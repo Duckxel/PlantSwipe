@@ -107,10 +107,18 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
     case 'description':
       return { ...next, description: typeof data === 'string' ? data : next.description }
     case 'identity': {
+      type IdentityComposition = NonNullable<NonNullable<Plant['identity']>['composition']>
       const payload = { ...(data as Record<string, unknown>) }
       delete (payload as any).colors
       if ('composition' in payload) {
-        payload.composition = expandCompositionFromDb(payload.composition) as any
+        const normalizedComposition = expandCompositionFromDb(
+          payload.composition as string[] | null | undefined,
+        ) as IdentityComposition | undefined
+        if (normalizedComposition) {
+          ;(payload as { composition?: IdentityComposition }).composition = normalizedComposition
+        } else {
+          delete (payload as Record<string, unknown>).composition
+        }
       }
       const lifeCycleResult = normalizeEnumValueInput(lifeCycleEnum as EnumTools, (payload as any).lifeCycle)
       if (lifeCycleResult.shouldUpdate) {

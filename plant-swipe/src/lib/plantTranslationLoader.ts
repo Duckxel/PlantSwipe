@@ -33,6 +33,9 @@ import {
 } from '@/lib/composition'
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
+type PlantCareData = NonNullable<Plant["plantCare"]>
+type PlantGrowthData = NonNullable<Plant["growth"]>
+type PlantEcologyData = NonNullable<Plant["ecology"]>
 
 const sanitizeStringValue = (value: string): string | undefined => {
   const trimmed = value.trim()
@@ -478,22 +481,21 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         },
         plantCare: {
           origin: translation.origin || basePlant.origin || [],
-            habitat: habitatEnum.toUiArray(translation.habitat || basePlant.habitat) as Plant["plantCare"]["habitat"],
+            habitat: habitatEnum.toUiArray(translation.habitat || basePlant.habitat) as PlantCareData["habitat"],
           temperatureMax: basePlant.temperature_max || undefined,
           temperatureMin: basePlant.temperature_min || undefined,
           temperatureIdeal: basePlant.temperature_ideal || undefined,
             levelSun:
-              (levelSunEnum.toUi(translation.level_sun || basePlant.level_sun) as Plant["plantCare"]["levelSun"]) ||
-              undefined,
+              (levelSunEnum.toUi(translation.level_sun || basePlant.level_sun) as PlantCareData["levelSun"]) || undefined,
           hygrometry: basePlant.hygrometry || undefined,
-            wateringType: wateringTypeEnum.toUiArray(translation.watering_type || basePlant.watering_type) as Plant["plantCare"]["wateringType"],
-            division: divisionEnum.toUiArray(translation.division || basePlant.division) as Plant["plantCare"]["division"],
-            soil: soilEnum.toUiArray(translation.soil || basePlant.soil) as Plant["plantCare"]["soil"],
+            wateringType: wateringTypeEnum.toUiArray(translation.watering_type || basePlant.watering_type) as PlantCareData["wateringType"],
+            division: divisionEnum.toUiArray(translation.division || basePlant.division) as PlantCareData["division"],
+            soil: soilEnum.toUiArray(translation.soil || basePlant.soil) as PlantCareData["soil"],
           adviceSoil: translation.advice_soil || basePlant.advice_soil || undefined,
-            mulching: mulchingEnum.toUiArray(translation.mulching || basePlant.mulching) as any,
+            mulching: mulchingEnum.toUiArray(translation.mulching || basePlant.mulching) as PlantCareData["mulching"],
           adviceMulching: translation.advice_mulching || basePlant.advice_mulching || undefined,
-            nutritionNeed: nutritionNeedEnum.toUiArray(translation.nutrition_need || basePlant.nutrition_need) as Plant["plantCare"]["nutritionNeed"],
-            fertilizer: fertilizerEnum.toUiArray(translation.fertilizer || basePlant.fertilizer) as Plant["plantCare"]["fertilizer"],
+            nutritionNeed: nutritionNeedEnum.toUiArray(translation.nutrition_need || basePlant.nutrition_need) as PlantCareData["nutritionNeed"],
+            fertilizer: fertilizerEnum.toUiArray(translation.fertilizer || basePlant.fertilizer) as PlantCareData["fertilizer"],
           adviceFertilizer: translation.advice_fertilizer || basePlant.advice_fertilizer || undefined,
           watering: {
             schedules,
@@ -507,7 +509,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           wingspan: basePlant.wingspan_cm || undefined,
           tutoring: basePlant.tutoring || false,
           adviceTutoring: translation.advice_tutoring || basePlant.advice_tutoring || undefined,
-            sowType: sowTypeEnum.toUiArray(translation.sow_type || basePlant.sow_type) as Plant["growth"]["sowType"],
+            sowType: sowTypeEnum.toUiArray(translation.sow_type || basePlant.sow_type) as PlantGrowthData["sowType"],
           separation: basePlant.separation_cm || undefined,
           transplanting: basePlant.transplanting || undefined,
           adviceSowing: translation.advice_sowing || basePlant.advice_sowing || undefined,
@@ -525,11 +527,11 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         },
         ecology: {
           melliferous: basePlant.melliferous || false,
-            polenizer: polenizerEnum.toUiArray(translation.polenizer || basePlant.polenizer) as Plant["ecology"]["polenizer"],
+            polenizer: polenizerEnum.toUiArray(translation.polenizer || basePlant.polenizer) as PlantEcologyData["polenizer"],
           beFertilizer: basePlant.be_fertilizer || false,
           groundEffect: translation.ground_effect || basePlant.ground_effect || undefined,
             conservationStatus:
-              (conservationStatusEnum.toUi(translation.conservation_status || basePlant.conservation_status) as Plant["ecology"]["conservationStatus"]) ||
+              (conservationStatusEnum.toUi(translation.conservation_status || basePlant.conservation_status) as PlantEcologyData["conservationStatus"]) ||
               undefined,
         },
         danger: {

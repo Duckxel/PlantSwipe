@@ -43,6 +43,9 @@ import {
 } from "@/lib/composition"
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
+type PlantCareData = NonNullable<Plant["plantCare"]>
+type PlantGrowthData = NonNullable<Plant["growth"]>
+type PlantEcologyData = NonNullable<Plant["ecology"]>
 
 const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
@@ -376,20 +379,20 @@ async function loadPlant(id: string): Promise<Plant | null> {
       },
       plantCare: {
         origin: data.origin || [],
-        habitat: habitatEnum.toUiArray(data.habitat) as Plant["plantCare"]["habitat"],
+        habitat: habitatEnum.toUiArray(data.habitat) as PlantCareData["habitat"],
         temperatureMax: data.temperature_max || undefined,
         temperatureMin: data.temperature_min || undefined,
         temperatureIdeal: data.temperature_ideal || undefined,
-        levelSun: (levelSunEnum.toUi(data.level_sun) as Plant["plantCare"]["levelSun"]) || undefined,
+        levelSun: (levelSunEnum.toUi(data.level_sun) as PlantCareData["levelSun"]) || undefined,
         hygrometry: data.hygrometry || undefined,
-        wateringType: wateringTypeEnum.toUiArray(data.watering_type) as Plant["plantCare"]["wateringType"],
-        division: divisionEnum.toUiArray(data.division) as Plant["plantCare"]["division"],
-        soil: soilEnum.toUiArray(data.soil) as Plant["plantCare"]["soil"],
+        wateringType: wateringTypeEnum.toUiArray(data.watering_type) as PlantCareData["wateringType"],
+        division: divisionEnum.toUiArray(data.division) as PlantCareData["division"],
+        soil: soilEnum.toUiArray(data.soil) as PlantCareData["soil"],
         adviceSoil: data.advice_soil || undefined,
-        mulching: mulchingEnum.toUiArray(data.mulching) as any,
+        mulching: mulchingEnum.toUiArray(data.mulching) as PlantCareData["mulching"],
         adviceMulching: data.advice_mulching || undefined,
-        nutritionNeed: nutritionNeedEnum.toUiArray(data.nutrition_need) as Plant["plantCare"]["nutritionNeed"],
-        fertilizer: fertilizerEnum.toUiArray(data.fertilizer) as Plant["plantCare"]["fertilizer"],
+        nutritionNeed: nutritionNeedEnum.toUiArray(data.nutrition_need) as PlantCareData["nutritionNeed"],
+        fertilizer: fertilizerEnum.toUiArray(data.fertilizer) as PlantCareData["fertilizer"],
         adviceFertilizer: data.advice_fertilizer || undefined,
       watering: {
         schedules: normalizeSchedules(
@@ -401,20 +404,20 @@ async function loadPlant(id: string): Promise<Plant | null> {
         ),
       },
     },
-    growth: {
+      growth: {
         sowingMonth: monthSlugsToNumbers(data.sowing_month),
         floweringMonth: monthSlugsToNumbers(data.flowering_month),
         fruitingMonth: monthSlugsToNumbers(data.fruiting_month),
-      height: data.height_cm || undefined,
-      wingspan: data.wingspan_cm || undefined,
-      tutoring: data.tutoring || false,
-      adviceTutoring: data.advice_tutoring || undefined,
-        sowType: sowTypeEnum.toUiArray(data.sow_type) as PlantGrowth["sowType"],
-      separation: data.separation_cm || undefined,
-      transplanting: data.transplanting || undefined,
-      adviceSowing: data.advice_sowing || undefined,
-      cut: data.cut || undefined,
-    },
+        height: data.height_cm || undefined,
+        wingspan: data.wingspan_cm || undefined,
+        tutoring: data.tutoring || false,
+        adviceTutoring: data.advice_tutoring || undefined,
+        sowType: sowTypeEnum.toUiArray(data.sow_type) as PlantGrowthData["sowType"],
+        separation: data.separation_cm || undefined,
+        transplanting: data.transplanting || undefined,
+        adviceSowing: data.advice_sowing || undefined,
+        cut: data.cut || undefined,
+      },
     usage: {
       adviceMedicinal: data.advice_medicinal || undefined,
       nutritionalIntake: data.nutritional_intake || [],
@@ -427,10 +430,10 @@ async function loadPlant(id: string): Promise<Plant | null> {
     },
       ecology: {
         melliferous: data.melliferous || false,
-        polenizer: polenizerEnum.toUiArray(data.polenizer) as Plant["ecology"]["polenizer"],
+        polenizer: polenizerEnum.toUiArray(data.polenizer) as PlantEcologyData["polenizer"],
         beFertilizer: data.be_fertilizer || false,
         groundEffect: data.ground_effect || undefined,
-        conservationStatus: (conservationStatusEnum.toUi(data.conservation_status) as Plant["ecology"]["conservationStatus"]) || undefined,
+        conservationStatus: (conservationStatusEnum.toUi(data.conservation_status) as PlantEcologyData["conservationStatus"]) || undefined,
       },
     danger: { pests: data.pests || [], diseases: data.diseases || [] },
     miscellaneous: {
