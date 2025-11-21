@@ -36,6 +36,7 @@ import {
   CartesianGrid,
   Tooltip as RechartsTooltip,
   Cell,
+  Rectangle,
 } from 'recharts'
 import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import {
@@ -386,37 +387,32 @@ export const PlantInfoPage: React.FC = () => {
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
-    <>
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-5">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
+    <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
+          onClick={handleGoBack}
+        >
+          <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          {t('common.back', { defaultValue: 'Back' })}
+        </Button>
+        {profile?.is_admin && plant && (
           <Button
             type="button"
-            variant="ghost"
-            className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
-            onClick={handleGoBack}
+            variant="outline"
+            className="flex items-center gap-2 rounded-2xl border-emerald-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
+            onClick={handleEdit}
           >
-            <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            {t('common.back', { defaultValue: 'Back' })}
+            <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            {t('common.edit', { defaultValue: 'Edit' })}
           </Button>
-          {profile?.is_admin && plant && (
-            <Button
-              type="button"
-              variant="outline"
-              className="flex items-center gap-2 rounded-2xl border-emerald-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
-              onClick={handleEdit}
-            >
-              <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              {t('common.edit', { defaultValue: 'Edit' })}
-            </Button>
-          )}
-        </div>
-        <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
+        )}
       </div>
-
-      <div className="max-w-6xl mx-auto mt-4 sm:mt-6 px-3 sm:px-4 lg:px-6 pb-12 sm:pb-16">
-        <MoreInformationSection plant={plant} />
-      </div>
-    </>
+      <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
+      <MoreInformationSection plant={plant} />
+    </div>
   )
 }
 
@@ -534,19 +530,19 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             transition={{ duration: 0.4, delay: 0.02 }}
             className="lg:col-span-1 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent"
           >
-            <div className="flex items-center justify-between gap-2 mb-4">
+            <div className="mb-3 space-y-2">
               <div>
                 <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
                   3D View
                 </p>
-                <p className="text-sm sm:text-base font-semibold text-stone-900 dark:text-white">Dimensions</p>
+                <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Dimensions</p>
               </div>
               {highlightBadges.length > 0 && (
-                <div className="flex flex-wrap gap-2 justify-end">
-                  {highlightBadges.slice(0, 3).map((badge) => (
+                <div className="flex flex-wrap gap-2">
+                  {highlightBadges.slice(0, 4).map((badge) => (
                     <Badge
                       key={badge}
-                      className="rounded-2xl border border-emerald-200/70 bg-white/90 px-3 py-1 text-xs sm:text-sm font-semibold tracking-wide text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-100 uppercase"
+                      className="rounded-2xl border border-emerald-300/70 bg-white px-3 py-1 text-xs sm:text-sm font-semibold tracking-wide text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/15 dark:text-emerald-100 uppercase shadow-sm"
                     >
                       {badge}
                     </Badge>
@@ -555,8 +551,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               )}
             </div>
             <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
-              <div className="md:w-1/2 rounded-2xl border border-emerald-100/70 bg-white/70 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60">
-                <DimensionCube scale={cubeScale} className="w-full aspect-square" />
+              <div className="relative w-full md:w-1/2 rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60">
+                <div className="relative w-full aspect-square">
+                  <DimensionCube scale={cubeScale} className="h-full w-full" />
+                </div>
               </div>
               <div className="flex-1 flex flex-col gap-2">
                 {dimensionLegend.map((item) => (
@@ -605,97 +603,14 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         </motion.section>
       </div>
 
-        {/* Second Row - Seasonal Timeline, Habitat Map, Color Moodboard */}
+        {/* Second Row - Color Moodboard beside Seasonal Timeline */}
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-          {/* Seasonal Timeline */}
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.08 }}
-            className={`${palette.length > 0 || habitats.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-            <div className="relative space-y-3 sm:space-y-4">
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-                <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
-              </div>
-              <div className="h-52 sm:h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={timelineData} stackOffset="expand">
-                    <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
-                    <YAxis hide domain={[0, 3]} />
-                    <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
-                {Object.entries(TIMELINE_COLORS).map(([label, color]) => (
-                  <span key={label} className="flex items-center gap-1.5 sm:gap-2">
-                    <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                    {label.charAt(0).toUpperCase() + label.slice(1)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </motion.section>
-
-          {/* Habitat Map */}
-          {habitats.length > 0 && (
-            <motion.section
-              {...SECTION_ANIMATION}
-              transition={{ duration: 0.4, delay: 0.11 }}
-              className="lg:col-span-1 rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90"
-            >
-              <div className="space-y-3 sm:space-y-4">
-                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-                  <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Habitat Map</span>
-                </div>
-                <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
-                  <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />
-                  <img src={worldMapDark} alt="" className="absolute inset-0 hidden h-full w-full object-cover opacity-75 dark:block" />
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_30%_40%,rgba(16,185,129,0.25),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(14,165,233,0.25),transparent_65%)]" />
-                  <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:32px_32px] sm:bg-[size:48px_48px] dark:bg-[linear-gradient(90deg,rgba(3,37,65,0.5)_1px,transparent_1px),linear-gradient(0deg,rgba(3,37,65,0.5)_1px,transparent_1px)]" />
-                  {activePins.map((pin) => (
-                    <div
-                      key={`${pin.label}-${pin.left}-${pin.top}`}
-                      className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 sm:gap-2 rounded-xl sm:rounded-2xl bg-white/90 px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium text-stone-800 shadow-md backdrop-blur-md dark:bg-[#2d2d30]/90 dark:text-stone-100"
-                      style={{ top: pin.top, left: pin.left }}
-                    >
-                      <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-500 flex-shrink-0" />
-                      <span className="whitespace-nowrap">{pin.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                  {climateBadges.length ? (
-                    climateBadges.map((badge) => (
-                      <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                        <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                        {badge}
-                      </Badge>
-                    ))
-                  ) : (
-                    <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                      <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                      Temperate
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </motion.section>
-          )}
-
           {/* Color Moodboard */}
           {palette.length > 0 && (
             <motion.section
               {...SECTION_ANIMATION}
-              transition={{ duration: 0.4, delay: 0.14 }}
-              className={`${habitats.length > 0 ? 'lg:col-span-1' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4`}
+              transition={{ duration: 0.4, delay: 0.08 }}
+              className="lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4"
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
               <div className="relative space-y-2 sm:space-y-3">
@@ -712,7 +627,90 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </div>
             </motion.section>
           )}
+
+          {/* Seasonal Timeline */}
+          <motion.section
+            {...SECTION_ANIMATION}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className={`${palette.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+            <div className="relative space-y-3 sm:space-y-4">
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+                <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
+              </div>
+              <div className="h-52 sm:h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={timelineData} stackOffset="expand">
+                    <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
+                    <YAxis hide domain={[0, 3]} />
+                    <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
+                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} shape={<RoundedTopBar />} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
+                {Object.entries(TIMELINE_COLORS).map(([label, color]) => (
+                  <span key={label} className="flex items-center gap-1.5 sm:gap-2">
+                    <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    {label.charAt(0).toUpperCase() + label.slice(1)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </motion.section>
         </div>
+
+        {/* Habitat Map */}
+        {habitats.length > 0 && (
+          <motion.section
+            {...SECTION_ANIMATION}
+            transition={{ duration: 0.4, delay: 0.13 }}
+            className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90"
+          >
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Habitat Map</span>
+              </div>
+              <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
+                <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />
+                <img src={worldMapDark} alt="" className="absolute inset-0 hidden h-full w-full object-cover opacity-75 dark:block" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_30%_40%,rgba(16,185,129,0.25),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(14,165,233,0.25),transparent_65%)]" />
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:32px_32px] sm:bg-[size:48px_48px] dark:bg-[linear-gradient(90deg,rgba(3,37,65,0.5)_1px,transparent_1px),linear-gradient(0deg,rgba(3,37,65,0.5)_1px,transparent_1px)]" />
+                {activePins.map((pin) => (
+                  <div
+                    key={`${pin.label}-${pin.left}-${pin.top}`}
+                    className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 sm:gap-2 rounded-xl sm:rounded-2xl bg-white/90 px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium text-stone-800 shadow-md backdrop-blur-md dark:bg-[#2d2d30]/90 dark:text-stone-100"
+                    style={{ top: pin.top, left: pin.left }}
+                  >
+                    <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-500 flex-shrink-0" />
+                    <span className="whitespace-nowrap">{pin.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                {climateBadges.length ? (
+                  climateBadges.map((badge) => (
+                    <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                      <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                      {badge}
+                    </Badge>
+                  ))
+                ) : (
+                  <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                    <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                    Temperate
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </motion.section>
+        )}
 
       {/* Info Cards Section - Full width for better mobile experience */}
       <div className="space-y-3 sm:space-y-4">
@@ -763,6 +761,17 @@ const TimelineTooltip = (
       </div>
     </div>
   )
+}
+
+type RoundedBarProps = React.ComponentProps<typeof Rectangle> & {
+  payload?: { flowering?: number }
+}
+
+const RoundedTopBar: React.FC<RoundedBarProps> = (props) => {
+  const { payload, ...rest } = props
+  const hasFlowering = (payload?.flowering ?? 0) > 0
+  const radius: [number, number, number, number] = hasFlowering ? [8, 8, 0, 0] : [0, 0, 0, 0]
+  return <Rectangle {...rest} radius={radius} />
 }
 
 const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string }> = ({ label, value, subLabel }) => (
