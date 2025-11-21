@@ -384,10 +384,11 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
                 No image yet
               </div>
             )}
-            </div>
+          </div>
         </div>
+      </div>
 
-        {visibleStats.length > 0 && (
+      {visibleStats.length > 0 && (
           <div className="rounded-[28px] border border-white/40 bg-white/70 px-4 py-4 shadow-inner backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:px-6 sm:py-6">
             <div className="flex flex-wrap gap-3 sm:gap-4">
               {visibleStats.map((stat) => (
