@@ -681,13 +681,15 @@ const CareChartTooltip = ({ active, payload: tooltipPayload }: TooltipProps<numb
 }
 
 const TimelineTooltip = (
-  { active, payload: tooltipPayload, label }: TooltipProps<number, string> & { payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number } }> },
+  props: TooltipProps<number, string> & { payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number } }> },
 ) => {
+  const { active, payload: tooltipPayload } = props
   const data = tooltipPayload && tooltipPayload.length > 0 ? tooltipPayload[0].payload : null
   if (!active || !data) return null
+  const displayLabel = typeof props.label === 'string' ? props.label : ''
   return (
     <div className="rounded-xl border border-sky-400/30 bg-white/95 px-3 py-2 text-xs text-stone-700 shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95 dark:text-stone-100">
-      <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{label}</p>
+      <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{displayLabel}</p>
       <div className="space-y-1 mt-1">
         {Object.entries(data).map(([key, value]) =>
           value ? (
