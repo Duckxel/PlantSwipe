@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles } from "lucide-react"
+import { Sparkles, ChevronDown } from "lucide-react"
 
 export type PlantProfileFormProps = {
   value: Plant
@@ -897,6 +897,21 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   const [insertName, setInsertName] = React.useState("")
   const [insertHex, setInsertHex] = React.useState("#")
   const [inserting, setInserting] = React.useState(false)
+  const [showAdvancedColors, setShowAdvancedColors] = React.useState(false)
+
+  const { singleWordColors, multiWordColors } = React.useMemo(() => {
+    const single: PlantColor[] = []
+    const multi: PlantColor[] = []
+    ;(available || []).forEach((color) => {
+      const name = (color.name || "").trim()
+      if (name && !/\s/.test(name)) {
+        single.push(color)
+      } else {
+        multi.push(color)
+      }
+    })
+    return { singleWordColors: single, multiWordColors: multi }
+  }, [available])
 
   const loadColors = React.useCallback(async (term?: string) => {
     setLoading(true)
@@ -910,6 +925,10 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   React.useEffect(() => {
     if (open) loadColors(search)
   }, [open, search, loadColors])
+
+  React.useEffect(() => {
+    if (multiWordColors.length === 0) setShowAdvancedColors(false)
+  }, [multiWordColors.length])
 
   const alreadyAdded = (candidate: PlantColor) => (colors || []).some((c) => (c.id && candidate.id && c.id === candidate.id) || c.name.toLowerCase() === candidate.name.toLowerCase())
 
@@ -934,6 +953,21 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
     setOpen(false)
   }
 
+  const renderColorOption = (c: PlantColor) => (
+    <button
+      key={c.id || c.name}
+      type="button"
+      onClick={() => addColor(c)}
+      className="flex items-center gap-3 rounded border p-2 hover:bg-muted"
+    >
+      <span className="w-6 h-6 rounded-full border" style={{ backgroundColor: c.hexCode || "transparent" }} />
+      <span className="text-left">
+        <div className="font-medium text-sm">{c.name}</div>
+        <div className="text-xs text-muted-foreground">{c.hexCode || "No hex"}</div>
+      </span>
+    </button>
+  )
+
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap gap-2">
@@ -954,28 +988,43 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
             <DialogTitle>Select or add a color</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search colors by name" />
-            <div className="max-h-64 overflow-auto border rounded p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {loading ? <div className="col-span-full text-center text-sm text-muted-foreground">Loading colors...</div> : (
-                (available || []).map((c) => (
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search colors by name" />
+              <div className="max-h-64 overflow-auto border rounded p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {loading ? (
+                  <div className="col-span-full text-center text-sm text-muted-foreground">Loading colors...</div>
+                ) : (
+                  singleWordColors.map(renderColorOption)
+                )}
+                {!loading && singleWordColors.length === 0 && (
+                  <div className="col-span-full text-center text-sm text-muted-foreground">
+                    {multiWordColors.length > 0
+                      ? "All matching colors include multiple words. Open Advanced colors to view them."
+                      : "No colors found."}
+                  </div>
+                )}
+              </div>
+              {multiWordColors.length > 0 && (
+                <div className="rounded-lg border">
                   <button
-                    key={c.id || c.name}
                     type="button"
-                    onClick={() => addColor(c)}
-                    className="flex items-center gap-3 rounded border p-2 hover:bg-muted"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium"
+                    onClick={() => setShowAdvancedColors((prev) => !prev)}
                   >
-                    <span className="w-6 h-6 rounded-full border" style={{ backgroundColor: c.hexCode || "transparent" }} />
-                    <span className="text-left">
-                      <div className="font-medium text-sm">{c.name}</div>
-                      <div className="text-xs text-muted-foreground">{c.hexCode || "No hex"}</div>
+                    <span>
+                      <span className="block">Advanced colors</span>
+                      <span className="text-xs text-muted-foreground">Multi-word color names</span>
                     </span>
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${showAdvancedColors ? "rotate-180" : ""}`}
+                    />
                   </button>
-                ))
+                  {showAdvancedColors && (
+                    <div className="border-t px-2 py-2 max-h-48 overflow-auto grid grid-cols-2 sm:grid-cols-3 gap-2 bg-muted/30 rounded-b-lg">
+                      {multiWordColors.map(renderColorOption)}
+                    </div>
+                  )}
+                </div>
               )}
-              {!loading && (available || []).length === 0 && (
-                <div className="col-span-full text-center text-sm text-muted-foreground">No colors found.</div>
-              )}
-            </div>
             <div className="grid gap-2 border-t pt-3">
               <div className="font-medium text-sm">Insert a new color</div>
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-center">
