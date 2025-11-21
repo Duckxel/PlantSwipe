@@ -483,20 +483,21 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
   }, [companionsKey])
 
     return (
-      <div className="space-y-6 pb-16">
-        <div className="relative overflow-hidden rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
+      <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
+        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
           <div className="absolute inset-0 opacity-25 blur-3xl" style={{ background: "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)" }} />
-            <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto">
+            <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 flex flex-col items-end gap-1.5 sm:gap-2 md:gap-3 pointer-events-auto">
             {onToggleLike && (
               <Button
                 type="button"
                 size="lg"
                 variant={liked ? "default" : "secondary"}
-                className="rounded-full px-6 py-3 text-base shadow-lg"
+                className="rounded-full px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base shadow-lg"
                 onClick={onToggleLike}
               >
-                <Heart className="mr-2 h-5 w-5" fill={liked ? "currentColor" : "none"} />
-                {liked ? "Liked" : "Like"}
+                <Heart className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" fill={liked ? "currentColor" : "none"} />
+                <span className="hidden sm:inline">{liked ? "Liked" : "Like"}</span>
+                <span className="sm:hidden">{liked ? "✓" : "♡"}</span>
               </Button>
             )}
             <div className="flex flex-col items-end gap-1">
@@ -504,33 +505,33 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
                 type="button"
                 size="lg"
                 variant="outline"
-                className="rounded-full px-5 py-3 text-base shadow-lg"
+                className="rounded-full px-4 py-2 sm:px-5 sm:py-3 text-sm sm:text-base shadow-lg"
                 onClick={handleShare}
               >
-                <Share2 className="mr-2 h-5 w-5" />
-                Share
+                <Share2 className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="hidden sm:inline">Share</span>
               </Button>
-              {shareFeedback && <span className="text-xs font-medium text-white drop-shadow">{shareFeedback}</span>}
+              {shareFeedback && <span className="text-[10px] sm:text-xs font-medium text-white drop-shadow">{shareFeedback}</span>}
             </div>
           </div>
-          <div className="relative flex flex-col gap-4 p-4 pt-16 sm:p-6 lg:flex-row lg:gap-8 lg:p-8">
-            <div className="flex-1 space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="uppercase tracking-wide">{plant.plantType || "Plant"}</Badge>
+          <div className="relative flex flex-col gap-3 sm:gap-4 p-3 pt-14 sm:p-4 sm:pt-16 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
+            <div className="flex-1 space-y-3 sm:space-y-4">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <Badge variant="secondary" className="uppercase tracking-wide text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">{plant.plantType || "Plant"}</Badge>
               {utilityBadges.map((u) => (
-                <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70">
+                <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
                   {u}
                 </Badge>
               ))}
-              {seasons.length > 0 && <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50">{seasons.join(" • ")}</Badge>}
+              {seasons.length > 0 && <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">{seasons.join(" • ")}</Badge>}
             </div>
               <div>
-                <h1 className="text-3xl sm:text-4xl font-bold text-foreground">{plant.name}</h1>
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-tight">{plant.name}</h1>
                 {plant.identity?.scientificName && (
-                  <p className="text-lg text-muted-foreground italic">{plant.identity.scientificName}</p>
+                  <p className="text-sm sm:text-base md:text-lg text-muted-foreground italic mt-1">{plant.identity.scientificName}</p>
                 )}
               </div>
-            {plant.identity?.overview && <p className="text-muted-foreground leading-relaxed text-base">{plant.identity.overview}</p>}
+            {plant.identity?.overview && <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{plant.identity.overview}</p>}
 
             {heroColors.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
@@ -692,54 +693,54 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 xl:grid-cols-4">
         {plant.growth?.height !== undefined && (
           <Card className="bg-gradient-to-br from-emerald-500/90 to-emerald-700 text-white shadow-lg">
-            <CardContent className="flex items-center justify-between p-4">
-              <div>
-                <p className="text-xs uppercase text-white/80">Height</p>
-                <p className="text-3xl font-bold">{plant.growth.height} cm</p>
+            <CardContent className="flex items-center justify-between p-3 sm:p-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Height</p>
+                <p className="text-xl sm:text-2xl md:text-3xl font-bold">{plant.growth.height} cm</p>
               </div>
-              <Flame className="h-10 w-10 text-white/80" />
+              <Flame className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
             </CardContent>
           </Card>
         )}
         {plant.growth?.wingspan !== undefined && (
           <Card className="bg-gradient-to-br from-sky-400/90 to-blue-600 text-white shadow-lg">
-            <CardContent className="flex items-center justify-between p-4">
-              <div>
-                <p className="text-xs uppercase text-white/80">Wingspan</p>
-                <p className="text-3xl font-bold">{plant.growth.wingspan} cm</p>
+            <CardContent className="flex items-center justify-between p-3 sm:p-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Wingspan</p>
+                <p className="text-xl sm:text-2xl md:text-3xl font-bold">{plant.growth.wingspan} cm</p>
               </div>
-              <Leaf className="h-10 w-10 text-white/80" />
+              <Leaf className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
             </CardContent>
           </Card>
         )}
         {plant.plantCare?.hygrometry !== undefined && (
           <Card className="bg-gradient-to-br from-cyan-400/90 to-teal-600 text-white shadow-lg">
-            <CardContent className="flex items-center justify-between p-4">
-              <div>
-                <p className="text-xs uppercase text-white/80">Humidity sweet spot</p>
-                <p className="text-3xl font-bold">{plant.plantCare.hygrometry}%</p>
+            <CardContent className="flex items-center justify-between p-3 sm:p-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Humidity</p>
+                <p className="text-xl sm:text-2xl md:text-3xl font-bold">{plant.plantCare.hygrometry}%</p>
               </div>
-              <Droplets className="h-10 w-10 text-white/80" />
+              <Droplets className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
             </CardContent>
           </Card>
         )}
         {plant.plantCare?.levelSun && (
           <Card className="bg-gradient-to-br from-amber-400/90 to-orange-600 text-white shadow-lg">
-            <CardContent className="flex items-center justify-between p-4">
-              <div>
-                <p className="text-xs uppercase text-white/80">Sun craving</p>
-                <p className="text-2xl font-bold leading-tight">{plant.plantCare.levelSun}</p>
+            <CardContent className="flex items-center justify-between p-3 sm:p-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Sun</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{plant.plantCare.levelSun}</p>
               </div>
-              <SunMedium className="h-10 w-10 text-white/80" />
+              <SunMedium className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
             </CardContent>
           </Card>
         )}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 xl:grid-cols-2">
         {identityHasContent && (
           <Section title="Identity" icon={<Fingerprint className="h-4 w-4" />}>
             <div className="grid gap-3 sm:grid-cols-2">
