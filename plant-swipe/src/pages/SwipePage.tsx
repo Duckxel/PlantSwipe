@@ -742,16 +742,16 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
   }
 
   // Check utility field for usage indicators - normalize to lowercase for comparison
-  const utilityArray = (plant.utility ?? []).filter((util): util is string => 
-    typeof util === "string" && util.trim().length > 0
-  )
+  const utilityArray = (plant.utility ?? [])
+    .map((util) => String(util))
+    .filter((util) => util.trim().length > 0)
   const utilitySet = new Set(utilityArray.map((util) => util.toLowerCase().trim()))
   
   // Check comestiblePart for edible indicator - only show if there are valid, non-empty entries
   // Filter out empty strings, null, undefined, and whitespace-only strings
-  const comestibleParts = (plant.comestiblePart ?? []).filter((part): part is string => 
-    typeof part === "string" && part.trim().length > 0
-  )
+  const comestibleParts = (plant.comestiblePart ?? [])
+    .map((part) => String(part))
+    .filter((part) => part.trim().length > 0)
   const hasComestiblePart = comestibleParts.length > 0
 
   // Edible: Only show if utility explicitly has "comestible" OR comestiblePart has valid entries
@@ -964,15 +964,19 @@ const buildColorSwatches = (plant: Plant): ColorSwatchDescriptor[] => {
   const identityColors: string[] = []
   if (plant.identity?.colors && Array.isArray(plant.identity.colors)) {
     plant.identity.colors.forEach((color) => {
-      if (color && typeof color === "object") {
-        // PlantColor object with name and hexCode
-        if (color.hexCode && typeof color.hexCode === "string" && color.hexCode.trim().length > 0) {
-          identityColors.push(color.hexCode.trim())
-        } else if (color.name && typeof color.name === "string" && color.name.trim().length > 0) {
-          identityColors.push(color.name.trim())
+      if (!color) return
+      
+      // Handle PlantColor object with name and hexCode
+      if (typeof color === "object" && "name" in color) {
+        const plantColor = color as { name?: string; hexCode?: string }
+        if (plantColor.hexCode && typeof plantColor.hexCode === "string" && plantColor.hexCode.trim().length > 0) {
+          identityColors.push(plantColor.hexCode.trim())
+        } else if (plantColor.name && typeof plantColor.name === "string" && plantColor.name.trim().length > 0) {
+          identityColors.push(plantColor.name.trim())
         }
-      } else if (typeof color === "string" && color.trim().length > 0) {
-        // Fallback: treat as string
+      } 
+      // Handle string fallback
+      else if (typeof color === "string" && color.trim().length > 0) {
         identityColors.push(color.trim())
       }
     })

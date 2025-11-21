@@ -94,16 +94,6 @@ const SECTION_ANIMATION = {
   viewport: { once: true, amount: 0.1 },
 }
 
-type MoodboardColor = { label: string; tone: string; category: string }
-const DEFAULT_MOODBOARD: MoodboardColor[] = [
-  { label: 'Forest Canopy', tone: '#0f172a', category: 'Foliage' },
-  { label: 'Morning Dew', tone: '#1d4ed8', category: 'Highlights' },
-  { label: 'Soft Petal', tone: '#fb7185', category: 'Accent' },
-  { label: 'Moss Floor', tone: '#166534', category: 'Ground' },
-  { label: 'Amber Bloom', tone: '#ea580c', category: 'Flower' },
-  { label: 'Cloud Haze', tone: '#94a3b8', category: 'Mist' },
-]
-
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
 const mapSunLevel = (value?: string | null) => {
@@ -157,8 +147,6 @@ const buildTimelineData = (plant: Plant) => {
     sowing: sowing.includes(idx + 1) ? 1 : 0,
   }))
 }
-
-const isPlantColor = (color: PlantColor | MoodboardColor): color is PlantColor => (color as PlantColor).name !== undefined
 
 const normalizeSchedules = (rows?: any[]): WaterSchedules => {
   if (!rows?.length) return []
@@ -670,7 +658,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
                 {palette.map((color, idx) => {
-                  const colorLabel = isPlantColor(color) ? color.name : color.label
+                  const colorLabel = color.name || `Color ${idx + 1}`
                   return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
                 })}
               </div>
@@ -762,11 +750,10 @@ const InfoItem: React.FC<{ label: string; value: string; icon?: React.ReactNode 
   </div>
 )
 
-const ColorSwatchCard: React.FC<{ color: PlantColor | MoodboardColor }> = ({ color }) => {
-  const isPlant = isPlantColor(color)
-  const label = isPlant ? color.name || 'Palette' : color.label
-  const tone = isPlant ? color.hexCode || '#16a34a' : color.tone
-  const category = isPlant ? 'Palette' : color.category
+const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
+  const label = color.name || 'Palette'
+  const tone = color.hexCode || '#16a34a'
+  const category = 'Palette'
   const gradient = `linear-gradient(135deg, ${tone}, ${tone})`
   return (
     <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-2.5 sm:p-3 shadow-sm transition hover:-translate-y-0.5 sm:hover:-translate-y-1 hover:shadow-md">
