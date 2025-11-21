@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import type { Plant } from "@/types/plant"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabaseClient"
+import { cn } from "@/lib/utils"
 import {
   SunMedium,
   Droplets,
@@ -43,6 +44,13 @@ interface PlantDetailsProps {
   plant: Plant
   liked?: boolean
   onToggleLike?: () => void
+}
+
+type DetailPanel = {
+  id: string
+  label: string
+  icon: React.ReactNode
+  content: React.ReactNode
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode; icon: React.ReactNode }> = ({ title, children, icon }) => (
@@ -184,9 +192,14 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
   const [isPanning, setIsPanning] = useState(false)
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const touchStartRef = useRef<number | null>(null)
+  const [selectedPanel, setSelectedPanel] = useState<string | null>(null)
 
   useEffect(() => {
     setActiveImageIndex(0)
+  }, [plant.id])
+
+  useEffect(() => {
+    setSelectedPanel(null)
   }, [plant.id])
 
   useEffect(() => {
@@ -430,6 +443,288 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     updatedAtDisplay,
   )
   const galleryHasContent = Boolean(plant.images?.length)
+
+  const identitySection = identityHasContent ? (
+    <Section title="Identity" icon={<Fingerprint className="h-4 w-4" />}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldRow label="Given Names" value={safeJoin(plant.identity?.givenNames)} />
+        <FieldRow label="Family" value={plant.identity?.family} />
+        <FieldRow label="Life Cycle" value={plant.identity?.lifeCycle} />
+        <FieldRow label="Seasons" value={seasons.length ? seasons.join(" • ") : undefined} />
+        <FieldRow label="Foliage Persistance" value={plant.identity?.foliagePersistance} />
+        <FieldRow label="Spiked" value={booleanText(plant.identity?.spiked)} />
+        <FieldRow label="Toxicity (Human)" value={plant.identity?.toxicityHuman} />
+        <FieldRow label="Toxicity (Pets)" value={plant.identity?.toxicityPets} />
+        <FieldRow label="Allergens" value={listOrTags(plant.identity?.allergens)} />
+        <FieldRow label="Scent" value={booleanText(plant.identity?.scent)} />
+        <FieldRow label="Symbolism" value={listOrTags(plant.identity?.symbolism)} />
+        <FieldRow label="Living Space" value={plant.identity?.livingSpace} />
+        <FieldRow label="Composition" value={listOrTags(plant.identity?.composition as string[])} />
+        <FieldRow label="Maintenance Level" value={plant.identity?.maintenanceLevel} />
+      </div>
+    </Section>
+  ) : null
+
+  const plantCareSection = plantCareHasContent ? (
+    <div className="space-y-6">
+      <Section title="Plant Care" icon={<Droplet className="h-4 w-4" />}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FieldRow label="Origin" value={listOrTags(plant.plantCare?.origin)} />
+          <FieldRow label="Habitat" value={listOrTags(plant.plantCare?.habitat as string[])} />
+          <FieldRow
+            label="Watering"
+            value={(() => {
+              const schedules = plant.plantCare?.watering && Array.isArray(plant.plantCare.watering.schedules)
+                ? plant.plantCare.watering.schedules
+                : []
+              if (schedules.length) {
+                return schedules
+                  .filter((s) => s.season || s.quantity !== undefined || s.timePeriod)
+                  .map((s) => {
+                    const seasonLabel = s.season ? `${s.season}` : "Any season"
+                    const qtyPart = s.quantity !== undefined ? `${s.quantity}` : ""
+                    const periodPart = s.timePeriod ? `${qtyPart ? " / " : ""}${s.timePeriod}` : ""
+                    const suffix = qtyPart || periodPart ? ` • ${qtyPart}${periodPart}` : ""
+                    return `${seasonLabel}${suffix}`
+                  })
+                  .join(" | ")
+              }
+              if (plant.plantCare?.watering) {
+                return `${[plant.plantCare.watering.season, plant.plantCare.watering.quantity].filter(Boolean).join(" • ")} ${plant.plantCare.watering.timePeriod ? `/ ${plant.plantCare.watering.timePeriod}` : ""}`.trim()
+              }
+              return undefined
+            })()}
+          />
+          <FieldRow label="Watering Type" value={listOrTags(plant.plantCare?.wateringType as string[])} />
+          <FieldRow label="Division" value={listOrTags(plant.plantCare?.division as string[])} />
+          <FieldRow label="Soil" value={listOrTags(plant.plantCare?.soil as string[])} />
+          <FieldRow label="Mulching" value={listOrTags(plant.plantCare?.mulching as string[])} />
+          <FieldRow label="Nutrition Need" value={listOrTags(plant.plantCare?.nutritionNeed as string[])} />
+          <FieldRow label="Fertilizer" value={listOrTags(plant.plantCare?.fertilizer as string[])} />
+          <FieldRow label="Advice Soil" value={plant.plantCare?.adviceSoil} />
+          <FieldRow label="Advice Mulching" value={plant.plantCare?.adviceMulching} />
+          <FieldRow label="Advice Fertilizer" value={plant.plantCare?.adviceFertilizer} />
+        </div>
+      </Section>
+      {(temperatureData.length > 0 || wateringPieData.length > 0) && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {temperatureData.length > 0 && (
+            <Card className="border border-muted/60 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                  <Thermometer className="h-4 w-4 text-amber-500" />
+                  Temperature window (°C)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={temperatureData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                    <YAxis hide domain={["dataMin - 5", "dataMax + 5"]} />
+                    <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                      {temperatureData.map((_, idx) => (
+                        <Cell key={idx} fill={colorPalette[idx % colorPalette.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {wateringPieData.length > 0 && (
+            <Card className="border border-muted/60 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                  <Droplets className="h-4 w-4 text-sky-500" />
+                  Watering style mix
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={wateringPieData} dataKey="value" nameKey="name" innerRadius={40} outerRadius={70} paddingAngle={2}>
+                      {wateringPieData.map((entry, idx) => (
+                        <Cell key={`cell-${idx}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+    </div>
+  ) : null
+
+  const growthSection = growthHasContent ? (
+    <Section title="Growth" icon={<Sprout className="h-4 w-4" />}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldRow label="Sowing Month" value={monthsToBadges(plant.growth?.sowingMonth)} />
+        <FieldRow label="Flowering Month" value={monthsToBadges(plant.growth?.floweringMonth)} />
+        <FieldRow label="Fruiting Month" value={monthsToBadges(plant.growth?.fruitingMonth)} />
+        <FieldRow label="Tutoring" value={booleanText(plant.growth?.tutoring)} />
+        <FieldRow label="Advice Tutoring" value={plant.growth?.adviceTutoring} />
+        <FieldRow label="Sow Type" value={listOrTags(plant.growth?.sowType as string[])} />
+        <FieldRow label="Separation" value={plant.growth?.separation ? `${plant.growth.separation} cm` : undefined} />
+        <FieldRow label="Transplanting" value={booleanText(plant.growth?.transplanting)} />
+        <FieldRow label="Advice Sowing" value={plant.growth?.adviceSowing} />
+        <FieldRow label="Cut" value={plant.growth?.cut} />
+      </div>
+    </Section>
+  ) : null
+
+  const usageSection = usageHasContent ? (
+    <Section title="Usage" icon={<ChefHat className="h-4 w-4" />}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldRow label="Advice Medicinal" value={plant.usage?.adviceMedicinal} />
+        <FieldRow label="Nutritional Intake" value={listOrTags(plant.usage?.nutritionalIntake)} />
+        <FieldRow label="Infusion" value={booleanText(plant.usage?.infusion)} />
+        <FieldRow label="Advice Infusion" value={plant.usage?.adviceInfusion} />
+        <FieldRow label="Infusion Mix" value={plant.usage?.infusionMix ? <DictionaryList value={plant.usage.infusionMix} /> : undefined} />
+        <FieldRow label="Recipes Ideas" value={listOrTags(plant.usage?.recipesIdeas)} />
+        <FieldRow label="Aromatherapy" value={booleanText(plant.usage?.aromatherapy)} />
+        <FieldRow label="Spice Mixes" value={listOrTags(plant.usage?.spiceMixes)} />
+      </div>
+    </Section>
+  ) : null
+
+  const ecologySection = ecologyHasContent ? (
+    <Section title="Ecology" icon={<Leaf className="h-4 w-4" />}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldRow label="Melliferous" value={booleanText(plant.ecology?.melliferous)} />
+        <FieldRow label="Polenizer" value={listOrTags(plant.ecology?.polenizer as string[])} />
+        <FieldRow label="Be Fertilizer" value={booleanText(plant.ecology?.beFertilizer)} />
+        <FieldRow label="Ground Effect" value={plant.ecology?.groundEffect} />
+        <FieldRow label="Conservation Status" value={plant.ecology?.conservationStatus} />
+      </div>
+    </Section>
+  ) : null
+
+  const dangerSection = dangerHasContent ? (
+    <Section title="Danger" icon={<ShieldAlert className="h-4 w-4" />}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldRow label="Pests" value={listOrTags(plant.danger?.pests)} />
+        <FieldRow label="Diseases" value={listOrTags(plant.danger?.diseases)} />
+      </div>
+    </Section>
+  ) : null
+
+  const companionsSection = hasCompanions ? (
+    <Section title="Companions" icon={<Users className="h-4 w-4" />}>
+      {companionDetails.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {companionDetails.map((companion) => (
+            <CompanionCard key={companion.id} id={companion.id} name={companion.name} image={companion.image} />
+          ))}
+        </div>
+      ) : (
+        <FieldRow label="Companions" value={listOrTags(plant.miscellaneous?.companions)} />
+      )}
+    </Section>
+  ) : null
+
+  const miscSection = miscHasContent ? (
+    <Section title="Tags & Sources" icon={<Info className="h-4 w-4" />}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldRow label="Tags" value={listOrTags(plant.miscellaneous?.tags)} />
+        <FieldRow
+          label="Sources"
+          value={(plant.miscellaneous?.sources || []).length ? (
+            <div className="space-y-2 text-sm">
+              {(plant.miscellaneous?.sources || []).map((src, idx) => (
+                <div key={`${src.name}-${idx}`} className="flex flex-col rounded border px-3 py-2 bg-white/70 dark:bg-[#151b15]">
+                  <div className="font-medium">{src.name}</div>
+                  {src.url && (
+                    <a href={src.url} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all">
+                      {src.url}
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : undefined}
+        />
+      </div>
+    </Section>
+  ) : null
+
+  const metaSection = metaHasContent ? (
+    <Section title="Meta" icon={<Info className="h-4 w-4" />}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldRow label="Author" value={plant.meta?.createdBy} />
+        <FieldRow label="Created" value={createdAtDisplay} />
+        <FieldRow label="Last Editor" value={plant.meta?.updatedBy} />
+        <FieldRow label="Last Updated" value={updatedAtDisplay} />
+        <FieldRow label="Admin Commentary" value={plant.meta?.adminCommentary} />
+      </div>
+    </Section>
+  ) : null
+
+  const gallerySection = galleryHasContent ? (
+    <Section title="Gallery" icon={<Layers className="h-4 w-4" />}>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {(plant.images ?? []).map((img) => {
+          const imageIndex = images.findIndex((i) => i.id === img.id || i.link === img.link)
+          return (
+            <div
+              key={img.id || img.link}
+              className="relative overflow-hidden rounded-xl border border-muted/60 bg-white/80 shadow-sm cursor-pointer transition hover:scale-105 hover:shadow-md"
+              onClick={() => {
+                if (imageIndex >= 0) {
+                  setActiveImageIndex(imageIndex)
+                  setViewerOpen(true)
+                }
+              }}
+            >
+              <img src={img.link} alt={plant.name} className="h-32 w-full object-cover sm:h-40" loading="lazy" />
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1 text-[11px] uppercase tracking-wide text-white">
+                {img.use}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Section>
+  ) : null
+
+  const detailPanels = [
+    identitySection && { id: "identity", label: "Identity", icon: <Fingerprint className="h-3.5 w-3.5" />, content: identitySection },
+    plantCareSection && { id: "care", label: "Care", icon: <Droplet className="h-3.5 w-3.5" />, content: plantCareSection },
+    growthSection && { id: "growth", label: "Growth", icon: <Sprout className="h-3.5 w-3.5" />, content: growthSection },
+    usageSection && { id: "usage", label: "Usage", icon: <ChefHat className="h-3.5 w-3.5" />, content: usageSection },
+    (ecologySection || dangerSection) && {
+      id: "ecosystem",
+      label: "Ecosystem",
+      icon: <Leaf className="h-3.5 w-3.5" />,
+      content: (
+        <div className="space-y-4">
+          {ecologySection}
+          {dangerSection}
+        </div>
+      ),
+    },
+    (companionsSection || miscSection) && {
+      id: "community",
+      label: "Community",
+      icon: <Users className="h-3.5 w-3.5" />,
+      content: (
+        <div className="space-y-4">
+          {companionsSection}
+          {miscSection}
+        </div>
+      ),
+    },
+    metaSection && { id: "meta", label: "Meta", icon: <Info className="h-3.5 w-3.5" />, content: metaSection },
+    gallerySection && { id: "gallery", label: "Gallery", icon: <Layers className="h-3.5 w-3.5" />, content: gallerySection },
+  ].filter(Boolean) as DetailPanel[]
+
+  const panelIds = detailPanels.map((panel) => panel.id)
+  const activePanelId = selectedPanel && panelIds.includes(selectedPanel) ? selectedPanel : panelIds[0] ?? null
+  const activePanel = detailPanels.find((panel) => panel.id === activePanelId) || null
 
   useEffect(() => {
     let ignore = false
@@ -750,259 +1045,33 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
         )}
       </div>
 
-      <div className="grid gap-4 sm:gap-6 xl:grid-cols-2">
-        {identityHasContent && (
-          <Section title="Identity" icon={<Fingerprint className="h-4 w-4" />}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Given Names" value={safeJoin(plant.identity?.givenNames)} />
-              <FieldRow label="Family" value={plant.identity?.family} />
-              <FieldRow label="Life Cycle" value={plant.identity?.lifeCycle} />
-              <FieldRow label="Seasons" value={seasons.length ? seasons.join(" • ") : undefined} />
-              <FieldRow label="Foliage Persistance" value={plant.identity?.foliagePersistance} />
-              <FieldRow label="Spiked" value={booleanText(plant.identity?.spiked)} />
-              <FieldRow label="Toxicity (Human)" value={plant.identity?.toxicityHuman} />
-              <FieldRow label="Toxicity (Pets)" value={plant.identity?.toxicityPets} />
-              <FieldRow label="Allergens" value={listOrTags(plant.identity?.allergens)} />
-              <FieldRow label="Scent" value={booleanText(plant.identity?.scent)} />
-              <FieldRow label="Symbolism" value={listOrTags(plant.identity?.symbolism)} />
-              <FieldRow label="Living Space" value={plant.identity?.livingSpace} />
-              <FieldRow label="Composition" value={listOrTags(plant.identity?.composition as string[])} />
-              <FieldRow label="Maintenance Level" value={plant.identity?.maintenanceLevel} />
+        {detailPanels.length > 0 && (
+          <div className="mt-8 space-y-4">
+            <div className="flex flex-wrap gap-2 overflow-x-auto rounded-3xl border border-stone-200/70 bg-white/80 p-2 dark:border-white/10 dark:bg-white/5">
+              {detailPanels.map((panel) => (
+                <button
+                  key={panel.id}
+                  type="button"
+                  className={cn(
+                    "flex items-center gap-2 rounded-2xl px-4 py-1.5 text-xs font-semibold tracking-wide transition",
+                    panel.id === activePanelId
+                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30"
+                      : "bg-transparent text-stone-600 hover:bg-white/80 dark:text-stone-300"
+                  )}
+                  onClick={() => setSelectedPanel(panel.id)}
+                >
+                  <span className="h-4 w-4 text-current">{panel.icon}</span>
+                  {panel.label}
+                </button>
+              ))}
             </div>
-          </Section>
-        )}
-
-        {plantCareHasContent && (
-          <Section title="Plant Care" icon={<Droplet className="h-4 w-4" />}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Origin" value={listOrTags(plant.plantCare?.origin)} />
-              <FieldRow label="Habitat" value={listOrTags(plant.plantCare?.habitat as string[])} />
-              <FieldRow
-                label="Watering"
-                value={(() => {
-                  const schedules = plant.plantCare?.watering && Array.isArray(plant.plantCare.watering.schedules)
-                    ? plant.plantCare.watering.schedules
-                    : []
-                  if (schedules.length) {
-                    return schedules
-                      .filter((s) => s.season || s.quantity !== undefined || s.timePeriod)
-                      .map((s) => {
-                        const seasonLabel = s.season ? `${s.season}` : "Any season"
-                        const qtyPart = s.quantity !== undefined ? `${s.quantity}` : ""
-                        const periodPart = s.timePeriod ? `${qtyPart ? " / " : ""}${s.timePeriod}` : ""
-                        const suffix = qtyPart || periodPart ? ` • ${qtyPart}${periodPart}` : ""
-                        return `${seasonLabel}${suffix}`
-                      })
-                      .join(" | ")
-                  }
-                  if (plant.plantCare?.watering) {
-                    return `${[plant.plantCare.watering.season, plant.plantCare.watering.quantity].filter(Boolean).join(" • ")} ${plant.plantCare.watering.timePeriod ? `/ ${plant.plantCare.watering.timePeriod}` : ""}`.trim()
-                  }
-                  return undefined
-                })()}
-              />
-              <FieldRow label="Watering Type" value={listOrTags(plant.plantCare?.wateringType as string[])} />
-              <FieldRow label="Division" value={listOrTags(plant.plantCare?.division as string[])} />
-              <FieldRow label="Soil" value={listOrTags(plant.plantCare?.soil as string[])} />
-              <FieldRow label="Mulching" value={listOrTags(plant.plantCare?.mulching as string[])} />
-              <FieldRow label="Nutrition Need" value={listOrTags(plant.plantCare?.nutritionNeed as string[])} />
-              <FieldRow label="Fertilizer" value={listOrTags(plant.plantCare?.fertilizer as string[])} />
-              <FieldRow label="Advice Soil" value={plant.plantCare?.adviceSoil} />
-              <FieldRow label="Advice Mulching" value={plant.plantCare?.adviceMulching} />
-              <FieldRow label="Advice Fertilizer" value={plant.plantCare?.adviceFertilizer} />
-            </div>
-
-            <div className="mt-6 grid gap-4 lg:grid-cols-2">
-              {temperatureData.length > 0 && (
-                <Card className="border border-muted/60 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                      <Thermometer className="h-4 w-4 text-amber-500" />
-                      Temperature window (°C)
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={temperatureData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                        <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                        <YAxis hide domain={["dataMin - 5", "dataMax + 5"]} />
-                        <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
-                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                          {temperatureData.map((_, idx) => (
-                            <Cell key={idx} fill={colorPalette[idx % colorPalette.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              )}
-
-              {wateringPieData.length > 0 && (
-                <Card className="border border-muted/60 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                      <Droplets className="h-4 w-4 text-sky-500" />
-                      Watering style mix
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={wateringPieData} dataKey="value" nameKey="name" innerRadius={40} outerRadius={70} paddingAngle={2}>
-                          {wateringPieData.map((entry, idx) => (
-                            <Cell key={`cell-${idx}`} fill={entry.fill} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </Section>
-        )}
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        {growthHasContent && (
-          <Section title="Growth" icon={<Sprout className="h-4 w-4" />}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Sowing Month" value={monthsToBadges(plant.growth?.sowingMonth)} />
-              <FieldRow label="Flowering Month" value={monthsToBadges(plant.growth?.floweringMonth)} />
-              <FieldRow label="Fruiting Month" value={monthsToBadges(plant.growth?.fruitingMonth)} />
-              <FieldRow label="Tutoring" value={booleanText(plant.growth?.tutoring)} />
-              <FieldRow label="Advice Tutoring" value={plant.growth?.adviceTutoring} />
-              <FieldRow label="Sow Type" value={listOrTags(plant.growth?.sowType as string[])} />
-              <FieldRow label="Separation" value={plant.growth?.separation ? `${plant.growth.separation} cm` : undefined} />
-              <FieldRow label="Transplanting" value={booleanText(plant.growth?.transplanting)} />
-              <FieldRow label="Advice Sowing" value={plant.growth?.adviceSowing} />
-              <FieldRow label="Cut" value={plant.growth?.cut} />
-            </div>
-          </Section>
-        )}
-
-        {usageHasContent && (
-          <Section title="Usage" icon={<ChefHat className="h-4 w-4" />}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Advice Medicinal" value={plant.usage?.adviceMedicinal} />
-              <FieldRow label="Nutritional Intake" value={listOrTags(plant.usage?.nutritionalIntake)} />
-              <FieldRow label="Infusion" value={booleanText(plant.usage?.infusion)} />
-              <FieldRow label="Advice Infusion" value={plant.usage?.adviceInfusion} />
-              <FieldRow label="Infusion Mix" value={plant.usage?.infusionMix ? <DictionaryList value={plant.usage.infusionMix} /> : undefined} />
-              <FieldRow label="Recipes Ideas" value={listOrTags(plant.usage?.recipesIdeas)} />
-              <FieldRow label="Aromatherapy" value={booleanText(plant.usage?.aromatherapy)} />
-              <FieldRow label="Spice Mixes" value={listOrTags(plant.usage?.spiceMixes)} />
-            </div>
-          </Section>
-        )}
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        {ecologyHasContent && (
-          <Section title="Ecology" icon={<Leaf className="h-4 w-4" />}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Melliferous" value={booleanText(plant.ecology?.melliferous)} />
-              <FieldRow label="Polenizer" value={listOrTags(plant.ecology?.polenizer as string[])} />
-              <FieldRow label="Be Fertilizer" value={booleanText(plant.ecology?.beFertilizer)} />
-              <FieldRow label="Ground Effect" value={plant.ecology?.groundEffect} />
-              <FieldRow label="Conservation Status" value={plant.ecology?.conservationStatus} />
-            </div>
-          </Section>
-        )}
-
-        {dangerHasContent && (
-          <Section title="Danger" icon={<ShieldAlert className="h-4 w-4" />}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Pests" value={listOrTags(plant.danger?.pests)} />
-              <FieldRow label="Diseases" value={listOrTags(plant.danger?.diseases)} />
-            </div>
-          </Section>
-        )}
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        {/* Companions Section - Only show if companions exist */}
-        {hasCompanions && (
-          <Section title="Companions" icon={<Users className="h-4 w-4" />}>
-            {companionDetails.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {companionDetails.map((companion) => (
-                  <CompanionCard key={companion.id} id={companion.id} name={companion.name} image={companion.image} />
-                ))}
+            {activePanel && (
+              <div className="space-y-6">
+                {activePanel.content}
               </div>
-            ) : (
-              <FieldRow label="Companions" value={listOrTags(plant.miscellaneous?.companions)} />
             )}
-          </Section>
+          </div>
         )}
-
-        {/* Tags & Sources Section */}
-        {miscHasContent && (
-          <Section title="Tags & Sources" icon={<Info className="h-4 w-4" />}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Tags" value={listOrTags(plant.miscellaneous?.tags)} />
-              <FieldRow
-                label="Sources"
-                value={(plant.miscellaneous?.sources || []).length ? (
-                  <div className="space-y-2 text-sm">
-                    {(plant.miscellaneous?.sources || []).map((src, idx) => (
-                      <div key={`${src.name}-${idx}`} className="flex flex-col rounded border px-3 py-2 bg-white/70 dark:bg-[#151b15]">
-                        <div className="font-medium">{src.name}</div>
-                        {src.url && (
-                          <a href={src.url} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all">
-                            {src.url}
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : undefined}
-              />
-            </div>
-          </Section>
-        )}
-
-        {metaHasContent && (
-          <Section title="Meta" icon={<Info className="h-4 w-4" />}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Author" value={plant.meta?.createdBy} />
-              <FieldRow label="Created" value={createdAtDisplay} />
-              <FieldRow label="Last Editor" value={plant.meta?.updatedBy} />
-              <FieldRow label="Last Updated" value={updatedAtDisplay} />
-              <FieldRow label="Admin Commentary" value={plant.meta?.adminCommentary} />
-            </div>
-          </Section>
-        )}
-      </div>
-
-        {galleryHasContent ? (
-          <Section title="Gallery" icon={<Layers className="h-4 w-4" />}>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {(plant.images ?? []).map((img) => {
-                const imageIndex = images.findIndex((i) => i.id === img.id || i.link === img.link)
-                return (
-                  <div
-                    key={img.id || img.link}
-                    className="relative overflow-hidden rounded-xl border border-muted/60 bg-white/80 shadow-sm cursor-pointer transition hover:scale-105 hover:shadow-md"
-                    onClick={() => {
-                      if (imageIndex >= 0) {
-                        setActiveImageIndex(imageIndex)
-                        setViewerOpen(true)
-                      }
-                    }}
-                  >
-                    <img src={img.link} alt={plant.name} className="h-32 w-full object-cover sm:h-40" loading="lazy" />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1 text-[11px] uppercase tracking-wide text-white">
-                      {img.use}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </Section>
-        ) : null}
     </div>
   )
 }

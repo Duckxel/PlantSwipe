@@ -1,6 +1,7 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
+import { DimensionCube } from '@/components/plant/DimensionCube'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { Plant, PlantImage, PlantWateringSchedule, PlantColor } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
@@ -36,7 +37,6 @@ import {
   Tooltip as RechartsTooltip,
   Cell,
 } from 'recharts'
-import * as THREE from 'three'
 import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import {
   expandCompositionFromDb,
@@ -414,12 +414,12 @@ export const PlantInfoPage: React.FC = () => {
               </Button>
             )}
         </div>
-        <PlantDetails
-          plant={plant}
-          liked={likedIds.includes(plant.id)}
-          onToggleLike={toggleLiked}
-        />
           <MoreInformationSection plant={plant} />
+          <PlantDetails
+            plant={plant}
+            liked={likedIds.includes(plant.id)}
+            onToggleLike={toggleLiked}
+          />
       </div>
     </div>
   )
@@ -453,6 +453,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     plant.identity?.livingSpace,
     plant.plantCare?.levelSun,
     plant.ecology?.conservationStatus,
+  ].filter(Boolean) as string[]
+  const highlightBadges = [
+    plant.identity?.livingSpace,
+    plant.plantCare?.levelSun,
+    plant.utility?.[0],
+    plant.identity?.season?.slice(0, 2).join(' • '),
   ].filter(Boolean) as string[]
   const palette = plant.identity?.colors?.length ? plant.identity.colors : []
   const infoSections = [
@@ -501,9 +507,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       className="space-y-4 sm:space-y-6"
     >
       <div className="flex flex-col gap-1.5 sm:gap-2">
-        <h2 className="text-xl sm:text-2xl font-semibold text-stone-900 dark:text-stone-100">More Information</h2>
+        <p className="text-[11px] uppercase tracking-[0.45em] text-emerald-500/80">Immersive overview</p>
+        <h2 className="text-xl sm:text-2xl font-semibold text-stone-900 dark:text-stone-100">Feel the plant before the paragraphs</h2>
         <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-          Dive deeper into dimensions, care routines, seasonal rhythms, and ecological context.
+          Play with the holographic cube, skim the care pulse, and glance at ecology badges—then dive deeper if you want.
         </p>
       </div>
       
@@ -529,6 +536,18 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 <DimensionLegendCard key={item.label} {...item} />
               ))}
             </div>
+              {highlightBadges.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {highlightBadges.slice(0, 3).map((badge) => (
+                    <Badge key={badge} className="rounded-full border border-emerald-100/60 bg-white/80 px-2.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
+                      {badge}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <p className="mt-3 text-[11px] leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
+                Hover, drag, or tap to orbit the cube and understand the plant’s footprint before diving into the details.
+              </p>
           </motion.section>
         )}
 
