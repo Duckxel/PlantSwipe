@@ -964,25 +964,6 @@ const TimelineTooltip = (
   )
 }
 
-const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string; className?: string }> = ({
-  label,
-  value,
-  subLabel,
-  className,
-}) => (
-  <div
-    className={`rounded-xl border border-emerald-500/30 bg-white/95 px-3.5 sm:px-4 py-2.5 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50 ${
-      className || ''
-    }`}
-  >
-    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
-      {label}
-    </div>
-    <div className="text-[11px] sm:text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-1">{subLabel}</div>
-    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">{value}</div>
-  </div>
-)
-
 const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
   <Card className="rounded-2xl sm:rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
     <CardHeader className="space-y-2 sm:space-y-3 p-4 sm:p-6">
