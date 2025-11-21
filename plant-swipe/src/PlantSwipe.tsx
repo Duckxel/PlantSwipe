@@ -375,6 +375,31 @@ export default function PlantSwipe() {
     const lowerQuery = query.toLowerCase()
     const normalizedType = typeFilter?.toLowerCase() ?? null
     const normalizedUsage = usageFilters.map((u) => u.toLowerCase())
+    const normalizedColorFilter = colorFilter ? colorFilter.toLowerCase().trim() : null
+    const colorFilterHasWhitespace = normalizedColorFilter ? /\s/.test(normalizedColorFilter) : false
+
+    const colorMatches = (colorName: string): boolean => {
+      if (!normalizedColorFilter) return true
+
+      const normalizedColor = (colorName || "").toLowerCase().trim()
+      if (!normalizedColor) return false
+
+      if (colorFilterHasWhitespace) {
+        return normalizedColor === normalizedColorFilter
+      }
+
+      if (normalizedColor === normalizedColorFilter) {
+        return true
+      }
+
+      const tokens = normalizedColor
+        .replace(/[-_/]+/g, " ")
+        .split(/\s+/)
+        .filter(Boolean)
+
+      return tokens.includes(normalizedColorFilter)
+    }
+
     return plants.filter((p: Plant) => {
       // Extract colors from both legacy format (p.colors) and new format (p.identity?.colors)
       const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
@@ -387,7 +412,7 @@ export default function PlantSwipe() {
         .toLowerCase()
         .includes(lowerQuery)
       const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
-      const matchesColor = colorFilter ? colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
+      const matchesColor = normalizedColorFilter ? colors.some((color) => colorMatches(color)) : true
       const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
       const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
