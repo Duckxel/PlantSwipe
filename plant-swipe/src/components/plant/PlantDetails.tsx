@@ -384,32 +384,32 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
                 No image yet
               </div>
             )}
-          </div>
-            {visibleStats.length > 0 && (
-              <div className="mt-4 w-full rounded-[28px] border border-white/20 bg-white/10 p-4 shadow-inner backdrop-blur-sm sm:p-6">
-                <div className="flex flex-wrap gap-3 sm:gap-4">
-                  {visibleStats.map((stat) => (
-                    <Card
-                      key={stat.label}
-                      className={`flex-1 min-w-[180px] bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}
-                    >
-                      <CardContent className="flex items-center justify-between p-3 sm:p-4">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
-                          <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
-                          {stat.detail ? (
-                            <p className="text-[11px] sm:text-xs mt-1 text-white/80 truncate">{stat.detail}</p>
-                          ) : null}
-                        </div>
-                        <div className="ml-2 flex-shrink-0">{stat.icon}</div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+            </div>
         </div>
+
+        {visibleStats.length > 0 && (
+          <div className="rounded-[28px] border border-white/40 bg-white/70 px-4 py-4 shadow-inner backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:px-6 sm:py-6">
+            <div className="flex flex-wrap gap-3 sm:gap-4">
+              {visibleStats.map((stat) => (
+                <Card
+                  key={stat.label}
+                  className={`flex-1 min-w-[180px] bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}
+                >
+                  <CardContent className="flex items-center justify-between p-3 sm:p-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
+                      <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
+                      {stat.detail ? (
+                        <p className="text-[11px] sm:text-xs mt-1 text-white/80 truncate">{stat.detail}</p>
+                      ) : null}
+                    </div>
+                    <div className="ml-2 flex-shrink-0">{stat.icon}</div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
       {viewerOpen && activeImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={closeViewer}>
