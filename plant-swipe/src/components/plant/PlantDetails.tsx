@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { Plant } from "@/types/plant"
+import type { Plant, PlantWateringSchedule } from "@/types/plant"
 import {
   SunMedium,
   Droplets,
@@ -187,7 +187,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       ? "Share unavailable"
       : ""
 
-  const formatWateringNeed = (schedules?: Plant["plantCare"]?.watering?.schedules) => {
+  const formatWateringNeed = (schedules?: PlantWateringSchedule[]) => {
     if (!schedules?.length) return "Flexible"
     const schedule = schedules[0]
     const quantity = schedule.quantity ?? undefined
