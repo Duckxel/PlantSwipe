@@ -212,7 +212,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     const maintenanceLevel =
       plant.identity?.maintenanceLevel || plant.plantCare?.maintenanceLevel || plant.care?.maintenanceLevel || undefined
 
-    const stats = [
+  const stats = [
     {
       label: "Sun Level",
       value: plant.plantCare?.levelSun || "Adaptive",
@@ -260,6 +260,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
         plant.plantCare?.temperatureIdeal !== undefined,
     },
   ]
+
+  const visibleStats = stats.filter((stat) => stat.visible)
 
   const identity = plant.identity ?? {}
   const plantCare = plant.plantCare ?? {}
@@ -487,25 +489,28 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
             )}
           </div>
 
-          <div className="relative mx-3 mb-6 mt-4 space-y-6 rounded-[28px] border border-white/20 bg-white/10 p-4 shadow-inner backdrop-blur-sm sm:mx-4 sm:p-6 md:mx-6 lg:mx-8">
-            <div className="grid grid-cols-2 gap-y-3 gap-x-2 md:grid-cols-4 md:gap-x-3 md:gap-y-4 xl:grid-cols-5">
-              {stats.map((stat) =>
-                stat.visible ? (
-                  <Card key={stat.label} className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}>
-                    <CardContent className="flex items-center justify-between p-3 sm:p-4">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
-                        <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
-                        {stat.detail ? (
-                          <p className="text-[11px] sm:text-xs mt-1 text-white/80 truncate">{stat.detail}</p>
-                        ) : null}
-                      </div>
-                      <div className="ml-2 flex-shrink-0">{stat.icon}</div>
-                    </CardContent>
-                  </Card>
-                ) : null,
+            <div className="relative mx-3 mb-6 mt-4 space-y-6 rounded-[28px] border border-white/20 bg-white/10 p-4 shadow-inner backdrop-blur-sm sm:mx-4 sm:p-6 md:mx-6 lg:mx-8">
+              {visibleStats.length > 0 && (
+                <div
+                  className="grid gap-y-3 gap-x-2 sm:gap-3"
+                  style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}
+                >
+                  {visibleStats.map((stat) => (
+                    <Card key={stat.label} className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}>
+                      <CardContent className="flex items-center justify-between p-3 sm:p-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
+                          <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
+                          {stat.detail ? (
+                            <p className="text-[11px] sm:text-xs mt-1 text-white/80 truncate">{stat.detail}</p>
+                          ) : null}
+                        </div>
+                        <div className="ml-2 flex-shrink-0">{stat.icon}</div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               )}
-            </div>
 
             <div className="space-y-4 sm:space-y-5">
               {hasIdentityDetails && (
