@@ -36,7 +36,6 @@ import {
   CartesianGrid,
   Tooltip as RechartsTooltip,
   Cell,
-  Rectangle,
 } from 'recharts'
 import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import {
@@ -684,9 +683,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                     <YAxis hide domain={[0, 3]} />
                     <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} shape={RoundedSowingBar} />
-                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} shape={RoundedFruitingBar} />
-                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} shape={RoundedFloweringBar} />
+                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -799,27 +798,6 @@ const TimelineTooltip = (
     </div>
   )
 }
-
-type TimelineBarPayload = { flowering?: number; fruiting?: number; sowing?: number }
-
-type RoundedBarProps = React.ComponentProps<typeof Rectangle> & {
-  payload?: TimelineBarPayload
-  value?: number
-}
-
-const createRoundedBar = (higherKeys: (keyof TimelineBarPayload)[]) => {
-  const Shape: React.FC<RoundedBarProps> = ({ payload, value, height, ...rest }) => {
-    if ((value ?? 0) <= 0 || (height ?? 0) <= 0) return null
-    const hasHigher = higherKeys.some((key) => (payload?.[key] ?? 0) > 0)
-    const radius: [number, number, number, number] = hasHigher ? [0, 0, 0, 0] : [8, 8, 0, 0]
-    return <Rectangle {...rest} payload={payload} height={height} radius={radius} />
-  }
-  return Shape
-}
-
-const RoundedFloweringBar = createRoundedBar([])
-const RoundedFruitingBar = createRoundedBar(['flowering'])
-const RoundedSowingBar = createRoundedBar(['flowering', 'fruiting'])
 
 const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string; className?: string }> = ({
   label,
