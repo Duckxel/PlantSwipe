@@ -6225,6 +6225,86 @@ app.post('/api/track-visit', async (req, res) => {
   }
 })
 
+app.options('/api/account/delete', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+app.post('/api/account/delete', async (req, res) => {
+  try {
+    if (!supabaseServiceClient) {
+      res.status(503).json({ error: 'Account deletion is not configured on this server' })
+      return
+    }
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    const userId = user.id
+
+    let deletedGardens = 0
+    let deletedGardenIds = []
+    try {
+      const { data: ownerMemberships, error: ownerErr } = await supabaseServiceClient
+        .from('garden_members')
+        .select('garden_id')
+        .eq('user_id', userId)
+        .eq('role', 'owner')
+      if (ownerErr) throw ownerErr
+      const gardenIds = Array.from(
+        new Set(
+          (ownerMemberships || [])
+            .map((row) => row?.garden_id)
+            .filter((gid) => typeof gid === 'string' && gid.length > 0),
+        ),
+      )
+      if (gardenIds.length > 0) {
+        const { data: deletedRows, error: deleteGardensErr } = await supabaseServiceClient
+          .from('gardens')
+          .delete()
+          .in('id', gardenIds)
+          .select('id')
+        if (deleteGardensErr) throw deleteGardensErr
+        deletedGardenIds = (deletedRows || []).map((row) => row?.id).filter(Boolean)
+        deletedGardens = deletedGardenIds.length
+      }
+    } catch (gardenErr) {
+      console.error('[account-delete] Failed to delete owned gardens', gardenErr)
+      res.status(500).json({ error: 'Failed to delete owned gardens' })
+      return
+    }
+
+    try {
+      if (sql) {
+        await sql`delete from public.user_task_daily_cache where user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('user_task_daily_cache').delete().eq('user_id', userId)
+      }
+    } catch (cacheErr) {
+      console.warn('[account-delete] Failed to clear task cache for user', cacheErr?.message || cacheErr)
+    }
+
+    const { error: deleteUserError } = await supabaseServiceClient.auth.admin.deleteUser(userId)
+    if (deleteUserError) {
+      console.error('[account-delete] Failed to delete auth user', deleteUserError)
+      res.status(500).json({ error: 'Failed to delete account' })
+      return
+    }
+
+    res.json({
+      ok: true,
+      deletedGardens,
+      deletedGardenIds,
+      deletedUser: true,
+    })
+  } catch (err) {
+    console.error('[account-delete] Unexpected failure', err)
+    res.status(500).json({ error: 'Failed to delete account' })
+  }
+})
+
 // Admin: unique visitors stats (past 10m and 7 days)
 app.get('/api/admin/visitors-stats', async (req, res) => {
   const uid = "public"
