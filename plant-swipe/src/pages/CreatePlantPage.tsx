@@ -728,6 +728,62 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         })
         await upsertSources(savedId, sources)
         await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
+        
+        // Save current language translation if not English
+        if (language && language !== 'en') {
+          const dbLifeCycle = lifeCycleEnum.toDb(plantToSave.identity?.lifeCycle)
+          const dbSeasons = seasonEnum.toDbArray(plantToSave.identity?.season)
+          const dbLivingSpace = livingSpaceEnum.toDb(plantToSave.identity?.livingSpace)
+          const dbMaintenance = maintenanceLevelEnum.toDb(plantToSave.identity?.maintenanceLevel)
+          const dbToxicityHuman = toxicityEnum.toDb(plantToSave.identity?.toxicityHuman)
+          const dbToxicityPets = toxicityEnum.toDb(plantToSave.identity?.toxicityPets)
+          const dbHabitat = habitatEnum.toDbArray(plantToSave.plantCare?.habitat)
+          const primarySource = sources[0]
+          
+          const currentLanguageTranslation = {
+            plant_id: savedId,
+            language: language,
+            name: plantToSave.name.trim() || null,
+            given_names: plantToSave.identity?.givenNames || [],
+            scientific_name: plantToSave.identity?.scientificName || null,
+            family: plantToSave.identity?.family || null,
+            overview: plantToSave.identity?.overview || null,
+            promotion_month: normalizedPromotionMonth,
+            life_cycle: dbLifeCycle || null,
+            season: normalizedIdentitySeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
+            toxicity_human: dbToxicityHuman || null,
+            toxicity_pets: dbToxicityPets || null,
+            allergens: plantToSave.identity?.allergens || [],
+            symbolism: plantToSave.identity?.symbolism || [],
+            living_space: dbLivingSpace || null,
+            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+            maintenance_level: normalizedMaintenance || null,
+            origin: plantToSave.plantCare?.origin || [],
+            habitat: dbHabitat,
+            advice_soil: plantToSave.plantCare?.adviceSoil || null,
+            advice_mulching: plantToSave.plantCare?.adviceMulching || null,
+            advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
+            advice_tutoring: plantToSave.growth?.adviceTutoring || null,
+            advice_sowing: plantToSave.growth?.adviceSowing || null,
+            advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+            advice_infusion: plantToSave.usage?.adviceInfusion || null,
+            ground_effect: plantToSave.ecology?.groundEffect || null,
+            admin_commentary: plantToSave.meta?.adminCommentary || null,
+            source_name: primarySource?.name || null,
+            source_url: primarySource?.url || null,
+            tags: plantToSave.miscellaneous?.tags || [],
+          }
+          
+          const { error: translationError } = await supabase
+            .from('plant_translations')
+            .upsert(currentLanguageTranslation, { onConflict: 'plant_id,language' })
+          if (translationError) {
+            console.error('Failed to save current language translation:', translationError)
+            // Don't throw - allow plant save to succeed even if translation save fails
+          }
+        }
+        
       setPlant({
         ...plantToSave,
         plantCare: { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } },
