@@ -960,34 +960,65 @@ const formatIndicatorValue = (value?: string | null): string => {
 }
 
 const buildColorSwatches = (plant: Plant): ColorSwatchDescriptor[] => {
-  const directColors = Array.isArray(plant.colors) ? plant.colors : []
-  const normalizedDirect = directColors.filter((color): color is string => typeof color === "string" && color.trim().length > 0)
-
-  const fallbackColors: string[] = []
-  if (!normalizedDirect.length) {
-    plant.phenology?.flowerColors?.forEach((color) => {
-      if (color?.hex) {
-        fallbackColors.push(color.hex)
-      } else if (color?.name) {
-        fallbackColors.push(color.name)
-      }
-    })
-    plant.phenology?.leafColors?.forEach((color) => {
-      if (color?.hex) {
-        fallbackColors.push(color.hex)
-      } else if (color?.name) {
-        fallbackColors.push(color.name)
+  // Primary source: plant.identity?.colors (array of PlantColor objects)
+  const identityColors: string[] = []
+  if (plant.identity?.colors && Array.isArray(plant.identity.colors)) {
+    plant.identity.colors.forEach((color) => {
+      if (color && typeof color === "object") {
+        // PlantColor object with name and hexCode
+        if (color.hexCode && typeof color.hexCode === "string" && color.hexCode.trim().length > 0) {
+          identityColors.push(color.hexCode.trim())
+        } else if (color.name && typeof color.name === "string" && color.name.trim().length > 0) {
+          identityColors.push(color.name.trim())
+        }
+      } else if (typeof color === "string" && color.trim().length > 0) {
+        // Fallback: treat as string
+        identityColors.push(color.trim())
       }
     })
   }
 
-  const palette = normalizedDirect.length ? normalizedDirect : fallbackColors
+  // Secondary source: plant.colors (legacy array of strings)
+  const legacyColors: string[] = []
+  if (Array.isArray(plant.colors)) {
+    plant.colors.forEach((color) => {
+      if (typeof color === "string" && color.trim().length > 0) {
+        legacyColors.push(color.trim())
+      }
+    })
+  }
+
+  // Tertiary source: phenology colors (fallback)
+  const fallbackColors: string[] = []
+  if (identityColors.length === 0 && legacyColors.length === 0) {
+    plant.phenology?.flowerColors?.forEach((color) => {
+      if (color?.hex && typeof color.hex === "string" && color.hex.trim().length > 0) {
+        fallbackColors.push(color.hex.trim())
+      } else if (color?.name && typeof color.name === "string" && color.name.trim().length > 0) {
+        fallbackColors.push(color.name.trim())
+      }
+    })
+    plant.phenology?.leafColors?.forEach((color) => {
+      if (color?.hex && typeof color.hex === "string" && color.hex.trim().length > 0) {
+        fallbackColors.push(color.hex.trim())
+      } else if (color?.name && typeof color.name === "string" && color.name.trim().length > 0) {
+        fallbackColors.push(color.name.trim())
+      }
+    })
+  }
+
+  // Use identity colors first, then legacy colors, then fallback
+  const palette = identityColors.length > 0 ? identityColors : (legacyColors.length > 0 ? legacyColors : fallbackColors)
 
   return palette
-    .map((color, index) => ({
-      id: `${color}-${index}`,
-      label: formatIndicatorValue(color),
-      tone: resolveColorValue(color),
-    }))
-    .filter((entry) => entry.label.length > 0 || Boolean(entry.tone))
+    .map((color, index) => {
+      const resolvedTone = resolveColorValue(color)
+      const label = formatIndicatorValue(color)
+      return {
+        id: `${color}-${index}`,
+        label: label || resolvedTone,
+        tone: resolvedTone,
+      }
+    })
+    .filter((entry) => entry.tone && entry.tone.length > 0)
 }
