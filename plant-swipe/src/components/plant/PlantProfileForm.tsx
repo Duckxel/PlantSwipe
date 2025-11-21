@@ -30,6 +30,16 @@ const normalizeHex = (hex?: string) => {
   return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
 }
 
+const isSingleWordColorName = (name?: string) => {
+  if (!name) return false
+  const normalized = name
+    .trim()
+    .replace(/[\u2010-\u2015]/g, "-") // normalize special dashes
+    .replace(/[-_/]+/g, " ")
+  if (!normalized) return false
+  return normalized.split(/\s+/).filter(Boolean).length === 1
+}
+
 type FieldType =
   | "text"
   | "textarea"
@@ -903,8 +913,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
     const single: PlantColor[] = []
     const multi: PlantColor[] = []
     ;(available || []).forEach((color) => {
-      const name = (color.name || "").trim()
-      if (name && !/\s/.test(name)) {
+      if (isSingleWordColorName(color.name)) {
         single.push(color)
       } else {
         multi.push(color)
