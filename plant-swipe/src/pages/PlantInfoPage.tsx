@@ -605,9 +605,21 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                     <YAxis hide domain={[0, 3]} />
                     <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[8, 8, 0, 0]} />
-                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} />
-                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} />
+                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[0, 0, 0, 0]} />
+                    <Bar
+                      dataKey="flowering"
+                      stackId="timeline"
+                      fill={TIMELINE_COLORS.flowering}
+                      radius={(payload) => {
+                        const monthData = payload.payload
+                        const isTopLayer =
+                          (monthData.fruiting ?? 0) === 0 &&
+                          (monthData.sowing ?? 0) === 0 &&
+                          (monthData.flowering ?? 0) === 1
+                        return isTopLayer ? [8, 8, 0, 0] : [0, 0, 0, 0]
+                      }}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
