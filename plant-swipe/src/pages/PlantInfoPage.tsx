@@ -1152,3 +1152,5 @@ const formatAuditStamp = (user?: string | null, timestamp?: string | null) => {
   if (user) return user
   return dateLabel
 }
+
+export default PlantInfoPage
