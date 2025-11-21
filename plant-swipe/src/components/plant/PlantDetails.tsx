@@ -187,6 +187,18 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       ? "Share unavailable"
       : ""
 
+  const formatWateringNeed = (schedules?: Plant["plantCare"]?.watering?.schedules) => {
+    if (!schedules?.length) return "Flexible"
+    const schedule = schedules[0]
+    const quantity = schedule.quantity ?? undefined
+    const timePeriod = schedule.timePeriod?.replace(/[_-]/g, " ").toLowerCase()
+
+    if (quantity && timePeriod) return `${quantity} / ${timePeriod}`
+    if (quantity) return `${quantity}x`
+    if (timePeriod) return `Every ${timePeriod}`
+    return "Scheduled"
+  }
+
   const stats = [
     {
       label: "Sun Level",
@@ -195,15 +207,13 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       icon: <SunMedium className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible: Boolean(plant.plantCare?.levelSun),
     },
-    {
-      label: "Watering Need",
-      value: plant.plantCare?.watering?.schedules?.length
-        ? `${plant.plantCare.watering.schedules.length} plan${plant.plantCare.watering.schedules.length === 1 ? "" : "s"}`
-        : "Flexible",
-      gradient: "from-blue-400/90 to-cyan-600",
-      icon: <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
-      visible: Boolean(plant.plantCare?.watering?.schedules?.length),
-    },
+      {
+        label: "Watering Need",
+        value: formatWateringNeed(plant.plantCare?.watering?.schedules),
+        gradient: "from-blue-400/90 to-cyan-600",
+        icon: <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+        visible: Boolean(plant.plantCare?.watering?.schedules?.length),
+      },
     {
       label: "Humidity",
       value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : "Ambient",
@@ -383,9 +393,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
         )}
       </div>
 
-      <div className="rounded-3xl border border-dashed border-emerald-200/60 bg-white/70 p-4 text-sm text-stone-600 shadow-inner dark:border-emerald-900/30 dark:bg-emerald-900/10 dark:text-emerald-200">
-        Detailed schema-style notes have been tucked into the immersive explorer below so you can stay in the vibe here.
-      </div>
     </div>
   )
 }
