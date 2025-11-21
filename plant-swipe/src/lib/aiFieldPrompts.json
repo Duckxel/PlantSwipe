@@ -1,0 +1,70 @@
+{
+  "plantType": [
+    "Classify {{plantName}} by its dominant growth habit or planting form.",
+    "Return a single lowercase string chosen from: \"plant\", \"flower\", \"bamboo\", \"shrub\", \"tree\"."
+  ],
+  "utility": [
+    "List every practical or ornamental role {{plantName}} is commonly grown for.",
+    "Return an array of lowercase tags selected from: \"comestible\", \"ornemental\", \"produce_fruit\", \"aromatic\", \"medicinal\", \"odorous\", \"climbing\", \"cereal\", \"spice\"."
+  ],
+  "comestiblePart": [
+    "Identify which anatomical parts of {{plantName}} are safely edible.",
+    "Return an array whose values are limited to: \"flower\", \"fruit\", \"seed\", \"leaf\", \"stem\", \"root\", \"bulb\", \"bark\", \"wood\"."
+  ],
+  "fruitType": [
+    "Describe the fruiting category for {{plantName}} if it produces harvestable fruit.",
+    "Return an array containing any applicable values from: \"nut\", \"seed\", \"stone\". Use an empty array when the plant does not fruit."
+  ],
+  "seasons": [
+    "Indicate the seasons when {{plantName}} looks most attractive or is at peak performance.",
+    "Return an array of capitalized season names chosen from: \"Spring\", \"Summer\", \"Autumn\", \"Winter\"."
+  ],
+  "description": [
+    "Write a cohesive horticultural overview for {{plantName}} that highlights appearance, growth habit, bloom/fruit interest, and essential care.",
+    "Use 150-300 words of prose (no bullet lists or headings) and keep the tone factual and neutral."
+  ],
+  "identity": [
+    "Populate the `identity` object for {{plantName}} with authoritative taxonomy and naming information.",
+    "Include: `givenNames` (array of common names), `scientificName` (binomial), `family`, `overview` (2-3 sentence summary distinct from the main description), `promotionMonth` (1-12 where relevant), `lifeCycle` (Annual, Biennials, Perenials, Ephemerals, Monocarpic, or Polycarpic), `season` (array of capitalized seasons), `foliagePersistance` (Deciduous, Evergreen, Semi-Evergreen, or Marcescent), `spiked` (boolean), `toxicityHuman` and `toxicityPets` (Non-Toxic, Midly Irritating, Highly Toxic, or Lethally Toxic), `allergens` (array), `colors` (array of objects like {\"name\":\"Deep Pink\",\"hexCode\":\"#d62d5b\"}), `multicolor`, `bicolor`, `scent` (booleans), `symbolism` (array of short themes), `livingSpace` (Indoor, Outdoor, or Both), `composition` (subset of Flowerbed, Path, Hedge, Ground Cover, Pot), and `maintenanceLevel` (None, Low, Moderate, or Heavy).",
+    "Use concise values grounded in reputable botanical sources and avoid copying the long-form description."
+  ],
+  "plantCare": [
+    "Outline how to cultivate {{plantName}} successfully.",
+    "Populate: `origin` (regions/countries), `habitat` (choose from the predefined habitat enums), `temperatureMax`, `temperatureMin`, `temperatureIdeal` (°C integers), `levelSun` (Low Light, Shade, Partial Sun, or Full Sun), `hygrometry` (0-100 scale describing ambient humidity), `wateringType`, `division`, `soil`, `adviceSoil`, `mulching`, `adviceMulching`, `nutritionNeed`, `fertilizer`, and `adviceFertilizer`.",
+    "For watering, include both summary guidance and an explicit `schedules` array under `watering`, where every schedule entry is `{ \"season\": \"Spring\", \"quantity\": 2, \"timePeriod\": \"week\" }` describing how often to water.",
+    "Keep recommendations practical, specific, and consistent with the plant’s native environment."
+  ],
+  "growth": [
+    "Detail the growth and propagation profile for {{plantName}}.",
+    "Fill: `sowingMonth`, `floweringMonth`, and `fruitingMonth` as arrays of integers (1-12); `height` and `wingspan` in centimeters; `tutoring` (boolean) with `adviceTutoring`; `sowType` (array of techniques such as direct_sow or trays); `separation` (centimeters between plants); `transplanting` (boolean); `adviceSowing`; and `cut` (short note on pruning or cutting style).",
+    "Use realistic numbers pulled from horticultural references."
+  ],
+  "usage": [
+    "Summarize how people cook with, medicate with, or otherwise use {{plantName}}.",
+    "Populate: `adviceMedicinal` (concise paragraph on traditional medicinal uses if applicable), `nutritionalIntake` (array mentioning vitamins or benefits), `infusion` (boolean) with `adviceInfusion`, `infusionMix` (array of objects like {\"mix_name\":\"Chamomile blend\",\"benefit\":\"Calming digestive tea\"}), `recipesIdeas` (array of short dish ideas), `aromatherapy` (boolean), and `spiceMixes` (array of blends).",
+    "If certain uses are not documented, leave their arrays empty instead of inventing data."
+  ],
+  "ecology": [
+    "Capture {{plantName}}’s ecological value and environmental needs.",
+    "Set `melliferous` (boolean for nectar value), list `polenizer` helpers (Bee, Wasp, Ant, Butterfly, Bird, Mosquito, Fly, Beetle, ladybug, Stagbeetle, Cockchafer, dungbeetle, weevil), `beFertilizer` (boolean), `groundEffect` (erosion control, nitrogen fixing, etc.), and `conservationStatus` (Safe, At Risk, Vulnerable, Endangered, Critically Endangered, or Extinct).",
+    "Note wildlife relationships or restoration roles when credible data exists."
+  ],
+  "danger": [
+    "List the main pests and diseases that threaten {{plantName}}.",
+    "Return two arrays: `pests` (common or scientific names) and `diseases` (named issues such as powdery mildew).",
+    "Only include issues that are well-documented for this species."
+  ],
+  "miscellaneous": [
+    "Provide supporting relational data for {{plantName}}.",
+    "Fill `companions` with names of plants that grow well alongside it, `tags` with short categorical labels users might search for, and `sources` with an array of citation objects shaped like {\"name\":\"Royal Horticultural Society\",\"url\":\"https://www.rhs.org.uk/\"}.",
+    "Prefer high-quality references and avoid duplicates."
+  ],
+  "meta": [
+    "When meta data is requested for {{plantName}}, only populate editorial helper fields.",
+    "Return an object that may include `funFact` (<=40 words of trivia), `adminCommentary`, `createdBy`, `updatedBy`, and timestamps if they are already known; leave review status untouched unless explicitly provided."
+  ],
+  "meaning": [
+    "Summarize the symbolic meaning of {{plantName}} in under 50 words.",
+    "Focus on emotions, ceremonies, or cultural themes backed by botanical folklore. Do not include care advice or lists."
+  ]
+}

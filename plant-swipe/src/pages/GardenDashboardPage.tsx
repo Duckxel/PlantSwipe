@@ -1588,20 +1588,16 @@ export const GardenDashboardPage: React.FC = () => {
       const queryLower = plantQuery.toLowerCase().trim();
 
       // Search in base plants table
-      const { data: basePlants, error: baseError } = await supabase
-        .from("plants")
-        .select(
-          "id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount",
-        )
+        const { data: basePlants, error: baseError } = await supabase
+          .from("plants")
+          .select("id")
         .ilike("name", `%${queryLower}%`)
         .limit(20);
 
       // Search in translations table for current language
-      const { data: translatedPlants, error: transError } = await supabase
-        .from("plant_translations")
-        .select(
-          "plant_id, name, scientific_name, meaning, description, care_soil",
-        )
+        const { data: translatedPlants, error: transError } = await supabase
+          .from("plant_translations")
+          .select("plant_id")
         .eq("language", currentLang)
         .ilike("name", `%${queryLower}%`)
         .limit(20);
@@ -1625,11 +1621,9 @@ export const GardenDashboardPage: React.FC = () => {
       }
 
       // Load full plant data for all matching IDs
-      const { data: fullPlants, error: fullError } = await supabase
-        .from("plants")
-        .select(
-          "id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount",
-        )
+        const { data: fullPlants, error: fullError } = await supabase
+          .from("plants")
+          .select("*")
         .in("id", Array.from(allPlantIds))
         .limit(20);
 
@@ -2395,14 +2389,11 @@ export const GardenDashboardPage: React.FC = () => {
                           }}
                         >
                           <div className="absolute top-2 right-2 z-10">
-                            <button
-                              onClick={(e: any) => {
-                                e.stopPropagation();
-                                if (gp?.plant)
-                                  navigate(`/plants/${gp.plant.id}`, {
-                                    state: { backgroundLocation: location },
-                                  });
-                              }}
+                              <button
+                                onClick={(e: any) => {
+                                  e.stopPropagation();
+                                  if (gp?.plant) navigate(`/plants/${gp.plant.id}`);
+                                }}
                               onMouseDown={(e: any) => e.stopPropagation()}
                               onTouchStart={(e: any) => e.stopPropagation()}
                               aria-label={t(

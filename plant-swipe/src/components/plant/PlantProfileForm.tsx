@@ -6,20 +6,29 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
-import { plantFormCategoryOrder, type PlantFormCategory } from "@/lib/plantFormCategories"
+import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
+import { Sparkles } from "lucide-react"
 
 export type PlantProfileFormProps = {
   value: Plant
   onChange: (plant: Plant) => void
   colorSuggestions?: PlantColor[]
+  categoryProgress?: CategoryProgress
 }
 
 const neuCardClass =
   "rounded-2xl border border-emerald-100/80 dark:border-emerald-900/50 bg-gradient-to-br " +
   "from-emerald-50/80 via-emerald-100/70 to-white/80 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] " +
   "shadow-[0_18px_50px_-26px_rgba(16,185,129,0.35)] dark:shadow-[0_22px_65px_-40px_rgba(0,0,0,0.65)]"
+
+const normalizeHex = (hex?: string) => {
+  if (!hex) return ""
+  const trimmed = hex.trim()
+  if (!trimmed) return ""
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
+}
 
 type FieldType =
   | "text"
@@ -35,17 +44,63 @@ type FieldType =
   | "sources"
   | "readonly"
 
+type FieldOption = string | { label: string; value: string | number }
+
 interface FieldConfig {
   key: string
   label: string
   description: string
   type: FieldType
-  options?: string[]
+  options?: ReadonlyArray<FieldOption>
 }
 
 const monthOptions = [
-  "January","February","March","April","May","June","July","August","September","October","November","December"
-]
+  { label: "January", value: 1 },
+  { label: "February", value: 2 },
+  { label: "March", value: 3 },
+  { label: "April", value: 4 },
+  { label: "May", value: 5 },
+  { label: "June", value: 6 },
+  { label: "July", value: 7 },
+  { label: "August", value: 8 },
+  { label: "September", value: 9 },
+  { label: "October", value: 10 },
+  { label: "November", value: 11 },
+  { label: "December", value: 12 },
+] as const
+
+const monthLookup = monthOptions.reduce((acc, option) => {
+  const lower = option.label.toLowerCase()
+  acc[lower] = option.value
+  acc[lower.slice(0, 3)] = option.value
+  acc[String(option.value)] = option.value
+  acc[option.value.toString().padStart(2, '0')] = option.value
+  return acc
+}, {} as Record<string, number>)
+
+const normalizeMonthValue = (input: unknown): number | null => {
+  if (typeof input === "number" && Number.isFinite(input)) {
+    const int = Math.round(input)
+    if (int >= 1 && int <= 12) return int
+  }
+  if (typeof input === "string") {
+    const trimmed = input.trim().toLowerCase()
+    if (!trimmed) return null
+    if (monthLookup[trimmed]) return monthLookup[trimmed]
+  }
+  return null
+}
+
+const normalizeMonthArray = (value: unknown): number[] => {
+  if (value === null || value === undefined) return []
+  const source = Array.isArray(value) ? value : [value]
+  const result: number[] = []
+  for (const entry of source) {
+    const normalized = normalizeMonthValue(entry)
+    if (normalized && !result.includes(normalized)) result.push(normalized)
+  }
+  return result
+}
 
 const TagInput: React.FC<{ value: string[]; onChange: (v: string[]) => void; placeholder?: string }> = ({ value, onChange, placeholder }) => {
   const [input, setInput] = React.useState("")
@@ -462,10 +517,17 @@ const comestibleOptions = ["flower","fruit","seed","leaf","stem","root","bulb","
 const fruitOptions = ["nut","seed","stone"] as const
 const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
 
-function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig) {
-  const value = getValue(plant, field.key)
-  const id = field.key.replace(/\./g, "-")
-  const isAdvice = field.label.toLowerCase().includes("advice")
+  function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig) {
+    const value = getValue(plant, field.key)
+    const id = field.key.replace(/\./g, "-")
+    const isAdvice = field.label.toLowerCase().includes("advice")
+    const isMonthMultiField = field.key.startsWith("growth.") && field.key.toLowerCase().includes("month")
+    const isPromotionMonthField = field.key === "identity.promotionMonth"
+    const normalizedOptions = (field.options || []).map((opt) =>
+      typeof opt === "string"
+        ? { label: opt, value: opt, key: opt }
+        : { label: opt.label, value: opt.value, key: String(opt.value) },
+    )
 
   const body = (() => {
     if (field.key === "meta.status") {
@@ -475,6 +537,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         Review: "#0ea5e9",
         Approved: "#10b981",
       }
+        const statusOptions = (field.options || []).map((opt) => (typeof opt === "string" ? opt : String(opt.value)))
       return (
         <div className="grid gap-2">
           <Label>{field.label}</Label>
@@ -484,9 +547,9 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
             onChange={(e) => onChange(field.key, e.target.value)}
           >
             <option value="">Select status</option>
-            {(field.options || []).map((opt) => (
-              <option key={opt} value={opt} style={{ color: statusColors[opt] || "inherit" }}>
-                ● {opt}
+              {statusOptions.map((opt) => (
+                <option key={opt} value={opt} style={{ color: statusColors[opt] || "inherit" }}>
+                  ● {opt}
               </option>
             ))}
           </select>
@@ -535,48 +598,66 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
             <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
         )
-      case "select":
-        return (
-          <div className="grid gap-2">
-            <Label>{field.label}</Label>
-            <select
-              className="h-9 rounded-md border px-2 text-sm"
-              value={value || ""}
-              onChange={(e) => onChange(field.key, e.target.value || undefined)}
-            >
-              <option value="">Select option</option>
-              {(field.options || []).map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
-      case "multiselect":
-        return (
-          <div className="grid gap-2">
-            <Label>{field.label}</Label>
-            <div className="flex flex-wrap gap-2">
-              {(field.options || []).map((opt) => {
-                const selected = Array.isArray(value) ? value.includes(opt) : false
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => {
-                      const current: string[] = Array.isArray(value) ? value : []
-                      onChange(field.key, selected ? current.filter((v) => v !== opt) : [...current, opt])
-                    }}
-                    className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                  >
-                    {opt}
-                  </button>
-                )
-              })}
+        case "select": {
+          const selectValue = isPromotionMonthField ? normalizeMonthValue(value) ?? value : value
+          const valueKey =
+            normalizedOptions.find((opt) => Object.is(opt.value, selectValue))?.key ??
+            (selectValue === null || selectValue === undefined ? "" : String(selectValue))
+          return (
+            <div className="grid gap-2">
+              <Label>{field.label}</Label>
+              <select
+                className="h-9 rounded-md border px-2 text-sm"
+                value={valueKey}
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    onChange(field.key, undefined)
+                    return
+                  }
+                  const selectedOption = normalizedOptions.find((opt) => opt.key === e.target.value)
+                  onChange(field.key, selectedOption ? selectedOption.value : undefined)
+                }}
+              >
+                <option value="">Select option</option>
+                {normalizedOptions.map((opt) => (
+                  <option key={opt.key} value={opt.key}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             </div>
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
+          )
+        }
+        case "multiselect": {
+          const currentValues = isMonthMultiField ? normalizeMonthArray(value) : (Array.isArray(value) ? [...value] : [])
+          const includesValue = (candidate: unknown) =>
+            currentValues.some((entry) => Object.is(entry, candidate) || (typeof entry === "string" && typeof candidate === "string" && entry === candidate))
+          return (
+            <div className="grid gap-2">
+              <Label>{field.label}</Label>
+              <div className="flex flex-wrap gap-2">
+                {normalizedOptions.map((opt) => {
+                  const selected = includesValue(opt.value)
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => {
+                        const nextValues = selected
+                          ? currentValues.filter((entry) => !(Object.is(entry, opt.value) || (typeof entry === "string" && typeof opt.value === "string" && entry === opt.value)))
+                          : [...currentValues, opt.value]
+                        onChange(field.key, nextValues)
+                      }}
+                      className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
+            </div>
+          )
+        }
       case "tags":
         return (
           <div className="grid gap-2">
@@ -630,46 +711,59 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
     }
   })()
 
-  if (isAdvice) {
-    return (
-      <details key={field.key} className="rounded border bg-muted/20 p-3" open={false}>
-        <summary className="cursor-pointer text-sm font-semibold">{field.label} (optional)</summary>
-        <div className="mt-3">{body}</div>
-      </details>
-    )
-  }
+    const adviceHasValue = (() => {
+      if (!isAdvice) return false
+      if (typeof value === "string") return value.trim().length > 0
+      if (Array.isArray(value)) return value.some((entry) => (typeof entry === "string" ? entry.trim().length > 0 : entry !== null && entry !== undefined))
+      if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).some((entry) => {
+        if (typeof entry === "string") return entry.trim().length > 0
+        return entry !== null && entry !== undefined
+      })
+      return false
+    })()
+
+    if (isAdvice) {
+      if (adviceHasValue) {
+        return (
+          <div key={field.key} className="rounded border border-emerald-200/60 dark:border-emerald-900/40 bg-white/80 dark:bg-[#101610] p-3">
+            {body}
+          </div>
+        )
+      }
+      return (
+        <details key={field.key} className="rounded border bg-muted/20 p-3" open={false}>
+          <summary className="cursor-pointer text-sm font-semibold">{field.label} (optional)</summary>
+          <div className="mt-3">{body}</div>
+        </details>
+      )
+    }
 
   return <div key={field.key}>{body}</div>
 }
 
 function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void }) {
-  React.useEffect(() => {
-    const list: PlantImage[] = images && images.length ? images : [{ link: "", use: "primary" }]
-    let next: PlantImage[] = list
-    const primaryIndex = list.findIndex((img) => img.use === "primary")
-    const discoveryIndex = list.findIndex((img) => img.use === "discovery")
-    if (primaryIndex === -1) {
-      next = [{ ...list[0], use: "primary" }, ...list.slice(1)]
-    }
-    if (discoveryIndex !== -1) {
-      let firstDiscoverySeen = false
-      next = next.map((img) => {
-        if (img.use !== "discovery") return img
-        if (firstDiscoverySeen) return { ...img, use: "other" }
-        firstDiscoverySeen = true
-        return img
-      })
-    }
-    if (next !== images) onChange(next)
-  }, [images, onChange])
+  const list = Array.isArray(images) ? images : []
+  const [previewErrors, setPreviewErrors] = React.useState<Record<string, boolean>>({})
+
+  const getPreviewKey = (img: PlantImage, idx: number) => img.id || img.link || `idx-${idx}`
 
   const updateImage = (idx: number, patch: Partial<PlantImage>) => {
-    const next = images.map((img, i) => i === idx ? { ...img, ...patch } : img)
+    const next = list.map((img, i) => (i === idx ? { ...img, ...patch } : img))
     onChange(next)
+    if (Object.prototype.hasOwnProperty.call(patch, 'link')) {
+      const key = getPreviewKey(list[idx], idx)
+      setPreviewErrors((prev) => {
+        if (!prev[key]) return prev
+        const clone = { ...prev }
+        delete clone[key]
+        return clone
+      })
+    }
   }
+
   const setUse = (idx: number, use: "primary" | "discovery" | "other") => {
     onChange(
-      images.map((img, i) => {
+      list.map((img, i) => {
         if (i === idx) return { ...img, use }
         if (use === "primary" && img.use === "primary") return { ...img, use: "other" }
         if (use === "discovery" && img.use === "discovery") return { ...img, use: "other" }
@@ -677,43 +771,120 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
       }),
     )
   }
+
   const addImage = () => {
-    const hasPrimary = images.some((img) => img.use === "primary")
-    onChange([...images, { link: "", use: hasPrimary ? "other" : "primary" }])
+    const hasPrimary = list.some((img) => img.use === "primary")
+    onChange([...list, { link: "", use: hasPrimary ? "other" : "primary" }])
   }
+
   const removeImage = (idx: number) => {
-    const next = images.filter((_, i) => i !== idx)
-    if (!next.length) {
-      onChange([{ link: "", use: "primary" }])
-      return
-    }
-    if (!next.some((img) => img.use === "primary")) {
-      next[0] = { ...next[0], use: "primary" }
-    }
+    const next = list.filter((_, i) => i !== idx)
     onChange(next)
   }
+
+  const moveImage = (idx: number, direction: -1 | 1) => {
+    const target = idx + direction
+    if (target < 0 || target >= list.length) return
+    const next = [...list]
+    const [item] = next.splice(idx, 1)
+    next.splice(target, 0, item)
+    onChange(next)
+  }
+
   return (
-    <div className="grid gap-3">
-      {images.map((img, idx) => (
-        <div key={idx} className="rounded border p-3 space-y-2">
-          <Input value={img.link} onChange={(e) => updateImage(idx, { link: e.target.value })} placeholder="Image link" />
-          <div className="flex gap-2 items-center">
-            <Label className="text-sm">Use</Label>
-            {(["primary","discovery","other"] as const).map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setUse(idx, opt)}
-                className={`px-3 py-1 rounded-full border text-sm transition ${img.use === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          <Button variant="ghost" type="button" onClick={() => removeImage(idx)} className="text-red-600">Remove image</Button>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <Label className="font-semibold">Images</Label>
+          <p className="text-xs text-muted-foreground">Primary appears on detail pages; Discovery on list cards.</p>
         </div>
-      ))}
-      <Button type="button" onClick={addImage}>Add image</Button>
+        <Button type="button" variant="outline" onClick={addImage}>
+          Add image
+        </Button>
+      </div>
+      {!list.length && (
+        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          No images yet. Click "Add image" to start.
+        </div>
+      )}
+      <div className="space-y-3">
+        {list.map((img, idx) => {
+          const previewKey = getPreviewKey(img, idx)
+          const hasError = previewErrors[previewKey]
+          return (
+            <div key={previewKey} className="rounded-xl border p-3 space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="sm:w-48">
+                  <div className="relative h-32 rounded-lg border bg-muted/30 flex items-center justify-center overflow-hidden">
+                    {img.link && !hasError ? (
+                      <img
+                        src={img.link}
+                        alt={`Plant image ${idx + 1}`}
+                        className="h-full w-full object-cover"
+                        onError={() => setPreviewErrors((prev) => ({ ...prev, [previewKey]: true }))}
+                        onLoad={() =>
+                          setPreviewErrors((prev) => {
+                            if (!prev[previewKey]) return prev
+                            const clone = { ...prev }
+                            delete clone[previewKey]
+                            return clone
+                          })
+                        }
+                      />
+                    ) : (
+                      <span className="px-4 text-center text-xs text-muted-foreground">
+                        {img.link && hasError ? 'Preview failed - double-check the URL.' : 'Preview appears after entering a valid URL.'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex-1 space-y-3">
+                  <Input
+                    value={img.link || ""}
+                    onChange={(e) => updateImage(idx, { link: e.target.value })}
+                    placeholder="https://example.com/photo.jpg"
+                  />
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Usage</span>
+                    {(["primary","discovery","other"] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setUse(idx, opt)}
+                        className={`px-3 py-1 rounded-full border text-xs uppercase tracking-wide ${
+                          (img.use || 'other') === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {img.use === 'primary'
+                      ? 'Shown as the hero/detail image.'
+                      : img.use === 'discovery'
+                        ? 'Used in discovery cards and lists.'
+                        : 'Supports the gallery.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex gap-2">
+                  <Button type="button" variant="ghost" onClick={() => moveImage(idx, -1)} disabled={idx === 0}>
+                    Move up
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => moveImage(idx, 1)} disabled={idx === list.length - 1}>
+                    Move down
+                  </Button>
+                </div>
+                <Button type="button" variant="ghost" className="text-red-600" onClick={() => removeImage(idx)}>
+                  Remove
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -726,12 +897,6 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   const [insertName, setInsertName] = React.useState("")
   const [insertHex, setInsertHex] = React.useState("#")
   const [inserting, setInserting] = React.useState(false)
-
-  const normalizeHex = (hex: string) => {
-    const trimmed = hex.trim()
-    if (!trimmed) return ""
-    return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
-  }
 
   const loadColors = React.useCallback(async (term?: string) => {
     setLoading(true)
@@ -829,7 +994,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, categoryProgress }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
     basics: null,
@@ -843,6 +1008,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions }: PlantPro
     meta: null,
   })
   const [selectedCategory, setSelectedCategory] = React.useState<PlantFormCategory>('identity')
+  const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const categoryLabels: Record<PlantFormCategory, string> = {
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
@@ -857,6 +1023,32 @@ export function PlantProfileForm({ value, onChange, colorSuggestions }: PlantPro
   const scrollToCategory = (category: PlantFormCategory) => {
     setSelectedCategory(category)
   }
+  React.useEffect(() => {
+    if (colorSuggestions?.length) {
+      setShowColorRecommendations(true)
+    } else {
+      setShowColorRecommendations(false)
+    }
+  }, [colorSuggestions?.length])
+  const addSuggestedColor = React.useCallback(
+    (suggestion: PlantColor | { name?: string; hexCode?: string; hex?: string; label?: string }) => {
+      const current = value.identity?.colors || []
+      const name = suggestion.name || (suggestion as any)?.label || suggestion.hexCode || (suggestion as any)?.hex || t('plantAdmin.colorFallback', 'Color')
+      const hex = normalizeHex(suggestion.hexCode || (suggestion as any)?.hex || '')
+      const alreadyAdded = current.some((color) => {
+        const colorName = color.name?.toLowerCase()
+        const colorHex = normalizeHex(color.hexCode || '')
+        return (
+          (name && colorName === name.toLowerCase()) ||
+          (hex && colorHex && colorHex === hex)
+        )
+      })
+      if (alreadyAdded) return
+      const next: PlantColor = hex ? { name, hexCode: hex } : { name }
+      onChange(setValue(value, 'identity.colors', [...current, next]))
+    },
+    [onChange, t, value],
+  )
   const categoriesWithoutBasics = plantFormCategoryOrder.filter((cat) => cat !== 'basics')
   const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
   return (
@@ -964,93 +1156,164 @@ export function PlantProfileForm({ value, onChange, colorSuggestions }: PlantPro
         </Card>
       </div>
 
-      <div className={`${neuCardClass} rounded-2xl p-4`}>
-        <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
-        <div className="flex flex-wrap gap-3">
-          {categoriesWithoutBasics.map((key) => (
-            <Button
-              key={key}
-              size="lg"
-              className="min-w-[110px] px-4 py-2 text-sm sm:text-base shadow-sm"
-              variant={selectedCategory === key ? 'default' : 'outline'}
-              onClick={() => scrollToCategory(key)}
-            >
-              {categoryLabels[key]}
-            </Button>
-          ))}
+        <div className={`${neuCardClass} rounded-2xl p-4`}>
+          <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
+          <div className="flex flex-wrap gap-3">
+            {categoriesWithoutBasics.map((key) => {
+              const info = categoryProgress?.[key]
+              return (
+                <div key={key} className="relative">
+                  <Button
+                    size="lg"
+                    className="min-w-[110px] px-4 py-2 text-sm sm:text-base shadow-sm"
+                    variant={selectedCategory === key ? 'default' : 'outline'}
+                    onClick={() => scrollToCategory(key)}
+                  >
+                    {categoryLabels[key]}
+                  </Button>
+                  {info?.total ? (
+                    <span
+                      className={`absolute -top-2 -right-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white ${
+                        info.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'
+                      }`}
+                    >
+                      {info.status === 'done' ? t('plantAdmin.sectionFilled', 'Filled') : `${info.completed}/${info.total}`}
+                    </span>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
         </div>
-      </div>
 
-      <div className="space-y-6">
-        {(['identity','plantCare','growth','usage','ecology','danger','miscellaneous','meta'] as PlantFormCategory[]).map((cat) => {
-          const visible = selectedCategory === cat
-          if (!visible) return null
-          const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat] = node }
-          const fieldGroups: Record<PlantFormCategory, FieldConfig[]> = {
-            basics: [],
-            identity: identityFields,
-            plantCare: careFields,
-            growth: growthFields,
-            usage: usageFields,
-            ecology: ecologyFields,
-            danger: dangerFields,
-            miscellaneous: miscFields,
-            meta: metaFields,
-          }
-          return (
-            <div key={cat} ref={refSetter}>
-              <Card className={neuCardClass}>
-                <CardHeader><CardTitle>{categoryLabels[cat]}</CardTitle></CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
-                  {cat === 'identity' && (
-                    <div className="md:col-span-2">
-                      <Label>Colors</Label>
-                      {colorSuggestions?.length ? (
-                        <div className="mt-2 mb-3 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner">
-                          <div className="text-sm font-semibold mb-2">AI suggested palettes (review before adding)</div>
-                          <div className="flex flex-wrap gap-2">
-                            {colorSuggestions.map((c, idx) => (
-                              <div key={`${c.name || c.hexCode || idx}-${idx}`} className="flex items-center gap-2 rounded-lg bg-white/80 dark:bg-[#1a1f1a] px-3 py-2 shadow-sm">
-                                <span
-                                  className="h-4 w-4 rounded-full border"
-                                  style={{ backgroundColor: c.hexCode || (c as any).hex || undefined }}
-                                />
-                                <div className="flex flex-col leading-tight">
-                                  <span className="text-sm font-medium">{c.name || c.hexCode || (c as any).hex || 'Color'}</span>
-                                  {(c.hexCode || (c as any).hex) && (
-                                    <span className="text-xs text-muted-foreground">{c.hexCode || (c as any).hex}</span>
-                                  )}
+        <div className="space-y-6">
+          {(['identity','plantCare','growth','usage','ecology','danger','miscellaneous','meta'] as PlantFormCategory[]).map((cat) => {
+            if (selectedCategory !== cat) return null
+            const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat] = node }
+            const fieldGroups: Record<PlantFormCategory, FieldConfig[]> = {
+              basics: [],
+              identity: identityFields,
+              plantCare: careFields,
+              growth: growthFields,
+              usage: usageFields,
+              ecology: ecologyFields,
+              danger: dangerFields,
+              miscellaneous: miscFields,
+              meta: metaFields,
+            }
+            const progressInfo = categoryProgress?.[cat]
+            return (
+              <div key={cat} ref={refSetter}>
+                <Card className={neuCardClass}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between gap-4">
+                      <span>{categoryLabels[cat]}</span>
+                      {progressInfo?.total ? (
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            progressInfo.status === 'done'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
+                          }`}
+                        >
+                          {progressInfo.status === 'done'
+                            ? t('plantAdmin.sectionFilled', 'Filled')
+                            : `${progressInfo.completed}/${progressInfo.total}`}
+                        </span>
+                      ) : null}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                    {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
+                    {cat === 'identity' && (
+                      <div className="md:col-span-2">
+                        {colorSuggestions?.length ? (
+                          <div className="mb-3">
+                            <button
+                              type="button"
+                              className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
+                              onClick={() => setShowColorRecommendations((prev) => !prev)}
+                            >
+                              <Sparkles className="h-4 w-4" />
+                              {showColorRecommendations
+                                ? t('plantAdmin.hideColorSuggestions', 'Hide AI color suggestions')
+                                : t('plantAdmin.showColorSuggestions', 'Show AI color suggestions')}
+                            </button>
+                            {showColorRecommendations && (
+                              <div className="mt-2 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner space-y-3">
+                                <div className="text-xs text-muted-foreground">
+                                  {t('plantAdmin.colorSuggestionsReview', 'Review and add the colors you like to your palette.')}
+                                </div>
+                                <div className="flex flex-wrap gap-3">
+                                  {colorSuggestions.map((c, idx) => {
+                                    const name = c.name || (c as any)?.label || c.hexCode || (c as any)?.hex || t('plantAdmin.colorFallback', 'Color')
+                                    const hex = normalizeHex(c.hexCode || (c as any)?.hex || '')
+                                    const alreadyAdded = (value.identity?.colors || []).some((color) => {
+                                      const colorName = color.name?.toLowerCase()
+                                      const colorHex = normalizeHex(color.hexCode || '')
+                                      return (
+                                        (name && colorName === name.toLowerCase()) ||
+                                        (hex && colorHex && colorHex === hex)
+                                      )
+                                    })
+                                    return (
+                                      <div
+                                        key={`${name}-${hex || idx}`}
+                                        className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-[#111611] px-3 py-2 shadow-sm border border-emerald-100/60 dark:border-emerald-900/40"
+                                      >
+                                        <span
+                                          className="h-5 w-5 rounded-full border border-stone-200 dark:border-stone-700"
+                                          style={{ backgroundColor: hex || undefined }}
+                                        />
+                                        <div className="flex flex-col leading-tight min-w-[90px]">
+                                          <span className="text-sm font-medium text-emerald-900 dark:text-emerald-200">{name}</span>
+                                          {hex && <span className="text-xs text-muted-foreground">{hex}</span>}
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant={alreadyAdded ? 'secondary' : 'default'}
+                                          disabled={alreadyAdded}
+                                          onClick={() => addSuggestedColor(c)}
+                                        >
+                                          {alreadyAdded ? t('plantAdmin.colorAdded', 'Added') : t('plantAdmin.addColor', 'Add')}
+                                        </Button>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
-                            ))}
+                            )}
                           </div>
+                        ) : null}
+                        <Label>{t('plantAdmin.colorsLabel', 'Colors')}</Label>
+                        {!colorSuggestions?.length && (
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {t('plantAdmin.colorSuggestionPlaceholder', 'AI recommendations will show up here when available.')}
+                          </p>
+                        )}
+                        <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
+                        <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!value.identity?.multicolor}
+                              onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
+                            />
+                            Multicolor
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!value.identity?.bicolor}
+                              onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
+                            />
+                            Bicolor
+                          </label>
                         </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mb-2">AI suggestions will appear here without changing your palette.</p>
-                      )}
-                      <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
-                      <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!value.identity?.multicolor}
-                            onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
-                          />
-                          Multicolor
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!value.identity?.bicolor}
-                            onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
-                          />
-                          Bicolor
-                        </label>
+                        <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
-                    </div>
-                  )}
+                    )}
                 </CardContent>
               </Card>
             </div>

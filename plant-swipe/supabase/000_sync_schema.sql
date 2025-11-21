@@ -7,6 +7,63 @@ create extension if not exists pgcrypto;
 -- Optional: scheduling support
 create extension if not exists pg_cron;
 
+-- ========== Public schema hard cleanup (drops rogue tables) ==========
+do $$ declare
+  allowed_tables constant text[] := array[
+    'profiles',
+    'plants',
+    'plant_watering_schedules',
+    'plant_sources',
+    'plant_infusion_mixes',
+    'plant_images',
+    'colors',
+    'plant_colors',
+    'translation_languages',
+    'plant_translations',
+    'requested_plants',
+    'admin_media_uploads',
+    'plant_request_users',
+    'gardens',
+    'garden_members',
+    'garden_plants',
+    'garden_plant_events',
+    'garden_inventory',
+    'garden_instance_inventory',
+    'garden_transactions',
+    'garden_tasks',
+    'garden_plant_schedule',
+    'garden_watering_schedule',
+    'garden_plant_tasks',
+    'garden_plant_task_occurrences',
+    'garden_task_user_completions',
+    'web_visits',
+    'banned_accounts',
+    'banned_ips',
+    'broadcast_messages',
+    'profile_admin_notes',
+    'admin_activity_logs',
+    'garden_activity_logs',
+    'friend_requests',
+    'friends',
+    'notification_campaigns',
+    'user_notifications',
+    'user_push_subscriptions'
+  ];
+  rec record;
+begin
+  for rec in
+    select tablename
+    from pg_tables
+    where schemaname = 'public'
+      and tablename not like 'pg_%'
+      and tablename not like 'sql_%'
+  loop
+    if not (rec.tablename = any(allowed_tables)) then
+      execute format('drop table if exists public.%I cascade', rec.tablename);
+    end if;
+  end loop;
+end $$;
+
 -- ========== Profiles (user profiles) ==========
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -246,10 +303,8 @@ create table if not exists public.plants (
   updated_time timestamptz not null default now()
 );
 create unique index if not exists plants_name_unique on public.plants (lower(name));
-alter table if exists public.plants alter column status set default 'in progres';
-update public.plants set status = 'in progres' where status is null;
 
--- Ensure meta columns exist on older deployments
+-- Ensure meta columns exist on older deployments (add columns before referencing them)
 alter table if exists public.plants add column if not exists status text check (status in ('in progres','rework','review','approved'));
 alter table if exists public.plants add column if not exists admin_commentary text;
 alter table if exists public.plants add column if not exists given_names text[] not null default '{}';
@@ -257,8 +312,80 @@ alter table if exists public.plants add column if not exists created_by text;
 alter table if exists public.plants add column if not exists created_time timestamptz not null default now();
 alter table if exists public.plants add column if not exists updated_by text;
 alter table if exists public.plants add column if not exists updated_time timestamptz not null default now();
-alter table if exists public.plants alter column status set default 'in progres';
 
+alter table if exists public.plants alter column status set default 'in progres';
+update public.plants set status = 'in progres' where status is null;
+
+-- Backfill all plant attribute columns on existing deployments
+alter table if exists public.plants add column if not exists plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree'));
+alter table if exists public.plants add column if not exists utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']);
+alter table if exists public.plants add column if not exists comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']);
+alter table if exists public.plants add column if not exists fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']);
+alter table if exists public.plants add column if not exists given_names text[] not null default '{}';
+alter table if exists public.plants add column if not exists scientific_name text;
+alter table if exists public.plants add column if not exists family text;
+alter table if exists public.plants add column if not exists overview text;
+alter table if exists public.plants add column if not exists promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december'));
+alter table if exists public.plants add column if not exists life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic'));
+alter table if exists public.plants add column if not exists season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']);
+alter table if exists public.plants add column if not exists foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent'));
+alter table if exists public.plants add column if not exists spiked boolean default false;
+alter table if exists public.plants add column if not exists toxicity_human text check (toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
+alter table if exists public.plants add column if not exists toxicity_pets text check (toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
+alter table if exists public.plants add column if not exists allergens text[] not null default '{}';
+alter table if exists public.plants add column if not exists scent boolean default false;
+alter table if exists public.plants add column if not exists symbolism text[] not null default '{}';
+alter table if exists public.plants add column if not exists living_space text check (living_space in ('indoor','outdoor','both'));
+alter table if exists public.plants add column if not exists composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']);
+alter table if exists public.plants add column if not exists maintenance_level text check (maintenance_level in ('none','low','moderate','heavy'));
+alter table if exists public.plants add column if not exists multicolor boolean default false;
+alter table if exists public.plants add column if not exists bicolor boolean default false;
+alter table if exists public.plants add column if not exists origin text[] not null default '{}';
+alter table if exists public.plants add column if not exists habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']);
+alter table if exists public.plants add column if not exists temperature_max integer;
+alter table if exists public.plants add column if not exists temperature_min integer;
+alter table if exists public.plants add column if not exists temperature_ideal integer;
+alter table if exists public.plants add column if not exists level_sun text check (level_sun in ('low light','shade','partial sun','full sun'));
+alter table if exists public.plants add column if not exists hygrometry integer;
+alter table if exists public.plants add column if not exists watering_type text[] not null default '{}'::text[] check (watering_type <@ array['surface','buried','hose','drop','drench']);
+alter table if exists public.plants add column if not exists division text[] not null default '{}'::text[] check (division <@ array['seed','cutting','division','layering','grafting','tissue separation','bulb separation']);
+alter table if exists public.plants add column if not exists soil text[] not null default '{}'::text[] check (soil <@ array['vermiculite','perlite','sphagnum moss','rock wool','sand','gravel','potting soil','peat','clay pebbles','coconut fiber','bark','wood chips']);
+alter table if exists public.plants add column if not exists advice_soil text;
+alter table if exists public.plants add column if not exists mulching text[] not null default '{}'::text[] check (mulching <@ array['wood chips','bark','green manure','cocoa bean hulls','buckwheat hulls','cereal straw','hemp straw','woven fabric','pozzolana','crushed slate','clay pellets']);
+alter table if exists public.plants add column if not exists advice_mulching text;
+alter table if exists public.plants add column if not exists nutrition_need text[] not null default '{}'::text[] check (nutrition_need <@ array['nitrogen','phosphorus','potassium','calcium','magnesium','sulfur','iron','boron','manganese','molybene','chlorine','copper','zinc','nitrate','phosphate']);
+alter table if exists public.plants add column if not exists fertilizer text[] not null default '{}'::text[] check (fertilizer <@ array['granular fertilizer','liquid fertilizer','meat flour','fish flour','crushed bones','crushed horns','slurry','manure','animal excrement','sea fertilizer','yurals','wine','guano','coffee grounds','banana peel','eggshell','vegetable cooking water','urine','grass clippings','vegetable waste','natural mulch']);
+alter table if exists public.plants add column if not exists advice_fertilizer text;
+alter table if exists public.plants add column if not exists sowing_month text[] not null default '{}'::text[] check (sowing_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']);
+alter table if exists public.plants add column if not exists flowering_month text[] not null default '{}'::text[] check (flowering_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']);
+alter table if exists public.plants add column if not exists fruiting_month text[] not null default '{}'::text[] check (fruiting_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']);
+alter table if exists public.plants add column if not exists height_cm integer;
+alter table if exists public.plants add column if not exists wingspan_cm integer;
+alter table if exists public.plants add column if not exists tutoring boolean default false;
+alter table if exists public.plants add column if not exists advice_tutoring text;
+alter table if exists public.plants add column if not exists sow_type text[] not null default '{}'::text[] check (sow_type <@ array['direct','indoor','row','hill','broadcast','seed tray','cell','pot']);
+alter table if exists public.plants add column if not exists separation_cm integer;
+alter table if exists public.plants add column if not exists transplanting boolean;
+alter table if exists public.plants add column if not exists advice_sowing text;
+alter table if exists public.plants add column if not exists cut text;
+alter table if exists public.plants add column if not exists advice_medicinal text;
+alter table if exists public.plants add column if not exists nutritional_intake text[] not null default '{}';
+alter table if exists public.plants add column if not exists infusion boolean default false;
+alter table if exists public.plants add column if not exists advice_infusion text;
+alter table if exists public.plants add column if not exists recipes_ideas text[] not null default '{}';
+alter table if exists public.plants add column if not exists aromatherapy boolean default false;
+alter table if exists public.plants add column if not exists spice_mixes text[] not null default '{}';
+alter table if exists public.plants add column if not exists melliferous boolean default false;
+alter table if exists public.plants add column if not exists polenizer text[] not null default '{}'::text[] check (polenizer <@ array['bee','wasp','ant','butterfly','bird','mosquito','fly','beetle','ladybug','stagbeetle','cockchafer','dungbeetle','weevil']);
+alter table if exists public.plants add column if not exists be_fertilizer boolean default false;
+alter table if exists public.plants add column if not exists ground_effect text;
+alter table if exists public.plants add column if not exists conservation_status text check (conservation_status in ('safe','at risk','vulnerable','endangered','critically endangered','extinct'));
+alter table if exists public.plants add column if not exists pests text[] not null default '{}';
+alter table if exists public.plants add column if not exists diseases text[] not null default '{}';
+alter table if exists public.plants add column if not exists companions text[] not null default '{}';
+alter table if exists public.plants add column if not exists tags text[] not null default '{}';
+alter table if exists public.plants add column if not exists source_name text;
+alter table if exists public.plants add column if not exists source_url text;
 -- Drop obsolete JSON columns from earlier iterations
 alter table if exists public.plants drop column if exists identity;
 alter table if exists public.plants drop column if exists plant_care;
@@ -288,6 +415,102 @@ alter table if exists public.plants drop column if exists water_freq_amount;
 alter table if exists public.plants drop column if exists water_freq_unit;
 alter table if exists public.plants drop column if exists water_freq_value;
 alter table if exists public.plants drop column if exists updated_at;
+
+-- Strict column whitelist for plants (drops anything not declared above)
+do $$ declare
+  allowed_columns constant text[] := array[
+    'id',
+    'name',
+    'plant_type',
+    'utility',
+    'comestible_part',
+    'fruit_type',
+    'given_names',
+    'scientific_name',
+    'family',
+    'overview',
+    'promotion_month',
+    'life_cycle',
+    'season',
+    'foliage_persistance',
+    'spiked',
+    'toxicity_human',
+    'toxicity_pets',
+    'allergens',
+    'scent',
+    'symbolism',
+    'living_space',
+    'composition',
+    'maintenance_level',
+    'multicolor',
+    'bicolor',
+    'origin',
+    'habitat',
+    'temperature_max',
+    'temperature_min',
+    'temperature_ideal',
+    'level_sun',
+    'hygrometry',
+    'watering_type',
+    'division',
+    'soil',
+    'advice_soil',
+    'mulching',
+    'advice_mulching',
+    'nutrition_need',
+    'fertilizer',
+    'advice_fertilizer',
+    'sowing_month',
+    'flowering_month',
+    'fruiting_month',
+    'height_cm',
+    'wingspan_cm',
+    'tutoring',
+    'advice_tutoring',
+    'sow_type',
+    'separation_cm',
+    'transplanting',
+    'advice_sowing',
+    'cut',
+    'advice_medicinal',
+    'nutritional_intake',
+    'infusion',
+    'advice_infusion',
+    'recipes_ideas',
+    'aromatherapy',
+    'spice_mixes',
+    'melliferous',
+    'polenizer',
+    'be_fertilizer',
+    'ground_effect',
+    'conservation_status',
+    'pests',
+    'diseases',
+    'companions',
+    'tags',
+    'source_name',
+    'source_url',
+    'status',
+    'admin_commentary',
+    'created_by',
+    'created_time',
+    'updated_by',
+    'updated_time'
+  ];
+  rec record;
+begin
+  for rec in
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'plants'
+  loop
+    if not (rec.column_name = any(allowed_columns)) then
+      execute format('alter table public.%I drop column %I cascade', 'plants', rec.column_name);
+    end if;
+  end loop;
+end $$;
+
 alter table public.plants enable row level security;
 -- Clean up legacy duplicate read policies if present
 do $$ begin
@@ -529,6 +752,8 @@ create table if not exists public.plant_translations (
   advice_infusion text,
   ground_effect text,
   admin_commentary text,
+  source_name text,
+  source_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (plant_id, language)
@@ -575,6 +800,8 @@ alter table if exists public.plant_translations add column if not exists advice_
 alter table if exists public.plant_translations add column if not exists advice_infusion text;
 alter table if exists public.plant_translations add column if not exists ground_effect text;
 alter table if exists public.plant_translations add column if not exists admin_commentary text;
+alter table if exists public.plant_translations add column if not exists source_name text;
+alter table if exists public.plant_translations add column if not exists source_url text;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;

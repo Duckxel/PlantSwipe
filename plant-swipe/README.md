@@ -248,7 +248,6 @@ Stores base plant information.
 | `rarity` | TEXT | Rarity classification |
 | `meaning` | TEXT | Symbolic meaning |
 | `description` | TEXT | Plant description |
-| `care_soil` | TEXT | Soil care instructions |
 | `created_at` | TIMESTAMP | Creation timestamp |
 
 ### `plant_translations`
@@ -263,7 +262,6 @@ Stores translations for plant data.
 | `scientific_name` | TEXT | Translated scientific name |
 | `meaning` | TEXT | Translated meaning |
 | `description` | TEXT | Translated description |
-| `care_soil` | TEXT | Translated care instructions |
 
 ### `profiles`
 User profile information.

@@ -196,8 +196,8 @@ async function loadPlantRoutes() {
     const to = offset + limit - 1
     const { data, error } = await client
       .from('plants')
-      .select('id, updated_at, meta')
-      .order('updated_at', { ascending: false })
+      .select('id, updated_time, created_time')
+      .order('updated_time', { ascending: false, nullsFirst: false })
       .range(offset, to)
 
     if (error) {
@@ -229,23 +229,12 @@ async function loadPlantRoutes() {
 }
 
 function pickLastmod(row) {
-  if (row?.updated_at) {
-    const iso = toIsoString(row.updated_at)
-    if (iso) return iso
-  }
-  if (!row?.meta) return null
-  let meta = row.meta
-  if (typeof meta === 'string') {
-    try {
-      meta = JSON.parse(meta)
-    } catch {
-      meta = null
-    }
-  }
-  if (meta && typeof meta === 'object') {
-    const iso = toIsoString(meta.updatedAt || meta.updated_at)
-    if (iso) return iso
-  }
+  const updated = row?.updated_time || row?.updatedTime
+  const created = row?.created_time || row?.createdTime
+  const updatedIso = toIsoString(updated)
+  if (updatedIso) return updatedIso
+  const createdIso = toIsoString(created)
+  if (createdIso) return createdIso
   return null
 }
 

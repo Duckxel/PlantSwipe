@@ -7,6 +7,58 @@ import { getPrimaryPhotoUrl } from '@/lib/photos'
 import type { SupportedLanguage } from './i18n'
 import { mergePlantWithTranslation } from './plantTranslationLoader'
 
+type PlantCareShape = NonNullable<Plant['plantCare']>
+
+const LEVEL_SUN_MAP: Record<string, PlantCareShape['levelSun']> = {
+  'low light': 'Low Light',
+  shade: 'Shade',
+  'partial sun': 'Partial Sun',
+  'full sun': 'Full Sun',
+}
+
+const WATERING_TYPE_VALUES = ['surface', 'buried', 'hose', 'drop', 'drench'] as const
+type WateringTypeValue = (typeof WATERING_TYPE_VALUES)[number]
+
+const SOIL_TYPE_VALUES = [
+  'Vermiculite',
+  'Perlite',
+  'Sphagnum moss',
+  'rock wool',
+  'Sand',
+  'Gravel',
+  'Potting Soil',
+  'Peat',
+  'Clay pebbles',
+  'coconut fiber',
+  'Bark',
+  'Wood Chips',
+] as const
+type SoilTypeValue = (typeof SOIL_TYPE_VALUES)[number]
+
+function normalizeLevelSun(value: unknown): PlantCareShape['levelSun'] | undefined {
+  if (typeof value !== 'string') return undefined
+  const mapped = LEVEL_SUN_MAP[value.toLowerCase()]
+  return mapped
+}
+
+function normalizeWateringTypes(value: unknown): PlantCareShape['wateringType'] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const filtered = value.filter(
+    (entry): entry is WateringTypeValue =>
+      typeof entry === 'string' && WATERING_TYPE_VALUES.includes(entry as WateringTypeValue),
+  )
+  return filtered.length ? filtered : undefined
+}
+
+function normalizeSoilTypes(value: unknown): PlantCareShape['soil'] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const filtered = value.filter(
+    (entry): entry is SoilTypeValue =>
+      typeof entry === 'string' && SOIL_TYPE_VALUES.includes(entry as SoilTypeValue),
+  )
+  return filtered.length ? filtered : undefined
+}
+
 const missingSupabaseRpcs = new Set<string>()
 const missingSupabaseTablesOrViews = new Set<string>()
 let taskCachesDisabled = false
@@ -322,8 +374,8 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
     const { data: plantRows } = await supabase
       .from('plants')
-      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta')
-    .in('id', plantIds)
+      .select('*')
+      .in('id', plantIds)
   
   // Always load translations for the specified language (including English)
   // This ensures plants created in one language display correctly in another
@@ -880,24 +932,37 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
   const plantIds = rows.map(r => String(r.plant_id))
   const { data: plantRows } = await supabase
     .from('plants')
-    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, classification')
+    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, seeds_available, level_sun, watering_type, soil, maintenance_level, classification')
     .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
+    const levelSun = normalizeLevelSun(p.level_sun)
+    const wateringTypes = normalizeWateringTypes(p.watering_type)
+    const soilTypes = normalizeSoilTypes(p.soil)
+    const maintenanceLevel = typeof p.maintenance_level === 'string' ? p.maintenance_level : undefined
+
     idToPlant[String(p.id)] = {
       id: String(p.id),
-      name: String(p.name),
+      name: String(p.name || ''),
       scientificName: String(p.scientific_name || ''),
       colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-      seasons: Array.isArray(p.seasons) ? p.seasons.map(String) as any : [],
-      rarity: p.rarity,
+      seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
+      rarity: p.rarity || undefined,
       meaning: p.meaning || '',
       description: p.description || '',
       photos: Array.isArray(p.photos) ? p.photos : undefined,
       image: getPrimaryPhotoUrl(Array.isArray(p.photos) ? p.photos : []) || p.image_url || '',
-      care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
+      care: {
+        levelSun,
+        wateringType: wateringTypes,
+        soil: soilTypes,
+        maintenanceLevel,
+        difficulty: maintenanceLevel,
+      },
       seedsAvailable: Boolean(p.seeds_available ?? false),
-      classification: typeof p.classification === 'string' ? JSON.parse(p.classification) : p.classification || undefined,
+      classification: typeof p.classification === 'string'
+        ? JSON.parse(p.classification)
+        : (p.classification as Plant['classification']) || undefined,
     }
   }
   return rows.map(r => ({
