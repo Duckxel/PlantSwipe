@@ -986,6 +986,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             : plant.meta?.adminCommentary || null,
           source_name: translatedSource.name || null,
           source_url: translatedSource.url || null,
+          tags: await translateArraySafe(plant.miscellaneous?.tags),
         })
       }
 
