@@ -46,6 +46,8 @@ const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ d
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
+type ColorOption = { id: string; name: string; hexCode: string }
+
 type ExtendedWindow = Window & {
   requestIdleCallback?: (callback: (...args: any[]) => void, options?: { timeout?: number }) => number
   cancelIdleCallback?: (handle: number) => void
@@ -99,6 +101,7 @@ export default function PlantSwipe() {
   const [usageFilters, setUsageFilters] = useState<string[]>([])
   const [seasonSectionOpen, setSeasonSectionOpen] = useState(true)
   const [colorSectionOpen, setColorSectionOpen] = useState(true)
+  const [advancedColorsOpen, setAdvancedColorsOpen] = useState(false)
   const [classificationSectionOpen, setClassificationSectionOpen] = useState(true)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
@@ -135,7 +138,26 @@ export default function PlantSwipe() {
   const [plants, setPlants] = useState<Plant[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [colorOptions, setColorOptions] = useState<Array<{ id: string; name: string; hexCode: string }>>([])
+  const [colorOptions, setColorOptions] = useState<ColorOption[]>([])
+
+  const { singleWordColors, multiWordColors } = React.useMemo(() => {
+    const single: ColorOption[] = []
+    const multi: ColorOption[] = []
+
+    colorOptions.forEach((color) => {
+      const normalized = (color.name || "").trim()
+      const preparedColor = color.name === normalized ? color : { ...color, name: normalized }
+      const hasSingleWord = normalized.length > 0 && !/\s/.test(normalized)
+
+      if (hasSingleWord) {
+        single.push(preparedColor)
+      } else {
+        multi.push(preparedColor)
+      }
+    })
+
+    return { singleWordColors: single, multiWordColors: multi }
+  }, [colorOptions])
   
   const typeOptions = useMemo(() => {
     const labels = new Set<string>()
@@ -192,25 +214,33 @@ export default function PlantSwipe() {
           .from('colors')
           .select('id, name, hex_code')
           .order('name', { ascending: true })
-        
+
         if (error) {
           console.error('Error loading colors:', error)
           return
         }
-        
+
         if (data) {
-          setColorOptions(data.map(c => ({
+          setColorOptions(data.map((c) => ({
             id: c.id,
-            name: c.name,
-            hexCode: c.hex_code
+            name: (c.name ?? "").trim(),
+            hexCode: c.hex_code ?? ""
           })))
         }
       } catch (e) {
         console.error('Error loading colors:', e)
       }
     }
+
     loadColors()
   }, [])
+
+  React.useEffect(() => {
+    if (!colorFilter) return
+    if (/\s/.test(colorFilter.trim())) {
+      setAdvancedColorsOpen(true)
+    }
+  }, [colorFilter])
 
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
@@ -685,198 +715,243 @@ export default function PlantSwipe() {
     </button>
   )
 
-  const FilterControls = () => (
-    <div className="space-y-6">
-      {/* Sort */}
-      <div>
-        <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
-        <select
-          value={searchSort}
-          onChange={(e) => setSearchSort(e.target.value as SearchSortMode)}
-          className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
-        >
-          <option value="default">{t("plant.sortDefault")}</option>
-          <option value="newest">{t("plant.sortNewest")}</option>
-          <option value="popular">{t("plant.sortPopular")}</option>
-          <option value="favorites">{t("plant.sortFavorites")}</option>
-        </select>
-      </div>
+    const FilterControls = () => {
+      const renderColorOption = (color: ColorOption) => {
+        const isActive = colorFilter === color.name
+        const label = color.name || t("plant.unknownColor", { defaultValue: "Unnamed color" })
 
-      {/* Classification */}
-      <div>
-        <FilterSectionHeader
-          label={t("plant.classification")}
-          isOpen={classificationSectionOpen}
-          onToggle={() => setClassificationSectionOpen((prev) => !prev)}
-        />
-        {classificationSectionOpen && (
-          <div className="mt-3 space-y-4">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                {t("plantInfo.classification.type", { defaultValue: "Type" })}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {typeOptions.length > 0 ? (
-                  typeOptions.map((option) => (
-                    <button
-                      key={option}
-                      onClick={() => setTypeFilter((current) => (current === option ? null : option))}
-                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                        typeFilter === option
-                          ? "bg-black dark:bg-white text-white dark:text-black"
-                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                      }`}
-                      aria-pressed={typeFilter === option}
-                    >
-                      {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
-                    </button>
-                  ))
-                ) : (
-                  <p className="text-xs opacity-60">
-                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                {t("plantInfo.sections.usage", { defaultValue: "Usage" })}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {usageOptions.length > 0 ? (
-                  usageOptions.map((option) => {
-                    const isSelected = usageFilters.includes(option)
-                    return (
-                      <button
-                        key={option}
-                        onClick={() =>
-                          setUsageFilters((current) =>
-                            isSelected ? current.filter((value) => value !== option) : [...current, option]
-                          )
-                        }
-                        className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                          isSelected
-                            ? "bg-emerald-600 dark:bg-emerald-500 text-white"
-                            : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                        }`}
-                        aria-pressed={isSelected}
-                      >
-                        {t(`plant.utility.${option.toLowerCase()}`, { defaultValue: option })}
-                      </button>
-                    )
-                  })
-                ) : (
-                  <p className="text-xs opacity-60">
-                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                  </p>
-                )}
-              </div>
-            </div>
+        return (
+          <button
+            key={color.id}
+            type="button"
+            onClick={() => setColorFilter((cur) => (cur === color.name ? null : color.name))}
+            className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition flex items-center gap-2 ${
+              isActive
+                ? "bg-black dark:bg-white text-white dark:text-black"
+                : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+            }`}
+            aria-pressed={isActive}
+            style={!isActive && color.hexCode ? { borderColor: color.hexCode } : undefined}
+          >
+            <span
+              className="w-3 h-3 rounded-full flex-shrink-0 border border-black/5 dark:border-white/10"
+              style={{ backgroundColor: color.hexCode || "transparent" }}
+              aria-hidden="true"
+            />
+            <span>{label}</span>
+          </button>
+        )
+      }
+
+      return (
+        <div className="space-y-6">
+          {/* Sort */}
+          <div>
+            <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
+            <select
+              value={searchSort}
+              onChange={(e) => setSearchSort(e.target.value as SearchSortMode)}
+              className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
+            >
+              <option value="default">{t("plant.sortDefault")}</option>
+              <option value="newest">{t("plant.sortNewest")}</option>
+              <option value="popular">{t("plant.sortPopular")}</option>
+              <option value="favorites">{t("plant.sortFavorites")}</option>
+            </select>
           </div>
-        )}
-      </div>
 
-      {/* Seasons */}
-      <div>
-        <FilterSectionHeader
-          label={t("plant.season")}
-          isOpen={seasonSectionOpen}
-          onToggle={() => setSeasonSectionOpen((prev) => !prev)}
-        />
-        {seasonSectionOpen && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
-                className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                  seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                }`}
-                aria-pressed={seasonFilter === s}
-              >
-                {t(`plant.${s.toLowerCase()}`)}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Colors */}
-      <div>
-        <FilterSectionHeader
-          label={t("plant.color")}
-          isOpen={colorSectionOpen}
-          onToggle={() => setColorSectionOpen((prev) => !prev)}
-        />
-        {colorSectionOpen && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {colorOptions.length > 0 ? (
-              colorOptions.map((color) => (
-                <button
-                  key={color.id}
-                  onClick={() => setColorFilter((cur) => (cur === color.name ? null : color.name))}
-                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition flex items-center gap-2 ${
-                    colorFilter === color.name ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                  }`}
-                  aria-pressed={colorFilter === color.name}
-                  style={colorFilter === color.name ? {} : { borderColor: color.hexCode }}
-                >
-                  <span
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: color.hexCode }}
-                    aria-hidden="true"
-                  />
-                  <span>{color.name}</span>
-                </button>
-              ))
-            ) : (
-              <div className="text-sm text-stone-500 dark:text-stone-400">{t("common.loading")}</div>
+          {/* Classification */}
+          <div>
+            <FilterSectionHeader
+              label={t("plant.classification")}
+              isOpen={classificationSectionOpen}
+              onToggle={() => setClassificationSectionOpen((prev) => !prev)}
+            />
+            {classificationSectionOpen && (
+              <div className="mt-3 space-y-4">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
+                    {t("plantInfo.classification.type", { defaultValue: "Type" })}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {typeOptions.length > 0 ? (
+                      typeOptions.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setTypeFilter((current) => (current === option ? null : option))}
+                          className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                            typeFilter === option
+                              ? "bg-black dark:bg-white text-white dark:text-black"
+                              : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                          }`}
+                          aria-pressed={typeFilter === option}
+                        >
+                          {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-xs opacity-60">
+                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
+                    {t("plantInfo.sections.usage", { defaultValue: "Usage" })}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {usageOptions.length > 0 ? (
+                      usageOptions.map((option) => {
+                        const isSelected = usageFilters.includes(option)
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() =>
+                              setUsageFilters((current) =>
+                                isSelected ? current.filter((value) => value !== option) : [...current, option]
+                              )
+                            }
+                            className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                              isSelected
+                                ? "bg-emerald-600 dark:bg-emerald-500 text-white"
+                                : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                            }`}
+                            aria-pressed={isSelected}
+                          >
+                            {t(`plant.utility.${option.toLowerCase()}`, { defaultValue: option })}
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <p className="text-xs opacity-60">
+                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Toggles */}
-      <div className="pt-2 space-y-2">
-        <button
-          onClick={() => setOnlySeeds((v) => !v)}
-          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-            onlySeeds ? "bg-emerald-600 dark:bg-emerald-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-          }`}
-          aria-pressed={onlySeeds}
-        >
-          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.seedsOnly")}
-        </button>
-        <button
-          onClick={() => setOnlyFavorites((v) => !v)}
-          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-            onlyFavorites ? "bg-rose-600 dark:bg-rose-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-          }`}
-          aria-pressed={onlyFavorites}
-        >
-          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.favoritesOnly")}
-        </button>
-      </div>
+          {/* Seasons */}
+          <div>
+            <FilterSectionHeader
+              label={t("plant.season")}
+              isOpen={seasonSectionOpen}
+              onToggle={() => setSeasonSectionOpen((prev) => !prev)}
+            />
+            {seasonSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
+                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                      seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                    }`}
+                    aria-pressed={seasonFilter === s}
+                  >
+                    {t(`plant.${s.toLowerCase()}`)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-      {/* Active filters summary */}
-      <div className="text-xs space-y-1">
-        <div className="font-medium uppercase tracking-wide opacity-60">{t("plant.active")}</div>
-        <div className="flex flex-wrap gap-2">
-          {seasonFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>}
-          {colorFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>}
-          {typeFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.classificationType.${typeFilter.toLowerCase()}`, { defaultValue: typeFilter })}</Badge>}
-          {usageFilters.map((usage) => (
-            <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
-          ))}
-          {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
-          {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
-          {!seasonFilter && !colorFilter && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
-            <span className="opacity-50">{t("plant.none")}</span>
-          )}
+          {/* Colors */}
+          <div>
+            <FilterSectionHeader
+              label={t("plant.color")}
+              isOpen={colorSectionOpen}
+              onToggle={() => setColorSectionOpen((prev) => !prev)}
+            />
+            {colorSectionOpen && (
+              <div className="mt-3 space-y-3">
+                {colorOptions.length === 0 ? (
+                  <div className="text-sm text-stone-500 dark:text-stone-400">{t("common.loading")}</div>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {singleWordColors.length > 0 ? (
+                        singleWordColors.map(renderColorOption)
+                      ) : (
+                        <p className="text-xs opacity-60">
+                          {t("plant.noSimpleColors", { defaultValue: "No single-word colors available." })}
+                        </p>
+                      )}
+                    </div>
+                    {multiWordColors.length > 0 && (
+                      <div className="rounded-2xl border border-dashed border-stone-200 dark:border-[#3e3e42] p-3 bg-white/70 dark:bg-[#2d2d30]/50">
+                        <button
+                          type="button"
+                          onClick={() => setAdvancedColorsOpen((prev) => !prev)}
+                          className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-300"
+                          aria-expanded={advancedColorsOpen}
+                        >
+                          <span>{t("plant.advancedColors", { defaultValue: "Advanced colors" })}</span>
+                          {advancedColorsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </button>
+                        {advancedColorsOpen && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {multiWordColors.map(renderColorOption)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Toggles */}
+          <div className="pt-2 space-y-2">
+            <button
+              type="button"
+              onClick={() => setOnlySeeds((v) => !v)}
+              className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                onlySeeds ? "bg-emerald-600 dark:bg-emerald-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+              }`}
+              aria-pressed={onlySeeds}
+            >
+              <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.seedsOnly")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlyFavorites((v) => !v)}
+              className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                onlyFavorites ? "bg-rose-600 dark:bg-rose-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+              }`}
+              aria-pressed={onlyFavorites}
+            >
+              <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.favoritesOnly")}
+            </button>
+          </div>
+
+          {/* Active filters summary */}
+          <div className="text-xs space-y-1">
+            <div className="font-medium uppercase tracking-wide opacity-60">{t("plant.active")}</div>
+            <div className="flex flex-wrap gap-2">
+              {seasonFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>}
+              {colorFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>}
+              {typeFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.classificationType.${typeFilter.toLowerCase()}`, { defaultValue: typeFilter })}</Badge>}
+              {usageFilters.map((usage) => (
+                <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
+              ))}
+              {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
+              {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
+              {!seasonFilter && !colorFilter && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
+                <span className="opacity-50">{t("plant.none")}</span>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  )
+      )
+    }
 
     return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
