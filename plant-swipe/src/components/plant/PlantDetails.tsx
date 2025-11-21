@@ -407,6 +407,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
             </Button>
             {shareFeedback && <span className="text-[10px] sm:text-xs font-medium text-white drop-shadow">{shareFeedback}</span>}
           </div>
+
         </div>
         <div className="relative flex flex-col gap-3 sm:gap-4 p-3 pt-14 sm:p-4 sm:pt-16 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
           <div className="flex-1 space-y-3 sm:space-y-4">
@@ -491,6 +492,191 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
               </div>
             )}
           </div>
+
+          <div className="relative mx-3 mb-6 mt-4 space-y-6 rounded-[28px] border border-white/20 bg-white/10 p-4 shadow-inner backdrop-blur-sm sm:mx-4 sm:p-6 md:mx-6 lg:mx-8">
+            <div className="grid grid-cols-2 gap-y-3 gap-x-2 md:grid-cols-4 md:gap-x-3 md:gap-y-4 xl:grid-cols-5">
+              {stats.map((stat) =>
+                stat.visible ? (
+                  <Card key={stat.label} className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}>
+                    <CardContent className="flex items-center justify-between p-3 sm:p-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
+                        <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
+                        {stat.detail ? (
+                          <p className="text-[11px] sm:text-xs mt-1 text-white/80 truncate">{stat.detail}</p>
+                        ) : null}
+                      </div>
+                      <div className="ml-2 flex-shrink-0">{stat.icon}</div>
+                    </CardContent>
+                  </Card>
+                ) : null,
+              )}
+            </div>
+
+            <div className="space-y-4 sm:space-y-5">
+              {hasIdentityDetails && (
+                <SectionCard title="Botanical Identity">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DetailRow label="Family" value={identity.family} />
+                    <DetailRow label="Life Cycle" value={identity.lifeCycle} />
+                    <DetailRow label="Foliage Persistence" value={identity.foliagePersistance} />
+                    <DetailRow
+                      label="Spiked"
+                      value={<BooleanBadge value={identity.spiked} positive="Has spikes" negative="Smooth stems" />}
+                    />
+                    <DetailRow label="Allergens" value={<ChipList items={allergenList} />} />
+                    <DetailRow
+                      label="Fragrance"
+                      value={<BooleanBadge value={identity.scent} positive="Scented" negative="No noticeable scent" />}
+                    />
+                    <DetailRow label="Symbolism" value={<ChipList items={symbolismList} />} />
+                    <DetailRow label="Composition Uses" value={<ChipList items={compositionList} />} />
+                    <DetailRow label="Color Traits" value={<ChipList items={colorTraitChips} />} />
+                  </div>
+                </SectionCard>
+              )}
+
+              {hasCareDetails && (
+                <SectionCard title="Plant Care">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DetailRow label="Origin" value={<ChipList items={originList} />} />
+                    <DetailRow label="Watering Type" value={<ChipList items={wateringTypeList} />} />
+                    <DetailRow label="Division" value={<ChipList items={divisionList} />} />
+                    <DetailRow label="Soil Mix" value={<ChipList items={soilList} />} />
+                    <DetailRow label="Mulching Materials" value={<ChipList items={mulchingMaterials} />} />
+                    <DetailRow label="Nutrition Need" value={<ChipList items={nutritionNeeds} />} />
+                    <DetailRow label="Fertilizer Types" value={<ChipList items={fertilizerList} />} />
+                    <DetailRow label="Soil Advice" value={plantCare.adviceSoil} />
+                    <DetailRow label="Mulching Advice" value={plantCare.adviceMulching} />
+                    <DetailRow label="Fertilizer Advice" value={plantCare.adviceFertilizer} />
+                    <DetailRow
+                      className="sm:col-span-2"
+                      label="Temperature Comfort"
+                      value={
+                        <ThermostatGauge
+                          min={plantCare.temperatureMin}
+                          ideal={plantCare.temperatureIdeal}
+                          max={plantCare.temperatureMax}
+                        />
+                      }
+                    />
+                  </div>
+                </SectionCard>
+              )}
+
+              {hasGrowthDetails && (
+                <SectionCard title="Growth">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DetailRow
+                      label="Needs Support"
+                      value={<BooleanBadge value={growth.tutoring} positive="Requires tutoring" negative="Self-supporting" />}
+                    />
+                    <DetailRow label="Support Notes" value={growth.adviceTutoring} />
+                    <DetailRow label="Sow Type" value={<ChipList items={sowTypeList} />} />
+                    <DetailRow
+                      label="Needs Transplanting"
+                      value={<BooleanBadge value={growth.transplanting} positive="Transplant recommended" negative="No transplant" />}
+                    />
+                    <DetailRow label="Sowing Notes" value={growth.adviceSowing} />
+                    <DetailRow label="Cut Type" value={growth.cut} />
+                  </div>
+                </SectionCard>
+              )}
+
+              {hasUsageDetails && (
+                <SectionCard title="Usage & Flavor">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DetailRow label="Medicinal Notes" value={usage.adviceMedicinal} />
+                    <DetailRow label="Nutritional Intake" value={<ChipList items={nutritionalIntakeList} />} />
+                    <DetailRow
+                      label="Infusion Friendly"
+                      value={<BooleanBadge value={usage.infusion} positive="Infusion ready" negative="Not used for infusions" />}
+                    />
+                    <DetailRow label="Infusion Notes" value={usage.adviceInfusion} />
+                    <DetailRow
+                      className="sm:col-span-2"
+                      label="Infusion Mix"
+                      value={
+                        infusionMixEntries.length ? (
+                          <ul className="space-y-2 text-sm">
+                            {infusionMixEntries.map(([mix, benefit]) => (
+                              <li key={`infusion-${mix}`} className="rounded-lg border border-muted/40 bg-muted/20 p-2">
+                                <p className="font-semibold">{mix}</p>
+                                <p className="text-xs text-muted-foreground">{benefit}</p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null
+                      }
+                    />
+                    <DetailRow
+                      label="Aromatherapy"
+                      value={<BooleanBadge value={usage.aromatherapy} positive="Essential oils" negative="Not for oils" />}
+                    />
+                    <DetailRow label="Spice Mixes" value={<ChipList items={spiceMixes} />} />
+                  </div>
+                </SectionCard>
+              )}
+
+              {hasEcologyDetails && (
+                <SectionCard title="Ecology">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DetailRow
+                      label="Melliferous"
+                      value={<BooleanBadge value={ecology.melliferous} positive="Pollinator magnet" negative="Not melliferous" />}
+                    />
+                    <DetailRow
+                      label="Green Manure"
+                      value={<BooleanBadge value={ecology.beFertilizer} positive="Feeds neighboring plants" negative="Neutral" />}
+                    />
+                  </div>
+                </SectionCard>
+              )}
+
+              {hasDangerDetails && (
+                <SectionCard title="Danger">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DetailRow label="Pests" value={<ChipList items={pestList} />} />
+                    <DetailRow label="Diseases" value={<ChipList items={diseaseList} />} />
+                  </div>
+                </SectionCard>
+              )}
+
+              {hasMiscDetails && (
+                <SectionCard title="Companions & References">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DetailRow label="Companions" value={<ChipList items={companions} />} />
+                    <DetailRow label="Tags" value={<ChipList items={tagList} />} />
+                    <DetailRow
+                      className="sm:col-span-2"
+                      label="Sources"
+                      value={<SourceList sources={sources} />}
+                    />
+                  </div>
+                </SectionCard>
+              )}
+
+              {hasMetaDetails && (
+                <SectionCard title="Meta">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DetailRow label="Status" value={meta.status} />
+                    <DetailRow label="Admin Commentary" value={meta.adminCommentary} />
+                    <DetailRow label="Created" value={createdStamp} />
+                    <DetailRow label="Updated" value={updatedStamp} />
+                  </div>
+                </SectionCard>
+              )}
+
+              {hasBasicDetails && (
+                <SectionCard title="Basic Profile">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DetailRow label="Edible Parts" value={<ChipList items={comestiblePartList} />} />
+                    <DetailRow label="Fruit Type" value={<ChipList items={fruitTypeList} />} />
+                  </div>
+                </SectionCard>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -520,190 +706,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
           </div>
         </div>
       )}
-
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-y-3 md:gap-y-4 gap-x-2 md:gap-x-3">
-        {stats.map((stat) =>
-          stat.visible ? (
-              <Card key={stat.label} className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}>
-              <CardContent className="flex items-center justify-between p-3 sm:p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
-                    <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
-                    {stat.detail ? (
-                      <p className="text-[11px] sm:text-xs mt-1 text-white/80 truncate">{stat.detail}</p>
-                    ) : null}
-                </div>
-                <div className="ml-2 flex-shrink-0">{stat.icon}</div>
-              </CardContent>
-            </Card>
-          ) : null,
-        )}
-      </div>
-
-        <div className="mt-6 space-y-4 sm:space-y-5">
-          {hasIdentityDetails && (
-            <SectionCard title="Botanical Identity">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailRow label="Family" value={identity.family} />
-                <DetailRow label="Life Cycle" value={identity.lifeCycle} />
-                <DetailRow label="Foliage Persistence" value={identity.foliagePersistance} />
-                <DetailRow
-                  label="Spiked"
-                  value={<BooleanBadge value={identity.spiked} positive="Has spikes" negative="Smooth stems" />}
-                />
-                <DetailRow label="Allergens" value={<ChipList items={allergenList} />} />
-                <DetailRow
-                  label="Fragrance"
-                  value={<BooleanBadge value={identity.scent} positive="Scented" negative="No noticeable scent" />}
-                />
-                <DetailRow label="Symbolism" value={<ChipList items={symbolismList} />} />
-                <DetailRow label="Composition Uses" value={<ChipList items={compositionList} />} />
-                <DetailRow label="Color Traits" value={<ChipList items={colorTraitChips} />} />
-              </div>
-            </SectionCard>
-          )}
-
-          {hasCareDetails && (
-            <SectionCard title="Plant Care">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailRow label="Origin" value={<ChipList items={originList} />} />
-                <DetailRow label="Watering Type" value={<ChipList items={wateringTypeList} />} />
-                <DetailRow label="Division" value={<ChipList items={divisionList} />} />
-                <DetailRow label="Soil Mix" value={<ChipList items={soilList} />} />
-                <DetailRow label="Mulching Materials" value={<ChipList items={mulchingMaterials} />} />
-                <DetailRow label="Nutrition Need" value={<ChipList items={nutritionNeeds} />} />
-                <DetailRow label="Fertilizer Types" value={<ChipList items={fertilizerList} />} />
-                <DetailRow label="Soil Advice" value={plantCare.adviceSoil} />
-                <DetailRow label="Mulching Advice" value={plantCare.adviceMulching} />
-                <DetailRow label="Fertilizer Advice" value={plantCare.adviceFertilizer} />
-                <DetailRow
-                  className="sm:col-span-2"
-                  label="Temperature Comfort"
-                  value={
-                    <ThermostatGauge
-                      min={plantCare.temperatureMin}
-                      ideal={plantCare.temperatureIdeal}
-                      max={plantCare.temperatureMax}
-                    />
-                  }
-                />
-              </div>
-            </SectionCard>
-          )}
-
-          {hasGrowthDetails && (
-            <SectionCard title="Growth">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailRow
-                  label="Needs Support"
-                  value={<BooleanBadge value={growth.tutoring} positive="Requires tutoring" negative="Self-supporting" />}
-                />
-                <DetailRow label="Support Notes" value={growth.adviceTutoring} />
-                <DetailRow label="Sow Type" value={<ChipList items={sowTypeList} />} />
-                <DetailRow
-                  label="Needs Transplanting"
-                  value={<BooleanBadge value={growth.transplanting} positive="Transplant recommended" negative="No transplant" />}
-                />
-                <DetailRow label="Sowing Notes" value={growth.adviceSowing} />
-                <DetailRow label="Cut Type" value={growth.cut} />
-              </div>
-            </SectionCard>
-          )}
-
-          {hasUsageDetails && (
-            <SectionCard title="Usage & Flavor">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailRow label="Medicinal Notes" value={usage.adviceMedicinal} />
-                <DetailRow label="Nutritional Intake" value={<ChipList items={nutritionalIntakeList} />} />
-                <DetailRow
-                  label="Infusion Friendly"
-                  value={<BooleanBadge value={usage.infusion} positive="Infusion ready" negative="Not used for infusions" />}
-                />
-                <DetailRow label="Infusion Notes" value={usage.adviceInfusion} />
-                <DetailRow
-                  className="sm:col-span-2"
-                  label="Infusion Mix"
-                  value={
-                    infusionMixEntries.length ? (
-                      <ul className="space-y-2 text-sm">
-                        {infusionMixEntries.map(([mix, benefit]) => (
-                          <li key={`infusion-${mix}`} className="rounded-lg border border-muted/40 bg-muted/20 p-2">
-                            <p className="font-semibold">{mix}</p>
-                            <p className="text-xs text-muted-foreground">{benefit}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null
-                  }
-                />
-                <DetailRow
-                  label="Aromatherapy"
-                  value={<BooleanBadge value={usage.aromatherapy} positive="Essential oils" negative="Not for oils" />}
-                />
-                <DetailRow label="Spice Mixes" value={<ChipList items={spiceMixes} />} />
-              </div>
-            </SectionCard>
-          )}
-
-          {hasEcologyDetails && (
-            <SectionCard title="Ecology">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailRow
-                  label="Melliferous"
-                  value={<BooleanBadge value={ecology.melliferous} positive="Pollinator magnet" negative="Not melliferous" />}
-                />
-                <DetailRow
-                  label="Green Manure"
-                  value={<BooleanBadge value={ecology.beFertilizer} positive="Feeds neighboring plants" negative="Neutral" />}
-                />
-              </div>
-            </SectionCard>
-          )}
-
-          {hasDangerDetails && (
-            <SectionCard title="Danger">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailRow label="Pests" value={<ChipList items={pestList} />} />
-                <DetailRow label="Diseases" value={<ChipList items={diseaseList} />} />
-              </div>
-            </SectionCard>
-          )}
-
-          {hasMiscDetails && (
-            <SectionCard title="Companions & References">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailRow label="Companions" value={<ChipList items={companions} />} />
-                <DetailRow label="Tags" value={<ChipList items={tagList} />} />
-                <DetailRow
-                  className="sm:col-span-2"
-                  label="Sources"
-                  value={<SourceList sources={sources} />}
-                />
-              </div>
-            </SectionCard>
-          )}
-
-          {hasMetaDetails && (
-            <SectionCard title="Meta">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailRow label="Status" value={meta.status} />
-                <DetailRow label="Admin Commentary" value={meta.adminCommentary} />
-                <DetailRow label="Created" value={createdStamp} />
-                <DetailRow label="Updated" value={updatedStamp} />
-              </div>
-            </SectionCard>
-          )}
-
-          {hasBasicDetails && (
-            <SectionCard title="Basic Profile">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailRow label="Edible Parts" value={<ChipList items={comestiblePartList} />} />
-                <DetailRow label="Fruit Type" value={<ChipList items={fruitTypeList} />} />
-              </div>
-            </SectionCard>
-          )}
-        </div>
-
     </div>
   )
   }
