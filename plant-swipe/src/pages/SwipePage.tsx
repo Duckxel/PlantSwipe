@@ -741,16 +741,21 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  // Check utility field for usage indicators
-  const utilitySet = new Set(
-    (plant.utility ?? [])
-      .map((util) => (typeof util === "string" ? util.toLowerCase() : null))
-      .filter((entry): entry is string => Boolean(entry)),
+  // Check utility field for usage indicators - normalize to lowercase for comparison
+  const utilityArray = (plant.utility ?? []).filter((util): util is string => 
+    typeof util === "string" && util.trim().length > 0
   )
+  const utilitySet = new Set(utilityArray.map((util) => util.toLowerCase().trim()))
   
-  // Check comestiblePart for edible indicator
-  const hasComestiblePart = plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0 && plant.comestiblePart.some(part => part && part.trim().length > 0)
+  // Check comestiblePart for edible indicator - only show if there are valid, non-empty entries
+  // Filter out empty strings, null, undefined, and whitespace-only strings
+  const comestibleParts = (plant.comestiblePart ?? []).filter((part): part is string => 
+    typeof part === "string" && part.trim().length > 0
+  )
+  const hasComestiblePart = comestibleParts.length > 0
 
+  // Edible: Only show if utility explicitly has "comestible" OR comestiblePart has valid entries
+  // The utility field is the primary source of truth - comestiblePart is secondary
   if (utilitySet.has("comestible") || hasComestiblePart) {
     items.push({
       key: "edible",
@@ -761,7 +766,11 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  if (utilitySet.has("medicinal") || plant.usage?.adviceMedicinal) {
+  // Medicinal: Only show if utility explicitly has "medicinal" OR adviceMedicinal has meaningful content
+  const hasMedicinalAdvice = plant.usage?.adviceMedicinal && 
+    typeof plant.usage.adviceMedicinal === "string" && 
+    plant.usage.adviceMedicinal.trim().length > 0
+  if (utilitySet.has("medicinal") || hasMedicinalAdvice) {
     items.push({
       key: "medicinal",
       label: t("discoveryPage.indicators.medicinal", { defaultValue: "Medicinal" }),
@@ -771,7 +780,10 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  if (utilitySet.has("aromatic") || plant.usage?.aromatherapy || plant.identity?.scent) {
+  // Aromatic: Only show if utility explicitly has "aromatic" OR aromatherapy is true OR scent is true
+  const hasAromatherapy = plant.usage?.aromatherapy === true
+  const hasScent = plant.identity?.scent === true
+  if (utilitySet.has("aromatic") || hasAromatherapy || hasScent) {
     items.push({
       key: "aromatic",
       label: t("discoveryPage.indicators.aromatic", { defaultValue: "Aromatic" }),
