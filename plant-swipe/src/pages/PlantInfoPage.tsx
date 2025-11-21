@@ -386,41 +386,31 @@ export const PlantInfoPage: React.FC = () => {
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-emerald-50/70 via-white to-emerald-100/60 dark:from-[#0b1115] dark:via-[#0f151a] dark:to-[#0f1819]">
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="absolute -left-24 top-16 h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl dark:bg-emerald-500/15" />
-        <div className="absolute right-0 bottom-0 h-80 w-80 rounded-full bg-emerald-100/50 blur-3xl dark:bg-emerald-700/10" />
-      </div>
-      <div className="relative max-w-6xl mx-auto mt-4 sm:mt-6 px-3 sm:px-4 lg:px-6 pb-12 sm:pb-16 space-y-4 sm:space-y-6">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
+    <div className="max-w-6xl mx-auto mt-4 sm:mt-6 px-3 sm:px-4 lg:px-6 pb-12 sm:pb-16 space-y-4 sm:space-y-6">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
+          onClick={handleGoBack}
+        >
+          <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          {t('common.back', { defaultValue: 'Back' })}
+        </Button>
+        {profile?.is_admin && plant && (
           <Button
-              type="button"
-            variant="ghost"
-            className="flex items-center gap-2 rounded-2xl border border-white/40 bg-white/70 px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-transparent dark:bg-white/10"
-            onClick={handleGoBack}
+            type="button"
+            variant="outline"
+            className="flex items-center gap-2 rounded-2xl border-emerald-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
+            onClick={handleEdit}
           >
-            <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            {t('common.back', { defaultValue: 'Back' })}
+            <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            {t('common.edit', { defaultValue: 'Edit' })}
           </Button>
-            {profile?.is_admin && plant && (
-              <Button
-                type="button"
-                variant="outline"
-                className="flex items-center gap-2 rounded-2xl border-emerald-200/60 bg-white/80 px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/30 dark:bg-[#0d0f15]"
-                onClick={handleEdit}
-              >
-                <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                {t('common.edit', { defaultValue: 'Edit' })}
-              </Button>
-            )}
-        </div>
-          <MoreInformationSection plant={plant} />
-          <PlantDetails
-            plant={plant}
-            liked={likedIds.includes(plant.id)}
-            onToggleLike={toggleLiked}
-          />
+        )}
       </div>
+      <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
+      <MoreInformationSection plant={plant} />
     </div>
   )
 }
