@@ -51,7 +51,7 @@ interface FieldConfig {
   label: string
   description: string
   type: FieldType
-  options?: FieldOption[]
+  options?: ReadonlyArray<FieldOption>
 }
 
 const monthOptions = [
