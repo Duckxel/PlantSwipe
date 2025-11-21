@@ -1036,6 +1036,7 @@ const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
       <div className="text-[10px] sm:text-[11px] font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
     </div>
   )
+}
 
 interface InfoItemConfig {
   label: string
