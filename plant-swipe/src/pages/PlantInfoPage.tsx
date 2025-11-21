@@ -770,10 +770,10 @@ const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
   const category = 'Palette'
   const gradient = `linear-gradient(135deg, ${tone}, ${tone})`
   return (
-    <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-2.5 sm:p-3 shadow-sm transition hover:-translate-y-0.5 sm:hover:-translate-y-1 hover:shadow-md">
-      <div className="mb-2 sm:mb-3 h-12 sm:h-16 w-full rounded-lg sm:rounded-xl shadow-inner" style={{ backgroundImage: gradient }} />
-      <div className="text-[9px] sm:text-xs uppercase tracking-widest text-stone-500 dark:text-stone-400">{category}</div>
-      <div className="text-xs sm:text-sm font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
+    <div className="group relative overflow-hidden rounded-lg sm:rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-1.5 sm:p-2 shadow-sm transition hover:-translate-y-0.5 sm:hover:-translate-y-1 hover:shadow-md">
+      <div className="mb-1.5 sm:mb-2 h-10 sm:h-12 w-full rounded-md sm:rounded-lg shadow-inner" style={{ backgroundImage: gradient }} />
+      <div className="text-[8px] sm:text-[10px] uppercase tracking-widest text-stone-500 dark:text-stone-400">{category}</div>
+      <div className="text-[11px] sm:text-xs font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
     </div>
   )
 }
