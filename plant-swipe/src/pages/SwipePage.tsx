@@ -747,16 +747,9 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     .filter((util) => util.trim().length > 0)
   const utilitySet = new Set(utilityArray.map((util) => util.toLowerCase().trim()))
   
-  // Check comestiblePart for edible indicator - only show if there are valid, non-empty entries
-  // Filter out empty strings, null, undefined, and whitespace-only strings
-  const comestibleParts = (plant.comestiblePart ?? [])
-    .map((part) => String(part))
-    .filter((part) => part.trim().length > 0)
-  const hasComestiblePart = comestibleParts.length > 0
-
-  // Edible: Only show if utility explicitly has "comestible" OR comestiblePart has valid entries
-  // The utility field is the primary source of truth - comestiblePart is secondary
-  if (utilitySet.has("comestible") || hasComestiblePart) {
+  // Edible: Only show if utility explicitly has "comestible"
+  // The utility field is the source of truth - comestiblePart is just data, not a display indicator
+  if (utilitySet.has("comestible")) {
     items.push({
       key: "edible",
       label: t("discoveryPage.indicators.edible", { defaultValue: "Edible" }),
