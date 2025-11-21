@@ -940,7 +940,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const dbFertilizer = fertilizerEnum.toDbArray(plant.plantCare?.fertilizer)
           const dbSowType = sowTypeEnum.toDbArray(plant.growth?.sowType)
           const dbPolenizer = polenizerEnum.toDbArray(plant.ecology?.polenizer)
-          const dbConservation = conservationStatusEnum.toDb(plant.ecology?.conservationStatus)
 
           translatedRows.push({
           plant_id: plant.id,
@@ -1000,7 +999,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             fertilizer: dbFertilizer,
             sow_type: dbSowType,
             polenizer: dbPolenizer,
-            conservation_status: dbConservation || null,
             admin_commentary: plant.meta?.adminCommentary
             ? await translateText(plant.meta.adminCommentary, target, sourceLang)
             : plant.meta?.adminCommentary || null,
