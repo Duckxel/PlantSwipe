@@ -529,35 +529,41 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         
         {/* 3D Dimensions - Compact card in first column */}
         {(height !== null || wingspan !== null || spacing !== null) && (
-          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.02 }} className="lg:col-span-1 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-4 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl overflow-hidden border border-emerald-500/25 bg-gradient-to-br from-emerald-50/80 via-white/60 to-transparent shadow-sm dark:border-emerald-500/30 dark:from-emerald-900/30 dark:via-[#0f1f1f]/80 dark:to-transparent">
-                  <DimensionCube scale={cubeScale} />
-                </div>
-                <div>
-                  <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">3D View</p>
-                  <p className="text-[10px] sm:text-xs font-semibold text-stone-900 dark:text-white">Dimensions</p>
-                </div>
+          <motion.section
+            {...SECTION_ANIMATION}
+            transition={{ duration: 0.4, delay: 0.02 }}
+            className="lg:col-span-1 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent"
+          >
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <div>
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
+                  3D View
+                </p>
+                <p className="text-sm sm:text-base font-semibold text-stone-900 dark:text-white">Dimensions</p>
               </div>
-            </div>
-            <div className="space-y-2">
-              {dimensionLegend.map((item) => (
-                <DimensionLegendCard key={item.label} {...item} />
-              ))}
-            </div>
               {highlightBadges.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2 justify-end">
                   {highlightBadges.slice(0, 3).map((badge) => (
-                    <Badge key={badge} className="rounded-full border border-emerald-100/60 bg-white/80 px-2.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
+                    <Badge
+                      key={badge}
+                      className="rounded-2xl border border-emerald-200/70 bg-white/90 px-3 py-1 text-xs sm:text-sm font-semibold tracking-wide text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-100 uppercase"
+                    >
                       {badge}
                     </Badge>
                   ))}
                 </div>
               )}
-              <p className="mt-3 text-[11px] leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
-                Hover, drag, or tap to orbit the cube and understand the plant’s footprint before diving into the details.
-              </p>
+            </div>
+            <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
+              <div className="md:w-1/2 rounded-2xl border border-emerald-100/70 bg-white/70 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60">
+                <DimensionCube scale={cubeScale} className="w-full aspect-square" />
+              </div>
+              <div className="flex-1 flex flex-col gap-2">
+                {dimensionLegend.map((item) => (
+                  <DimensionLegendCard key={item.label} {...item} />
+                ))}
+              </div>
+            </div>
           </motion.section>
         )}
 
@@ -772,10 +778,12 @@ const TimelineTooltip = (
 }
 
 const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string }> = ({ label, value, subLabel }) => (
-  <div className="rounded-xl border border-emerald-500/20 bg-white/85 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/30 dark:bg-[#0f1f1f]/70 dark:text-emerald-100">
-    <div className="text-[9px] sm:text-[10px] uppercase tracking-widest text-emerald-600/75">{label}</div>
-    <div className="text-xs sm:text-sm font-semibold text-stone-900 dark:text-stone-100">{value}</div>
-    <div className="text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">{subLabel}</div>
+  <div className="rounded-xl border border-emerald-500/30 bg-white/95 px-3.5 sm:px-4 py-2.5 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50">
+    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
+      {label}
+    </div>
+    <div className="text-[11px] sm:text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-1">{subLabel}</div>
+    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">{value}</div>
   </div>
 )
 
