@@ -151,6 +151,12 @@ const emptyPlant: Plant = {
   colors: [],
 }
 
+const normalizeSeasonSlug = (value?: string | null): string | null => {
+  if (!value) return null
+  const slug = seasonEnum.toDb(value)
+  return slug || null
+}
+
 function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSchedule[] {
   if (!entries?.length) return []
   return entries
@@ -232,7 +238,7 @@ async function upsertWateringSchedules(plantId: string, schedules: Plant["plantC
   const entries = normalizeSchedules(schedules?.watering?.schedules)
   const rows = entries.map((entry) => ({
     plant_id: plantId,
-    season: entry.season || null,
+      season: normalizeSeasonSlug(entry.season),
     quantity: entry.quantity ?? null,
     time_period: entry.timePeriod || null,
   }))
