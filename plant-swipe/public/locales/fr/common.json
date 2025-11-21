@@ -401,8 +401,13 @@
       "utility": {
         "ornemental": "Ornemental",
         "comestible": "Comestible",
+        "produce_fruit": "Production de fruits",
         "aromatic": "Aromatique",
-        "medicinal": "Médicinal"
+        "medicinal": "Médicinal",
+        "odorous": "Odorant",
+        "climbing": "Grimpant",
+        "cereal": "Céréale",
+        "spice": "Épice"
       }
     },
     "requestPlant": {
