@@ -452,6 +452,18 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     plant.identity?.season?.slice(0, 2).join(' • '),
   ].filter(Boolean) as string[]
   const palette = plant.identity?.colors?.length ? plant.identity.colors : []
+    const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
+      if (!schedules.length) return 'Flexible'
+      return schedules
+        .map((schedule) => {
+          const season = schedule.season ? `${schedule.season}: ` : ''
+          const quantity = schedule.quantity ? `${schedule.quantity}` : ''
+          const period = schedule.timePeriod ? ` / ${schedule.timePeriod}` : ''
+          return `${season}${quantity}${period}`.trim() || 'Scheduled'
+        })
+        .join(' • ')
+    }
+
     const usageItems = [
       { label: 'Utility', value: plant.utility?.join(', ') || 'Ornamental', icon: <Palette className="h-3.5 w-3.5" /> },
     ]
@@ -490,7 +502,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       title: 'Care Highlights',
       icon: <Droplets className="h-4 w-4" />,
       items: [
-        { label: 'Water', value: `${plant.plantCare?.watering?.schedules?.length || 1} plan(s)`, icon: <Droplets className="h-3.5 w-3.5" /> },
+          {
+            label: 'Water',
+            value: formatWaterPlans(plant.plantCare?.watering?.schedules || []),
+            icon: <Droplets className="h-3.5 w-3.5" />,
+          },
         { label: 'Sunlight', value: plant.plantCare?.levelSun || 'Adaptive', icon: <Sun className="h-3.5 w-3.5" /> },
         { label: 'Soil Mix', value: plant.plantCare?.soil?.join(', ') || 'Loamy blend', icon: <Leaf className="h-3.5 w-3.5" /> },
       ],
