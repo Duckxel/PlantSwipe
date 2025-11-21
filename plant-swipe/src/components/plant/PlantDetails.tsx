@@ -966,14 +966,26 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
         {galleryHasContent ? (
           <Section title="Gallery" icon={<Layers className="h-4 w-4" />}>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {(plant.images ?? []).map((img) => (
-                <div key={img.id || img.link} className="relative overflow-hidden rounded-xl border border-muted/60 bg-white/80 shadow-sm">
-                  <img src={img.link} alt={plant.name} className="h-32 w-full object-cover sm:h-40" loading="lazy" />
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1 text-[11px] uppercase tracking-wide text-white">
-                    {img.use}
+              {(plant.images ?? []).map((img) => {
+                const imageIndex = images.findIndex((i) => i.id === img.id || i.link === img.link)
+                return (
+                  <div
+                    key={img.id || img.link}
+                    className="relative overflow-hidden rounded-xl border border-muted/60 bg-white/80 shadow-sm cursor-pointer transition hover:scale-105 hover:shadow-md"
+                    onClick={() => {
+                      if (imageIndex >= 0) {
+                        setActiveImageIndex(imageIndex)
+                        setViewerOpen(true)
+                      }
+                    }}
+                  >
+                    <img src={img.link} alt={plant.name} className="h-32 w-full object-cover sm:h-40" loading="lazy" />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1 text-[11px] uppercase tracking-wide text-white">
+                      {img.use}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </Section>
         ) : null}
