@@ -933,7 +933,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const dbHabitat = habitatEnum.toDbArray(plant.plantCare?.habitat)
           const dbLevelSun = levelSunEnum.toDb(plant.plantCare?.levelSun)
           const dbWateringType = wateringTypeEnum.toDbArray(plant.plantCare?.wateringType)
-          const dbDivision = divisionEnum.toDbArray(plant.plantCare?.division)
           const dbSoil = soilEnum.toDbArray(plant.plantCare?.soil)
           const dbMulching = mulchingEnum.toDbArray(plant.plantCare?.mulching)
           const dbNutritionNeed = nutritionNeedEnum.toDbArray(plant.plantCare?.nutritionNeed)
@@ -992,7 +991,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               : plant.ecology?.groundEffect || null,
             level_sun: dbLevelSun || null,
             watering_type: dbWateringType,
-            division: dbDivision,
             soil: dbSoil,
             mulching: dbMulching,
             nutrition_need: dbNutritionNeed,
