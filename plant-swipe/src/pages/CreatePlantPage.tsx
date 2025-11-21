@@ -1000,7 +1000,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             fertilizer: dbFertilizer,
             sow_type: dbSowType,
             polenizer: dbPolenizer,
-            conservation_status: dbConservation || null,
             admin_commentary: plant.meta?.adminCommentary
             ? await translateText(plant.meta.adminCommentary, target, sourceLang)
             : plant.meta?.adminCommentary || null,
