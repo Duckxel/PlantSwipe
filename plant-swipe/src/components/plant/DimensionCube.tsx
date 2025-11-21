@@ -17,12 +17,17 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, className }
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(window.devicePixelRatio || 1)
-    const size = Math.min(container.clientWidth, container.clientHeight) || container.clientWidth || 200
-    renderer.setSize(size, size)
+    const resolveSize = () => {
+      const width = container.clientWidth || 200
+      const height = container.clientHeight || width
+      return { width, height }
+    }
+    const { width: initialWidth, height: initialHeight } = resolveSize()
+    renderer.setSize(initialWidth, initialHeight)
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
+    const camera = new THREE.PerspectiveCamera(38, initialWidth / Math.max(1, initialHeight), 0.1, 100)
     const cameraDistance = 4.8
 
     const cubeCenterY = scale / 2
@@ -74,12 +79,17 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, className }
     grid.position.set(0, 0, 0)
     scene.add(grid)
 
+    const setRendererSize = () => {
+      const { width, height } = resolveSize()
+      renderer.setSize(width, height)
+      camera.aspect = width / Math.max(1, height)
+      camera.updateProjectionMatrix()
+    }
+    setRendererSize()
+
     const handleResize = () => {
       if (!container) return
-      const nextSize = Math.min(container.clientWidth, container.clientHeight) || container.clientWidth || 200
-      renderer.setSize(nextSize, nextSize)
-      camera.aspect = 1
-      camera.updateProjectionMatrix()
+      setRendererSize()
     }
     window.addEventListener('resize', handleResize)
 
@@ -177,7 +187,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, className }
     }
   }, [scale])
 
-  return <div ref={containerRef} className={cn('relative aspect-square w-full', className)} />
+  return <div ref={containerRef} className={cn('relative h-full w-full', className)} />
 }
 
 export default DimensionCube
