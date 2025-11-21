@@ -391,14 +391,12 @@
       "next": "Suivant",
       "tryAnotherSearch": "Essayez une autre recherche ou ajustez vos filtres.",
       "reset": "Réinitialiser",
-      "classification": {
-        "type": {
-          "plant": "Plante",
-          "bambu": "Bambou",
-          "shrub": "Arbuste",
-          "tree": "Arbre",
-          "other": "Autre"
-        }
+      "classificationType": {
+        "plant": "Plante",
+        "bambu": "Bambou",
+        "shrub": "Arbuste",
+        "tree": "Arbre",
+        "other": "Autre"
       },
       "utility": {
         "ornemental": "Ornemental",

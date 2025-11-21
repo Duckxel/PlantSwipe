@@ -391,14 +391,12 @@
       "next": "Next",
       "tryAnotherSearch": "Try another search or adjust your filters.",
       "reset": "Reset",
-      "classification": {
-        "type": {
-          "plant": "Plant",
-          "bambu": "Bamboo",
-          "shrub": "Shrub",
-          "tree": "Tree",
-          "other": "Other"
-        }
+      "classificationType": {
+        "plant": "Plant",
+        "bambu": "Bamboo",
+        "shrub": "Shrub",
+        "tree": "Tree",
+        "other": "Other"
       },
       "utility": {
         "ornemental": "Ornamental",

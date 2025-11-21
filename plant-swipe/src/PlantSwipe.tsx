@@ -728,7 +728,7 @@ export default function PlantSwipe() {
                       }`}
                       aria-pressed={typeFilter === option}
                     >
-                      {t(`plant.classification.type.${option.toLowerCase()}`, { defaultValue: option })}
+                      {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
                     </button>
                   ))
                 ) : (
@@ -864,7 +864,7 @@ export default function PlantSwipe() {
         <div className="flex flex-wrap gap-2">
           {seasonFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>}
           {colorFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>}
-          {typeFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.classification.type.${typeFilter.toLowerCase()}`, { defaultValue: typeFilter })}</Badge>}
+          {typeFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.classificationType.${typeFilter.toLowerCase()}`, { defaultValue: typeFilter })}</Badge>}
           {usageFilters.map((usage) => (
             <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
           ))}
