@@ -169,10 +169,23 @@ const normalizeSchedules = (rows?: any[]): WaterSchedules => {
   }))
 }
 
-async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
+async function fetchPlantWithRelations(id: string, language?: string): Promise<Plant | null> {
   const { data, error } = await supabase.from('plants').select('*').eq('id', id).maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
+  
+  // Load translation if language is provided
+  let translation: any = null
+  if (language) {
+    const { data: translationData } = await supabase
+      .from('plant_translations')
+      .select('*')
+      .eq('plant_id', id)
+      .eq('language', language)
+      .maybeSingle()
+    translation = translationData || null
+  }
+  
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
@@ -184,55 +197,59 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
     return acc
   }, {})
   const sourceList = (sources || []).map((s) => ({ id: s.id, name: s.name, url: s.url }))
-  if (!sourceList.length && (data.source_name || data.source_url)) {
-    sourceList.push({ id: `${data.id}-legacy-source`, name: data.source_name || 'Source', url: data.source_url || undefined })
+  if (!sourceList.length && ((translation?.source_name || data.source_name) || (translation?.source_url || data.source_url))) {
+    sourceList.push({ 
+      id: `${data.id}-legacy-source`, 
+      name: translation?.source_name || data.source_name || 'Source', 
+      url: translation?.source_url || data.source_url || undefined 
+    })
   }
     return {
       id: data.id,
-      name: data.name,
+      name: translation?.name || data.name,
       plantType: (plantTypeEnum.toUi(data.plant_type) as Plant["plantType"]) || undefined,
       utility: utilityEnum.toUiArray(data.utility) as Plant["utility"],
       comestiblePart: comestiblePartEnum.toUiArray(data.comestible_part) as Plant["comestiblePart"],
       fruitType: fruitTypeEnum.toUiArray(data.fruit_type) as Plant["fruitType"],
     identity: {
-      givenNames: data.given_names || [],
-      scientificName: data.scientific_name || undefined,
-      family: data.family || undefined,
-        overview: data.overview || undefined,
-        promotionMonth: monthSlugToNumber(data.promotion_month) ?? undefined,
-        lifeCycle: (lifeCycleEnum.toUi(data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
-        season: seasonEnum.toUiArray(data.season) as NonNullable<Plant["identity"]>["season"],
-        foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
+      givenNames: translation?.given_names || data.given_names || [],
+      scientificName: translation?.scientific_name || data.scientific_name || undefined,
+      family: translation?.family || data.family || undefined,
+        overview: translation?.overview || data.overview || undefined,
+        promotionMonth: monthSlugToNumber(translation?.promotion_month || data.promotion_month) ?? undefined,
+        lifeCycle: (lifeCycleEnum.toUi(translation?.life_cycle || data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
+        season: seasonEnum.toUiArray(translation?.season || data.season) as NonNullable<Plant["identity"]>["season"],
+        foliagePersistance: expandFoliagePersistanceFromDb(translation?.foliage_persistance || data.foliage_persistance),
       spiked: data.spiked || false,
-        toxicityHuman: (toxicityEnum.toUi(data.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
-        toxicityPets: (toxicityEnum.toUi(data.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
-      allergens: data.allergens || [],
+        toxicityHuman: (toxicityEnum.toUi(translation?.toxicity_human || data.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
+        toxicityPets: (toxicityEnum.toUi(translation?.toxicity_pets || data.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
+      allergens: translation?.allergens || data.allergens || [],
       scent: data.scent || false,
-        symbolism: data.symbolism || [],
-        livingSpace: (livingSpaceEnum.toUi(data.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
-        composition: expandCompositionFromDb(data.composition) as IdentityComposition,
-        maintenanceLevel: (maintenanceLevelEnum.toUi(data.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
+        symbolism: translation?.symbolism || data.symbolism || [],
+        livingSpace: (livingSpaceEnum.toUi(translation?.living_space || data.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
+        composition: expandCompositionFromDb(translation?.composition || data.composition) as IdentityComposition,
+        maintenanceLevel: (maintenanceLevelEnum.toUi(translation?.maintenance_level || data.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
       multicolor: data.multicolor || false,
       bicolor: data.bicolor || false,
       colors,
     },
       plantCare: {
-        origin: data.origin || [],
-        habitat: habitatEnum.toUiArray(data.habitat) as PlantCareData["habitat"],
+        origin: translation?.origin || data.origin || [],
+        habitat: habitatEnum.toUiArray(translation?.habitat || data.habitat) as PlantCareData["habitat"],
         temperatureMax: data.temperature_max || undefined,
         temperatureMin: data.temperature_min || undefined,
         temperatureIdeal: data.temperature_ideal || undefined,
-        levelSun: (levelSunEnum.toUi(data.level_sun) as PlantCareData["levelSun"]) || undefined,
+        levelSun: (levelSunEnum.toUi(translation?.level_sun || data.level_sun) as PlantCareData["levelSun"]) || undefined,
         hygrometry: data.hygrometry || undefined,
         wateringType: wateringTypeEnum.toUiArray(data.watering_type) as PlantCareData["wateringType"],
         division: divisionEnum.toUiArray(data.division) as PlantCareData["division"],
         soil: soilEnum.toUiArray(data.soil) as PlantCareData["soil"],
-        adviceSoil: data.advice_soil || undefined,
+        adviceSoil: translation?.advice_soil || data.advice_soil || undefined,
         mulching: mulchingEnum.toUiArray(data.mulching) as PlantCareData["mulching"],
-        adviceMulching: data.advice_mulching || undefined,
+        adviceMulching: translation?.advice_mulching || data.advice_mulching || undefined,
         nutritionNeed: nutritionNeedEnum.toUiArray(data.nutrition_need) as PlantCareData["nutritionNeed"],
         fertilizer: fertilizerEnum.toUiArray(data.fertilizer) as PlantCareData["fertilizer"],
-        adviceFertilizer: data.advice_fertilizer || undefined,
+        adviceFertilizer: translation?.advice_fertilizer || data.advice_fertilizer || undefined,
       watering: {
         schedules: normalizeSchedules(schedules || []),
       },
@@ -244,18 +261,18 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
         height: data.height_cm || undefined,
         wingspan: data.wingspan_cm || undefined,
         tutoring: data.tutoring || false,
-        adviceTutoring: data.advice_tutoring || undefined,
+        adviceTutoring: translation?.advice_tutoring || data.advice_tutoring || undefined,
         sowType: sowTypeEnum.toUiArray(data.sow_type) as PlantGrowthData["sowType"],
         separation: data.separation_cm || undefined,
         transplanting: data.transplanting || undefined,
-        adviceSowing: data.advice_sowing || undefined,
+        adviceSowing: translation?.advice_sowing || data.advice_sowing || undefined,
         cut: data.cut || undefined,
       },
     usage: {
-      adviceMedicinal: data.advice_medicinal || undefined,
+      adviceMedicinal: translation?.advice_medicinal || data.advice_medicinal || undefined,
       nutritionalIntake: data.nutritional_intake || [],
       infusion: data.infusion || false,
-      adviceInfusion: data.advice_infusion || undefined,
+      adviceInfusion: translation?.advice_infusion || data.advice_infusion || undefined,
       infusionMix,
       recipesIdeas: data.recipes_ideas || [],
       aromatherapy: data.aromatherapy || false,
@@ -265,18 +282,18 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
         melliferous: data.melliferous || false,
         polenizer: polenizerEnum.toUiArray(data.polenizer) as PlantEcologyData["polenizer"],
         beFertilizer: data.be_fertilizer || false,
-        groundEffect: data.ground_effect || undefined,
+        groundEffect: translation?.ground_effect || data.ground_effect || undefined,
         conservationStatus: (conservationStatusEnum.toUi(data.conservation_status) as PlantEcologyData["conservationStatus"]) || undefined,
       },
     danger: { pests: data.pests || [], diseases: data.diseases || [] },
     miscellaneous: {
       companions: data.companions || [],
-      tags: data.tags || [],
+      tags: translation?.tags || data.tags || [],
       sources: sourceList,
     },
     meta: {
       status: data.status || undefined,
-      adminCommentary: data.admin_commentary || undefined,
+      adminCommentary: translation?.admin_commentary || data.admin_commentary || undefined,
       createdBy: data.created_by || undefined,
       createdTime: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,
@@ -284,8 +301,8 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
     },
       multicolor: data.multicolor || false,
       bicolor: data.bicolor || false,
-      seasons: seasonEnum.toUiArray(data.season) as Plant['seasons'],
-    description: data.overview || undefined,
+      seasons: seasonEnum.toUiArray(translation?.season || data.season) as Plant['seasons'],
+    description: translation?.overview || data.overview || undefined,
     images: (images as PlantImage[]) || [],
   }
 }
@@ -333,7 +350,7 @@ export const PlantInfoPage: React.FC = () => {
       setLoading(true)
       setError(null)
       try {
-        const record = await fetchPlantWithRelations(id)
+        const record = await fetchPlantWithRelations(id, currentLang)
         if (!ignore) setPlant(record)
       } catch (e: any) {
         if (!ignore) setError(e?.message || t('plantInfo.failedToLoad'))
