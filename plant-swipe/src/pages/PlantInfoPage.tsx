@@ -938,10 +938,7 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
       camera.position.y = cameraHeight
       camera.lookAt(cubeCenter)
 
-      // Rotate meshes around their own center (which is at cubeCenter)
-      outerMesh.rotation.y = totalRotation
-      outerWire.rotation.y = totalRotation
-      innerWire.rotation.y = -totalRotation * 0.833 // Maintain relative rotation
+      // Don't rotate the meshes - only the camera rotates around the cube
 
       renderer.render(scene, camera)
       frameId = requestAnimationFrame(animate)
