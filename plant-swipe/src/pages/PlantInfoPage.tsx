@@ -780,7 +780,9 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
-    camera.position.set(4.8, 1.8, 4.8)
+    const cameraDistance = 4.8
+    const cameraHeight = 1.8
+    camera.position.set(cameraDistance, cameraHeight, cameraDistance)
     camera.lookAt(new THREE.Vector3(0, 0.6, 0))
 
     const ambientLight = new THREE.AmbientLight(0xbfffe0, 0.45)
@@ -846,18 +848,94 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
     }
     window.addEventListener('resize', handleResize)
 
+    // Rotation state
+    let autoAngle = 0
+    let userRotation = 0
+    let isDragging = false
+    let lastMouseX = 0
+    let lastMouseY = 0
+    let lastTouchX = 0
+    let lastTouchY = 0
+    const rotationSpeed = 0.005
+    const autoRotationSpeed = 0.0012
+
+    // Mouse event handlers
+    const handleMouseDown = (e: MouseEvent) => {
+      isDragging = true
+      lastMouseX = e.clientX
+      lastMouseY = e.clientY
+      renderer.domElement.style.cursor = 'grabbing'
+    }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return
+      const deltaX = e.clientX - lastMouseX
+      userRotation += deltaX * rotationSpeed
+      lastMouseX = e.clientX
+      lastMouseY = e.clientY
+    }
+
+    const handleMouseUp = () => {
+      isDragging = false
+      renderer.domElement.style.cursor = 'grab'
+    }
+
+    // Touch event handlers
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        isDragging = true
+        lastTouchX = e.touches[0].clientX
+        lastTouchY = e.touches[0].clientY
+        renderer.domElement.style.cursor = 'grabbing'
+      }
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDragging || e.touches.length !== 1) return
+      e.preventDefault()
+      const deltaX = e.touches[0].clientX - lastTouchX
+      userRotation += deltaX * rotationSpeed
+      lastTouchX = e.touches[0].clientX
+      lastTouchY = e.touches[0].clientY
+    }
+
+    const handleTouchEnd = () => {
+      isDragging = false
+      renderer.domElement.style.cursor = 'grab'
+    }
+
+    // Add event listeners
+    renderer.domElement.style.cursor = 'grab'
+    renderer.domElement.addEventListener('mousedown', handleMouseDown)
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    renderer.domElement.addEventListener('touchstart', handleTouchStart, { passive: false })
+    renderer.domElement.addEventListener('touchmove', handleTouchMove, { passive: false })
+    renderer.domElement.addEventListener('touchend', handleTouchEnd)
+
     let frameId: number
-    let angle = 0
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     const animate = () => {
-      angle += 0.0012
-      camera.position.x = 4.8 * Math.cos(angle)
-      camera.position.z = 4.8 * Math.sin(angle)
+      if (!isDragging) {
+        // Continue auto-rotation when not dragging
+        autoAngle += autoRotationSpeed
+      }
+
+      // Combine user rotation with auto rotation
+      const totalRotation = autoAngle + userRotation
+
+      // Update camera position (fixed distance, only rotation changes)
+      camera.position.x = cameraDistance * Math.cos(totalRotation)
+      camera.position.z = cameraDistance * Math.sin(totalRotation)
+      camera.position.y = cameraHeight
       camera.lookAt(new THREE.Vector3(0, 0.6, 0))
-      outerMesh.rotation.y += 0.0012
-      outerWire.rotation.y += 0.0012
-      innerWire.rotation.y -= 0.001
+
+      // Rotate meshes
+      outerMesh.rotation.y = totalRotation
+      outerWire.rotation.y = totalRotation
+      innerWire.rotation.y = -totalRotation * 0.833 // Maintain relative rotation
+
       renderer.render(scene, camera)
       frameId = requestAnimationFrame(animate)
     }
@@ -871,8 +949,16 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
     return () => {
       if (frameId) cancelAnimationFrame(frameId)
       window.removeEventListener('resize', handleResize)
+      renderer.domElement.removeEventListener('mousedown', handleMouseDown)
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      renderer.domElement.removeEventListener('touchstart', handleTouchStart)
+      renderer.domElement.removeEventListener('touchmove', handleTouchMove)
+      renderer.domElement.removeEventListener('touchend', handleTouchEnd)
       renderer.dispose()
-      container.removeChild(renderer.domElement)
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement)
+      }
     }
   }, [scale])
 
