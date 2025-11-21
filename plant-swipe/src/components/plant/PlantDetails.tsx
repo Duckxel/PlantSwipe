@@ -6,7 +6,6 @@ import type { Plant } from "@/types/plant"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabaseClient"
 import {
-  Flame,
   SunMedium,
   Droplets,
   Thermometer,
