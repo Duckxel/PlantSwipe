@@ -53,6 +53,16 @@ preferEnv('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+let aiFieldPromptsTemplate = {}
+try {
+  const promptPath = path.join(__dirname, 'src', 'lib', 'aiFieldPrompts.json')
+  const promptContents = fsSync.readFileSync(promptPath, 'utf-8')
+  aiFieldPromptsTemplate = JSON.parse(promptContents)
+} catch (err) {
+  console.warn('[server] Failed to load AI field prompts JSON:', err?.message || err)
+  aiFieldPromptsTemplate = {}
+}
+
 // Resolve the real Git repository root, even when running under a symlinked
 // deployment directory like /var/www/PlantSwipe/plant-swipe.
 async function getRepoRoot() {
@@ -853,6 +863,24 @@ function collectFieldHints(node, path, hints = new Set()) {
   return hints
 }
 
+function renderFieldPromptFromTemplate(fieldKey, plantName) {
+  const template = aiFieldPromptsTemplate?.[fieldKey]
+  if (!template) return null
+
+  let segments = []
+  if (Array.isArray(template)) {
+    segments = template
+  } else if (typeof template === 'string') {
+    segments = [template]
+  } else if (template && Array.isArray(template.instructions)) {
+    segments = template.instructions
+  }
+
+  if (!segments.length) return null
+  const compiled = segments.join('\n')
+  return compiled.replace(/\{\{\s*plantName\s*\}\}/gi, plantName)
+}
+
 function inferExpectedKind(node) {
   if (Array.isArray(node)) return 'array'
   if (!node || typeof node !== 'object') {
@@ -982,11 +1010,11 @@ async function generateFieldData(options) {
 
   const hintList = Array.from(collectFieldHints(fieldSchema, fieldKey)).slice(0, 50)
   const commonInstructions = [
-    'You fill plant data for individual fields.',
-    'Respond only with valid JSON containing the requested field.',
-    'Never include explanations, markdown, or extra prose.',
-    'Never output null; use empty strings, empty arrays, or omit keys instead.',
-    'Reuse any existing data when it is already suitable.',
+    `Act as a horticulture researcher filling structured data for the plant named "${plantName}".`,
+    'Work only in concise English and rely on reputable botanical sources.',
+    'Respond strictly with valid JSON containing the requested field and nothing else.',
+    'Populate every possible sub-value; if data is missing, return an empty string or array instead of null.',
+    'Reuse suitable existing data and never fabricate meta/status/image information.',
   ].join('\n')
 
   const promptSections = [
@@ -995,22 +1023,9 @@ async function generateFieldData(options) {
     `Field definition (for reference):\n${JSON.stringify(fieldSchema, null, 2)}`,
   ]
 
-  if (fieldKey === 'description') {
-    promptSections.push(
-      'Write a cohesive botanical description between 100 and 400 words. Use complete sentences and paragraph-style prose, highlight appearance, growth habit, seasonal interest, and growing requirements. Do not use bullet lists, headings, or markdown. Stay factual and avoid repetition.'
-    )
-  }
-
-  if (fieldKey === 'meta') {
-    promptSections.push(
-      'When filling meta.funFact, write one or two concise sentences (under 40 words total) that share a distinct trivia, historical note, or surprising usage. Do not repeat symbolism information covered in the meaning field. Avoid lists, markdown, or restating care guidance.'
-    )
-  }
-
-  if (fieldKey === 'meaning') {
-    promptSections.push(
-      'Return a single string under 50 words that concentrates on the plant’s symbolism—highlight key themes such as emotions, rites, or values (e.g., love, marriage, protection). Mention cultural or historical contexts only when they reinforce the symbolism. Do not include care advice, botanical traits, bullet characters, or markdown.'
-    )
+  const templatePrompt = renderFieldPromptFromTemplate(fieldKey, plantName)
+  if (templatePrompt) {
+    promptSections.push(templatePrompt)
   }
 
   if (hintList.length > 0) {

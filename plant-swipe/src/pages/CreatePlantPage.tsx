@@ -15,52 +15,43 @@ import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
+import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
+import {
+  expandCompositionFromDb,
+  normalizeCompositionForDb,
+  expandFoliagePersistanceFromDb,
+  normalizeFoliagePersistanceForDb,
+  plantTypeEnum,
+  utilityEnum,
+  comestiblePartEnum,
+  fruitTypeEnum,
+  seasonEnum,
+  lifeCycleEnum,
+  livingSpaceEnum,
+  maintenanceLevelEnum,
+  toxicityEnum,
+  habitatEnum,
+  levelSunEnum,
+  wateringTypeEnum,
+  divisionEnum,
+  soilEnum,
+  mulchingEnum,
+  nutritionNeedEnum,
+  fertilizerEnum,
+  sowTypeEnum,
+  polenizerEnum,
+  conservationStatusEnum,
+} from "@/lib/composition"
 
-const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
+type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
+type PlantCareData = NonNullable<Plant["plantCare"]>
+type PlantGrowthData = NonNullable<Plant["growth"]>
+type PlantEcologyData = NonNullable<Plant["ecology"]>
+
+const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
 const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
-const MONTH_SLUGS = [
-  'january',
-  'february',
-  'march',
-  'april',
-  'may',
-  'june',
-  'july',
-  'august',
-  'september',
-  'october',
-  'november',
-  'december',
-] as const
-
-const monthNumberToSlug = (value?: number | null): string | null => {
-  if (!value) return null
-  const index = value - 1
-  if (index < 0 || index >= MONTH_SLUGS.length) return null
-  return MONTH_SLUGS[index]
-}
-
-const monthNumbersToSlugs = (values?: number[] | null): string[] =>
-  Array.isArray(values)
-    ? values
-        .map((entry) => monthNumberToSlug(entry))
-        .filter((entry): entry is string => Boolean(entry))
-    : []
-
-const monthSlugToNumber = (slug?: string | null): number | null => {
-  if (!slug) return null
-  const index = MONTH_SLUGS.indexOf(slug.toLowerCase() as (typeof MONTH_SLUGS)[number])
-  return index === -1 ? null : index + 1
-}
-
-const monthSlugsToNumbers = (values?: string[] | null): number[] =>
-  Array.isArray(values)
-    ? values
-        .map((entry) => monthSlugToNumber(entry))
-        .filter((entry): entry is number => typeof entry === 'number')
-    : []
 
 const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
   const map: Record<string, PlantMeta['status']> = {
@@ -160,6 +151,12 @@ const emptyPlant: Plant = {
   colors: [],
 }
 
+const normalizeSeasonSlug = (value?: string | null): string | null => {
+  if (!value) return null
+  const slug = seasonEnum.toDb(value)
+  return slug || null
+}
+
 function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSchedule[] {
   if (!entries?.length) return []
   return entries
@@ -194,8 +191,25 @@ function coerceBoolean(value: unknown, fallback: boolean | null = false): boolea
 
 async function upsertColors(colors: PlantColor[]) {
   if (!colors?.length) return [] as string[]
-  const upsertPayload = colors.map((c) => ({ name: c.name, hex_code: c.hexCode || null }))
-  const { data, error } = await supabase.from('colors').upsert(upsertPayload).select('id,name')
+  const normalized = colors
+    .map((c) => {
+      const name = c.name?.trim()
+      if (!name) return null
+      const hex = c.hexCode?.trim()
+      return {
+        name,
+        hex_code: hex && hex.length ? (hex.startsWith("#") ? hex : `#${hex}`) : null,
+      }
+    })
+    .filter((entry): entry is { name: string; hex_code: string | null } => Boolean(entry?.name))
+  if (!normalized.length) return [] as string[]
+  const deduped = Array.from(
+    new Map(normalized.map((entry) => [entry.name.toLowerCase(), entry])).values(),
+  )
+  const { data, error } = await supabase
+    .from('colors')
+    .upsert(deduped, { onConflict: 'name' })
+    .select('id,name')
   if (error) throw new Error(error.message)
   return (data || []).map((row) => row.id as string)
 }
@@ -241,7 +255,7 @@ async function upsertWateringSchedules(plantId: string, schedules: Plant["plantC
   const entries = normalizeSchedules(schedules?.watering?.schedules)
   const rows = entries.map((entry) => ({
     plant_id: plantId,
-    season: entry.season || null,
+      season: normalizeSeasonSlug(entry.season),
     quantity: entry.quantity ?? null,
     time_period: entry.timePeriod || null,
   }))
@@ -317,52 +331,52 @@ async function loadPlant(id: string): Promise<Plant | null> {
       url: data.source_url || undefined,
     })
   }
-  const plant: Plant = {
-    id: data.id,
-    name: data.name,
-    plantType: data.plant_type || undefined,
-    utility: data.utility || [],
-    comestiblePart: data.comestible_part || [],
-    fruitType: data.fruit_type || [],
+    const plant: Plant = {
+      id: data.id,
+      name: data.name,
+      plantType: (plantTypeEnum.toUi(data.plant_type) as Plant["plantType"]) || undefined,
+      utility: utilityEnum.toUiArray(data.utility) as Plant["utility"],
+      comestiblePart: comestiblePartEnum.toUiArray(data.comestible_part) as Plant["comestiblePart"],
+      fruitType: fruitTypeEnum.toUiArray(data.fruit_type) as Plant["fruitType"],
     identity: {
       givenNames: data.given_names || [],
       scientificName: data.scientific_name || undefined,
       family: data.family || undefined,
-      overview: data.overview || undefined,
-      promotionMonth: data.promotion_month || undefined,
-      lifeCycle: data.life_cycle || undefined,
-      season: (data.season || []).map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)) as Plant["seasons"],
-      foliagePersistance: data.foliage_persistance || undefined,
-      spiked: data.spiked || false,
-      toxicityHuman: data.toxicity_human || undefined,
-      toxicityPets: data.toxicity_pets || undefined,
-      allergens: data.allergens || [],
-      scent: data.scent || false,
-      symbolism: data.symbolism || [],
-      livingSpace: data.living_space || undefined,
-      composition: data.composition || [],
-      maintenanceLevel: data.maintenance_level || undefined,
-      multicolor: data.multicolor || false,
-      bicolor: data.bicolor || false,
-      colors,
-    },
-    plantCare: {
-      origin: data.origin || [],
-      habitat: data.habitat || [],
-      temperatureMax: data.temperature_max || undefined,
-      temperatureMin: data.temperature_min || undefined,
-      temperatureIdeal: data.temperature_ideal || undefined,
-      levelSun: data.level_sun || undefined,
-      hygrometry: data.hygrometry || undefined,
-      wateringType: data.watering_type || [],
-      division: data.division || [],
-      soil: data.soil || [],
-      adviceSoil: data.advice_soil || undefined,
-      mulching: data.mulching || [],
-      adviceMulching: data.advice_mulching || undefined,
-      nutritionNeed: data.nutrition_need || [],
-      fertilizer: data.fertilizer || [],
-      adviceFertilizer: data.advice_fertilizer || undefined,
+        overview: data.overview || undefined,
+        promotionMonth: monthSlugToNumber(data.promotion_month) ?? undefined,
+        lifeCycle: (lifeCycleEnum.toUi(data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
+        season: seasonEnum.toUiArray(data.season) as NonNullable<Plant["identity"]>["season"],
+        foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
+        spiked: data.spiked || false,
+        toxicityHuman: (toxicityEnum.toUi(data.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
+        toxicityPets: (toxicityEnum.toUi(data.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
+        allergens: data.allergens || [],
+        scent: data.scent || false,
+        symbolism: data.symbolism || [],
+        livingSpace: (livingSpaceEnum.toUi(data.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
+        composition: expandCompositionFromDb(data.composition) as IdentityComposition,
+        maintenanceLevel: (maintenanceLevelEnum.toUi(data.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
+        multicolor: data.multicolor || false,
+        bicolor: data.bicolor || false,
+        colors,
+      },
+      plantCare: {
+        origin: data.origin || [],
+        habitat: habitatEnum.toUiArray(data.habitat) as PlantCareData["habitat"],
+        temperatureMax: data.temperature_max || undefined,
+        temperatureMin: data.temperature_min || undefined,
+        temperatureIdeal: data.temperature_ideal || undefined,
+        levelSun: (levelSunEnum.toUi(data.level_sun) as PlantCareData["levelSun"]) || undefined,
+        hygrometry: data.hygrometry || undefined,
+        wateringType: wateringTypeEnum.toUiArray(data.watering_type) as PlantCareData["wateringType"],
+        division: divisionEnum.toUiArray(data.division) as PlantCareData["division"],
+        soil: soilEnum.toUiArray(data.soil) as PlantCareData["soil"],
+        adviceSoil: data.advice_soil || undefined,
+        mulching: mulchingEnum.toUiArray(data.mulching) as PlantCareData["mulching"],
+        adviceMulching: data.advice_mulching || undefined,
+        nutritionNeed: nutritionNeedEnum.toUiArray(data.nutrition_need) as PlantCareData["nutritionNeed"],
+        fertilizer: fertilizerEnum.toUiArray(data.fertilizer) as PlantCareData["fertilizer"],
+        adviceFertilizer: data.advice_fertilizer || undefined,
       watering: {
         schedules: normalizeSchedules(
           (schedules || []).map((row: any) => ({
@@ -373,20 +387,20 @@ async function loadPlant(id: string): Promise<Plant | null> {
         ),
       },
     },
-    growth: {
+      growth: {
         sowingMonth: monthSlugsToNumbers(data.sowing_month),
         floweringMonth: monthSlugsToNumbers(data.flowering_month),
         fruitingMonth: monthSlugsToNumbers(data.fruiting_month),
-      height: data.height_cm || undefined,
-      wingspan: data.wingspan_cm || undefined,
-      tutoring: data.tutoring || false,
-      adviceTutoring: data.advice_tutoring || undefined,
-      sowType: data.sow_type || [],
-      separation: data.separation_cm || undefined,
-      transplanting: data.transplanting || undefined,
-      adviceSowing: data.advice_sowing || undefined,
-      cut: data.cut || undefined,
-    },
+        height: data.height_cm || undefined,
+        wingspan: data.wingspan_cm || undefined,
+        tutoring: data.tutoring || false,
+        adviceTutoring: data.advice_tutoring || undefined,
+        sowType: sowTypeEnum.toUiArray(data.sow_type) as PlantGrowthData["sowType"],
+        separation: data.separation_cm || undefined,
+        transplanting: data.transplanting || undefined,
+        adviceSowing: data.advice_sowing || undefined,
+        cut: data.cut || undefined,
+      },
     usage: {
       adviceMedicinal: data.advice_medicinal || undefined,
       nutritionalIntake: data.nutritional_intake || [],
@@ -397,13 +411,13 @@ async function loadPlant(id: string): Promise<Plant | null> {
       aromatherapy: data.aromatherapy || false,
       spiceMixes: data.spice_mixes || [],
     },
-    ecology: {
-      melliferous: data.melliferous || false,
-      polenizer: data.polenizer || [],
-      beFertilizer: data.be_fertilizer || false,
-      groundEffect: data.ground_effect || undefined,
-      conservationStatus: data.conservation_status || undefined,
-    },
+      ecology: {
+        melliferous: data.melliferous || false,
+        polenizer: polenizerEnum.toUiArray(data.polenizer) as PlantEcologyData["polenizer"],
+        beFertilizer: data.be_fertilizer || false,
+        groundEffect: data.ground_effect || undefined,
+        conservationStatus: (conservationStatusEnum.toUi(data.conservation_status) as PlantEcologyData["conservationStatus"]) || undefined,
+      },
     danger: { pests: data.pests || [], diseases: data.diseases || [] },
     miscellaneous: {
       companions: data.companions || [],
@@ -420,7 +434,7 @@ async function loadPlant(id: string): Promise<Plant | null> {
     },
     multicolor: data.multicolor || false,
     bicolor: data.bicolor || false,
-    seasons: (data.season || []).map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)) as Plant["seasons"],
+      seasons: seasonEnum.toUiArray(data.season) as Plant["seasons"],
     description: data.overview || undefined,
     images: (images as PlantImage[]) || [],
   }
@@ -454,7 +468,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         'utility',
         'comestiblePart',
         'fruitType',
-        'images',
+        'seasons',
+        'description',
         'identity',
         'plantCare',
         'growth',
@@ -462,21 +477,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         'ecology',
         'danger',
         'miscellaneous',
-        'meta',
-        'seasons',
-        'description',
-      ].filter((key) => !DISALLOWED_FIELDS.has(key) && !DISALLOWED_FIELDS.has(key.toLowerCase())),
+      ].filter((key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase())),
     [],
   )
-  const basicFieldOrder = React.useMemo(() => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'identity'], [])
-  const mandatoryFieldOrder = React.useMemo(() => {
-    const remaining = targetFields.filter((key) => !basicFieldOrder.includes(key))
-    return [...basicFieldOrder, ...remaining]
+  const basicFieldOrder = React.useMemo(
+    () => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description', 'identity'],
+    [],
+  )
+  const aiFieldOrder = React.useMemo(() => {
+    const prioritized = basicFieldOrder.filter((key) => targetFields.includes(key))
+    const remaining = targetFields.filter((key) => !prioritized.includes(key))
+    return [...prioritized, ...remaining]
   }, [basicFieldOrder, targetFields])
-  const aiCategoryOrder = React.useMemo(
-    () => ['identity', 'plantCare', 'growth', 'usage', 'ecology', 'danger', 'miscellaneous', 'meta'],
-    [],
-  )
+  const mandatoryFieldOrder = aiFieldOrder
   const categoryLabels = React.useMemo(() => ({
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
@@ -532,7 +545,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       watering: { ...(candidate.plantCare?.watering || {}), schedules: normalizeSchedules(candidate.plantCare?.watering?.schedules) },
     },
   })
-  const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
+    const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
+    const showAiProgressCard = aiWorking || (!aiCompleted && hasAiProgress)
   const recentSectionLog = React.useMemo(() => aiSectionLog.slice(-5).reverse(), [aiSectionLog])
   const initializeCategoryProgress = () => {
     const progress = buildCategoryProgress(targetFields)
@@ -579,50 +593,72 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       const plantId = plantToSave.id || id || generateUUIDv4()
       const createdByValue = existingLoaded ? plantToSave.meta?.createdBy || null : (plantToSave.meta?.createdBy || (profile as any)?.full_name || null)
       const createdTimeValue = existingLoaded ? plantToSave.meta?.createdAt || null : (plantToSave.meta?.createdAt || new Date().toISOString())
-      const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
-      const sources = plantToSave.miscellaneous?.sources || []
-      const primarySource = sources[0]
-      const payload = {
-        id: plantId,
-        name: plantToSave.name.trim(),
-        plant_type: plantToSave.plantType || null,
-        utility: plantToSave.utility || [],
-        comestible_part: plantToSave.comestiblePart || [],
-        fruit_type: plantToSave.fruitType || [],
-        given_names: plantToSave.identity?.givenNames || [],
-        scientific_name: plantToSave.identity?.scientificName || null,
-        family: plantToSave.identity?.family || null,
-        overview: plantToSave.identity?.overview || null,
-        promotion_month: plantToSave.identity?.promotionMonth || null,
-        life_cycle: plantToSave.identity?.lifeCycle || null,
-        season: plantToSave.identity?.season ? plantToSave.identity.season.map((s) => s.toString().toLowerCase()) : [],
-        foliage_persistance: plantToSave.identity?.foliagePersistance || null,
-        spiked: coerceBoolean(plantToSave.identity?.spiked, false),
-        toxicity_human: plantToSave.identity?.toxicityHuman || null,
-        toxicity_pets: plantToSave.identity?.toxicityPets || null,
-        allergens: plantToSave.identity?.allergens || [],
-        scent: coerceBoolean(plantToSave.identity?.scent, false),
-        symbolism: plantToSave.identity?.symbolism || [],
-        living_space: plantToSave.identity?.livingSpace || null,
-        composition: plantToSave.identity?.composition || [],
-        maintenance_level: plantToSave.identity?.maintenanceLevel || null,
+        const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
+        const sources = plantToSave.miscellaneous?.sources || []
+        const primarySource = sources[0]
+        const normalizedPlantType = plantTypeEnum.toDb(plantToSave.plantType)
+        const normalizedUtility = utilityEnum.toDbArray(plantToSave.utility)
+        const normalizedComestible = comestiblePartEnum.toDbArray(plantToSave.comestiblePart)
+        const normalizedFruit = fruitTypeEnum.toDbArray(plantToSave.fruitType)
+        const normalizedIdentitySeasons = seasonEnum.toDbArray(plantToSave.identity?.season)
+        const normalizedLifeCycle = lifeCycleEnum.toDb(plantToSave.identity?.lifeCycle)
+        const normalizedLivingSpace = livingSpaceEnum.toDb(plantToSave.identity?.livingSpace)
+        const normalizedMaintenance = maintenanceLevelEnum.toDb(plantToSave.identity?.maintenanceLevel)
+        const normalizedToxicityHuman = toxicityEnum.toDb(plantToSave.identity?.toxicityHuman)
+        const normalizedToxicityPets = toxicityEnum.toDb(plantToSave.identity?.toxicityPets)
+        const normalizedHabitat = habitatEnum.toDbArray(plantToSave.plantCare?.habitat)
+        const normalizedLevelSun = levelSunEnum.toDb(plantToSave.plantCare?.levelSun)
+        const normalizedWateringType = wateringTypeEnum.toDbArray(plantToSave.plantCare?.wateringType)
+        const normalizedDivision = divisionEnum.toDbArray(plantToSave.plantCare?.division)
+        const normalizedSoil = soilEnum.toDbArray(plantToSave.plantCare?.soil)
+        const normalizedMulching = mulchingEnum.toDbArray(plantToSave.plantCare?.mulching)
+        const normalizedNutritionNeed = nutritionNeedEnum.toDbArray(plantToSave.plantCare?.nutritionNeed)
+        const normalizedFertilizer = fertilizerEnum.toDbArray(plantToSave.plantCare?.fertilizer)
+        const normalizedSowType = sowTypeEnum.toDbArray(plantToSave.growth?.sowType)
+        const normalizedPolenizer = polenizerEnum.toDbArray(plantToSave.ecology?.polenizer)
+        const normalizedConservationStatus = conservationStatusEnum.toDb(plantToSave.ecology?.conservationStatus)
+        const normalizedPromotionMonth = monthNumberToSlug(plantToSave.identity?.promotionMonth)
+        const payload = {
+          id: plantId,
+          name: plantToSave.name.trim(),
+          plant_type: normalizedPlantType || null,
+          utility: normalizedUtility,
+          comestible_part: normalizedComestible,
+          fruit_type: normalizedFruit,
+          given_names: plantToSave.identity?.givenNames || [],
+          scientific_name: plantToSave.identity?.scientificName || null,
+          family: plantToSave.identity?.family || null,
+          overview: plantToSave.identity?.overview || null,
+          promotion_month: normalizedPromotionMonth,
+          life_cycle: normalizedLifeCycle || null,
+          season: normalizedIdentitySeasons,
+          foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
+          spiked: coerceBoolean(plantToSave.identity?.spiked, false),
+          toxicity_human: normalizedToxicityHuman || null,
+          toxicity_pets: normalizedToxicityPets || null,
+          allergens: plantToSave.identity?.allergens || [],
+          scent: coerceBoolean(plantToSave.identity?.scent, false),
+          symbolism: plantToSave.identity?.symbolism || [],
+          living_space: normalizedLivingSpace || null,
+          composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+        maintenance_level: normalizedMaintenance || null,
         multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
         bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
-        origin: plantToSave.plantCare?.origin || [],
-        habitat: plantToSave.plantCare?.habitat || [],
+          origin: plantToSave.plantCare?.origin || [],
+          habitat: normalizedHabitat,
         temperature_max: plantToSave.plantCare?.temperatureMax || null,
         temperature_min: plantToSave.plantCare?.temperatureMin || null,
         temperature_ideal: plantToSave.plantCare?.temperatureIdeal || null,
-        level_sun: plantToSave.plantCare?.levelSun || null,
+          level_sun: normalizedLevelSun || null,
         hygrometry: plantToSave.plantCare?.hygrometry || null,
-        watering_type: plantToSave.plantCare?.wateringType || [],
-        division: plantToSave.plantCare?.division || [],
-        soil: plantToSave.plantCare?.soil || [],
+          watering_type: normalizedWateringType,
+          division: normalizedDivision,
+          soil: normalizedSoil,
         advice_soil: plantToSave.plantCare?.adviceSoil || null,
-        mulching: plantToSave.plantCare?.mulching || [],
+          mulching: normalizedMulching,
         advice_mulching: plantToSave.plantCare?.adviceMulching || null,
-        nutrition_need: plantToSave.plantCare?.nutritionNeed || [],
-        fertilizer: plantToSave.plantCare?.fertilizer || [],
+          nutrition_need: normalizedNutritionNeed,
+          fertilizer: normalizedFertilizer,
         advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
         sowing_month: monthNumbersToSlugs(plantToSave.growth?.sowingMonth),
         flowering_month: monthNumbersToSlugs(plantToSave.growth?.floweringMonth),
@@ -631,7 +667,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         wingspan_cm: plantToSave.growth?.wingspan || null,
         tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
         advice_tutoring: plantToSave.growth?.adviceTutoring || null,
-        sow_type: plantToSave.growth?.sowType || [],
+          sow_type: normalizedSowType,
         separation_cm: plantToSave.growth?.separation || null,
         transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
         advice_sowing: plantToSave.growth?.adviceSowing || null,
@@ -644,10 +680,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
         spice_mixes: plantToSave.usage?.spiceMixes || [],
         melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
-        polenizer: plantToSave.ecology?.polenizer || [],
+          polenizer: normalizedPolenizer,
         be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
         ground_effect: plantToSave.ecology?.groundEffect || null,
-        conservation_status: plantToSave.ecology?.conservationStatus || null,
+          conservation_status: normalizedConservationStatus || null,
         pests: plantToSave.danger?.pests || [],
         diseases: plantToSave.danger?.diseases || [],
         companions: plantToSave.miscellaneous?.companions || [],
@@ -695,25 +731,32 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
   const runAiFill = async () => {
     const trimmedName = plant.name.trim()
-    if (!trimmedName) { setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')); return }
+    if (!trimmedName) {
+      setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.'))
+      return
+    }
+
     initializeCategoryProgress()
     setAiCompleted(false)
     setAiWorking(true)
     setColorSuggestions([])
     setError(null)
+
     let aiSucceeded = false
     let finalPlant: Plant | null = null
     const plantNameForAi = trimmedName
-      const applyWithStatus = (candidate: Plant): Plant => ({
+    const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
       meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
     })
-    const needsMonths = (p: Plant) => !((p.growth?.sowingMonth || []).length && (p.growth?.floweringMonth || []).length && (p.growth?.fruitingMonth || []).length)
+    const needsMonths = (p: Plant) =>
+      !((p.growth?.sowingMonth || []).length && (p.growth?.floweringMonth || []).length && (p.growth?.fruitingMonth || []).length)
     const needsOriginOrWater = (p: Plant) => {
       const hasOrigin = (p.plantCare?.origin || []).length > 0
       const hasSchedule = (p.plantCare?.watering?.schedules || []).length > 0
       return !(hasOrigin && hasSchedule)
     }
+
     const fillFieldWithRetries = async (fieldKey: string, existingField?: unknown) => {
       let lastError: Error | null = null
       for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -744,6 +787,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (lastError) console.error(`AI fill failed for ${fieldKey} after 3 attempts`, lastError)
       return false
     }
+
     const ensureMandatoryFields = async () => {
       for (const fieldKey of mandatoryFieldOrder) {
         if (!requiresFieldCompletion(fieldKey)) continue
@@ -753,6 +797,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         await fillFieldWithRetries(fieldKey, getFieldValueForKey(latestSnapshot, fieldKey))
       }
     }
+
     try {
       let aiData: Record<string, unknown> | null = null
       let lastError: Error | null = null
@@ -762,7 +807,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             plantName: plantNameForAi,
             schema: plantSchema,
             existingData: plant,
-            fields: aiCategoryOrder,
+            fields: aiFieldOrder,
             language,
             onFieldComplete: ({ field, data }) => {
               if (field === 'complete') return
@@ -807,9 +852,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (needsOriginOrWater(snapshot)) {
         await fillFieldWithRetries('plantCare', snapshot.plantCare)
       }
-      const growthSource = snapshot.growth
       if (needsMonths(snapshot)) {
-        await fillFieldWithRetries('growth', growthSource)
+        await fillFieldWithRetries('growth', snapshot.growth)
       }
 
       setPlant((prev) => {
@@ -835,6 +879,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         finalPlant = next
         return next
       })
+
       await ensureMandatoryFields()
       aiSucceeded = true
     } catch (e: any) {
@@ -868,7 +913,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       const sourceLang = language
       const translatedRows = [] as any[]
       const primarySource = (plant.miscellaneous?.sources || [])[0]
-      for (const target of targets) {
+        for (const target of targets) {
         const translatedName = await translateText(plant.name || '', target, sourceLang)
         const translatedGivenNames = await translateArray(plant.identity?.givenNames || [], target, sourceLang)
         const translateArraySafe = (arr?: string[]) => translateArray(arr || [], target, sourceLang)
@@ -879,7 +924,25 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (translatedSourceName) translatedSource.name = translatedSourceName
         if (primarySource?.url) translatedSource.url = primarySource.url
 
-        translatedRows.push({
+          const dbLifeCycle = lifeCycleEnum.toDb(plant.identity?.lifeCycle)
+          const dbSeasons = seasonEnum.toDbArray(plant.identity?.season)
+          const dbLivingSpace = livingSpaceEnum.toDb(plant.identity?.livingSpace)
+          const dbMaintenance = maintenanceLevelEnum.toDb(plant.identity?.maintenanceLevel)
+          const dbToxicityHuman = toxicityEnum.toDb(plant.identity?.toxicityHuman)
+          const dbToxicityPets = toxicityEnum.toDb(plant.identity?.toxicityPets)
+          const dbHabitat = habitatEnum.toDbArray(plant.plantCare?.habitat)
+          const dbLevelSun = levelSunEnum.toDb(plant.plantCare?.levelSun)
+          const dbWateringType = wateringTypeEnum.toDbArray(plant.plantCare?.wateringType)
+          const dbDivision = divisionEnum.toDbArray(plant.plantCare?.division)
+          const dbSoil = soilEnum.toDbArray(plant.plantCare?.soil)
+          const dbMulching = mulchingEnum.toDbArray(plant.plantCare?.mulching)
+          const dbNutritionNeed = nutritionNeedEnum.toDbArray(plant.plantCare?.nutritionNeed)
+          const dbFertilizer = fertilizerEnum.toDbArray(plant.plantCare?.fertilizer)
+          const dbSowType = sowTypeEnum.toDbArray(plant.growth?.sowType)
+          const dbPolenizer = polenizerEnum.toDbArray(plant.ecology?.polenizer)
+          const dbConservation = conservationStatusEnum.toDb(plant.ecology?.conservationStatus)
+
+          translatedRows.push({
           plant_id: plant.id,
           language: target,
           name: translatedName,
@@ -891,19 +954,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           overview: plant.identity?.overview
             ? await translateText(plant.identity.overview, target, sourceLang)
             : plant.identity?.overview || null,
-          promotion_month: plant.identity?.promotionMonth || null,
-          life_cycle: plant.identity?.lifeCycle || null,
-          season: plant.identity?.season ? plant.identity.season.map((s) => s.toString().toLowerCase()) : [],
-          foliage_persistance: plant.identity?.foliagePersistance || null,
-          toxicity_human: plant.identity?.toxicityHuman || null,
-          toxicity_pets: plant.identity?.toxicityPets || null,
-          allergens: await translateArraySafe(plant.identity?.allergens),
-          symbolism: await translateArraySafe(plant.identity?.symbolism),
-          living_space: plant.identity?.livingSpace || null,
-          composition: plant.identity?.composition || [],
-          maintenance_level: plant.identity?.maintenanceLevel || null,
+            promotion_month: monthNumberToSlug(plant.identity?.promotionMonth),
+            life_cycle: dbLifeCycle || null,
+            season: dbSeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plant.identity?.foliagePersistance),
+            toxicity_human: dbToxicityHuman || null,
+            toxicity_pets: dbToxicityPets || null,
+            allergens: await translateArraySafe(plant.identity?.allergens),
+            symbolism: await translateArraySafe(plant.identity?.symbolism),
+            living_space: dbLivingSpace || null,
+            composition: normalizeCompositionForDb(plant.identity?.composition),
+            maintenance_level: dbMaintenance || null,
           origin: await translateArraySafe(plant.plantCare?.origin),
-          habitat: plant.plantCare?.habitat || [],
+            habitat: dbHabitat,
           advice_soil: plant.plantCare?.adviceSoil
             ? await translateText(plant.plantCare.adviceSoil, target, sourceLang)
             : plant.plantCare?.adviceSoil || null,
@@ -925,10 +988,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           advice_infusion: plant.usage?.adviceInfusion
             ? await translateText(plant.usage.adviceInfusion, target, sourceLang)
             : plant.usage?.adviceInfusion || null,
-          ground_effect: plant.ecology?.groundEffect
-            ? await translateText(plant.ecology.groundEffect, target, sourceLang)
-            : plant.ecology?.groundEffect || null,
-          admin_commentary: plant.meta?.adminCommentary
+            ground_effect: plant.ecology?.groundEffect
+              ? await translateText(plant.ecology.groundEffect, target, sourceLang)
+              : plant.ecology?.groundEffect || null,
+            level_sun: dbLevelSun || null,
+            watering_type: dbWateringType,
+            division: dbDivision,
+            soil: dbSoil,
+            mulching: dbMulching,
+            nutrition_need: dbNutritionNeed,
+            fertilizer: dbFertilizer,
+            sow_type: dbSowType,
+            polenizer: dbPolenizer,
+            admin_commentary: plant.meta?.adminCommentary
             ? await translateText(plant.meta.adminCommentary, target, sourceLang)
             : plant.meta?.adminCommentary || null,
           source_name: translatedSource.name || null,
@@ -1027,7 +1099,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             </div>
           )}
         </div>
-        {(aiWorking || hasAiProgress) && (
+          {showAiProgressCard && (
           <Card>
             <CardContent className="space-y-4 pt-4">
               <div className="flex items-center justify-between text-sm font-medium">

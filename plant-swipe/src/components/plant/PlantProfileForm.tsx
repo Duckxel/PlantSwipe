@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
+import { Sparkles } from "lucide-react"
 
 export type PlantProfileFormProps = {
   value: Plant
@@ -21,6 +22,13 @@ const neuCardClass =
   "rounded-2xl border border-emerald-100/80 dark:border-emerald-900/50 bg-gradient-to-br " +
   "from-emerald-50/80 via-emerald-100/70 to-white/80 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] " +
   "shadow-[0_18px_50px_-26px_rgba(16,185,129,0.35)] dark:shadow-[0_22px_65px_-40px_rgba(0,0,0,0.65)]"
+
+const normalizeHex = (hex?: string) => {
+  if (!hex) return ""
+  const trimmed = hex.trim()
+  if (!trimmed) return ""
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
+}
 
 type FieldType =
   | "text"
@@ -36,17 +44,63 @@ type FieldType =
   | "sources"
   | "readonly"
 
+type FieldOption = string | { label: string; value: string | number }
+
 interface FieldConfig {
   key: string
   label: string
   description: string
   type: FieldType
-  options?: string[]
+  options?: ReadonlyArray<FieldOption>
 }
 
 const monthOptions = [
-  "January","February","March","April","May","June","July","August","September","October","November","December"
-]
+  { label: "January", value: 1 },
+  { label: "February", value: 2 },
+  { label: "March", value: 3 },
+  { label: "April", value: 4 },
+  { label: "May", value: 5 },
+  { label: "June", value: 6 },
+  { label: "July", value: 7 },
+  { label: "August", value: 8 },
+  { label: "September", value: 9 },
+  { label: "October", value: 10 },
+  { label: "November", value: 11 },
+  { label: "December", value: 12 },
+] as const
+
+const monthLookup = monthOptions.reduce((acc, option) => {
+  const lower = option.label.toLowerCase()
+  acc[lower] = option.value
+  acc[lower.slice(0, 3)] = option.value
+  acc[String(option.value)] = option.value
+  acc[option.value.toString().padStart(2, '0')] = option.value
+  return acc
+}, {} as Record<string, number>)
+
+const normalizeMonthValue = (input: unknown): number | null => {
+  if (typeof input === "number" && Number.isFinite(input)) {
+    const int = Math.round(input)
+    if (int >= 1 && int <= 12) return int
+  }
+  if (typeof input === "string") {
+    const trimmed = input.trim().toLowerCase()
+    if (!trimmed) return null
+    if (monthLookup[trimmed]) return monthLookup[trimmed]
+  }
+  return null
+}
+
+const normalizeMonthArray = (value: unknown): number[] => {
+  if (value === null || value === undefined) return []
+  const source = Array.isArray(value) ? value : [value]
+  const result: number[] = []
+  for (const entry of source) {
+    const normalized = normalizeMonthValue(entry)
+    if (normalized && !result.includes(normalized)) result.push(normalized)
+  }
+  return result
+}
 
 const TagInput: React.FC<{ value: string[]; onChange: (v: string[]) => void; placeholder?: string }> = ({ value, onChange, placeholder }) => {
   const [input, setInput] = React.useState("")
@@ -463,10 +517,17 @@ const comestibleOptions = ["flower","fruit","seed","leaf","stem","root","bulb","
 const fruitOptions = ["nut","seed","stone"] as const
 const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
 
-function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig) {
-  const value = getValue(plant, field.key)
-  const id = field.key.replace(/\./g, "-")
-  const isAdvice = field.label.toLowerCase().includes("advice")
+  function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig) {
+    const value = getValue(plant, field.key)
+    const id = field.key.replace(/\./g, "-")
+    const isAdvice = field.label.toLowerCase().includes("advice")
+    const isMonthMultiField = field.key.startsWith("growth.") && field.key.toLowerCase().includes("month")
+    const isPromotionMonthField = field.key === "identity.promotionMonth"
+    const normalizedOptions = (field.options || []).map((opt) =>
+      typeof opt === "string"
+        ? { label: opt, value: opt, key: opt }
+        : { label: opt.label, value: opt.value, key: String(opt.value) },
+    )
 
   const body = (() => {
     if (field.key === "meta.status") {
@@ -476,6 +537,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         Review: "#0ea5e9",
         Approved: "#10b981",
       }
+        const statusOptions = (field.options || []).map((opt) => (typeof opt === "string" ? opt : String(opt.value)))
       return (
         <div className="grid gap-2">
           <Label>{field.label}</Label>
@@ -485,9 +547,9 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
             onChange={(e) => onChange(field.key, e.target.value)}
           >
             <option value="">Select status</option>
-            {(field.options || []).map((opt) => (
-              <option key={opt} value={opt} style={{ color: statusColors[opt] || "inherit" }}>
-                ● {opt}
+              {statusOptions.map((opt) => (
+                <option key={opt} value={opt} style={{ color: statusColors[opt] || "inherit" }}>
+                  ● {opt}
               </option>
             ))}
           </select>
@@ -536,48 +598,66 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
             <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
         )
-      case "select":
-        return (
-          <div className="grid gap-2">
-            <Label>{field.label}</Label>
-            <select
-              className="h-9 rounded-md border px-2 text-sm"
-              value={value || ""}
-              onChange={(e) => onChange(field.key, e.target.value || undefined)}
-            >
-              <option value="">Select option</option>
-              {(field.options || []).map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
-      case "multiselect":
-        return (
-          <div className="grid gap-2">
-            <Label>{field.label}</Label>
-            <div className="flex flex-wrap gap-2">
-              {(field.options || []).map((opt) => {
-                const selected = Array.isArray(value) ? value.includes(opt) : false
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => {
-                      const current: string[] = Array.isArray(value) ? value : []
-                      onChange(field.key, selected ? current.filter((v) => v !== opt) : [...current, opt])
-                    }}
-                    className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                  >
-                    {opt}
-                  </button>
-                )
-              })}
+        case "select": {
+          const selectValue = isPromotionMonthField ? normalizeMonthValue(value) ?? value : value
+          const valueKey =
+            normalizedOptions.find((opt) => Object.is(opt.value, selectValue))?.key ??
+            (selectValue === null || selectValue === undefined ? "" : String(selectValue))
+          return (
+            <div className="grid gap-2">
+              <Label>{field.label}</Label>
+              <select
+                className="h-9 rounded-md border px-2 text-sm"
+                value={valueKey}
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    onChange(field.key, undefined)
+                    return
+                  }
+                  const selectedOption = normalizedOptions.find((opt) => opt.key === e.target.value)
+                  onChange(field.key, selectedOption ? selectedOption.value : undefined)
+                }}
+              >
+                <option value="">Select option</option>
+                {normalizedOptions.map((opt) => (
+                  <option key={opt.key} value={opt.key}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             </div>
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
+          )
+        }
+        case "multiselect": {
+          const currentValues = isMonthMultiField ? normalizeMonthArray(value) : (Array.isArray(value) ? [...value] : [])
+          const includesValue = (candidate: unknown) =>
+            currentValues.some((entry) => Object.is(entry, candidate) || (typeof entry === "string" && typeof candidate === "string" && entry === candidate))
+          return (
+            <div className="grid gap-2">
+              <Label>{field.label}</Label>
+              <div className="flex flex-wrap gap-2">
+                {normalizedOptions.map((opt) => {
+                  const selected = includesValue(opt.value)
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => {
+                        const nextValues = selected
+                          ? currentValues.filter((entry) => !(Object.is(entry, opt.value) || (typeof entry === "string" && typeof opt.value === "string" && entry === opt.value)))
+                          : [...currentValues, opt.value]
+                        onChange(field.key, nextValues)
+                      }}
+                      className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
+            </div>
+          )
+        }
       case "tags":
         return (
           <div className="grid gap-2">
@@ -631,14 +711,32 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
     }
   })()
 
-  if (isAdvice) {
-    return (
-      <details key={field.key} className="rounded border bg-muted/20 p-3" open={false}>
-        <summary className="cursor-pointer text-sm font-semibold">{field.label} (optional)</summary>
-        <div className="mt-3">{body}</div>
-      </details>
-    )
-  }
+    const adviceHasValue = (() => {
+      if (!isAdvice) return false
+      if (typeof value === "string") return value.trim().length > 0
+      if (Array.isArray(value)) return value.some((entry) => (typeof entry === "string" ? entry.trim().length > 0 : entry !== null && entry !== undefined))
+      if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).some((entry) => {
+        if (typeof entry === "string") return entry.trim().length > 0
+        return entry !== null && entry !== undefined
+      })
+      return false
+    })()
+
+    if (isAdvice) {
+      if (adviceHasValue) {
+        return (
+          <div key={field.key} className="rounded border border-emerald-200/60 dark:border-emerald-900/40 bg-white/80 dark:bg-[#101610] p-3">
+            {body}
+          </div>
+        )
+      }
+      return (
+        <details key={field.key} className="rounded border bg-muted/20 p-3" open={false}>
+          <summary className="cursor-pointer text-sm font-semibold">{field.label} (optional)</summary>
+          <div className="mt-3">{body}</div>
+        </details>
+      )
+    }
 
   return <div key={field.key}>{body}</div>
 }
@@ -800,12 +898,6 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   const [insertHex, setInsertHex] = React.useState("#")
   const [inserting, setInserting] = React.useState(false)
 
-  const normalizeHex = (hex: string) => {
-    const trimmed = hex.trim()
-    if (!trimmed) return ""
-    return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
-  }
-
   const loadColors = React.useCallback(async (term?: string) => {
     setLoading(true)
     const query = supabase.from('colors').select('id,name,hex_code').order('name')
@@ -916,6 +1008,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
     meta: null,
   })
   const [selectedCategory, setSelectedCategory] = React.useState<PlantFormCategory>('identity')
+  const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const categoryLabels: Record<PlantFormCategory, string> = {
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
@@ -930,6 +1023,32 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
   const scrollToCategory = (category: PlantFormCategory) => {
     setSelectedCategory(category)
   }
+  React.useEffect(() => {
+    if (colorSuggestions?.length) {
+      setShowColorRecommendations(true)
+    } else {
+      setShowColorRecommendations(false)
+    }
+  }, [colorSuggestions?.length])
+  const addSuggestedColor = React.useCallback(
+    (suggestion: PlantColor | { name?: string; hexCode?: string; hex?: string; label?: string }) => {
+      const current = value.identity?.colors || []
+      const name = suggestion.name || (suggestion as any)?.label || suggestion.hexCode || (suggestion as any)?.hex || t('plantAdmin.colorFallback', 'Color')
+      const hex = normalizeHex(suggestion.hexCode || (suggestion as any)?.hex || '')
+      const alreadyAdded = current.some((color) => {
+        const colorName = color.name?.toLowerCase()
+        const colorHex = normalizeHex(color.hexCode || '')
+        return (
+          (name && colorName === name.toLowerCase()) ||
+          (hex && colorHex && colorHex === hex)
+        )
+      })
+      if (alreadyAdded) return
+      const next: PlantColor = hex ? { name, hexCode: hex } : { name }
+      onChange(setValue(value, 'identity.colors', [...current, next]))
+    },
+    [onChange, t, value],
+  )
   const categoriesWithoutBasics = plantFormCategoryOrder.filter((cat) => cat !== 'basics')
   const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
   return (
@@ -1106,54 +1225,95 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
                     {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
-                  {cat === 'identity' && (
-                    <div className="md:col-span-2">
-                      <Label>Colors</Label>
-                      {colorSuggestions?.length ? (
-                        <div className="mt-2 mb-3 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner">
-                          <div className="text-sm font-semibold mb-2">AI suggested palettes (review before adding)</div>
-                          <div className="flex flex-wrap gap-2">
-                            {colorSuggestions.map((c, idx) => (
-                              <div key={`${c.name || c.hexCode || idx}-${idx}`} className="flex items-center gap-2 rounded-lg bg-white/80 dark:bg-[#1a1f1a] px-3 py-2 shadow-sm">
-                                <span
-                                  className="h-4 w-4 rounded-full border"
-                                  style={{ backgroundColor: c.hexCode || (c as any).hex || undefined }}
-                                />
-                                <div className="flex flex-col leading-tight">
-                                  <span className="text-sm font-medium">{c.name || c.hexCode || (c as any).hex || 'Color'}</span>
-                                  {(c.hexCode || (c as any).hex) && (
-                                    <span className="text-xs text-muted-foreground">{c.hexCode || (c as any).hex}</span>
-                                  )}
+                    {cat === 'identity' && (
+                      <div className="md:col-span-2">
+                        {colorSuggestions?.length ? (
+                          <div className="mb-3">
+                            <button
+                              type="button"
+                              className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
+                              onClick={() => setShowColorRecommendations((prev) => !prev)}
+                            >
+                              <Sparkles className="h-4 w-4" />
+                              {showColorRecommendations
+                                ? t('plantAdmin.hideColorSuggestions', 'Hide AI color suggestions')
+                                : t('plantAdmin.showColorSuggestions', 'Show AI color suggestions')}
+                            </button>
+                            {showColorRecommendations && (
+                              <div className="mt-2 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner space-y-3">
+                                <div className="text-xs text-muted-foreground">
+                                  {t('plantAdmin.colorSuggestionsReview', 'Review and add the colors you like to your palette.')}
+                                </div>
+                                <div className="flex flex-wrap gap-3">
+                                  {colorSuggestions.map((c, idx) => {
+                                    const name = c.name || (c as any)?.label || c.hexCode || (c as any)?.hex || t('plantAdmin.colorFallback', 'Color')
+                                    const hex = normalizeHex(c.hexCode || (c as any)?.hex || '')
+                                    const alreadyAdded = (value.identity?.colors || []).some((color) => {
+                                      const colorName = color.name?.toLowerCase()
+                                      const colorHex = normalizeHex(color.hexCode || '')
+                                      return (
+                                        (name && colorName === name.toLowerCase()) ||
+                                        (hex && colorHex && colorHex === hex)
+                                      )
+                                    })
+                                    return (
+                                      <div
+                                        key={`${name}-${hex || idx}`}
+                                        className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-[#111611] px-3 py-2 shadow-sm border border-emerald-100/60 dark:border-emerald-900/40"
+                                      >
+                                        <span
+                                          className="h-5 w-5 rounded-full border border-stone-200 dark:border-stone-700"
+                                          style={{ backgroundColor: hex || undefined }}
+                                        />
+                                        <div className="flex flex-col leading-tight min-w-[90px]">
+                                          <span className="text-sm font-medium text-emerald-900 dark:text-emerald-200">{name}</span>
+                                          {hex && <span className="text-xs text-muted-foreground">{hex}</span>}
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant={alreadyAdded ? 'secondary' : 'default'}
+                                          disabled={alreadyAdded}
+                                          onClick={() => addSuggestedColor(c)}
+                                        >
+                                          {alreadyAdded ? t('plantAdmin.colorAdded', 'Added') : t('plantAdmin.addColor', 'Add')}
+                                        </Button>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
-                            ))}
+                            )}
                           </div>
+                        ) : null}
+                        <Label>{t('plantAdmin.colorsLabel', 'Colors')}</Label>
+                        {!colorSuggestions?.length && (
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {t('plantAdmin.colorSuggestionPlaceholder', 'AI recommendations will show up here when available.')}
+                          </p>
+                        )}
+                        <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
+                        <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!value.identity?.multicolor}
+                              onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
+                            />
+                            Multicolor
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!value.identity?.bicolor}
+                              onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
+                            />
+                            Bicolor
+                          </label>
                         </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mb-2">AI suggestions will appear here without changing your palette.</p>
-                      )}
-                      <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
-                      <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!value.identity?.multicolor}
-                            onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
-                          />
-                          Multicolor
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!value.identity?.bicolor}
-                            onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
-                          />
-                          Bicolor
-                        </label>
+                        <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
-                    </div>
-                  )}
+                    )}
                 </CardContent>
               </Card>
             </div>
