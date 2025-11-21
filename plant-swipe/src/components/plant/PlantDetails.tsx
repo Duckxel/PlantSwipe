@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { Plant } from "@/types/plant"
+import type { Plant, PlantWateringSchedule } from "@/types/plant"
 import {
   SunMedium,
   Droplets,
@@ -187,7 +187,21 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       ? "Share unavailable"
       : ""
 
-  const stats = [
+  const formatWateringNeed = (schedules?: PlantWateringSchedule[]) => {
+    if (!schedules?.length) return "Flexible"
+    const schedule = schedules[0]
+    const quantity = schedule.quantity ?? undefined
+    const timePeriod = schedule.timePeriod?.replace(/[_-]/g, " ").toLowerCase()
+
+    if (quantity && timePeriod) return `${quantity} / ${timePeriod}`
+    if (quantity) return `${quantity}x`
+    if (timePeriod) return `Every ${timePeriod}`
+    return "Scheduled"
+  }
+
+    const sunExposure = plant.plantCare?.levelSun || "Adaptive"
+
+    const stats = [
     {
       label: "Sun Level",
       value: plant.plantCare?.levelSun || "Adaptive",
@@ -195,18 +209,18 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       icon: <SunMedium className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible: Boolean(plant.plantCare?.levelSun),
     },
-    {
-      label: "Watering Need",
-      value: plant.plantCare?.watering?.schedules?.length
-        ? `${plant.plantCare.watering.schedules.length} plan${plant.plantCare.watering.schedules.length === 1 ? "" : "s"}`
-        : "Flexible",
-      gradient: "from-blue-400/90 to-cyan-600",
-      icon: <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
-      visible: Boolean(plant.plantCare?.watering?.schedules?.length),
-    },
+      {
+        label: "Watering Need",
+        value: formatWateringNeed(plant.plantCare?.watering?.schedules),
+        detail: `Sun Exposure: ${sunExposure}`,
+        gradient: "from-blue-400/90 to-cyan-600",
+        icon: <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+        visible: Boolean(plant.plantCare?.watering?.schedules?.length),
+      },
     {
       label: "Humidity",
       value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : "Ambient",
+        detail: `Sun Exposure: ${sunExposure}`,
       gradient: "from-cyan-400/90 to-teal-600",
       icon: <Droplets className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible: plant.plantCare?.hygrometry !== undefined,
@@ -370,11 +384,14 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) =>
           stat.visible ? (
-            <Card key={stat.label} className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}>
+              <Card key={stat.label} className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}>
               <CardContent className="flex items-center justify-between p-3 sm:p-4">
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
-                  <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
+                    <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
+                    {stat.detail ? (
+                      <p className="text-[11px] sm:text-xs mt-1 text-white/80 truncate">{stat.detail}</p>
+                    ) : null}
                 </div>
                 <div className="ml-2 flex-shrink-0">{stat.icon}</div>
               </CardContent>
@@ -383,9 +400,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
         )}
       </div>
 
-      <div className="rounded-3xl border border-dashed border-emerald-200/60 bg-white/70 p-4 text-sm text-stone-600 shadow-inner dark:border-emerald-900/30 dark:bg-emerald-900/10 dark:text-emerald-200">
-        Detailed schema-style notes have been tucked into the immersive explorer below so you can stay in the vibe here.
-      </div>
     </div>
   )
 }

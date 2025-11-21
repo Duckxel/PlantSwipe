@@ -386,41 +386,31 @@ export const PlantInfoPage: React.FC = () => {
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-emerald-50/70 via-white to-emerald-100/60 dark:from-[#0b1115] dark:via-[#0f151a] dark:to-[#0f1819]">
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="absolute -left-24 top-16 h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl dark:bg-emerald-500/15" />
-        <div className="absolute right-0 bottom-0 h-80 w-80 rounded-full bg-emerald-100/50 blur-3xl dark:bg-emerald-700/10" />
-      </div>
-      <div className="relative max-w-6xl mx-auto mt-4 sm:mt-6 px-3 sm:px-4 lg:px-6 pb-12 sm:pb-16 space-y-4 sm:space-y-6">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
+    <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
+          onClick={handleGoBack}
+        >
+          <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          {t('common.back', { defaultValue: 'Back' })}
+        </Button>
+        {profile?.is_admin && plant && (
           <Button
-              type="button"
-            variant="ghost"
-            className="flex items-center gap-2 rounded-2xl border border-white/40 bg-white/70 px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-transparent dark:bg-white/10"
-            onClick={handleGoBack}
+            type="button"
+            variant="outline"
+            className="flex items-center gap-2 rounded-2xl border-emerald-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
+            onClick={handleEdit}
           >
-            <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            {t('common.back', { defaultValue: 'Back' })}
+            <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            {t('common.edit', { defaultValue: 'Edit' })}
           </Button>
-            {profile?.is_admin && plant && (
-              <Button
-                type="button"
-                variant="outline"
-                className="flex items-center gap-2 rounded-2xl border-emerald-200/60 bg-white/80 px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/30 dark:bg-[#0d0f15]"
-                onClick={handleEdit}
-              >
-                <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                {t('common.edit', { defaultValue: 'Edit' })}
-              </Button>
-            )}
-        </div>
-          <MoreInformationSection plant={plant} />
-          <PlantDetails
-            plant={plant}
-            liked={likedIds.includes(plant.id)}
-            onToggleLike={toggleLiked}
-          />
+        )}
       </div>
+      <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
+      <MoreInformationSection plant={plant} />
     </div>
   )
 }
@@ -461,12 +451,61 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     plant.identity?.season?.slice(0, 2).join(' • '),
   ].filter(Boolean) as string[]
   const palette = plant.identity?.colors?.length ? plant.identity.colors : []
-  const infoSections = [
+    const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
+      if (!schedules.length) return 'Flexible'
+      return schedules
+        .map((schedule) => {
+          const season = schedule.season ? `${schedule.season}: ` : ''
+          const quantity = schedule.quantity ? `${schedule.quantity}` : ''
+          const period = schedule.timePeriod ? ` / ${schedule.timePeriod}` : ''
+          return `${season}${quantity}${period}`.trim() || 'Scheduled'
+        })
+        .join(' • ')
+    }
+
+    const usageItems = [
+      { label: 'Utility', value: plant.utility?.join(', ') || 'Ornamental', icon: <Palette className="h-3.5 w-3.5" /> },
+    ]
+    const hasComestibleUtility = plant.utility?.some((u) => u?.toLowerCase() === 'comestible')
+    const comestiblePartsValue = plant.comestiblePart?.length ? plant.comestiblePart.join(', ') : null
+    const shouldShowComestibleParts = hasComestibleUtility || Boolean(comestiblePartsValue)
+    if (shouldShowComestibleParts) {
+      usageItems.push({
+        label: 'Comestible Parts',
+        value: comestiblePartsValue || 'Not specified',
+        icon: <Leaf className="h-3.5 w-3.5" />,
+      })
+    }
+    usageItems.push({
+      label: 'Recipes',
+      value: plant.usage?.recipesIdeas?.slice(0, 2).join(', ') || 'Seasonal teas',
+      icon: <Droplets className="h-3.5 w-3.5" />,
+    })
+
+    const [hoveredMonth, setHoveredMonth] = React.useState<string | null>(null)
+
+    const handleTimelineHover = React.useCallback((state: { activeLabel?: string | number } | undefined) => {
+      if (state?.activeLabel && typeof state.activeLabel === 'string') {
+        setHoveredMonth(state.activeLabel)
+      } else {
+        setHoveredMonth(null)
+      }
+    }, [])
+
+    const clearTimelineHover = React.useCallback(() => {
+      setHoveredMonth(null)
+    }, [])
+
+    const infoSections = [
     {
       title: 'Care Highlights',
       icon: <Droplets className="h-4 w-4" />,
       items: [
-        { label: 'Water', value: `${plant.plantCare?.watering?.schedules?.length || 1} plan(s)`, icon: <Droplets className="h-3.5 w-3.5" /> },
+          {
+            label: 'Water',
+            value: formatWaterPlans(plant.plantCare?.watering?.schedules || []),
+            icon: <Droplets className="h-3.5 w-3.5" />,
+          },
         { label: 'Sunlight', value: plant.plantCare?.levelSun || 'Adaptive', icon: <Sun className="h-3.5 w-3.5" /> },
         { label: 'Soil Mix', value: plant.plantCare?.soil?.join(', ') || 'Loamy blend', icon: <Leaf className="h-3.5 w-3.5" /> },
       ],
@@ -474,11 +513,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     {
       title: 'Usage & Flavor',
       icon: <Leaf className="h-4 w-4" />,
-      items: [
-        { label: 'Utility', value: plant.utility?.join(', ') || 'Ornamental', icon: <Palette className="h-3.5 w-3.5" /> },
-        { label: 'Comestible Parts', value: plant.comestiblePart?.join(', ') || 'Not specified', icon: <Leaf className="h-3.5 w-3.5" /> },
-        { label: 'Recipes', value: plant.usage?.recipesIdeas?.slice(0, 2).join(', ') || 'Seasonal teas', icon: <Droplets className="h-3.5 w-3.5" /> },
-      ],
+        items: usageItems,
     },
     {
       title: 'Ecology',
@@ -519,35 +554,43 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         
         {/* 3D Dimensions - Compact card in first column */}
         {(height !== null || wingspan !== null || spacing !== null) && (
-          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.02 }} className="lg:col-span-1 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-4 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl overflow-hidden border border-emerald-500/25 bg-gradient-to-br from-emerald-50/80 via-white/60 to-transparent shadow-sm dark:border-emerald-500/30 dark:from-emerald-900/30 dark:via-[#0f1f1f]/80 dark:to-transparent">
-                  <DimensionCube scale={cubeScale} />
-                </div>
-                <div>
-                  <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">3D View</p>
-                  <p className="text-[10px] sm:text-xs font-semibold text-stone-900 dark:text-white">Dimensions</p>
-                </div>
+          <motion.section
+            {...SECTION_ANIMATION}
+            transition={{ duration: 0.4, delay: 0.02 }}
+            className="lg:col-span-1 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent"
+          >
+            <div className="mb-3 space-y-2">
+              <div>
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
+                  3D View
+                </p>
+                <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Dimensions</p>
               </div>
-            </div>
-            <div className="space-y-2">
-              {dimensionLegend.map((item) => (
-                <DimensionLegendCard key={item.label} {...item} />
-              ))}
-            </div>
               {highlightBadges.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {highlightBadges.slice(0, 3).map((badge) => (
-                    <Badge key={badge} className="rounded-full border border-emerald-100/60 bg-white/80 px-2.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
+                <div className="flex flex-wrap gap-2">
+                  {highlightBadges.slice(0, 4).map((badge) => (
+                    <Badge
+                      key={badge}
+                      className="rounded-2xl border border-emerald-300/70 bg-white px-3 py-1 text-xs sm:text-sm font-semibold tracking-wide text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/15 dark:text-emerald-100 uppercase shadow-sm"
+                    >
                       {badge}
                     </Badge>
                   ))}
                 </div>
               )}
-              <p className="mt-3 text-[11px] leading-relaxed text-emerald-700/80 dark:text-emerald-200/80">
-                Hover, drag, or tap to orbit the cube and understand the plant’s footprint before diving into the details.
-              </p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
+              <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[260px]">
+                <DimensionCube scale={cubeScale} className="h-full w-full" />
+              </div>
+              <div className="flex flex-col gap-2 md:min-h-[260px]">
+                {dimensionLegend.map((item) => (
+                  <div key={item.label} className="md:flex-1">
+                    <DimensionLegendCard {...item} className="h-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
           </motion.section>
         )}
 
@@ -589,43 +632,82 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         </motion.section>
       </div>
 
-      {/* Second Row - Seasonal Timeline, Habitat Map, Color Moodboard */}
-      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-        {/* Seasonal Timeline */}
-        <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.08 }} className="lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-          <div className="relative space-y-3 sm:space-y-4">
-            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-              <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
+        {/* Second Row - Color Moodboard beside Seasonal Timeline */}
+        <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
+          {/* Color Moodboard */}
+          {palette.length > 0 && (
+            <motion.section
+              {...SECTION_ANIMATION}
+              transition={{ duration: 0.4, delay: 0.08 }}
+              className="lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4"
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+              <div className="relative space-y-2 sm:space-y-3">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                  <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Color Moodboard</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
+                  {palette.map((color, idx) => {
+                    const colorLabel = color.name || `Color ${idx + 1}`
+                    return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
+                  })}
+                </div>
+              </div>
+            </motion.section>
+          )}
+
+          {/* Seasonal Timeline */}
+            <motion.section
+              {...SECTION_ANIMATION}
+              transition={{ duration: 0.4, delay: 0.1 }}
+              className={`${palette.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
+            >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+            <div className="relative space-y-3 sm:space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+                    <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
+                  </div>
+                  {hoveredMonth ? (
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">{hoveredMonth}</span>
+                  ) : (
+                    <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">Hover a month</span>
+                  )}
+                </div>
+                <div className="h-52 sm:h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={timelineData} stackOffset="expand" onMouseMove={handleTimelineHover} onMouseLeave={clearTimelineHover}>
+                    <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
+                    <YAxis hide domain={[0, 3]} />
+                    <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
+                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
+                {Object.entries(TIMELINE_COLORS).map(([label, color]) => (
+                  <span key={label} className="flex items-center gap-1.5 sm:gap-2">
+                    <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    {label.charAt(0).toUpperCase() + label.slice(1)}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="h-48 sm:h-60">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={timelineData} stackOffset="expand">
-                  <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
-                  <YAxis hide domain={[0, 3]} />
-                  <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                  <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} />
-                  <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
-              {Object.entries(TIMELINE_COLORS).map(([label, color]) => (
-                <span key={label} className="flex items-center gap-1.5 sm:gap-2">
-                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                  {label.charAt(0).toUpperCase() + label.slice(1)}
-                </span>
-              ))}
-            </div>
-          </div>
-        </motion.section>
+          </motion.section>
+        </div>
 
         {/* Habitat Map */}
         {habitats.length > 0 && (
-          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.11 }} className={`${palette.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90`}>
+          <motion.section
+            {...SECTION_ANIMATION}
+            transition={{ duration: 0.4, delay: 0.13 }}
+            className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90"
+          >
             <div className="space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -648,43 +730,23 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 ))}
               </div>
               <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                {climateBadges.length
-                  ? climateBadges.map((badge) => (
-                      <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                        <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                        {badge}
-                      </Badge>
-                    ))
-                  : (
-                    <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                {climateBadges.length ? (
+                  climateBadges.map((badge) => (
+                    <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
                       <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                      Temperate
+                      {badge}
                     </Badge>
-                    )}
+                  ))
+                ) : (
+                  <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                    <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                    Temperate
+                  </Badge>
+                )}
               </div>
             </div>
           </motion.section>
         )}
-
-        {/* Color Moodboard */}
-        {palette.length > 0 && (
-          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.14 }} className={`${habitats.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}>
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-            <div className="relative space-y-3 sm:space-y-4">
-              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-                <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Color Moodboard</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
-                {palette.map((color, idx) => {
-                  const colorLabel = color.name || `Color ${idx + 1}`
-                  return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
-                })}
-              </div>
-            </div>
-          </motion.section>
-        )}
-      </div>
 
       {/* Info Cards Section - Full width for better mobile experience */}
       <div className="space-y-3 sm:space-y-4">
@@ -714,15 +776,15 @@ const CareChartTooltip = ({ active, payload: tooltipPayload }: TooltipProps<numb
 }
 
 const TimelineTooltip = (
-  props: TooltipProps<number, string> & { payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number; label?: string } }> },
+  props: TooltipProps<number, string> & { payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number; month?: string } }> },
 ) => {
   const { active, payload: tooltipPayload } = props
   const data = tooltipPayload && tooltipPayload.length > 0 ? tooltipPayload[0].payload : null
   if (!active || !data) return null
-  const displayLabel = typeof tooltipPayload?.[0]?.payload?.label === 'string' ? tooltipPayload[0].payload?.label! : ''
+  const displayLabel = typeof data?.month === 'string' ? data.month : ''
   return (
     <div className="rounded-xl border border-sky-400/30 bg-white/95 px-3 py-2 text-xs text-stone-700 shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95 dark:text-stone-100">
-      <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{displayLabel}</p>
+      <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{displayLabel || '—'}</p>
       <div className="space-y-1 mt-1">
         {Object.entries(data).map(([key, value]) =>
           value ? (
@@ -737,11 +799,22 @@ const TimelineTooltip = (
   )
 }
 
-const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string }> = ({ label, value, subLabel }) => (
-  <div className="rounded-xl border border-emerald-500/20 bg-white/85 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/30 dark:bg-[#0f1f1f]/70 dark:text-emerald-100">
-    <div className="text-[9px] sm:text-[10px] uppercase tracking-widest text-emerald-600/75">{label}</div>
-    <div className="text-xs sm:text-sm font-semibold text-stone-900 dark:text-stone-100">{value}</div>
-    <div className="text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">{subLabel}</div>
+const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string; className?: string }> = ({
+  label,
+  value,
+  subLabel,
+  className,
+}) => (
+  <div
+    className={`rounded-xl border border-emerald-500/30 bg-white/95 px-3.5 sm:px-4 py-2.5 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50 ${
+      className || ''
+    }`}
+  >
+    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
+      {label}
+    </div>
+    <div className="text-[11px] sm:text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-1">{subLabel}</div>
+    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">{value}</div>
   </div>
 )
 
@@ -775,200 +848,11 @@ const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
   const category = 'Palette'
   const gradient = `linear-gradient(135deg, ${tone}, ${tone})`
   return (
-    <div className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-2.5 sm:p-3 shadow-sm transition hover:-translate-y-0.5 sm:hover:-translate-y-1 hover:shadow-md">
-      <div className="mb-2 sm:mb-3 h-12 sm:h-16 w-full rounded-lg sm:rounded-xl shadow-inner" style={{ backgroundImage: gradient }} />
-      <div className="text-[9px] sm:text-xs uppercase tracking-widest text-stone-500 dark:text-stone-400">{category}</div>
-      <div className="text-xs sm:text-sm font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
+    <div className="group relative overflow-hidden rounded-md sm:rounded-lg border border-stone-200/60 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-1 sm:p-1.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="mb-1 sm:mb-1.5 h-8 sm:h-10 w-full rounded-md shadow-inner" style={{ backgroundImage: gradient }} />
+      <div className="text-[7px] sm:text-[9px] uppercase tracking-[0.3em] text-stone-500 dark:text-stone-400">{category}</div>
+      <div className="text-[10px] sm:text-[11px] font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
     </div>
   )
-}
-
-const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
-  const containerRef = React.useRef<HTMLDivElement>(null)
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return
-    const container = containerRef.current
-    if (!container) return
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-    renderer.setPixelRatio(window.devicePixelRatio || 1)
-    const size = Math.min(container.clientWidth, container.clientHeight) || container.clientWidth
-    renderer.setSize(size, size)
-    container.appendChild(renderer.domElement)
-
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
-    const cameraDistance = 4.8
-    
-    // Cube center position - cube sits on grid, so center is at scale/2 height
-    const cubeCenterY = scale / 2
-    const cubeCenter = new THREE.Vector3(0, cubeCenterY, 0)
-    
-    // Camera height relative to cube center
-    const cameraHeightOffset = 1.8
-    const cameraHeight = cubeCenterY + cameraHeightOffset
-    camera.position.set(cameraDistance, cameraHeight, cameraDistance)
-    camera.lookAt(cubeCenter)
-
-    const ambientLight = new THREE.AmbientLight(0xbfffe0, 0.45)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.85)
-    directionalLight.position.set(4, 6, 5)
-    const pointLight = new THREE.PointLight(0x34d399, 0.8)
-    pointLight.position.set(-3, -2, -6)
-    scene.add(ambientLight, directionalLight, pointLight)
-
-    const outerGeometry = new THREE.BoxGeometry(scale, scale, scale)
-    const outerMaterial = new THREE.MeshStandardMaterial({
-      color: 0x031512,
-      transparent: true,
-      opacity: 0.22,
-      metalness: 0.35,
-      roughness: 0.55,
-      emissive: 0x0d9488,
-      emissiveIntensity: 0.65,
-    })
-    const outerMesh = new THREE.Mesh(outerGeometry, outerMaterial)
-    // Position cube so its bottom sits on the grid (y=0)
-    outerMesh.position.set(0, cubeCenterY, 0)
-    scene.add(outerMesh)
-
-    const outerWire = new THREE.LineSegments(
-      new THREE.EdgesGeometry(outerGeometry),
-      new THREE.LineBasicMaterial({ color: 0x34f5c6 }),
-    )
-    outerWire.position.set(0, cubeCenterY, 0)
-    scene.add(outerWire)
-
-    const innerWire = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(scale * 0.7, scale * 0.7, scale * 0.7)),
-      new THREE.LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.8 }),
-    )
-    innerWire.position.set(0, cubeCenterY, 0)
-    scene.add(innerWire)
-
-    const grid = new THREE.GridHelper(6, 18, 0x34f5c6, 0x0f766e)
-    const gridMaterial = grid.material as THREE.Material
-    gridMaterial.transparent = true
-    gridMaterial.opacity = 0.25
-    // Grid sits at y=0
-    grid.position.set(0, 0, 0)
-    scene.add(grid)
-
-    const handleResize = () => {
-      if (!container) return
-      const size = Math.min(container.clientWidth, container.clientHeight) || container.clientWidth
-      renderer.setSize(size, size)
-      camera.aspect = 1
-      camera.updateProjectionMatrix()
-    }
-    window.addEventListener('resize', handleResize)
-
-    // Rotation state
-    let autoAngle = 0
-    let userRotation = 0
-    let isDragging = false
-    let lastMouseX = 0
-    let lastTouchX = 0
-    const rotationSpeed = 0.005
-    const autoRotationSpeed = 0.0012
-
-    // Mouse event handlers
-    const handleMouseDown = (e: MouseEvent) => {
-      isDragging = true
-      lastMouseX = e.clientX
-      renderer.domElement.style.cursor = 'grabbing'
-    }
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return
-      const deltaX = e.clientX - lastMouseX
-      userRotation += deltaX * rotationSpeed
-      lastMouseX = e.clientX
-    }
-
-    const handleMouseUp = () => {
-      isDragging = false
-      renderer.domElement.style.cursor = 'grab'
-    }
-
-    // Touch event handlers
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        isDragging = true
-        lastTouchX = e.touches[0].clientX
-        renderer.domElement.style.cursor = 'grabbing'
-      }
-    }
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isDragging || e.touches.length !== 1) return
-      e.preventDefault()
-      const deltaX = e.touches[0].clientX - lastTouchX
-      userRotation += deltaX * rotationSpeed
-      lastTouchX = e.touches[0].clientX
-    }
-
-    const handleTouchEnd = () => {
-      isDragging = false
-      renderer.domElement.style.cursor = 'grab'
-    }
-
-    // Add event listeners
-    renderer.domElement.style.cursor = 'grab'
-    renderer.domElement.addEventListener('mousedown', handleMouseDown)
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-    renderer.domElement.addEventListener('touchstart', handleTouchStart, { passive: false })
-    renderer.domElement.addEventListener('touchmove', handleTouchMove, { passive: false })
-    renderer.domElement.addEventListener('touchend', handleTouchEnd)
-
-    let frameId: number
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-    const animate = () => {
-      if (!isDragging) {
-        // Continue auto-rotation when not dragging
-        autoAngle += autoRotationSpeed
-      }
-
-      // Combine user rotation with auto rotation
-      const totalRotation = autoAngle + userRotation
-
-      // Update camera position - rotate around cube center (not world center)
-      camera.position.x = cubeCenter.x + cameraDistance * Math.cos(totalRotation)
-      camera.position.z = cubeCenter.z + cameraDistance * Math.sin(totalRotation)
-      camera.position.y = cameraHeight
-      camera.lookAt(cubeCenter)
-
-      // Don't rotate the meshes - only the camera rotates around the cube
-
-      renderer.render(scene, camera)
-      frameId = requestAnimationFrame(animate)
-    }
-
-    if (prefersReducedMotion) {
-      renderer.render(scene, camera)
-    } else {
-      animate()
-    }
-
-    return () => {
-      if (frameId) cancelAnimationFrame(frameId)
-      window.removeEventListener('resize', handleResize)
-      renderer.domElement.removeEventListener('mousedown', handleMouseDown)
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-      renderer.domElement.removeEventListener('touchstart', handleTouchStart)
-      renderer.domElement.removeEventListener('touchmove', handleTouchMove)
-      renderer.domElement.removeEventListener('touchend', handleTouchEnd)
-      renderer.dispose()
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement)
-      }
-    }
-  }, [scale])
-
-  return <div ref={containerRef} className="relative aspect-square w-full" />
 }
 
