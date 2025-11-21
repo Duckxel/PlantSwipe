@@ -390,7 +390,22 @@
       "info": "Info",
       "next": "Suivant",
       "tryAnotherSearch": "Essayez une autre recherche ou ajustez vos filtres.",
-      "reset": "Réinitialiser"
+      "reset": "Réinitialiser",
+      "classification": {
+        "type": {
+          "plant": "Plante",
+          "bambu": "Bambou",
+          "shrub": "Arbuste",
+          "tree": "Arbre",
+          "other": "Autre"
+        }
+      },
+      "utility": {
+        "ornemental": "Ornemental",
+        "comestible": "Comestible",
+        "aromatic": "Aromatique",
+        "medicinal": "Médicinal"
+      }
     },
     "requestPlant": {
       "button": "Demander une plante",
