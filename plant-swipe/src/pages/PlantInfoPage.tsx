@@ -584,79 +584,21 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         </motion.section>
       </div>
 
-        {/* Second Row - Color Moodboard, Habitat Map, Seasonal Timeline */}
-      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-          {/* Color Moodboard */}
-          {palette.length > 0 && (
-            <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.08 }} className={`${habitats.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}>
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-              <div className="relative space-y-3 sm:space-y-4">
-                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-                  <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Color Moodboard</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
-                  {palette.map((color, idx) => {
-                    const colorLabel = color.name || `Color ${idx + 1}`
-                    return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
-                  })}
-                </div>
-              </div>
-            </motion.section>
-          )}
-
-        {/* Habitat Map */}
-        {habitats.length > 0 && (
-            <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.11 }} className={`${palette.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90`}>
-            <div className="space-y-3 sm:space-y-4">
-              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-                <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Habitat Map</span>
-              </div>
-              <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
-                <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />
-                <img src={worldMapDark} alt="" className="absolute inset-0 hidden h-full w-full object-cover opacity-75 dark:block" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_30%_40%,rgba(16,185,129,0.25),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(14,165,233,0.25),transparent_65%)]" />
-                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:32px_32px] sm:bg-[size:48px_48px] dark:bg-[linear-gradient(90deg,rgba(3,37,65,0.5)_1px,transparent_1px),linear-gradient(0deg,rgba(3,37,65,0.5)_1px,transparent_1px)]" />
-                {activePins.map((pin) => (
-                  <div
-                    key={`${pin.label}-${pin.left}-${pin.top}`}
-                    className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 sm:gap-2 rounded-xl sm:rounded-2xl bg-white/90 px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium text-stone-800 shadow-md backdrop-blur-md dark:bg-[#2d2d30]/90 dark:text-stone-100"
-                    style={{ top: pin.top, left: pin.left }}
-                  >
-                    <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-500 flex-shrink-0" />
-                    <span className="whitespace-nowrap">{pin.label}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                {climateBadges.length
-                  ? climateBadges.map((badge) => (
-                      <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                        <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                        {badge}
-                      </Badge>
-                    ))
-                  : (
-                    <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                      <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                      Temperate
-                    </Badge>
-                    )}
-              </div>
-            </div>
-          </motion.section>
-        )}
-
+        {/* Second Row - Seasonal Timeline, Habitat Map, Color Moodboard */}
+        <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
           {/* Seasonal Timeline */}
-          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.14 }} className="lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
+          <motion.section
+            {...SECTION_ANIMATION}
+            transition={{ duration: 0.4, delay: 0.08 }}
+            className={`${palette.length > 0 || habitats.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
+          >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
             <div className="relative space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
                 <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
                 <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
               </div>
-              <div className="h-48 sm:h-60">
+              <div className="h-52 sm:h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={timelineData} stackOffset="expand">
                     <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
@@ -679,7 +621,77 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </div>
             </div>
           </motion.section>
-      </div>
+
+          {/* Habitat Map */}
+          {habitats.length > 0 && (
+            <motion.section
+              {...SECTION_ANIMATION}
+              transition={{ duration: 0.4, delay: 0.11 }}
+              className="lg:col-span-1 rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90"
+            >
+              <div className="space-y-3 sm:space-y-4">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                  <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Habitat Map</span>
+                </div>
+                <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
+                  <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />
+                  <img src={worldMapDark} alt="" className="absolute inset-0 hidden h-full w-full object-cover opacity-75 dark:block" />
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_30%_40%,rgba(16,185,129,0.25),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(14,165,233,0.25),transparent_65%)]" />
+                  <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:32px_32px] sm:bg-[size:48px_48px] dark:bg-[linear-gradient(90deg,rgba(3,37,65,0.5)_1px,transparent_1px),linear-gradient(0deg,rgba(3,37,65,0.5)_1px,transparent_1px)]" />
+                  {activePins.map((pin) => (
+                    <div
+                      key={`${pin.label}-${pin.left}-${pin.top}`}
+                      className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 sm:gap-2 rounded-xl sm:rounded-2xl bg-white/90 px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium text-stone-800 shadow-md backdrop-blur-md dark:bg-[#2d2d30]/90 dark:text-stone-100"
+                      style={{ top: pin.top, left: pin.left }}
+                    >
+                      <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-500 flex-shrink-0" />
+                      <span className="whitespace-nowrap">{pin.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                  {climateBadges.length ? (
+                    climateBadges.map((badge) => (
+                      <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                        <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                        {badge}
+                      </Badge>
+                    ))
+                  ) : (
+                    <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                      <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                      Temperate
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </motion.section>
+          )}
+
+          {/* Color Moodboard */}
+          {palette.length > 0 && (
+            <motion.section
+              {...SECTION_ANIMATION}
+              transition={{ duration: 0.4, delay: 0.14 }}
+              className={`${habitats.length > 0 ? 'lg:col-span-1' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4`}
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+              <div className="relative space-y-2 sm:space-y-3">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                  <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Color Moodboard</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
+                  {palette.map((color, idx) => {
+                    const colorLabel = color.name || `Color ${idx + 1}`
+                    return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
+                  })}
+                </div>
+              </div>
+            </motion.section>
+          )}
+        </div>
 
       {/* Info Cards Section - Full width for better mobile experience */}
       <div className="space-y-3 sm:space-y-4">
@@ -770,10 +782,10 @@ const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
   const category = 'Palette'
   const gradient = `linear-gradient(135deg, ${tone}, ${tone})`
   return (
-    <div className="group relative overflow-hidden rounded-lg sm:rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-1.5 sm:p-2 shadow-sm transition hover:-translate-y-0.5 sm:hover:-translate-y-1 hover:shadow-md">
-      <div className="mb-1.5 sm:mb-2 h-10 sm:h-12 w-full rounded-md sm:rounded-lg shadow-inner" style={{ backgroundImage: gradient }} />
-      <div className="text-[8px] sm:text-[10px] uppercase tracking-widest text-stone-500 dark:text-stone-400">{category}</div>
-      <div className="text-[11px] sm:text-xs font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
+    <div className="group relative overflow-hidden rounded-md sm:rounded-lg border border-stone-200/60 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-1 sm:p-1.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="mb-1 sm:mb-1.5 h-8 sm:h-10 w-full rounded-md shadow-inner" style={{ backgroundImage: gradient }} />
+      <div className="text-[7px] sm:text-[9px] uppercase tracking-[0.3em] text-stone-500 dark:text-stone-400">{category}</div>
+      <div className="text-[10px] sm:text-[11px] font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
     </div>
   )
 }
