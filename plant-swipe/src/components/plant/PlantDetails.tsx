@@ -223,7 +223,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       {
         label: "Watering Need",
         value: formatWateringNeed(plant.plantCare?.watering?.schedules),
-        detail: `Sun Exposure: ${sunExposure}`,
         gradient: "from-blue-400/90 to-cyan-600",
         icon: <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
         visible: Boolean(plant.plantCare?.watering?.schedules?.length),
@@ -231,7 +230,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     {
       label: "Humidity",
       value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : "Ambient",
-        detail: `Sun Exposure: ${sunExposure}`,
       gradient: "from-cyan-400/90 to-teal-600",
       icon: <Droplets className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible: plant.plantCare?.hygrometry !== undefined,
