@@ -412,15 +412,15 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
         separation: data.separation_cm || undefined,
         transplanting: data.transplanting || undefined,
         adviceSowing: translation?.advice_sowing || data.advice_sowing || undefined,
-        cut: data.cut || undefined,
+        cut: translation?.cut || data.cut || undefined,
       },
     usage: {
       adviceMedicinal: translation?.advice_medicinal || data.advice_medicinal || undefined,
-      nutritionalIntake: data.nutritional_intake || [],
+      nutritionalIntake: translation?.nutritional_intake || data.nutritional_intake || [],
       infusion: data.infusion || false,
       adviceInfusion: translation?.advice_infusion || data.advice_infusion || undefined,
       infusionMix,
-      recipesIdeas: data.recipes_ideas || [],
+      recipesIdeas: translation?.recipes_ideas || data.recipes_ideas || [],
       aromatherapy: data.aromatherapy || false,
       spiceMixes: data.spice_mixes || [],
     },
@@ -757,7 +757,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
             advice_tutoring: plantToSave.growth?.adviceTutoring || null,
             advice_sowing: plantToSave.growth?.adviceSowing || null,
+            cut: plantToSave.growth?.cut || null,
             advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+            nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
+            recipes_ideas: plantToSave.usage?.recipesIdeas || [],
             advice_infusion: plantToSave.usage?.adviceInfusion || null,
             ground_effect: plantToSave.ecology?.groundEffect || null,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
@@ -1032,9 +1035,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           advice_sowing: plant.growth?.adviceSowing
             ? await translateText(plant.growth.adviceSowing, target, sourceLang)
             : plant.growth?.adviceSowing || null,
+          cut: plant.growth?.cut
+            ? await translateText(plant.growth.cut, target, sourceLang)
+            : plant.growth?.cut || null,
           advice_medicinal: plant.usage?.adviceMedicinal
             ? await translateText(plant.usage.adviceMedicinal, target, sourceLang)
             : plant.usage?.adviceMedicinal || null,
+          nutritional_intake: await translateArraySafe(plant.usage?.nutritionalIntake),
+          recipes_ideas: await translateArraySafe(plant.usage?.recipesIdeas),
           advice_infusion: plant.usage?.adviceInfusion
             ? await translateText(plant.usage.adviceInfusion, target, sourceLang)
             : plant.usage?.adviceInfusion || null,

@@ -803,6 +803,9 @@ alter table if exists public.plant_translations add column if not exists admin_c
 alter table if exists public.plant_translations add column if not exists source_name text;
 alter table if exists public.plant_translations add column if not exists source_url text;
 alter table if exists public.plant_translations add column if not exists tags text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists nutritional_intake text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists recipes_ideas text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists cut text;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;
