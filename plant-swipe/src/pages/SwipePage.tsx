@@ -741,13 +741,17 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  const activitySet = new Set(
-    (plant.classification?.activities ?? [])
-      .map((activity) => (typeof activity === "string" ? activity.toLowerCase() : null))
+  // Check utility field for usage indicators
+  const utilitySet = new Set(
+    (plant.utility ?? [])
+      .map((util) => (typeof util === "string" ? util.toLowerCase() : null))
       .filter((entry): entry is string => Boolean(entry)),
   )
+  
+  // Check comestiblePart for edible indicator
+  const hasComestiblePart = plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0 && plant.comestiblePart.some(part => part && part.trim().length > 0)
 
-  if (activitySet.has("comestible")) {
+  if (utilitySet.has("comestible") || hasComestiblePart) {
     items.push({
       key: "edible",
       label: t("discoveryPage.indicators.edible", { defaultValue: "Edible" }),
@@ -757,7 +761,7 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  if (activitySet.has("medicinal")) {
+  if (utilitySet.has("medicinal") || plant.usage?.adviceMedicinal) {
     items.push({
       key: "medicinal",
       label: t("discoveryPage.indicators.medicinal", { defaultValue: "Medicinal" }),
@@ -767,7 +771,7 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  if (activitySet.has("aromatic")) {
+  if (utilitySet.has("aromatic") || plant.usage?.aromatherapy || plant.identity?.scent) {
     items.push({
       key: "aromatic",
       label: t("discoveryPage.indicators.aromatic", { defaultValue: "Aromatic" }),

@@ -146,7 +146,7 @@ export default function PlantSwipe() {
   const usageOptions = useMemo(() => {
     const labels = new Set<string>()
     plants.forEach((plant) => {
-      getPlantUsageLabels(plant.classification).forEach((label) => labels.add(label))
+      getPlantUsageLabels(plant).forEach((label) => labels.add(label))
     })
     return Array.from(labels).sort((a, b) => a.localeCompare(b))
   }, [plants])
@@ -327,7 +327,7 @@ export default function PlantSwipe() {
       const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
       const matchesType = normalizedType ? typeLabel === normalizedType : true
-      const plantUsageLabels = getPlantUsageLabels(p.classification).map((label) => label.toLowerCase())
+      const plantUsageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
       const matchesUsage = normalizedUsage.length
         ? normalizedUsage.every((usage) => plantUsageLabels.includes(usage))
         : true
@@ -1259,10 +1259,47 @@ function getPlantTypeLabel(classification?: Plant["classification"]): string | n
   return label || null
 }
 
-function getPlantUsageLabels(classification?: Plant["classification"]): string[] {
-  if (!classification?.activities) return []
-  return classification.activities
-    .map((activity) => formatClassificationLabel(activity))
-    .filter((label): label is string => Boolean(label))
+function getPlantUsageLabels(plant: Plant): string[] {
+  const labels: string[] = []
+  
+  // Get usage labels from utility field
+  if (plant.utility && Array.isArray(plant.utility) && plant.utility.length > 0) {
+    plant.utility.forEach((util) => {
+      if (util) {
+        const formatted = formatClassificationLabel(util)
+        if (formatted && !labels.includes(formatted)) {
+          labels.push(formatted)
+        }
+      }
+    })
+  }
+  
+  // Also check comestiblePart for edible-related labels
+  if (plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0) {
+    const hasEdible = plant.comestiblePart.some(part => part && part.trim().length > 0)
+    if (hasEdible) {
+      const edibleLabel = formatClassificationLabel('comestible')
+      if (edibleLabel && !labels.includes(edibleLabel)) {
+        labels.push(edibleLabel)
+      }
+    }
+  }
+  
+  // Check usage fields for additional indicators
+  if (plant.usage?.aromatherapy) {
+    const aromaticLabel = formatClassificationLabel('aromatic')
+    if (aromaticLabel && !labels.includes(aromaticLabel)) {
+      labels.push(aromaticLabel)
+    }
+  }
+  
+  if (plant.usage?.adviceMedicinal) {
+    const medicinalLabel = formatClassificationLabel('medicinal')
+    if (medicinalLabel && !labels.includes(medicinalLabel)) {
+      labels.push(medicinalLabel)
+    }
+  }
+  
+  return labels
 }
 
