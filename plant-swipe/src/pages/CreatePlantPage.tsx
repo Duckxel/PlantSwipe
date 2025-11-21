@@ -191,8 +191,25 @@ function coerceBoolean(value: unknown, fallback: boolean | null = false): boolea
 
 async function upsertColors(colors: PlantColor[]) {
   if (!colors?.length) return [] as string[]
-  const upsertPayload = colors.map((c) => ({ name: c.name, hex_code: c.hexCode || null }))
-  const { data, error } = await supabase.from('colors').upsert(upsertPayload).select('id,name')
+  const normalized = colors
+    .map((c) => {
+      const name = c.name?.trim()
+      if (!name) return null
+      const hex = c.hexCode?.trim()
+      return {
+        name,
+        hex_code: hex && hex.length ? (hex.startsWith("#") ? hex : `#${hex}`) : null,
+      }
+    })
+    .filter((entry): entry is { name: string; hex_code: string | null } => Boolean(entry?.name))
+  if (!normalized.length) return [] as string[]
+  const deduped = Array.from(
+    new Map(normalized.map((entry) => [entry.name.toLowerCase(), entry])).values(),
+  )
+  const { data, error } = await supabase
+    .from('colors')
+    .upsert(deduped, { onConflict: 'name' })
+    .select('id,name')
   if (error) throw new Error(error.message)
   return (data || []).map((row) => row.id as string)
 }
@@ -528,7 +545,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       watering: { ...(candidate.plantCare?.watering || {}), schedules: normalizeSchedules(candidate.plantCare?.watering?.schedules) },
     },
   })
-  const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
+    const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
+    const showAiProgressCard = aiWorking || (!aiCompleted && hasAiProgress)
   const recentSectionLog = React.useMemo(() => aiSectionLog.slice(-5).reverse(), [aiSectionLog])
   const initializeCategoryProgress = () => {
     const progress = buildCategoryProgress(targetFields)
@@ -1082,7 +1100,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             </div>
           )}
         </div>
-        {(aiWorking || hasAiProgress) && (
+          {showAiProgressCard && (
           <Card>
             <CardContent className="space-y-4 pt-4">
               <div className="flex items-center justify-between text-sm font-medium">

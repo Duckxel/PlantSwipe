@@ -1024,7 +1024,9 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
     setSelectedCategory(category)
   }
   React.useEffect(() => {
-    if (!colorSuggestions?.length) {
+    if (colorSuggestions?.length) {
+      setShowColorRecommendations(true)
+    } else {
       setShowColorRecommendations(false)
     }
   }, [colorSuggestions?.length])
