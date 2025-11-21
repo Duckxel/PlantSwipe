@@ -781,9 +781,16 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
     const cameraDistance = 4.8
-    const cameraHeight = 1.8
+    
+    // Cube center position - cube sits on grid, so center is at scale/2 height
+    const cubeCenterY = scale / 2
+    const cubeCenter = new THREE.Vector3(0, cubeCenterY, 0)
+    
+    // Camera height relative to cube center
+    const cameraHeightOffset = 1.8
+    const cameraHeight = cubeCenterY + cameraHeightOffset
     camera.position.set(cameraDistance, cameraHeight, cameraDistance)
-    camera.lookAt(new THREE.Vector3(0, 0.6, 0))
+    camera.lookAt(cubeCenter)
 
     const ambientLight = new THREE.AmbientLight(0xbfffe0, 0.45)
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.85)
@@ -803,18 +810,22 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
       emissiveIntensity: 0.65,
     })
     const outerMesh = new THREE.Mesh(outerGeometry, outerMaterial)
+    // Position cube so its bottom sits on the grid (y=0)
+    outerMesh.position.set(0, cubeCenterY, 0)
     scene.add(outerMesh)
 
     const outerWire = new THREE.LineSegments(
       new THREE.EdgesGeometry(outerGeometry),
       new THREE.LineBasicMaterial({ color: 0x34f5c6 }),
     )
+    outerWire.position.set(0, cubeCenterY, 0)
     scene.add(outerWire)
 
     const innerWire = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(scale * 0.7, scale * 0.7, scale * 0.7)),
       new THREE.LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.8 }),
     )
+    innerWire.position.set(0, cubeCenterY, 0)
     scene.add(innerWire)
 
     const sphereGeometry = new THREE.SphereGeometry(0.05, 16, 16)
@@ -828,7 +839,8 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
       offsets.forEach((y) =>
         offsets.forEach((z) => {
           const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial)
-          sphere.position.set(x, y, z)
+          // Position spheres relative to cube center
+          sphere.position.set(x, y + cubeCenterY, z)
           scene.add(sphere)
         }),
       ),
@@ -838,6 +850,8 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
     const gridMaterial = grid.material as THREE.Material
     gridMaterial.transparent = true
     gridMaterial.opacity = 0.25
+    // Grid sits at y=0
+    grid.position.set(0, 0, 0)
     scene.add(grid)
 
     const handleResize = () => {
@@ -925,13 +939,13 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
       // Combine user rotation with auto rotation
       const totalRotation = autoAngle + userRotation
 
-      // Update camera position (fixed distance, only rotation changes)
-      camera.position.x = cameraDistance * Math.cos(totalRotation)
-      camera.position.z = cameraDistance * Math.sin(totalRotation)
+      // Update camera position - rotate around cube center (not world center)
+      camera.position.x = cubeCenter.x + cameraDistance * Math.cos(totalRotation)
+      camera.position.z = cubeCenter.z + cameraDistance * Math.sin(totalRotation)
       camera.position.y = cameraHeight
-      camera.lookAt(new THREE.Vector3(0, 0.6, 0))
+      camera.lookAt(cubeCenter)
 
-      // Rotate meshes
+      // Rotate meshes around their own center (which is at cubeCenter)
       outerMesh.rotation.y = totalRotation
       outerWire.rotation.y = totalRotation
       innerWire.rotation.y = -totalRotation * 0.833 // Maintain relative rotation
