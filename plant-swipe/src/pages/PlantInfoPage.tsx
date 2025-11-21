@@ -386,32 +386,37 @@ export const PlantInfoPage: React.FC = () => {
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
-    <div className="max-w-6xl mx-auto mt-4 sm:mt-6 px-3 sm:px-4 lg:px-6 pb-12 sm:pb-16 space-y-4 sm:space-y-6">
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
-        <Button
-          type="button"
-          variant="ghost"
-          className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
-          onClick={handleGoBack}
-        >
-          <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          {t('common.back', { defaultValue: 'Back' })}
-        </Button>
-        {profile?.is_admin && plant && (
+    <>
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6">
+        <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
+      </div>
+
+      <div className="max-w-6xl mx-auto mt-4 sm:mt-6 px-3 sm:px-4 lg:px-6 pb-12 sm:pb-16 space-y-4 sm:space-y-6">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
           <Button
             type="button"
-            variant="outline"
-            className="flex items-center gap-2 rounded-2xl border-emerald-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
-            onClick={handleEdit}
+            variant="ghost"
+            className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
+            onClick={handleGoBack}
           >
-            <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            {t('common.edit', { defaultValue: 'Edit' })}
+            <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            {t('common.back', { defaultValue: 'Back' })}
           </Button>
-        )}
+          {profile?.is_admin && plant && (
+            <Button
+              type="button"
+              variant="outline"
+              className="flex items-center gap-2 rounded-2xl border-emerald-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
+              onClick={handleEdit}
+            >
+              <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              {t('common.edit', { defaultValue: 'Edit' })}
+            </Button>
+          )}
+        </div>
+        <MoreInformationSection plant={plant} />
       </div>
-      <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
-      <MoreInformationSection plant={plant} />
-    </div>
+    </>
   )
 }
 
