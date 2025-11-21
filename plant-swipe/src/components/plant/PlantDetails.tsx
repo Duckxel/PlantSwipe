@@ -366,7 +366,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
 
     const createdStamp = formatAuditStamp(meta.createdBy, meta.createdAt ?? meta.createdTime)
     const updatedStamp = formatAuditStamp(meta.updatedBy, meta.updatedAt ?? meta.updatedTime)
-    const hasMetaDetails = Boolean(meta.status || meta.adminCommentary || createdStamp || updatedStamp)
+    const hasMetaDetails = Boolean(meta.adminCommentary || createdStamp || updatedStamp)
 
     const hasBasicDetails = Boolean(comestiblePartList.length || fruitTypeList.length)
 
@@ -659,7 +659,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
               {hasMetaDetails && (
                 <SectionCard title="Meta">
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow label="Status" value={meta.status} />
                     <DetailRow label="Admin Commentary" value={meta.adminCommentary} />
                     <DetailRow label="Created" value={createdStamp} />
                     <DetailRow label="Updated" value={updatedStamp} />
