@@ -459,10 +459,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const { t, i18n } = useTranslation('common')
   const { id } = useParams<{ id?: string }>()
   const { profile } = useAuth()
-  const initialLanguage = SUPPORTED_LANGUAGES.includes(i18n.language as SupportedLanguage)
-    ? (i18n.language as SupportedLanguage)
-    : 'en'
-  const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
+    const initialLanguage = SUPPORTED_LANGUAGES.includes(i18n.language as SupportedLanguage)
+      ? (i18n.language as SupportedLanguage)
+      : 'en'
+    const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
+    const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
   const [loading, setLoading] = React.useState<boolean>(!!id)
   const [saving, setSaving] = React.useState(false)
@@ -514,29 +515,39 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
     meta: t('plantAdmin.categories.meta', 'Meta'),
   }), [t])
-  React.useEffect(() => {
-    i18n.changeLanguage(language)
-    saveLanguagePreference(language)
-  }, [language, i18n])
+    React.useEffect(() => {
+      languageRef.current = language
+      i18n.changeLanguage(language)
+      saveLanguagePreference(language)
+    }, [language, i18n])
 
-  React.useEffect(() => {
-    if (!id) { setLoading(false); return }
-    let ignore = false
-    const fetchPlant = async () => {
-      try {
-        // Load plant with translations for the current language (for viewing)
-        // When editing, users edit the base language, but can view translations
-        const loaded = await loadPlant(id, language)
-        if (!ignore && loaded) { setPlant(loaded); setExistingLoaded(true) }
-      } catch (e: any) {
-        if (!ignore) setError(e?.message || 'Failed to load plant')
-      } finally {
-        if (!ignore) setLoading(false)
+    React.useEffect(() => {
+      if (!id) { setLoading(false); return }
+      let ignore = false
+      const requestedLanguage = language
+      setLoading(true)
+      const fetchPlant = async () => {
+        try {
+          // Load plant with translations for the current language (for viewing)
+          // When editing, users edit the base language, but can view translations
+          const loaded = await loadPlant(id, requestedLanguage)
+          if (!ignore && loaded && languageRef.current === requestedLanguage) {
+            setPlant(loaded)
+            setExistingLoaded(true)
+          }
+        } catch (e: any) {
+          if (!ignore && languageRef.current === requestedLanguage) {
+            setError(e?.message || 'Failed to load plant')
+          }
+        } finally {
+          if (!ignore && languageRef.current === requestedLanguage) {
+            setLoading(false)
+          }
+        }
       }
-    }
-    fetchPlant()
-    return () => { ignore = true }
-  }, [id, language])
+      fetchPlant()
+      return () => { ignore = true }
+    }, [id, language])
   const captureColorSuggestions = (data: unknown) => {
     if (!data) return
     const parsed: PlantColor[] = []
@@ -600,10 +611,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
     const savePlant = async (plantOverride?: Plant) => {
+      const saveLanguage = language
       let plantToSave = plantOverride || plant
       const trimmedName = plantToSave.name.trim()
       if (!trimmedName) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
-      const isEnglish = language === 'en'
+      const isEnglish = saveLanguage === 'en'
       const existingPlantId = plantToSave.id || id
       if (!isEnglish && !existingPlantId) {
         setError(t('plantAdmin.translationRequiresBase', 'Save the English version before editing translations.'))
@@ -745,7 +757,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (!isEnglish) {
           const translationPayload = {
             plant_id: savedId,
-            language,
+            language: saveLanguage,
             name: trimmedName,
             given_names: plantToSave.identity?.givenNames || [],
             scientific_name: plantToSave.identity?.scientificName || null,
@@ -788,19 +800,21 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           }
         }
 
-        setPlant({
-          ...plantToSave,
-          plantCare: { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } },
-          miscellaneous: { ...(plantToSave.miscellaneous || {}), sources },
-          id: savedId,
-          meta: {
-            ...plantToSave.meta,
-            createdBy: createdByValue || undefined,
-            createdAt: createdTimeValue || undefined,
-            updatedBy: isEnglish ? ((profile as any)?.full_name || plantToSave.meta?.updatedBy) : plantToSave.meta?.updatedBy,
-            updatedAt: isEnglish ? payloadUpdatedTime || new Date().toISOString() : plantToSave.meta?.updatedAt,
-          },
-        })
+          if (languageRef.current === saveLanguage) {
+            setPlant({
+              ...plantToSave,
+              plantCare: { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } },
+              miscellaneous: { ...(plantToSave.miscellaneous || {}), sources },
+              id: savedId,
+              meta: {
+                ...plantToSave.meta,
+                createdBy: createdByValue || undefined,
+                createdAt: createdTimeValue || undefined,
+                updatedBy: isEnglish ? ((profile as any)?.full_name || plantToSave.meta?.updatedBy) : plantToSave.meta?.updatedBy,
+                updatedAt: isEnglish ? payloadUpdatedTime || new Date().toISOString() : plantToSave.meta?.updatedAt,
+              },
+            })
+          }
         if (isEnglish && !existingLoaded) setExistingLoaded(true)
         onSaved?.(savedId)
       } catch (e: any) {
