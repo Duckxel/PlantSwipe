@@ -24,6 +24,7 @@ import {
   Thermometer,
   Wind,
   Palette,
+  Info,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { TooltipProps } from 'recharts'
@@ -427,11 +428,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     const baseScale = 0.45 + (primaryDimension / maxReference) * 0.55
     return clamp(baseScale, 0.35, 1.08) * 1.45
   }, [primaryDimension])
-  const dimensionLegend = [
-    { label: 'Height', value: height ? `${height} cm` : '—', subLabel: 'Vertical growth' },
-    { label: 'Spread', value: wingspan ? `${wingspan} cm` : '—', subLabel: 'Canopy reach' },
-    { label: 'Spacing', value: spacing ? `${spacing} cm` : '—', subLabel: 'Garden spacing' },
-  ]
   const habitats = plant.plantCare?.habitat || []
   const activePins = habitats.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
     ...MAP_PIN_POSITIONS[idx],
@@ -562,9 +558,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const growthCut = formatTextValue(growth.cut)
       const growthSupportNotes = formatTextValue(growth.adviceTutoring)
       const growthSowingNotes = formatTextValue(growth.adviceSowing)
-      const heightLabel = growth.height ? `${growth.height} cm` : null
-      const wingspanLabel = growth.wingspan ? `${growth.wingspan} cm` : null
-      const spacingLabel = growth.separation ? `${growth.separation} cm` : null
       const groundEffectLabel = formatTextValue(ecology.groundEffect)
     const [hoveredMonth, setHoveredMonth] = React.useState<string | null>(null)
 
@@ -619,9 +612,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: 'Mulching', value: mulchingMaterial },
         { label: 'Nutrition Need', value: nutrientLabel },
         { label: 'Fertilizer', value: fertilizerLabel },
-        { label: 'Soil Advice', value: soilAdvice },
-        { label: 'Mulching Advice', value: mulchingAdvice },
-        { label: 'Fertilizer Advice', value: fertilizerAdvice },
+        { label: 'Soil Advice', value: soilAdvice, variant: 'note' },
+        { label: 'Mulching Advice', value: mulchingAdvice, variant: 'note' },
+        { label: 'Fertilizer Advice', value: fertilizerAdvice, variant: 'note' },
       ])
       const usageFlavor = filterInfoItems([
         {
@@ -631,11 +624,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         },
         { label: 'Comestible Parts', value: comestiblePartsLabel, icon: <Leaf className="h-3.5 w-3.5" /> },
         { label: 'Fruit Type', value: fruitTypeLabel },
-        { label: 'Medicinal Notes', value: medicinalNotes },
+        { label: 'Medicinal Notes', value: medicinalNotes, variant: 'note' },
         { label: 'Nutritional Intake', value: nutritionalLabel },
         { label: 'Infusion Friendly', value: infusionDescriptor },
-        { label: 'Infusion Notes', value: infusionNotes },
-        { label: 'Infusion Mix', value: infusionMixSummary },
+        { label: 'Infusion Notes', value: infusionNotes, variant: 'note' },
+        { label: 'Infusion Mix', value: infusionMixSummary, variant: 'note' },
         { label: 'Aromatherapy', value: aromaDescriptor },
         { label: 'Spice Mixes', value: spiceMixesLabel },
         { label: 'Recipes', value: infusionRecipes },
@@ -663,14 +656,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: 'Spiked', value: spikedDescriptor },
       ])
       const growthItems = filterInfoItems([
-        { label: 'Height', value: heightLabel },
-        { label: 'Spread', value: wingspanLabel },
-        { label: 'Spacing', value: spacingLabel },
         { label: 'Sow Type', value: sowTypeLabel },
         { label: 'Needs Support', value: supportDescriptor },
-        { label: 'Support Notes', value: growthSupportNotes },
+        { label: 'Support Notes', value: growthSupportNotes, variant: 'note' },
         { label: 'Transplanting', value: transplantDescriptor },
-        { label: 'Sowing Notes', value: growthSowingNotes },
+        { label: 'Sowing Notes', value: growthSowingNotes, variant: 'note' },
         { label: 'Cut Type', value: growthCut },
       ])
       const riskItems = filterInfoItems([
@@ -693,7 +683,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: 'Diseases', value: diseaseLabel },
       ])
       const recordItems = filterInfoItems([
-        { label: 'Admin Commentary', value: adminCommentary },
+        { label: 'Admin Commentary', value: adminCommentary, variant: 'note' },
         { label: 'Sources', value: formatSourcesList(misc.sources) },
         { label: 'Created', value: createdStamp },
         { label: 'Updated', value: updatedStamp },
@@ -753,18 +743,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </div>
               )}
             </div>
-            <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
               <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[260px]">
                 <DimensionCube scale={cubeScale} className="h-full w-full" />
               </div>
-              <div className="flex flex-col gap-2 md:min-h-[260px]">
-                {dimensionLegend.map((item) => (
-                  <div key={item.label} className="md:flex-1">
-                    <DimensionLegendCard {...item} className="h-full" />
-                  </div>
-                ))}
-              </div>
-            </div>
           </motion.section>
         )}
 
@@ -928,7 +909,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           {infoSections.map((section) => (
             <InfoCard key={section.title} title={section.title} icon={section.icon}>
               {section.items.map((item) => (
-                <InfoItem key={`${section.title}-${item.label}`} label={item.label} value={item.value || '—'} icon={item.icon} />
+              <InfoItem
+                key={`${section.title}-${item.label}`}
+                label={item.label}
+                value={item.value || '—'}
+                icon={item.icon}
+                variant={item.variant}
+              />
               ))}
             </InfoCard>
           ))}
@@ -1004,13 +991,30 @@ const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React
   </Card>
 )
 
-const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.ReactNode }> = ({
+const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.ReactNode; variant?: 'note' }> = ({
   label,
   value,
   icon,
+  variant,
 }) => {
   if (value === undefined || value === null) return null
   if (typeof value === 'string' && !value.trim()) return null
+  if (variant === 'note') {
+    return (
+      <div className="py-1 sm:py-1.5">
+        <div className="rounded-2xl border border-sky-200/70 bg-sky-50/90 px-3 py-2.5 text-sky-900 shadow-sm dark:border-sky-500/40 dark:bg-[#0f1f28]/70 dark:text-sky-100">
+          <div className="flex items-center gap-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.3em] text-sky-800 dark:text-sky-200">
+            <Info className="h-3.5 w-3.5" />
+            [!NOTE]
+            <span className="text-[9px] sm:text-[10px] font-normal normal-case tracking-normal text-sky-700 dark:text-sky-100">
+              {label}
+            </span>
+          </div>
+          <div className="mt-1 text-xs sm:text-sm leading-relaxed text-sky-900 dark:text-sky-100">{value}</div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="flex items-start gap-2 sm:gap-3 py-1 sm:py-1.5">
       <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-md border border-stone-200 bg-stone-100 flex items-center justify-center flex-shrink-0 mt-0.5 text-stone-600 dark:border-emerald-900/40 dark:bg-[#0f1f28] dark:text-emerald-200">
@@ -1042,6 +1046,7 @@ interface InfoItemConfig {
   label: string
   value?: React.ReactNode
   icon?: React.ReactNode
+  variant?: 'note'
 }
 
 const filterInfoItems = (items: InfoItemConfig[]) =>
