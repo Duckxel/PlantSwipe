@@ -261,14 +261,14 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     },
   ]
 
-    const identity = plant.identity ?? {}
-    const plantCare = plant.plantCare ?? {}
-    const growth = plant.growth ?? {}
-    const usage = plant.usage ?? {}
-    const ecology = plant.ecology ?? {}
-    const danger = plant.danger ?? {}
-    const misc = plant.miscellaneous ?? {}
-    const meta = plant.meta ?? {}
+  const identity = plant.identity ?? {}
+  const plantCare = plant.plantCare ?? {}
+  const growth = plant.growth ?? {}
+  const usage = plant.usage ?? {}
+  const ecology = plant.ecology ?? {}
+  const danger = plant.danger ?? {}
+  const misc = plant.miscellaneous ?? {}
+  const meta = plant.meta ?? {}
 
     const compositionList = compactStrings(identity.composition as string[] | undefined)
     const symbolismList = compactStrings(identity.symbolism)
@@ -309,66 +309,60 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     const pestList = compactStrings(danger.pests)
     const diseaseList = compactStrings(danger.diseases)
 
-    const hasIdentityDetails =
-      Boolean(
-        identity.family ||
-          identity.lifeCycle ||
-          identity.foliagePersistance ||
-          identity.spiked !== undefined ||
-          identity.scent !== undefined ||
-          allergenList.length ||
-          symbolismList.length ||
-          compositionList.length ||
-          colorTraitChips.length,
-      )
+  const hasIdentityDetails =
+    hasMeaningfulText(identity.family) ||
+    hasMeaningfulText(identity.lifeCycle) ||
+    hasMeaningfulText(identity.foliagePersistance) ||
+    identity.spiked !== undefined ||
+    identity.scent !== undefined ||
+    allergenList.length > 0 ||
+    symbolismList.length > 0 ||
+    compositionList.length > 0 ||
+    colorTraitChips.length > 0
 
-    const hasCareDetails =
-      Boolean(
-        originList.length ||
-          wateringTypeList.length ||
-          divisionList.length ||
-          soilList.length ||
-          mulchingMaterials.length ||
-          nutritionNeeds.length ||
-          fertilizerList.length ||
-          plantCare.adviceSoil ||
-          plantCare.adviceMulching ||
-          plantCare.adviceFertilizer ||
-          plantCare.temperatureMin !== undefined ||
-          plantCare.temperatureMax !== undefined ||
-          plantCare.temperatureIdeal !== undefined,
-      )
+  const hasCareDetails =
+    originList.length > 0 ||
+    wateringTypeList.length > 0 ||
+    divisionList.length > 0 ||
+    soilList.length > 0 ||
+    mulchingMaterials.length > 0 ||
+    nutritionNeeds.length > 0 ||
+    fertilizerList.length > 0 ||
+    hasMeaningfulText(plantCare.adviceSoil) ||
+    hasMeaningfulText(plantCare.adviceMulching) ||
+    hasMeaningfulText(plantCare.adviceFertilizer) ||
+    plantCare.temperatureMin !== undefined ||
+    plantCare.temperatureMax !== undefined ||
+    plantCare.temperatureIdeal !== undefined
 
-    const hasGrowthDetails = Boolean(
-      sowTypeList.length ||
-        growth.tutoring !== undefined ||
-        growth.adviceTutoring ||
-        growth.transplanting !== undefined ||
-        growth.adviceSowing ||
-        growth.cut,
-    )
+  const hasGrowthDetails =
+    sowTypeList.length > 0 ||
+    growth.tutoring !== undefined ||
+    hasMeaningfulText(growth.adviceTutoring) ||
+    growth.transplanting !== undefined ||
+    hasMeaningfulText(growth.adviceSowing) ||
+    hasMeaningfulText(growth.cut)
 
-    const hasUsageDetails = Boolean(
-      usage.adviceMedicinal ||
-        nutritionalIntakeList.length ||
-        usage.infusion !== undefined ||
-        usage.adviceInfusion ||
-        infusionMixEntries.length ||
-        usage.aromatherapy !== undefined ||
-        spiceMixes.length,
-    )
+  const hasUsageDetails =
+    hasMeaningfulText(usage.adviceMedicinal) ||
+    nutritionalIntakeList.length > 0 ||
+    usage.infusion !== undefined ||
+    hasMeaningfulText(usage.adviceInfusion) ||
+    infusionMixEntries.length > 0 ||
+    usage.aromatherapy !== undefined ||
+    spiceMixes.length > 0
 
-    const hasEcologyDetails = Boolean(ecology.melliferous !== undefined || ecology.beFertilizer !== undefined)
+  const hasEcologyDetails = ecology.melliferous !== undefined || ecology.beFertilizer !== undefined
 
-    const hasDangerDetails = Boolean(pestList.length || diseaseList.length)
+  const hasDangerDetails = pestList.length > 0 || diseaseList.length > 0
 
-    const hasMiscDetails = Boolean(companions.length || tagList.length || sources.length)
+  const hasMiscDetails = companions.length > 0 || tagList.length > 0 || sources.length > 0
 
-    const createdStamp = formatAuditStamp(meta.createdBy, meta.createdAt ?? meta.createdTime)
-    const updatedStamp = formatAuditStamp(meta.updatedBy, meta.updatedAt ?? meta.updatedTime)
-    const hasMetaDetails = Boolean(meta.adminCommentary || createdStamp || updatedStamp)
+  const createdStamp = formatAuditStamp(meta.createdBy, meta.createdAt ?? meta.createdTime)
+  const updatedStamp = formatAuditStamp(meta.updatedBy, meta.updatedAt ?? meta.updatedTime)
+  const hasMetaDetails = Boolean(hasMeaningfulText(meta.adminCommentary) || createdStamp || updatedStamp)
 
-    const hasBasicDetails = Boolean(comestiblePartList.length || fruitTypeList.length)
+  const hasBasicDetails = comestiblePartList.length > 0 || fruitTypeList.length > 0
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
@@ -714,12 +708,12 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     children: React.ReactNode
   }
   
-  const SectionCard = ({ title, children }: SectionCardProps) => (
-    <section className="rounded-2xl border border-muted/40 bg-white/90 p-4 shadow-sm dark:border-stone-800/60 dark:bg-slate-900/70 sm:p-5">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[0.35em] text-muted-foreground">{title}</h3>
-      <div className="mt-4 space-y-4">{children}</div>
-    </section>
-  )
+const SectionCard = ({ title, children }: SectionCardProps) => (
+  <section className="rounded-2xl border border-muted/40 bg-white/90 p-4 shadow-sm dark:border-stone-800/60 dark:bg-slate-900/70 sm:p-5">
+    <h3 className="text-[11px] font-semibold uppercase tracking-[0.35em] text-muted-foreground">{title}</h3>
+    <div className="mt-4 space-y-4">{children}</div>
+  </section>
+)
   
   interface DetailRowProps {
     label: string
@@ -727,27 +721,28 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     className?: string
   }
   
-  const DetailRow = ({ label, value, className }: DetailRowProps) => {
-    if (
-      value === undefined ||
-      value === null ||
-      (typeof value === "string" && value.trim().length === 0)
-    ) {
+const DetailRow = ({ label, value, className }: DetailRowProps) => {
+  if (value === undefined || value === null) {
+    return null
+  }
+  if (typeof value === "string") {
+    if (!isMeaningfulString(value)) {
       return null
     }
-    const content =
-      typeof value === "string" || typeof value === "number" ? (
-        <p className="text-sm font-medium text-foreground">{value}</p>
-      ) : (
-        value
-      )
-    return (
-      <div className={className ? `space-y-1 ${className}` : "space-y-1"}>
-        <p className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground">{label}</p>
-        {content}
-      </div>
-    )
   }
+  const content =
+    typeof value === "string" || typeof value === "number" ? (
+      <p className="text-sm font-medium text-foreground">{value}</p>
+    ) : (
+      value
+    )
+  return (
+    <div className={className ? `space-y-1 ${className}` : "space-y-1"}>
+      <p className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground">{label}</p>
+      {content}
+    </div>
+  )
+}
   
   const ChipList = ({ items }: { items: string[] }) => {
     if (!items.length) return null
@@ -838,12 +833,39 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     )
   }
   
-  const compactStrings = (values?: (string | null | undefined)[]): string[] => {
-    if (!values) return []
-    return values
-      .map((value) => (typeof value === "string" ? value.trim() : ""))
-      .filter((value): value is string => value.length > 0)
-  }
+const NON_VALUE_TOKENS = new Set([
+  "none",
+  "no",
+  "n/a",
+  "na",
+  "not applicable",
+  "not specified",
+  "unknown",
+  "unspecified",
+  "not provided",
+  "not available",
+  "aucun",
+  "aucune",
+  "sin datos",
+  "none noted",
+])
+
+const isMeaningfulString = (raw?: string | null) => {
+  if (!raw) return false
+  const trimmed = raw.trim()
+  if (!trimmed) return false
+  const normalized = trimmed.toLowerCase()
+  return !NON_VALUE_TOKENS.has(normalized)
+}
+
+const compactStrings = (values?: (string | null | undefined)[]): string[] => {
+  if (!values) return []
+  return values
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value): value is string => Boolean(value) && isMeaningfulString(value))
+}
+
+const hasMeaningfulText = (value?: string | null) => isMeaningfulString(value)
   
   const formatDateLabel = (value?: string) => {
     if (!value) return null
