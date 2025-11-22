@@ -94,7 +94,7 @@ export default function PlantSwipe() {
   )
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
-  const [colorFilter, setColorFilter] = useState<string | null>(null)
+  const [colorFilter, setColorFilter] = useState<string[]>([])
   const [onlySeeds, setOnlySeeds] = useState(false)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
@@ -236,8 +236,10 @@ export default function PlantSwipe() {
   }, [])
 
   React.useEffect(() => {
-    if (!colorFilter) return
-    if (/\s/.test(colorFilter.trim())) {
+    if (colorFilter.length === 0) return
+    // Open advanced colors section if any selected color has whitespace
+    const hasMultiWordColor = colorFilter.some((color) => /\s/.test(color.trim()))
+    if (hasMultiWordColor) {
       setAdvancedColorsOpen(true)
     }
   }, [colorFilter])
@@ -375,14 +377,13 @@ export default function PlantSwipe() {
     const lowerQuery = query.toLowerCase()
     const normalizedType = typeFilter?.toLowerCase() ?? null
     const normalizedUsage = usageFilters.map((u) => u.toLowerCase())
-    const normalizedColorFilter = colorFilter ? colorFilter.toLowerCase().trim() : null
-    const colorFilterHasWhitespace = normalizedColorFilter ? /\s/.test(normalizedColorFilter) : false
+    const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
 
-    const colorMatches = (colorName: string): boolean => {
-      if (!normalizedColorFilter) return true
-
+    const colorMatches = (colorName: string, normalizedColorFilter: string): boolean => {
       const normalizedColor = (colorName || "").toLowerCase().trim()
       if (!normalizedColor) return false
+
+      const colorFilterHasWhitespace = /\s/.test(normalizedColorFilter)
 
       if (colorFilterHasWhitespace) {
         return normalizedColor === normalizedColorFilter
@@ -412,7 +413,12 @@ export default function PlantSwipe() {
         .toLowerCase()
         .includes(lowerQuery)
       const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
-      const matchesColor = normalizedColorFilter ? colors.some((color) => colorMatches(color)) : true
+      // Match if any of the selected colors matches any of the plant's colors (OR logic)
+      const matchesColor = normalizedColorFilters.length === 0 
+        ? true 
+        : normalizedColorFilters.some((filterColor) => 
+            colors.some((plantColor) => colorMatches(plantColor, filterColor))
+          )
       const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
       const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
@@ -742,14 +748,18 @@ export default function PlantSwipe() {
 
     const FilterControls = () => {
       const renderColorOption = (color: ColorOption) => {
-        const isActive = colorFilter === color.name
+        const isActive = colorFilter.includes(color.name)
         const label = color.name || t("plant.unknownColor", { defaultValue: "Unnamed color" })
 
         return (
           <button
             key={color.id}
             type="button"
-            onClick={() => setColorFilter((cur) => (cur === color.name ? null : color.name))}
+            onClick={() => setColorFilter((cur) => 
+              isActive 
+                ? cur.filter((c) => c !== color.name)
+                : [...cur, color.name]
+            )}
             className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition flex items-center gap-2 ${
               isActive
                 ? "bg-black dark:bg-white text-white dark:text-black"
@@ -962,14 +972,16 @@ export default function PlantSwipe() {
             <div className="font-medium uppercase tracking-wide opacity-60">{t("plant.active")}</div>
             <div className="flex flex-wrap gap-2">
               {seasonFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>}
-              {colorFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>}
+              {colorFilter.map((color) => (
+                <Badge key={color} variant="secondary" className="rounded-xl">{t(`plant.${color.toLowerCase()}`, { defaultValue: color })}</Badge>
+              ))}
               {typeFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.classificationType.${typeFilter.toLowerCase()}`, { defaultValue: typeFilter })}</Badge>}
               {usageFilters.map((usage) => (
                 <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
               ))}
               {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
               {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
-              {!seasonFilter && !colorFilter && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
+              {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
                 <span className="opacity-50">{t("plant.none")}</span>
               )}
             </div>

@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   ChevronLeft,
+  ChevronRight,
   Pencil,
   MapPin,
   Compass,
@@ -25,6 +26,11 @@ import {
   Wind,
   Palette,
   Info,
+  Image as ImageIcon,
+  X,
+  ZoomIn,
+  ZoomOut,
+  RefreshCw,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { TooltipProps } from 'recharts'
@@ -850,6 +856,26 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </InfoCard>
             ))}
           </div>
+          
+          {/* Image Gallery */}
+          {plant.images && plant.images.length > 0 && (
+            <motion.section
+              {...SECTION_ANIMATION}
+              transition={{ duration: 0.4, delay: 0.15 }}
+              className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
+            >
+              <div className="space-y-3 sm:space-y-4">
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+                  <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Image Gallery</span>
+                </div>
+                <div className="max-h-[400px]">
+                  <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
+                </div>
+              </div>
+            </motion.section>
+          )}
+          
           {(createdTimestamp || updatedTimestamp || createdByLabel || updatedByLabel || sourcesValue) && (
             <div className="rounded-2xl border border-stone-200/70 bg-white/90 p-4 sm:p-5 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]">
               <div className="flex flex-col gap-3 text-xs sm:text-sm text-stone-600 dark:text-stone-300">
@@ -1095,6 +1121,267 @@ const formatTimestampDetailed = (value?: string | null) => {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }> = ({ images, plantName }) => {
+  const validImages = images.filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = React.useState(false)
+  const [canScrollRight, setCanScrollRight] = React.useState(false)
+  const [needsScrolling, setNeedsScrolling] = React.useState(true)
+  const [viewerOpen, setViewerOpen] = React.useState(false)
+  const [selectedImage, setSelectedImage] = React.useState<PlantImage | null>(null)
+  const [viewerZoom, setViewerZoom] = React.useState(1)
+  const [viewerOffset, setViewerOffset] = React.useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = React.useState(false)
+  const panStartRef = React.useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+
+  const checkScrollability = React.useCallback(() => {
+    if (!scrollContainerRef.current) return
+    const container = scrollContainerRef.current
+    const canScroll = container.scrollWidth > container.clientWidth
+    setNeedsScrolling(canScroll)
+    setCanScrollLeft(container.scrollLeft > 0)
+    setCanScrollRight(container.scrollLeft < container.scrollWidth - container.clientWidth - 1)
+  }, [])
+
+  React.useEffect(() => {
+    // Use a small delay to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      checkScrollability()
+    }, 100)
+    
+    const container = scrollContainerRef.current
+    if (container) {
+      container.addEventListener('scroll', checkScrollability)
+      window.addEventListener('resize', checkScrollability)
+      return () => {
+        clearTimeout(timeoutId)
+        container.removeEventListener('scroll', checkScrollability)
+        window.removeEventListener('resize', checkScrollability)
+      }
+    }
+    return () => clearTimeout(timeoutId)
+  }, [checkScrollability, validImages.length])
+
+  const scroll = React.useCallback((direction: 'left' | 'right') => {
+    if (!scrollContainerRef.current) return
+    const container = scrollContainerRef.current
+    const scrollAmount = container.clientWidth * 0.8
+    const targetScroll = direction === 'left' 
+      ? container.scrollLeft - scrollAmount 
+      : container.scrollLeft + scrollAmount
+    container.scrollTo({ left: targetScroll, behavior: 'smooth' })
+  }, [])
+
+  const openViewer = React.useCallback((img: PlantImage) => {
+    setSelectedImage(img)
+    setViewerOpen(true)
+  }, [])
+
+  const closeViewer = React.useCallback(() => {
+    setViewerOpen(false)
+    setViewerZoom(1)
+    setViewerOffset({ x: 0, y: 0 })
+    setIsPanning(false)
+  }, [])
+
+  const adjustZoom = React.useCallback((delta: number) => {
+    setViewerZoom((prev) => Math.min(4, Math.max(1, parseFloat((prev + delta).toFixed(2)))))
+  }, [])
+
+  const resetViewer = React.useCallback(() => {
+    setViewerZoom(1)
+    setViewerOffset({ x: 0, y: 0 })
+  }, [])
+
+  const handleViewerWheel = React.useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      adjustZoom(event.deltaY < 0 ? 0.15 : -0.15)
+    },
+    [adjustZoom],
+  )
+
+  const handleViewerPointerDown = React.useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      setIsPanning(true)
+      event.currentTarget.setPointerCapture(event.pointerId)
+      panStartRef.current = { x: event.clientX - viewerOffset.x, y: event.clientY - viewerOffset.y }
+    },
+    [viewerOffset.x, viewerOffset.y],
+  )
+
+  const handleViewerPointerMove = React.useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!isPanning) return
+      setViewerOffset({
+        x: event.clientX - panStartRef.current.x,
+        y: event.clientY - panStartRef.current.y,
+      })
+    },
+    [isPanning],
+  )
+
+  const handleViewerPointerUp = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    setIsPanning(false)
+  }, [])
+
+  React.useEffect(() => {
+    if (!viewerOpen) {
+      setViewerZoom(1)
+      setViewerOffset({ x: 0, y: 0 })
+      setIsPanning(false)
+      return
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeViewer()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [viewerOpen, closeViewer])
+
+  if (validImages.length === 0) return null
+
+  return (
+    <>
+      <div className="relative">
+        {needsScrolling && canScrollLeft && (
+          <button
+            type="button"
+            onClick={() => scroll('left')}
+            className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
+            aria-label="Scroll left"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
+        <div
+          ref={scrollContainerRef}
+          className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] max-h-[400px]"
+          style={{
+            justifyContent: needsScrolling ? 'flex-start' : 'center',
+          }}
+        >
+          {validImages.map((img, idx) => (
+            <div
+              key={img.id || `img-${idx}`}
+              className="flex-shrink-0 snap-start h-full flex items-center"
+              style={{ minWidth: 'min(280px, 80vw)', maxHeight: '400px' }}
+            >
+              <div className="relative w-full h-full max-h-[400px] overflow-hidden rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-[#2d2d30] cursor-pointer">
+                <img
+                  src={img.link}
+                  alt={`${plantName} - Image ${idx + 1}`}
+                  className="h-full w-full object-contain transition-transform duration-300 hover:scale-105"
+                  loading="lazy"
+                  draggable={false}
+                  onClick={() => openViewer(img)}
+                  style={{ maxHeight: '400px' }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        {needsScrolling && canScrollRight && (
+          <button
+            type="button"
+            onClick={() => scroll('right')}
+            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
+            aria-label="Scroll right"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+
+      {viewerOpen && selectedImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={closeViewer}>
+          <button
+            type="button"
+            className="absolute top-6 right-6 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
+            onClick={(event) => {
+              event.stopPropagation()
+              closeViewer()
+            }}
+            aria-label="Close image viewer"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <div
+            className="flex h-full w-full max-w-5xl flex-col items-center justify-center px-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div
+              className="relative max-h-[80vh] w-full overflow-hidden rounded-2xl border border-white/10 bg-black/60"
+              onWheel={handleViewerWheel}
+              onPointerDown={handleViewerPointerDown}
+              onPointerMove={handleViewerPointerMove}
+              onPointerUp={handleViewerPointerUp}
+              onPointerLeave={handleViewerPointerUp}
+            >
+              <img
+                src={selectedImage.link}
+                alt={plantName}
+                draggable={false}
+                className="h-full w-full select-none object-contain"
+                style={{
+                  transform: `translate(${viewerOffset.x}px, ${viewerOffset.y}px) scale(${viewerZoom})`,
+                  cursor: isPanning ? 'grabbing' : viewerZoom > 1 ? 'grab' : 'zoom-in',
+                  transition: isPanning ? 'none' : 'transform 0.2s ease-out',
+                }}
+              />
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-white">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  adjustZoom(0.2)
+                }}
+              >
+                <ZoomIn className="mr-1 h-4 w-4" />
+                Zoom in
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  adjustZoom(-0.2)
+                }}
+              >
+                <ZoomOut className="mr-1 h-4 w-4" />
+                Zoom out
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  resetViewer()
+                }}
+              >
+                <RefreshCw className="mr-1 h-4 w-4" />
+                Reset
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
 
 export default PlantInfoPage
