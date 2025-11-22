@@ -5551,12 +5551,12 @@ export const AdminPage: React.FC = () => {
                                               <div className="text-sm font-medium truncate">
                                                 {plant.name}
                                               </div>
-                                              {plant.promotionMonth && (
-                                                <div className="text-xs opacity-60">
-                                                  Promotion:{" "}
-                                                  {PROMOTION_MONTH_LABELS[plant.promotionMonth]}
-                                                </div>
-                                              )}
+                                              <div className="text-xs text-stone-500 dark:text-stone-300">
+                                                Promotion month:{" "}
+                                                {plant.promotionMonth
+                                                  ? PROMOTION_MONTH_LABELS[plant.promotionMonth]
+                                                  : "Not set"}
+                                              </div>
                                                 {plant.updatedAt && (
                                                   <div className="text-xs text-stone-500 dark:text-stone-400">
                                                     Last update {formatTimeAgo(plant.updatedAt)}
