@@ -258,8 +258,9 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
       return { ...img, use }
     })
     
-    // If no primary was set and we have images, set the first one as primary
-    if (!primaryUsed && mapped.length > 0) {
+    // If no primary or discovery was set and we have images, set the first one as primary
+    // This ensures at least one image has a special role, but allows multiple "other" photos
+    if (!primaryUsed && !discoveryUsed && mapped.length > 0) {
       mapped[0] = { ...mapped[0], use: 'primary' }
       primaryUsed = true
     }
