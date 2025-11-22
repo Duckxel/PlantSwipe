@@ -33,7 +33,9 @@ import {
   ArrowUpRight,
   Info,
   Plus,
-  LayoutDashboard,
+    LayoutDashboard,
+    ChevronLeft,
+    ChevronRight,
   Users,
   FileText,
   ScrollText,
@@ -2740,6 +2742,11 @@ export const AdminPage: React.FC = () => {
   ];
 
   const [activeTab, setActiveTab] = React.useState<AdminTab>("overview");
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  const toggleSidebarCollapsed = React.useCallback(
+    () => setSidebarCollapsed((prev) => !prev),
+    [],
+  );
 
   // Load plant requests on mount to show count in menu
   React.useEffect(() => {
@@ -3602,89 +3609,120 @@ export const AdminPage: React.FC = () => {
               <div className="text-sm font-semibold">Admin Panel</div>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {navItems.map(({ key, label, Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setActiveTab(key)}
-                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition ${
-                    activeTab === key
-                      ? "bg-white text-black shadow-sm"
-                      : "text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]"
-                  }`}
-                  style={
-                    activeTab === key
-                      ? {
-                          boxShadow: `0 6px 20px -15px ${accentColorWithOpacity}`,
-                        }
-                      : undefined
-                  }
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{label}</span>
-                  {key === "requests" && uniqueRequestedPlantsCount > 0 && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
-                      {uniqueRequestedPlantsCount}
-                    </span>
-                  )}
-                </button>
-              ))}
+                {navItems.map(({ key, label, Icon }) => {
+                  const isActive = activeTab === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setActiveTab(key)}
+                      className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition ${
+                        isActive
+                          ? "bg-white text-black shadow-sm dark:bg-[#1f1f24] dark:text-stone-100"
+                          : "text-stone-700 dark:text-stone-200 bg-stone-100 dark:bg-[#111116] hover:bg-stone-200 dark:hover:bg-[#1e1e22]"
+                      }`}
+                      style={
+                        isActive
+                          ? {
+                              boxShadow: `0 6px 20px -15px ${accentColorWithOpacity}`,
+                            }
+                          : undefined
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{label}</span>
+                      {key === "requests" && uniqueRequestedPlantsCount > 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
+                          {uniqueRequestedPlantsCount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
             </div>
           </div>
         </div>
 
         <div className="flex flex-col gap-6 md:flex-row md:items-stretch md:min-h-[calc(100vh-96px)]">
           {/* Sidebar Navigation - Desktop Only */}
-          <aside
-            className="hidden md:flex md:w-64 lg:w-72 flex-shrink-0 md:sticky md:top-6 md:self-stretch"
-          >
-            <div className={`${sidebarHeroClass} h-full`}>
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute -top-8 -right-6 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/20 blur-3xl" />
-                <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-emerald-100/70 dark:bg-emerald-500/15 blur-[120px]" />
-              </div>
-                <div className="relative z-10 p-6 border-b border-white/30 dark:border-white/10">
-                  <div className="flex items-center gap-3">
-                    <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-                    <div>
-                      <div className="text-lg font-semibold">Admin Panel</div>
-                      <div className="text-xs text-stone-600 dark:text-stone-300">
-                        Control Center
+            <aside
+              className={`hidden md:flex ${sidebarCollapsed ? "md:w-20" : "md:w-64 lg:w-72"} flex-shrink-0 md:sticky md:top-6 md:self-stretch transition-[width]`}
+            >
+              <div className={`${sidebarHeroClass} h-full`}>
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute -top-8 -right-6 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/20 blur-3xl" />
+                  <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-emerald-100/70 dark:bg-emerald-500/15 blur-[120px]" />
+                </div>
+                <div
+                  className={`relative z-10 flex items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} gap-3 p-4 border-b border-white/30 dark:border-white/10`}
+                >
+                  {!sidebarCollapsed && (
+                    <div className="flex items-center gap-3">
+                      <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                      <div>
+                        <div className="text-lg font-semibold">Admin Panel</div>
+                        <div className="text-xs text-stone-600 dark:text-stone-300">
+                          Control Center
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              <nav className="relative z-10 p-4 space-y-2 flex-1 overflow-y-auto">
-                {navItems.map(({ key, label, Icon }) => (
+                  )}
                   <button
-                    key={key}
-                    onClick={() => setActiveTab(key)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
-                      activeTab === key
-                        ? "bg-white/90 text-black shadow-sm"
-                        : "text-stone-700 dark:text-stone-200 hover:bg-white/60 dark:hover:bg-white/10"
-                    }`}
-                    style={
-                      activeTab === key
-                        ? {
-                            boxShadow: `0 12px 35px -20px ${accentColorWithOpacity}`,
-                          }
-                        : undefined
-                    }
+                    type="button"
+                    onClick={toggleSidebarCollapsed}
+                    className="rounded-full border border-white/40 dark:border-white/10 p-2 text-stone-600 dark:text-stone-200 hover:bg-white/70 dark:hover:bg-white/10 transition"
+                    aria-label={sidebarCollapsed ? "Expand admin sidebar" : "Collapse admin sidebar"}
                   >
-                    <Icon
-                      className={`h-5 w-5 ${activeTab === key ? "" : "opacity-70"}`}
-                    />
-                    <span className="font-medium">{label}</span>
-                    {key === "requests" && uniqueRequestedPlantsCount > 0 && (
-                      <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100">
-                        {uniqueRequestedPlantsCount}
-                      </span>
+                    {sidebarCollapsed ? (
+                      <ChevronRight className="h-4 w-4" />
+                    ) : (
+                      <ChevronLeft className="h-4 w-4" />
                     )}
                   </button>
-                ))}
-              </nav>
-            </div>
-          </aside>
+                </div>
+                <nav
+                  className={`relative z-10 p-4 flex-1 overflow-y-auto ${sidebarCollapsed ? "space-y-3" : "space-y-2"}`}
+                >
+                  {navItems.map(({ key, label, Icon }) => {
+                    const isActive = activeTab === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setActiveTab(key)}
+                        title={sidebarCollapsed ? label : undefined}
+                        className={`w-full flex ${
+                          sidebarCollapsed ? "flex-col items-center gap-1 py-3" : "items-center gap-3 px-4 py-3"
+                        } rounded-2xl transition ${
+                          isActive
+                            ? "bg-white/95 text-black shadow-sm dark:bg-[#1f1f24] dark:text-stone-100"
+                            : "text-stone-700 dark:text-stone-200 hover:bg-white/70 dark:hover:bg-white/10"
+                        }`}
+                        style={
+                          isActive
+                            ? {
+                                boxShadow: `0 12px 35px -20px ${accentColorWithOpacity}`,
+                              }
+                            : undefined
+                        }
+                      >
+                        <Icon
+                          className={`h-5 w-5 ${isActive ? "text-emerald-600 dark:text-emerald-400" : "opacity-80"}`}
+                        />
+                        {!sidebarCollapsed && <span className="font-medium">{label}</span>}
+                        {key === "requests" && uniqueRequestedPlantsCount > 0 && (
+                          <span
+                            className={`${
+                              sidebarCollapsed ? "text-[10px]" : "ml-auto text-xs"
+                            } font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100 px-2 py-0.5`}
+                          >
+                            {uniqueRequestedPlantsCount}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
+            </aside>
 
           {/* Main Content Area */}
           <main className="flex-1 w-full">
@@ -5196,7 +5234,7 @@ export const AdminPage: React.FC = () => {
                                   </Button>
                                 </div>
                                 <div className="grid gap-4 md:grid-cols-3">
-                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1c1c1f]/80 p-4 flex flex-col">
+                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
                                     <div className="flex items-start justify-between gap-3">
                                       <div>
                                         <div className="text-sm font-semibold">
@@ -5272,36 +5310,15 @@ export const AdminPage: React.FC = () => {
                                         </div>
                                       )}
                                     </div>
-                                    <div className="mt-4 space-y-1 text-xs">
-                                      {STATUS_DONUT_SEGMENTS.map((status) => (
-                                        <div
-                                          key={status}
-                                          className="flex items-center justify-between"
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <span
-                                              className="inline-block h-2.5 w-2.5 rounded-full"
-                                              style={{
-                                                backgroundColor: PLANT_STATUS_COLORS[status],
-                                              }}
-                                            />
-                                            <span>{PLANT_STATUS_LABELS[status]}</span>
-                                          </div>
-                                          <span className="font-medium">
-                                            {plantStatusCounts[status] ?? 0}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
                                   </div>
-                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1c1c1f]/80 p-4 flex flex-col">
+                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/90 dark:bg-[#131318] p-4 flex flex-col">
                                     <div className="text-sm font-semibold">
                                       Promotion cadence
                                     </div>
                                     <div className="text-xs opacity-60 mb-4">
                                       Number of plants promoted per month.
                                     </div>
-                                    <div className="flex-1">
+                                    <div className="flex-1 min-h-[260px]">
                                       {plantTableLoading ? (
                                         <div className="flex h-full items-center justify-center text-sm opacity-60">
                                           Loading chart...
@@ -5318,7 +5335,7 @@ export const AdminPage: React.FC = () => {
                                             </div>
                                           }
                                         >
-                                          <ResponsiveContainer width="100%" height={220}>
+                                          <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={promotionMonthData}>
                                               <CartesianGrid
                                                 strokeDasharray="3 3"
@@ -5349,7 +5366,7 @@ export const AdminPage: React.FC = () => {
                                       )}
                                     </div>
                                   </div>
-                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1c1c1f]/80 p-4 flex flex-col">
+                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
                                     <div className="text-sm font-semibold">
                                       Requests vs approved
                                     </div>
