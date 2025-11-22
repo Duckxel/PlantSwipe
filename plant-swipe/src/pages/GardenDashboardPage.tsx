@@ -63,6 +63,7 @@ import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/lib/i18nRouting";
 import { mergePlantWithTranslation } from "@/lib/plantTranslationLoader";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
+import { getPrimaryPhotoUrl } from "@/lib/photos";
 
 type TabKey = "overview" | "plants" | "routine" | "settings";
 
@@ -2406,16 +2407,19 @@ export const GardenDashboardPage: React.FC = () => {
                           </div>
                           <div className="grid grid-cols-3 items-stretch gap-0">
                             <div className="col-span-1 relative h-full min-h-[148px] rounded-l-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
-                              {gp.plant?.image ? (
-                                <img
-                                  src={gp.plant.image}
-                                  alt={gp.nickname || gp.plant?.name || "Plant"}
-                                  decoding="async"
-                                  loading="lazy"
-                                  className="absolute inset-0 h-full w-full object-cover object-center select-none"
-                                  draggable={false}
-                                />
-                              ) : null}
+                              {(() => {
+                                const primaryImageUrl = gp.plant?.photos ? getPrimaryPhotoUrl(gp.plant.photos) : null;
+                                return primaryImageUrl ? (
+                                  <img
+                                    src={primaryImageUrl}
+                                    alt={gp.nickname || gp.plant?.name || "Plant"}
+                                    decoding="async"
+                                    loading="lazy"
+                                    className="absolute inset-0 h-full w-full object-cover object-center select-none"
+                                    draggable={false}
+                                  />
+                                ) : null;
+                              })()}
                             </div>
                             <div className="col-span-2 p-3">
                               <div className="font-medium">
