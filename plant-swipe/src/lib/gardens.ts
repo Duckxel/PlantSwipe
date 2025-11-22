@@ -374,7 +374,7 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
     const { data: plantRows } = await supabase
       .from('plants')
-      .select('*')
+      .select('*, plant_images (id,link,use)')
       .in('id', plantIds)
   
   // Always load translations for the specified language (including English)
@@ -397,7 +397,21 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
     const translation = translationMap.get(p.id) || null
-    const mergedPlant = mergePlantWithTranslation(p, translation)
+    // Convert plant_images to photos format expected by mergePlantWithTranslation
+    const images = Array.isArray(p.plant_images) ? p.plant_images : []
+    const photos = images.map((img: any) => ({
+      url: img.link || '',
+      isPrimary: img.use === 'primary',
+      isVertical: false
+    }))
+    // Find primary image or use first image as fallback
+    const primaryImageUrl = images.find((img: any) => img.use === 'primary')?.link 
+      || images.find((img: any) => img.use === 'discovery')?.link 
+      || images[0]?.link 
+      || p.image_url 
+      || p.image
+    const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl }
+    const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation)
     idToPlant[String(p.id)] = mergedPlant
   }
   return rows.map(r => ({
