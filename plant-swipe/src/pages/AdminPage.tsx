@@ -5382,7 +5382,7 @@ export const AdminPage: React.FC = () => {
                                           : requestsVsApproved.approved === 0 &&
                                               requestsVsApproved.requests > 0
                                             ? "∞"
-                                            : "0%`}
+                                            : "0%"}
                                       </div>
                                     </div>
                                     <div className="mt-3 flex-1">
