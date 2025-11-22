@@ -1451,6 +1451,13 @@ export const AdminPage: React.FC = () => {
     },
     [],
   );
+  const handleOpenPlantEditor = React.useCallback(
+    (plantId: string) => {
+      if (!plantId) return;
+      navigate(`/create/${plantId}`);
+    },
+    [navigate],
+  );
 
   const loadPlantDashboard = React.useCallback(async () => {
     setPlantDashboardError(null);
@@ -5437,7 +5444,16 @@ export const AdminPage: React.FC = () => {
                                       {filteredPlantRows.map((plant) => (
                                         <div
                                           key={plant.id}
-                                          className="grid grid-cols-[minmax(0,1fr)_120px] gap-4 px-4 py-3 items-center"
+                                          role="button"
+                                          tabIndex={0}
+                                          onClick={() => handleOpenPlantEditor(plant.id)}
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Enter" || event.key === " ") {
+                                              event.preventDefault();
+                                              handleOpenPlantEditor(plant.id);
+                                            }
+                                          }}
+                                          className="grid grid-cols-[minmax(0,1fr)_120px] gap-4 px-4 py-3 items-center cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-[#1f1f24]"
                                         >
                                           <div className="flex items-center gap-3 min-w-0">
                                             <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl bg-neutral-100 dark:bg-[#2d2d30] text-sm font-semibold text-neutral-500 flex items-center justify-center">
