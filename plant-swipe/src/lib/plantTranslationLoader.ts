@@ -341,6 +341,9 @@ export function mergePlantWithTranslation(
 export async function loadPlantsWithTranslations(language: SupportedLanguage): Promise<Plant[]> {
     try {
       const TOP_LIKED_LIMIT = 5
+      
+      // Try the full query with all relationships first
+      // If this fails, we'll fall back to simpler queries
       const [plantsResponse, topLikedResponse] = await Promise.all([
         supabase
           .from('plants')
@@ -351,7 +354,11 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     const { data: plants, error } = plantsResponse
     const { data: topLiked, error: topLikedError } = topLikedResponse
 
-    if (error) throw error
+    if (error) {
+      console.error('Error loading plants with full query:', error)
+      // Don't throw immediately - try fallback queries below
+      throw error
+    }
     if (!plants || plants.length === 0) return []
 
     if (topLikedError) {
@@ -567,12 +574,43 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     })
   } catch (error) {
     console.error('Failed to load plants with translations:', error)
+    
+    // Try a simpler query without joins first
     try {
-      const { data: fallbackPlants } = await supabase
+      const { data: fallbackPlants, error: fallbackError } = await supabase
         .from('plants')
         .select('id,name,scientific_name,plant_type,overview,season,plant_images (link,use), plant_colors (colors (name,hex_code)), plant_sources (name,url)')
         .order('name', { ascending: true })
-      if (!fallbackPlants) return []
+      
+      if (fallbackError) {
+        console.error('Fallback query error:', fallbackError)
+        // Try even simpler query with just basic fields
+        const { data: minimalPlants, error: minimalError } = await supabase
+          .from('plants')
+          .select('id,name,scientific_name')
+          .order('name', { ascending: true })
+        
+        if (minimalError) {
+          console.error('Minimal query also failed:', minimalError)
+          return []
+        }
+        
+        if (!minimalPlants || minimalPlants.length === 0) return []
+        
+        return minimalPlants.map((row: any) => ({
+          id: String(row.id),
+          name: row.name || '',
+          identity: { scientificName: row.scientific_name || undefined },
+          description: '',
+          images: [],
+          image: '',
+          colors: [],
+          seasons: [],
+        } as Plant))
+      }
+      
+      if (!fallbackPlants || fallbackPlants.length === 0) return []
+      
       return fallbackPlants.map((row: any) => {
         const images: PlantImage[] = ((row.plant_images as any[]) || []).map((img) => ({ link: img?.link, use: img?.use }))
         const primaryImage = images.find((i) => i.use === 'primary')?.link || images.find((i) => i.use === 'discovery')?.link || images[0]?.link
