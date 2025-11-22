@@ -31,6 +31,7 @@ import {
   ZoomIn,
   ZoomOut,
   RefreshCw,
+  Utensils,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { TooltipProps } from 'recharts'
@@ -500,7 +501,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const transplantDescriptor = formatBooleanDescriptor(growth.transplanting, 'Transplant recommended', 'No transplant needed')
       const fragranceDescriptor = formatBooleanDescriptor(identity.scent, 'Fragrant', 'Neutral scent')
       const spikedDescriptor = formatBooleanDescriptor(identity.spiked, 'Has thorns', 'Smooth stems')
-      const infusionRecipes = formatTextValue(usage.recipesIdeas?.slice(0, 3).join(' • '))
+      const recipesIdeasList = compactStrings(usage.recipesIdeas)
       const habitatLabel = habitats.length ? habitats.join(' • ') : null
       const pollenizerLabel = pollenizerList.length ? pollenizerList.join(' • ') : null
       const nutrientLabel = nutritionNeeds.length ? nutritionNeeds.join(' • ') : null
@@ -606,7 +607,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: 'Infusion Mix', value: infusionMixSummary, variant: 'note' },
         { label: 'Aromatherapy', value: aromaDescriptor },
         { label: 'Spice Mixes', value: spiceMixesLabel },
-        { label: 'Recipes', value: infusionRecipes },
       ])
       const ecologyItems = filterInfoItems([
         { label: 'Habitat', value: habitatLabel || 'Garden adaptable', icon: <MapPin className="h-3.5 w-3.5" /> },
@@ -834,6 +834,38 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                     Temperate
                   </Badge>
                 )}
+              </div>
+            </div>
+          </motion.section>
+        )}
+
+      {/* Recipes Ideas Section - Prominent display */}
+        {recipesIdeasList.length > 0 && (
+          <motion.section
+            {...SECTION_ANIMATION}
+            transition={{ duration: 0.4, delay: 0.12 }}
+            className="rounded-2xl sm:rounded-3xl border-2 border-emerald-400/50 bg-gradient-to-br from-emerald-50/90 via-orange-50/60 to-amber-50/80 p-5 sm:p-6 dark:border-emerald-500/60 dark:from-emerald-500/15 dark:via-orange-500/10 dark:to-amber-500/10 shadow-lg"
+          >
+            <div className="space-y-4 sm:space-y-5">
+              <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-300">
+                <div className="rounded-xl bg-emerald-500/20 p-2 dark:bg-emerald-500/30">
+                  <Utensils className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100">Recipe Ideas</h3>
+                  <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">Culinary inspiration for this plant</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2.5 sm:gap-3">
+                {recipesIdeasList.map((recipe, idx) => (
+                  <Badge
+                    key={`recipe-${idx}`}
+                    className="rounded-xl sm:rounded-2xl border-2 border-emerald-300/70 bg-white px-4 py-2.5 text-sm sm:text-base font-semibold text-emerald-800 shadow-md transition-all hover:scale-105 hover:shadow-lg dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-100 hover:border-emerald-400 dark:hover:border-emerald-400"
+                  >
+                    <Utensils className="mr-2 h-4 w-4 inline-block" />
+                    {recipe}
+                  </Badge>
+                ))}
               </div>
             </div>
           </motion.section>
