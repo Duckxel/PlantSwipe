@@ -409,8 +409,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   ].filter(Boolean) as string[]
     const palette = plant.identity?.colors?.length ? plant.identity.colors : []
     const showPalette = palette.length > 0
-    const dimensionColClass = showPalette ? 'col-span-1' : 'col-span-2'
-    const timelineColClass = showPalette ? 'col-span-2 lg:col-span-1' : 'col-span-2 lg:col-span-2'
+    const dimensionColClass = showPalette ? 'col-span-1 sm:col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
+    const paletteColClass = showPalette ? 'col-span-1 sm:col-span-1 lg:col-span-1' : ''
+    const timelineColClass = showPalette ? 'col-span-1 sm:col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return 'Flexible'
       return schedules
@@ -678,12 +679,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         </div>
       
         {/* Dynamic Grid Layout */}
-        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-stretch">
+        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)] items-stretch">
           {(height !== null || wingspan !== null || spacing !== null) && (
             <motion.section
               {...SECTION_ANIMATION}
               transition={{ duration: 0.4, delay: 0.02 }}
-              className={`${dimensionColClass} lg:col-span-1 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent`}
+              className={`${dimensionColClass} rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent`}
             >
               <div className="mb-3 space-y-2">
                 <div>
@@ -724,7 +725,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             <motion.section
               {...SECTION_ANIMATION}
               transition={{ duration: 0.4, delay: 0.08 }}
-              className="col-span-1 lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4"
+              className={`${paletteColClass} justify-self-start w-full sm:w-auto relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4 max-w-[260px] lg:max-w-[240px]`}
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
               <div className="relative space-y-2 sm:space-y-3">
