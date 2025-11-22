@@ -650,14 +650,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: 'Pests', value: pestLabel },
         { label: 'Diseases', value: diseaseLabel },
       ])
-      const recordItems = filterInfoItems([
-        { label: 'Admin Commentary', value: adminCommentary, variant: 'note' },
-        { label: 'Created On', value: createdTimestamp },
-        { label: 'Created By', value: createdByLabel || 'Not recorded' },
-        { label: 'Last Updated On', value: updatedTimestamp },
-        { label: 'Last Updated By', value: updatedByLabel || 'Not recorded' },
-        { label: 'Sources', value: formatSourcesList(misc.sources) },
-      ])
+      const recordItems = filterInfoItems([{ label: 'Admin Commentary', value: adminCommentary, variant: 'note' }])
+      const sourcesValue = formatSourcesList(misc.sources)
       const infoSections = [
         { title: 'Care Highlights', icon: <Droplets className="h-4 w-4" />, items: careHighlights },
         { title: 'Care Details', icon: <Thermometer className="h-4 w-4" />, items: careDetails },
@@ -839,23 +833,48 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         )}
 
       {/* Info Cards Section - Full width for better mobile experience */}
-      <div className="space-y-3 sm:space-y-4">
-        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
-          {infoSections.map((section) => (
-            <InfoCard key={section.title} title={section.title} icon={section.icon}>
-              {section.items.map((item) => (
-              <InfoItem
-                key={`${section.title}-${item.label}`}
-                label={item.label}
-                value={item.value || '—'}
-                icon={item.icon}
-                variant={item.variant}
-              />
-              ))}
-            </InfoCard>
-          ))}
+        <div className="space-y-3 sm:space-y-4">
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+            {infoSections.map((section) => (
+              <InfoCard key={section.title} title={section.title} icon={section.icon}>
+                {section.items.map((item) => (
+                  <InfoItem
+                    key={`${section.title}-${item.label}`}
+                    label={item.label}
+                    value={item.value || '—'}
+                    icon={item.icon}
+                    variant={item.variant}
+                  />
+                ))}
+              </InfoCard>
+            ))}
+          </div>
+          {(createdTimestamp || updatedTimestamp || createdByLabel || updatedByLabel || sourcesValue) && (
+            <div className="rounded-2xl border border-stone-200/70 bg-white/90 p-4 sm:p-5 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]">
+              <div className="flex flex-col gap-3 text-xs sm:text-sm text-stone-600 dark:text-stone-300">
+                <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
+                  <span className="font-semibold text-stone-800 dark:text-stone-100">Created</span>
+                  <span className="text-stone-700 dark:text-stone-200">{createdTimestamp || 'Not recorded'}</span>
+                  <span className="text-stone-400">•</span>
+                  <span className="text-stone-700 dark:text-stone-200">By {createdByLabel || 'Unknown'}</span>
+                </div>
+                <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
+                  <span className="font-semibold text-stone-800 dark:text-stone-100">Updated</span>
+                  <span className="text-stone-700 dark:text-stone-200">{updatedTimestamp || 'Not recorded'}</span>
+                  <span className="text-stone-400">•</span>
+                  <span className="text-stone-700 dark:text-stone-200">By {updatedByLabel || 'Unknown'}</span>
+                </div>
+                {sourcesValue && (
+                  <div className="flex flex-wrap gap-2 sm:gap-3 items-center text-stone-700 dark:text-stone-200">
+                    <span className="font-semibold text-stone-800 dark:text-stone-100">Sources</span>
+                    <span className="text-stone-400">•</span>
+                    <span className="flex-1 min-w-0">{sourcesValue}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
     </motion.section>
   )
 }
