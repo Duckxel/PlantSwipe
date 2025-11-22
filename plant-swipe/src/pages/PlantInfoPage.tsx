@@ -835,23 +835,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </motion.section>
         )}
 
-        {/* Image Gallery */}
-        {plant.images && plant.images.length > 0 && (
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.15 }}
-            className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
-          >
-            <div className="space-y-3 sm:space-y-4">
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-                <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Image Gallery</span>
-              </div>
-              <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
-            </div>
-          </motion.section>
-        )}
-
       {/* Info Cards Section - Full width for better mobile experience */}
         <div className="space-y-3 sm:space-y-4">
           <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
@@ -869,6 +852,24 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </InfoCard>
             ))}
           </div>
+          
+          {/* Image Gallery */}
+          {plant.images && plant.images.length > 0 && (
+            <motion.section
+              {...SECTION_ANIMATION}
+              transition={{ duration: 0.4, delay: 0.15 }}
+              className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
+            >
+              <div className="space-y-3 sm:space-y-4">
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+                  <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Image Gallery</span>
+                </div>
+                <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
+              </div>
+            </motion.section>
+          )}
+          
           {(createdTimestamp || updatedTimestamp || createdByLabel || updatedByLabel || sourcesValue) && (
             <div className="rounded-2xl border border-stone-200/70 bg-white/90 p-4 sm:p-5 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]">
               <div className="flex flex-col gap-3 text-xs sm:text-sm text-stone-600 dark:text-stone-300">
