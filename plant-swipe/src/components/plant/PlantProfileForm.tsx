@@ -43,6 +43,7 @@ type FieldType =
   | "companions"
   | "sources"
   | "readonly"
+  | "temperature"
 
 type FieldOption = string | { label: string; value: string | number }
 
@@ -242,7 +243,7 @@ const WateringScheduleEditor: React.FC<{
       <div className="grid gap-3">
         {schedules.map((schedule, idx) => (
           <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <Input
                 placeholder="Season (optional)"
                 value={schedule.season || ""}
@@ -278,7 +279,7 @@ const WateringScheduleEditor: React.FC<{
           </div>
         ))}
         <div className="grid gap-2 rounded border border-dashed p-3">
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <Input
               placeholder="Season (optional)"
               value={draft.season}
@@ -445,9 +446,7 @@ const identityFields: FieldConfig[] = [
 const careFields: FieldConfig[] = [
   { key: "plantCare.origin", label: "Origin", description: "Where the plant originates from", type: "tags" },
   { key: "plantCare.habitat", label: "Habitat", description: "Habitat types", type: "multiselect", options: ["Aquatic","Semi-Aquatic","Wetland","Tropical","Temperate","Arid","Mediterranean","Mountain","Grassland","Forest","Coastal","Urban"] },
-  { key: "plantCare.temperatureMax", label: "Temperature Max", description: "Maximum temperature (°C)", type: "number" },
-  { key: "plantCare.temperatureMin", label: "Temperature Min", description: "Minimum temperature (°C)", type: "number" },
-  { key: "plantCare.temperatureIdeal", label: "Temperature Ideal", description: "Ideal temperature (°C)", type: "number" },
+  { key: "plantCare.temperature", label: "Temperature", description: "Temperature range (°C)", type: "temperature" },
   { key: "plantCare.levelSun", label: "Level Sun", description: "Sun exposure level", type: "select", options: ["Low Light","Shade","Partial Sun","Full Sun"] },
   { key: "plantCare.hygrometry", label: "Hygrometry", description: "Ideal humidity percentage", type: "number" },
   { key: "plantCare.watering.schedules", label: "Watering Schedule", description: "Seasonal watering (season + quantity + period)", type: "watering" },
@@ -703,6 +702,45 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
           <div className="grid gap-2">
             <Label>{field.label}</Label>
             <Input value={(value as string) || ""} readOnly />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "temperature":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid gap-1">
+                <Label htmlFor={`${id}-min`} className="text-xs text-muted-foreground">Min (°C)</Label>
+                <Input
+                  id={`${id}-min`}
+                  type="number"
+                  value={getValue(plant, "plantCare.temperatureMin") ?? ""}
+                  onChange={(e) => onChange("plantCare.temperatureMin", e.target.value === "" ? undefined : Number(e.target.value))}
+                  placeholder="Min"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor={`${id}-ideal`} className="text-xs text-muted-foreground">Ideal (°C)</Label>
+                <Input
+                  id={`${id}-ideal`}
+                  type="number"
+                  value={getValue(plant, "plantCare.temperatureIdeal") ?? ""}
+                  onChange={(e) => onChange("plantCare.temperatureIdeal", e.target.value === "" ? undefined : Number(e.target.value))}
+                  placeholder="Ideal"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor={`${id}-max`} className="text-xs text-muted-foreground">Max (°C)</Label>
+                <Input
+                  id={`${id}-max`}
+                  type="number"
+                  value={getValue(plant, "plantCare.temperatureMax") ?? ""}
+                  onChange={(e) => onChange("plantCare.temperatureMax", e.target.value === "" ? undefined : Number(e.target.value))}
+                  placeholder="Max"
+                />
+              </div>
+            </div>
             <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
         )

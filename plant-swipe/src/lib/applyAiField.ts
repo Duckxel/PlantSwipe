@@ -151,6 +151,13 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
             : String(payload.foliagePersistance ?? ''),
         )
       }
+      // Explicitly handle multicolor and bicolor booleans
+      if ('multicolor' in payload) {
+        (payload as any).multicolor = typeof payload.multicolor === 'boolean' ? payload.multicolor : Boolean(payload.multicolor)
+      }
+      if ('bicolor' in payload) {
+        (payload as any).bicolor = typeof payload.bicolor === 'boolean' ? payload.bicolor : Boolean(payload.bicolor)
+      }
       return { ...next, identity: { ...(next.identity || {}), ...payload } }
     }
     case 'plantCare': {
@@ -186,6 +193,30 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       const fertilizerResult = normalizeEnumArrayInput(fertilizerEnum as EnumTools, (payload as any).fertilizer)
       if (fertilizerResult.shouldUpdate) {
         (payload as any).fertilizer = fertilizerResult.value
+      }
+      // Explicitly handle temperature fields - ensure they're numbers or undefined
+      if ('temperatureMax' in payload) {
+        const val = payload.temperatureMax
+        (payload as any).temperatureMax = typeof val === 'number' && Number.isFinite(val) ? val : (typeof val === 'string' && val.trim() ? Number(val) : undefined)
+      }
+      if ('temperatureMin' in payload) {
+        const val = payload.temperatureMin
+        (payload as any).temperatureMin = typeof val === 'number' && Number.isFinite(val) ? val : (typeof val === 'string' && val.trim() ? Number(val) : undefined)
+      }
+      if ('temperatureIdeal' in payload) {
+        const val = payload.temperatureIdeal
+        (payload as any).temperatureIdeal = typeof val === 'number' && Number.isFinite(val) ? val : (typeof val === 'string' && val.trim() ? Number(val) : undefined)
+      }
+      // Explicitly handle origin array
+      if ('origin' in payload) {
+        const originVal = payload.origin
+        if (Array.isArray(originVal)) {
+          (payload as any).origin = originVal.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map(item => item.trim())
+        } else if (typeof originVal === 'string' && originVal.trim()) {
+          (payload as any).origin = [originVal.trim()]
+        } else {
+          (payload as any).origin = []
+        }
       }
       return { ...next, plantCare: { ...(next.plantCare || {}), ...payload } }
     }
