@@ -67,7 +67,7 @@ const normalizeEnumArrayInput = (enumTool: EnumTools, value: unknown): EnumArray
 export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown): Plant {
   const next: Plant = { ...prev }
 
-  const shouldIgnore = ['colors', 'identity.colors', 'miscellaneous.source', 'source', 'sources'].some(
+  const shouldIgnore = ['colors', 'identity.colors', 'miscellaneous.source', 'source', 'sources', 'images'].some(
     (blocked) => fieldKey.toLowerCase() === blocked.toLowerCase(),
   )
   if (shouldIgnore) return next
@@ -96,7 +96,8 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       return { ...next, fruitType: result.value as Plant['fruitType'] }
     }
     case 'images':
-      return { ...next, images: Array.isArray(data) ? (data as any) : next.images }
+      // Always preserve existing images - AI should never overwrite user-added images
+      return next
     case 'colors':
       return { ...next, colors: Array.isArray(data) ? (data as any) : next.colors }
     case 'seasons': {

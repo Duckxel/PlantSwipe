@@ -916,9 +916,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
     let aiSucceeded = false
     let finalPlant: Plant | null = null
+    // Capture current images at the start to preserve them throughout AI fill
+    const currentImages = plant.images || []
     const plantNameForAi = trimmedName
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
+      // Always preserve images from the current state
+      images: candidate.images && candidate.images.length > 0 ? candidate.images : currentImages,
       meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
     })
     const needsMonths = (p: Plant) =>
@@ -944,9 +948,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             const applied = applyAiFieldToPlant(prev, fieldKey, fieldData)
             const normalized = normalizePlantWatering(applied)
             const withStatus = applyWithStatus(normalized)
-            finalPlant = withStatus
+            // Ensure images are always preserved from the most recent state
+            const withImages = {
+              ...withStatus,
+              images: prev.images && prev.images.length > 0 ? prev.images : (withStatus.images || currentImages),
+            }
+            finalPlant = withImages
             markFieldComplete(fieldKey)
-            return withStatus
+            return withImages
           })
           return true
         } catch (err: any) {
@@ -989,8 +998,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 const applied = applyAiFieldToPlant(prev, field, data)
                 const normalized = normalizePlantWatering(applied)
                 const withStatus = applyWithStatus(normalized)
-                finalPlant = withStatus
-                return withStatus
+                // Ensure images are always preserved from the most recent state
+                const withImages = {
+                  ...withStatus,
+                  images: prev.images && prev.images.length > 0 ? prev.images : (withStatus.images || currentImages),
+                }
+                finalPlant = withImages
+                return withImages
               })
               markFieldComplete(field)
             },
@@ -1006,6 +1020,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (aiData && typeof aiData === 'object') {
         setPlant((prev) => {
           let updated = { ...prev }
+          // Preserve images before processing AI data
+          const preservedImages = prev.images && prev.images.length > 0 ? prev.images : currentImages
           for (const [fieldKey, data] of Object.entries(aiData as Record<string, unknown>)) {
             if (fieldKey.toLowerCase().includes('color')) captureColorSuggestions(data)
             if (fieldKey === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
@@ -1015,8 +1031,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const withId = { ...updated, id: updated.id || generateUUIDv4() }
           const normalized = normalizePlantWatering(withId)
           const withStatus = applyWithStatus(normalized)
-          finalPlant = withStatus
-          return withStatus
+          // Always restore preserved images
+          const withImages = {
+            ...withStatus,
+            images: preservedImages,
+          }
+          finalPlant = withImages
+          return withImages
         })
       }
 
@@ -1030,6 +1051,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
       setPlant((prev) => {
         const target = normalizePlantWatering(finalPlant || prev)
+        // Preserve images from current state
+        const preservedImages = prev.images && prev.images.length > 0 ? prev.images : currentImages
         const ensuredWater = (target.plantCare?.watering?.schedules || []).length
           ? normalizeSchedules(target.plantCare?.watering?.schedules)
           : [{ season: undefined, quantity: 1, timePeriod: 'week' as const }]
@@ -1040,6 +1063,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         }
         const next = {
           ...target,
+          images: preservedImages,
           plantCare: {
             ...(target.plantCare || {}),
             origin: (target.plantCare?.origin || []).length ? target.plantCare?.origin : ['Unknown'],
