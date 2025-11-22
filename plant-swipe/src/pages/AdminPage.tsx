@@ -1274,6 +1274,9 @@ export const AdminPage: React.FC = () => {
   const [visiblePlantStatuses, setVisiblePlantStatuses] = React.useState<
     NormalizedPlantStatus[]
   >(DEFAULT_VISIBLE_PLANT_STATUSES);
+  const [selectedPromotionMonth, setSelectedPromotionMonth] = React.useState<
+    PromotionMonthSlug | "none" | "all"
+  >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
 
@@ -1653,6 +1656,13 @@ export const AdminPage: React.FC = () => {
         const matchesStatus =
           statuses.size === 0 ? false : statuses.has(plant.status);
         if (!matchesStatus) return false;
+        const matchesPromotion =
+          selectedPromotionMonth === "all"
+            ? true
+            : selectedPromotionMonth === "none"
+              ? !plant.promotionMonth
+              : plant.promotionMonth === selectedPromotionMonth;
+        if (!matchesPromotion) return false;
         const matchesSearch = term
           ? plant.name.toLowerCase().includes(term)
           : true;
@@ -1664,7 +1674,7 @@ export const AdminPage: React.FC = () => {
         if (statusDiff !== 0) return statusDiff;
         return a.name.localeCompare(b.name);
       });
-  }, [plantDashboardRows, visiblePlantStatuses, plantSearchQuery]);
+  }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery]);
 
   const plantViewIsPlants = requestViewMode === "plants";
   const plantTableLoading =
@@ -5471,26 +5481,45 @@ export const AdminPage: React.FC = () => {
                             </Card>
                             <Card className="rounded-2xl">
                               <CardContent className="p-4 space-y-4">
-                                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                    <div>
-                                      <div className="text-sm font-medium">
-                                        Plant inventory
+                                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                      <div>
+                                        <div className="text-sm font-medium">
+                                          Plant inventory
+                                        </div>
+                                        <div className="text-xs opacity-60">
+                                          Toggle statuses, filter by promotion month, or search.
+                                        </div>
                                       </div>
-                                      <div className="text-xs opacity-60">
-                                        Toggle statuses or search to focus the list.
+                                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 w-full lg:w-auto">
+                                        <div className="relative flex-1">
+                                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+                                          <Input
+                                            value={plantSearchQuery}
+                                            onChange={(e) => setPlantSearchQuery(e.target.value)}
+                                            placeholder="Search by plant name..."
+                                            className="pl-10 rounded-xl"
+                                          />
+                                        </div>
+                                        <div className="w-full md:w-52">
+                                          <select
+                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                            value={selectedPromotionMonth}
+                                            onChange={(e) =>
+                                              setSelectedPromotionMonth(e.target.value as PromotionMonthSlug | "none" | "all")
+                                            }
+                                          >
+                                            <option value="all">All promotion months</option>
+                                            <option value="none">None assigned</option>
+                                            {PROMOTION_MONTH_SLUGS.map((slug) => (
+                                              <option key={slug} value={slug}>
+                                                {PROMOTION_MONTH_LABELS[slug]}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
                                       </div>
                                     </div>
-                                    <div className="w-full md:w-64 relative">
-                                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
-                                      <Input
-                                        value={plantSearchQuery}
-                                        onChange={(e) => setPlantSearchQuery(e.target.value)}
-                                        placeholder="Search by plant name..."
-                                        className="pl-10 rounded-xl"
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-2">
                                     {PLANT_STATUS_FILTER_OPTIONS.map((option) => {
                                       const selected = visiblePlantStatusesSet.has(option.value);
                                       return (
