@@ -409,9 +409,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   ].filter(Boolean) as string[]
     const palette = plant.identity?.colors?.length ? plant.identity.colors : []
     const showPalette = palette.length > 0
-    const dimensionColClass = showPalette ? 'col-span-1 sm:col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
-    const paletteColClass = showPalette ? 'col-span-1 sm:col-span-1 lg:col-span-1' : ''
-    const timelineColClass = showPalette ? 'col-span-1 sm:col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
+    const dimensionColClass = showPalette ? 'col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
+    const paletteColClass = showPalette ? 'col-span-1' : ''
+    const timelineColClass = showPalette ? 'col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return 'Flexible'
       return schedules
@@ -721,7 +721,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </motion.section>
           )}
 
-          {palette.length > 0 && (
+            {showPalette && (
             <motion.section
               {...SECTION_ANIMATION}
               transition={{ duration: 0.4, delay: 0.08 }}
