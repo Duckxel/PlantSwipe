@@ -738,7 +738,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
                   <span className="text-[10px] sm:text-xs uppercase tracking-widest">Color Moodboard</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
+                <div className="grid grid-cols-1 gap-1.5 sm:gap-2">
                   {palette.map((color, idx) => {
                     const colorLabel = color.name || `Color ${idx + 1}`
                     return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
