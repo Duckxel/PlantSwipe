@@ -731,6 +731,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         const normalizedPromotionMonth = monthNumberToSlug(plantToSave.identity?.promotionMonth)
         let savedId = plantId
         let payloadUpdatedTime: string | null = null
+        const normalizedStatus = (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase()
 
         if (isEnglish) {
           const payload = {
@@ -805,7 +806,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             tags: plantToSave.miscellaneous?.tags || [],
             source_name: primarySource?.name || null,
             source_url: primarySource?.url || null,
-            status: (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase(),
+            status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
             created_by: createdByValue,
             created_time: createdTimeValue,
@@ -875,6 +876,20 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           if (translationError) {
             throw new Error(translationError.message)
           }
+            const metaUpdatePayload = {
+              status: normalizedStatus,
+              admin_commentary: plantToSave.meta?.adminCommentary || null,
+              updated_by: updatedByValue,
+              updated_time: new Date().toISOString(),
+            }
+            const { error: metaUpdateError } = await supabase
+              .from('plants')
+              .update(metaUpdatePayload)
+              .eq('id', savedId)
+            if (metaUpdateError) {
+              throw new Error(metaUpdateError.message)
+            }
+            payloadUpdatedTime = metaUpdatePayload.updated_time
         }
 
           if (languageRef.current === saveLanguage) {
@@ -887,8 +902,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 ...plantToSave.meta,
                 createdBy: createdByValue || undefined,
                 createdAt: createdTimeValue || undefined,
-                updatedBy: isEnglish ? (updatedByValue || plantToSave.meta?.updatedBy) : plantToSave.meta?.updatedBy,
-                updatedAt: isEnglish ? payloadUpdatedTime || new Date().toISOString() : plantToSave.meta?.updatedAt,
+                  updatedBy: payloadUpdatedTime
+                    ? (updatedByValue || plantToSave.meta?.updatedBy)
+                    : plantToSave.meta?.updatedBy,
+                  updatedAt: payloadUpdatedTime || plantToSave.meta?.updatedAt,
               },
             })
           }
