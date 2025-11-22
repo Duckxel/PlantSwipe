@@ -227,25 +227,94 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
     const list = images && images.length ? images : []
     let primaryUsed = false
     let discoveryUsed = false
+    
+    // First pass: normalize the use values, ensuring only one primary and one discovery
     const mapped = list.map((img, idx) => {
       let use = img.use || (idx === 0 ? 'primary' : 'other')
+      
+      // Handle primary: only allow the first one
       if (use === 'primary') {
-        if (primaryUsed) use = 'other'
-        primaryUsed = true
+        if (primaryUsed) {
+          use = 'other' // Convert subsequent primary images to other
+        } else {
+          primaryUsed = true
+        }
       }
+      
+      // Handle discovery: only allow the first one
       if (use === 'discovery') {
-        if (discoveryUsed) use = 'other'
-        discoveryUsed = true
+        if (discoveryUsed) {
+          use = 'other' // Convert subsequent discovery images to other
+        } else {
+          discoveryUsed = true
+        }
       }
+      
+      // Ensure other images stay as 'other'
+      if (use !== 'primary' && use !== 'discovery') {
+        use = 'other'
+      }
+      
       return { ...img, use }
     })
-    if (!primaryUsed && mapped.length) mapped[0] = { ...mapped[0], use: 'primary' }
+    
+    // If no primary was set and we have images, set the first one as primary
+    if (!primaryUsed && mapped.length > 0) {
+      mapped[0] = { ...mapped[0], use: 'primary' }
+      primaryUsed = true
+    }
+    
     return mapped
   })()
+  
+  // Delete all existing images for this plant
   await supabase.from('plant_images').delete().eq('plant_id', plantId)
+  
   if (!normalized?.length) return
-  const inserts = normalized.filter((img) => img.link).map((img) => ({ plant_id: plantId, link: img.link, use: img.use || 'other' }))
+  
+  // Filter out images without links and ensure use is always set
+  const inserts = normalized
+    .filter((img) => img.link && img.link.trim())
+    .map((img) => ({ 
+      plant_id: plantId, 
+      link: img.link!.trim(), 
+      use: (img.use === 'primary' || img.use === 'discovery') ? img.use : 'other' 
+    }))
+  
   if (inserts.length === 0) return
+  
+  // Verify we only have one primary and one discovery before inserting
+  const primaryCount = inserts.filter(i => i.use === 'primary').length
+  const discoveryCount = inserts.filter(i => i.use === 'discovery').length
+  
+  if (primaryCount > 1) {
+    // Keep only the first primary, convert rest to other
+    let foundPrimary = false
+    for (let i = 0; i < inserts.length; i++) {
+      if (inserts[i].use === 'primary') {
+        if (foundPrimary) {
+          inserts[i].use = 'other'
+        } else {
+          foundPrimary = true
+        }
+      }
+    }
+  }
+  
+  if (discoveryCount > 1) {
+    // Keep only the first discovery, convert rest to other
+    let foundDiscovery = false
+    for (let i = 0; i < inserts.length; i++) {
+      if (inserts[i].use === 'discovery') {
+        if (foundDiscovery) {
+          inserts[i].use = 'other'
+        } else {
+          foundDiscovery = true
+        }
+      }
+    }
+  }
+  
   const { error } = await supabase.from('plant_images').insert(inserts)
   if (error) throw new Error(error.message)
 }
