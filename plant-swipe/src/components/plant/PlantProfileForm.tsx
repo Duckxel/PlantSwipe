@@ -992,11 +992,6 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
               )
             })}
           </div>
-          <div className="flex justify-end">
-            <Button type="button" variant="outline" onClick={addImage}>
-              Add image
-            </Button>
-          </div>
         </>
       )}
     </div>
