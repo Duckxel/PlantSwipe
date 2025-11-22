@@ -5194,6 +5194,21 @@ export const AdminPage: React.FC = () => {
                           className="rounded-2xl"
                         >
                           <a
+                            href="https://resend.com/emails"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="inline-block h-3 w-3 rounded-sm bg-purple-600 dark:bg-purple-500" />
+                            <span>Resend</span>
+                            <ExternalLink className="h-3 w-3 opacity-70" />
+                          </a>
+                        </Button>
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="rounded-2xl"
+                        >
+                          <a
                             href="https://supabase.com/dashboard/project/lxnkcguwewrskqnyzjwi"
                             target="_blank"
                             rel="noreferrer"
