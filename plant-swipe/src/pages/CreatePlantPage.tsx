@@ -574,18 +574,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const remaining = targetFields.filter((key) => !prioritized.includes(key))
     return [...prioritized, ...remaining]
   }, [basicFieldOrder, targetFields])
-  const mandatoryFieldOrder = aiFieldOrder
-  const categoryLabels = React.useMemo(() => ({
-    basics: t('plantAdmin.categories.basics', 'Basics'),
-    identity: t('plantAdmin.categories.identity', 'Identity'),
-    plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
-    growth: t('plantAdmin.categories.growth', 'Growth'),
-    usage: t('plantAdmin.categories.usage', 'Usage'),
-    ecology: t('plantAdmin.categories.ecology', 'Ecology'),
-    danger: t('plantAdmin.categories.danger', 'Danger'),
-    miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
-    meta: t('plantAdmin.categories.meta', 'Meta'),
-  }), [t])
+    const mandatoryFieldOrder = aiFieldOrder
+    const categoryLabels = React.useMemo(() => ({
+      basics: t('plantAdmin.categories.basics', 'Basics'),
+      identity: t('plantAdmin.categories.identity', 'Identity'),
+      plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
+      growth: t('plantAdmin.categories.growth', 'Growth'),
+      usage: t('plantAdmin.categories.usage', 'Usage'),
+      ecology: t('plantAdmin.categories.ecology', 'Ecology'),
+      danger: t('plantAdmin.categories.danger', 'Danger'),
+      miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
+      meta: t('plantAdmin.categories.meta', 'Meta'),
+    }), [t])
+
     React.useEffect(() => {
       languageRef.current = language
       i18n.changeLanguage(language)
@@ -608,7 +609,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           }
         } catch (e: any) {
           if (!ignore && languageRef.current === requestedLanguage) {
-            setError(e?.message || 'Failed to load plant')
+            setError(e?.message || t('plantAdmin.errors.loadPlant', 'Failed to load plant'))
           }
         } finally {
           if (!ignore && languageRef.current === requestedLanguage) {
@@ -618,8 +619,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
       fetchPlant()
       return () => { ignore = true }
-    }, [id, language])
-  const captureColorSuggestions = (data: unknown) => {
+    }, [id, language, t])
+
+    const captureColorSuggestions = (data: unknown) => {
     if (!data) return
     const parsed: PlantColor[] = []
     if (Array.isArray(data)) {
@@ -941,8 +943,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           }
         if (isEnglish && !existingLoaded) setExistingLoaded(true)
         onSaved?.(savedId)
-      } catch (e: any) {
-        setError(e?.message || 'Failed to save plant')
+        } catch (e: any) {
+          setError(e?.message || t('plantAdmin.errors.savePlant', 'Failed to save plant'))
       } finally {
         setSaving(false)
       }
@@ -1006,9 +1008,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           })
           return true
         } catch (err: any) {
-          lastError = err instanceof Error ? err : new Error(String(err || 'AI field fill failed'))
-          if (attempt >= 3) {
-            setError(lastError.message)
+            lastError = err instanceof Error ? err : new Error(String(err || 'AI field fill failed'))
+            if (attempt >= 3) {
+              setError(lastError?.message || t('plantAdmin.errors.aiFill', 'AI fill failed'))
           }
         }
       }
@@ -1125,8 +1127,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
       await ensureMandatoryFields()
       aiSucceeded = true
-    } catch (e: any) {
-      setError(e?.message || 'AI fill failed')
+      } catch (e: any) {
+        setError(e?.message || t('plantAdmin.errors.aiFill', 'AI fill failed'))
     } finally {
       setAiWorking(false)
       if (aiSucceeded) {
@@ -1248,8 +1250,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         meta: { ...(prev.meta || {}), status: IN_PROGRESS_STATUS },
       }))
       await savePlant()
-    } catch (e: any) {
-      setError(e?.message || 'Translation failed')
+      } catch (e: any) {
+        setError(e?.message || t('plantAdmin.errors.translation', 'Translation failed'))
     } finally {
       setTranslating(false)
     }
@@ -1291,10 +1293,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 </Button>
               </div>
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={onCancel} className="rounded-2xl">Cancel</Button>
+                  <Button variant="secondary" onClick={onCancel} className="rounded-2xl">{t('common.cancel', 'Cancel')}</Button>
                 <Button onClick={() => savePlant()} disabled={saving || aiWorking} className="rounded-2xl shadow-md">
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Plant
+                    {t('plantAdmin.savePlant', 'Save Plant')}
                 </Button>
               </div>
             </div>
