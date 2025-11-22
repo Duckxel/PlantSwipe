@@ -625,8 +625,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       setError(null)
       try {
         const plantId = existingPlantId || generateUUIDv4()
-        const createdByValue = existingLoaded ? plantToSave.meta?.createdBy || null : (plantToSave.meta?.createdBy || (profile as any)?.full_name || null)
-        const createdTimeValue = existingLoaded ? plantToSave.meta?.createdAt || null : (plantToSave.meta?.createdAt || new Date().toISOString())
+        // For new plants: set creator to current user's display name, preserve existing if already set
+        // For existing plants: preserve the original creator
+        const createdByValue = existingLoaded 
+          ? (plantToSave.meta?.createdBy || null)
+          : (plantToSave.meta?.createdBy || profile?.display_name || null)
+        const createdTimeValue = existingLoaded 
+          ? (plantToSave.meta?.createdAt || null)
+          : (plantToSave.meta?.createdAt || new Date().toISOString())
+        // Always set the updater to the current user when saving
+        const updatedByValue = profile?.display_name || plantToSave.meta?.updatedBy || null
         const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
@@ -732,7 +740,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             admin_commentary: plantToSave.meta?.adminCommentary || null,
             created_by: createdByValue,
             created_time: createdTimeValue,
-            updated_by: (profile as any)?.full_name || plantToSave.meta?.updatedBy || null,
+            updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
           }
           payloadUpdatedTime = payload.updated_time
@@ -810,7 +818,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 ...plantToSave.meta,
                 createdBy: createdByValue || undefined,
                 createdAt: createdTimeValue || undefined,
-                updatedBy: isEnglish ? ((profile as any)?.full_name || plantToSave.meta?.updatedBy) : plantToSave.meta?.updatedBy,
+                updatedBy: isEnglish ? (updatedByValue || plantToSave.meta?.updatedBy) : plantToSave.meta?.updatedBy,
                 updatedAt: isEnglish ? payloadUpdatedTime || new Date().toISOString() : plantToSave.meta?.updatedAt,
               },
             })
