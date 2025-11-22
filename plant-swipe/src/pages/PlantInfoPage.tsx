@@ -869,7 +869,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   <span className="text-[10px] sm:text-xs uppercase tracking-widest">Image Gallery</span>
                 </div>
-                <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
+                <div className="max-h-[400px]">
+                  <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
+                </div>
               </div>
             </motion.section>
           )}
@@ -1263,7 +1265,7 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
         )}
         <div
           ref={scrollContainerRef}
-          className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] max-h-[400px]"
           style={{
             justifyContent: needsScrolling ? 'flex-start' : 'center',
           }}
@@ -1271,17 +1273,18 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
           {validImages.map((img, idx) => (
             <div
               key={img.id || `img-${idx}`}
-              className="flex-shrink-0 snap-start"
-              style={{ minWidth: 'min(280px, 80vw)' }}
+              className="flex-shrink-0 snap-start h-full flex items-center"
+              style={{ minWidth: 'min(280px, 80vw)', maxHeight: '400px' }}
             >
-              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-[#2d2d30] cursor-pointer">
+              <div className="relative w-full h-full max-h-[400px] overflow-hidden rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-[#2d2d30] cursor-pointer">
                 <img
                   src={img.link}
                   alt={`${plantName} - Image ${idx + 1}`}
-                  className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                  className="h-full w-full object-contain transition-transform duration-300 hover:scale-105"
                   loading="lazy"
                   draggable={false}
                   onClick={() => openViewer(img)}
+                  style={{ maxHeight: '400px' }}
                 />
               </div>
             </div>
