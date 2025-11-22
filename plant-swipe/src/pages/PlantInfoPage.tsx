@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   ChevronLeft,
+  ChevronRight,
   Pencil,
   MapPin,
   Compass,
@@ -25,6 +26,7 @@ import {
   Wind,
   Palette,
   Info,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { TooltipProps } from 'recharts'
@@ -833,6 +835,23 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </motion.section>
         )}
 
+        {/* Image Gallery */}
+        {plant.images && plant.images.length > 0 && (
+          <motion.section
+            {...SECTION_ANIMATION}
+            transition={{ duration: 0.4, delay: 0.15 }}
+            className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
+          >
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+                <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Image Gallery</span>
+              </div>
+              <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
+            </div>
+          </motion.section>
+        )}
+
       {/* Info Cards Section - Full width for better mobile experience */}
         <div className="space-y-3 sm:space-y-4">
           <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
@@ -1095,6 +1114,104 @@ const formatTimestampDetailed = (value?: string | null) => {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }> = ({ images, plantName }) => {
+  const validImages = images.filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = React.useState(false)
+  const [canScrollRight, setCanScrollRight] = React.useState(false)
+  const [needsScrolling, setNeedsScrolling] = React.useState(true)
+
+  const checkScrollability = React.useCallback(() => {
+    if (!scrollContainerRef.current) return
+    const container = scrollContainerRef.current
+    const canScroll = container.scrollWidth > container.clientWidth
+    setNeedsScrolling(canScroll)
+    setCanScrollLeft(container.scrollLeft > 0)
+    setCanScrollRight(container.scrollLeft < container.scrollWidth - container.clientWidth - 1)
+  }, [])
+
+  React.useEffect(() => {
+    // Use a small delay to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      checkScrollability()
+    }, 100)
+    
+    const container = scrollContainerRef.current
+    if (container) {
+      container.addEventListener('scroll', checkScrollability)
+      window.addEventListener('resize', checkScrollability)
+      return () => {
+        clearTimeout(timeoutId)
+        container.removeEventListener('scroll', checkScrollability)
+        window.removeEventListener('resize', checkScrollability)
+      }
+    }
+    return () => clearTimeout(timeoutId)
+  }, [checkScrollability, validImages.length])
+
+  const scroll = React.useCallback((direction: 'left' | 'right') => {
+    if (!scrollContainerRef.current) return
+    const container = scrollContainerRef.current
+    const scrollAmount = container.clientWidth * 0.8
+    const targetScroll = direction === 'left' 
+      ? container.scrollLeft - scrollAmount 
+      : container.scrollLeft + scrollAmount
+    container.scrollTo({ left: targetScroll, behavior: 'smooth' })
+  }, [])
+
+  if (validImages.length === 0) return null
+
+  return (
+    <div className="relative">
+      {needsScrolling && canScrollLeft && (
+        <button
+          type="button"
+          onClick={() => scroll('left')}
+          className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
+          aria-label="Scroll left"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+      )}
+      <div
+        ref={scrollContainerRef}
+        className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+        style={{
+          justifyContent: needsScrolling ? 'flex-start' : 'center',
+        }}
+      >
+        {validImages.map((img, idx) => (
+          <div
+            key={img.id || `img-${idx}`}
+            className="flex-shrink-0 snap-start"
+            style={{ minWidth: 'min(280px, 80vw)' }}
+          >
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-[#2d2d30]">
+              <img
+                src={img.link}
+                alt={`${plantName} - Image ${idx + 1}`}
+                className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                loading="lazy"
+                draggable={false}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      {needsScrolling && canScrollRight && (
+        <button
+          type="button"
+          onClick={() => scroll('right')}
+          className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
+          aria-label="Scroll right"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      )}
+    </div>
+  )
 }
 
 export default PlantInfoPage
