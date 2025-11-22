@@ -1,7 +1,7 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, Check, Loader2, Sparkles } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Loader2, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
@@ -9,11 +9,11 @@ import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateri
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
-import { saveLanguagePreference } from "@/lib/i18nRouting"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
-import { useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
 import {
@@ -527,14 +527,14 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
 }
 
 export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: string) => void; initialName?: string }> = ({ onCancel, onSaved, initialName }) => {
-  const { t, i18n } = useTranslation('common')
+  const { t } = useTranslation('common')
   const { id } = useParams<{ id?: string }>()
+  const navigate = useNavigate()
+  const languageNavigate = useLanguageNavigate()
   const { profile } = useAuth()
-    const initialLanguage = SUPPORTED_LANGUAGES.includes(i18n.language as SupportedLanguage)
-      ? (i18n.language as SupportedLanguage)
-      : 'en'
-    const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
-    const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
+  const initialLanguage: SupportedLanguage = 'en'
+  const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
+  const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
   const [loading, setLoading] = React.useState<boolean>(!!id)
   const [saving, setSaving] = React.useState(false)
@@ -574,23 +574,22 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const remaining = targetFields.filter((key) => !prioritized.includes(key))
     return [...prioritized, ...remaining]
   }, [basicFieldOrder, targetFields])
-  const mandatoryFieldOrder = aiFieldOrder
-  const categoryLabels = React.useMemo(() => ({
-    basics: t('plantAdmin.categories.basics', 'Basics'),
-    identity: t('plantAdmin.categories.identity', 'Identity'),
-    plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
-    growth: t('plantAdmin.categories.growth', 'Growth'),
-    usage: t('plantAdmin.categories.usage', 'Usage'),
-    ecology: t('plantAdmin.categories.ecology', 'Ecology'),
-    danger: t('plantAdmin.categories.danger', 'Danger'),
-    miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
-    meta: t('plantAdmin.categories.meta', 'Meta'),
-  }), [t])
+    const mandatoryFieldOrder = aiFieldOrder
+    const categoryLabels = React.useMemo(() => ({
+      basics: t('plantAdmin.categories.basics', 'Basics'),
+      identity: t('plantAdmin.categories.identity', 'Identity'),
+      plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
+      growth: t('plantAdmin.categories.growth', 'Growth'),
+      usage: t('plantAdmin.categories.usage', 'Usage'),
+      ecology: t('plantAdmin.categories.ecology', 'Ecology'),
+      danger: t('plantAdmin.categories.danger', 'Danger'),
+      miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
+      meta: t('plantAdmin.categories.meta', 'Meta'),
+    }), [t])
+
     React.useEffect(() => {
       languageRef.current = language
-      i18n.changeLanguage(language)
-      saveLanguagePreference(language)
-    }, [language, i18n])
+    }, [language])
 
     React.useEffect(() => {
       if (!id) { setLoading(false); return }
@@ -608,7 +607,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           }
         } catch (e: any) {
           if (!ignore && languageRef.current === requestedLanguage) {
-            setError(e?.message || 'Failed to load plant')
+            setError(e?.message || t('plantAdmin.errors.loadPlant', 'Failed to load plant'))
           }
         } finally {
           if (!ignore && languageRef.current === requestedLanguage) {
@@ -618,8 +617,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
       fetchPlant()
       return () => { ignore = true }
-    }, [id, language])
-  const captureColorSuggestions = (data: unknown) => {
+    }, [id, language, t])
+
+    const captureColorSuggestions = (data: unknown) => {
     if (!data) return
     const parsed: PlantColor[] = []
     if (Array.isArray(data)) {
@@ -958,8 +958,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           }
         if (isEnglish && !existingLoaded) setExistingLoaded(true)
         onSaved?.(savedId)
-      } catch (e: any) {
-        setError(e?.message || 'Failed to save plant')
+        } catch (e: any) {
+          setError(e?.message || t('plantAdmin.errors.savePlant', 'Failed to save plant'))
       } finally {
         setSaving(false)
       }
@@ -1023,9 +1023,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           })
           return true
         } catch (err: any) {
-          lastError = err instanceof Error ? err : new Error(String(err || 'AI field fill failed'))
-          if (attempt >= 3) {
-            setError(lastError.message)
+            lastError = err instanceof Error ? err : new Error(String(err || 'AI field fill failed'))
+            if (attempt >= 3) {
+              setError(lastError?.message || t('plantAdmin.errors.aiFill', 'AI fill failed'))
           }
         }
       }
@@ -1142,8 +1142,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
       await ensureMandatoryFields()
       aiSucceeded = true
-    } catch (e: any) {
-      setError(e?.message || 'AI fill failed')
+      } catch (e: any) {
+        setError(e?.message || t('plantAdmin.errors.aiFill', 'AI fill failed'))
     } finally {
       setAiWorking(false)
       if (aiSucceeded) {
@@ -1265,12 +1265,25 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         meta: { ...(prev.meta || {}), status: IN_PROGRESS_STATUS },
       }))
       await savePlant()
-    } catch (e: any) {
-      setError(e?.message || 'Translation failed')
+      } catch (e: any) {
+        setError(e?.message || t('plantAdmin.errors.translation', 'Translation failed'))
     } finally {
       setTranslating(false)
     }
   }
+
+  const handleBackClick = React.useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    onCancel()
+  }, [navigate, onCancel])
+
+  const handleViewPlantInfo = React.useCallback(() => {
+    if (!id) return
+    languageNavigate(`/plants/${id}`)
+  }, [id, languageNavigate])
 
   return (
     <div className="max-w-6xl mx-auto px-4 pb-12 space-y-6">
@@ -1279,13 +1292,37 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         <div className="absolute -right-12 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/40 dark:bg-emerald-600/10 blur-3xl" aria-hidden="true" />
         <div className="relative p-6 sm:p-8 flex flex-col gap-6">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-            <div className="space-y-2">
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="rounded-full px-3"
+                  onClick={handleBackClick}
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  {t('plantAdmin.backToPrevious', 'Back to previous page')}
+                </Button>
+                {id ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="rounded-full px-3"
+                    onClick={handleViewPlantInfo}
+                  >
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
+                    {t('plantAdmin.viewPlantInfo', 'Open plant page')}
+                  </Button>
+                ) : null}
+              </div>
+              <div className="space-y-2">
               <h1 className="text-3xl font-semibold tracking-tight">
                 {id ? t('plantAdmin.editTitle', 'Edit Plant') : t('plantAdmin.createTitle', 'Create Plant')}
               </h1>
               <p className="text-sm text-muted-foreground max-w-2xl">
                 {t('plantAdmin.createSubtitle', 'Fill every field with the supplied descriptions or let AI help.')}
               </p>
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-2 rounded-full bg-white/80 dark:bg-[#151b15]/80 border border-stone-200/70 dark:border-stone-700/60 px-3 py-1.5 shadow-inner shadow-emerald-100/40 dark:shadow-[inset_0_1px_0_rgba(16,185,129,0.25)]">
@@ -1308,10 +1345,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 </Button>
               </div>
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={onCancel} className="rounded-2xl">Cancel</Button>
+                  <Button variant="secondary" onClick={onCancel} className="rounded-2xl">{t('common.cancel', 'Cancel')}</Button>
                 <Button onClick={() => savePlant()} disabled={saving || aiWorking} className="rounded-2xl shadow-md">
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Plant
+                    {t('plantAdmin.savePlant', 'Save Plant')}
                 </Button>
               </div>
             </div>
