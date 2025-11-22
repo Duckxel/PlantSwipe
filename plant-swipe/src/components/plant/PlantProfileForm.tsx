@@ -232,6 +232,7 @@ const WateringScheduleEditor: React.FC<{
   value: PlantWateringSchedule[] | undefined
   onChange: (schedules: PlantWateringSchedule[]) => void
 }> = ({ value, onChange }) => {
+  const { t } = useTranslation('common')
   const schedules = Array.isArray(value) ? value : []
   const [draft, setDraft] = React.useState<PlantWateringSchedule>({ season: "", quantity: undefined, timePeriod: undefined })
   const addDraft = () => {
@@ -247,16 +248,16 @@ const WateringScheduleEditor: React.FC<{
   const remove = (idx: number) => onChange(schedules.filter((_, i) => i !== idx))
     return (
       <div className="grid gap-3">
-        {schedules.map((schedule, idx) => (
+          {schedules.map((schedule, idx) => (
           <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <Input
-                placeholder="Season (optional)"
+                  placeholder={t('plantAdmin.watering.seasonPlaceholder', 'Season (optional)')}
                 value={schedule.season || ""}
                 onChange={(e) => update(idx, { season: e.target.value })}
               />
               <Input
-                placeholder="Quantity"
+                  placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
                 type="number"
                 value={schedule.quantity ?? ""}
                 onChange={(e) => {
@@ -269,17 +270,17 @@ const WateringScheduleEditor: React.FC<{
                 value={schedule.timePeriod || ""}
                 onChange={(e) => update(idx, { timePeriod: e.target.value ? (e.target.value as any) : undefined })}
               >
-                <option value="">Time period</option>
-                {(["week", "month", "year"] as const).map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
+                  <option value="">{t('plantAdmin.watering.timePeriodPlaceholder', 'Time period')}</option>
+                  {(['week', 'month', 'year'] as const).map((opt) => (
+                    <option key={opt} value={opt}>
+                      {t(`plantAdmin.optionLabels.${opt}`, opt)}
+                    </option>
+                  ))}
               </select>
             </div>
             <div className="flex justify-end">
               <Button variant="ghost" type="button" onClick={() => remove(idx)} className="text-red-600">
-                Remove
+                  {t('plantAdmin.actions.remove', 'Remove')}
               </Button>
             </div>
           </div>
@@ -287,12 +288,12 @@ const WateringScheduleEditor: React.FC<{
         <div className="grid gap-2 rounded border border-dashed p-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <Input
-              placeholder="Season (optional)"
+                placeholder={t('plantAdmin.watering.seasonPlaceholder', 'Season (optional)')}
               value={draft.season}
               onChange={(e) => setDraft((d) => ({ ...d, season: e.target.value }))}
             />
             <Input
-              placeholder="Quantity"
+                placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
               type="number"
               value={draft.quantity ?? ""}
               onChange={(e) => {
@@ -305,22 +306,22 @@ const WateringScheduleEditor: React.FC<{
               value={draft.timePeriod || ""}
               onChange={(e) => setDraft((d) => ({ ...d, timePeriod: e.target.value ? (e.target.value as any) : undefined }))}
             >
-              <option value="">Time period</option>
-              {(["week", "month", "year"] as const).map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
+                <option value="">{t('plantAdmin.watering.timePeriodPlaceholder', 'Time period')}</option>
+                {(['week', 'month', 'year'] as const).map((opt) => (
+                  <option key={opt} value={opt}>
+                    {t(`plantAdmin.optionLabels.${opt}`, opt)}
+                  </option>
+                ))}
             </select>
           </div>
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Season is optional. Add as many watering schedules as needed.</span>
+              <span>{t('plantAdmin.watering.helper', 'Season is optional. Add as many watering schedules as needed.')}</span>
             <Button
               type="button"
               onClick={addDraft}
               disabled={!(draft.season?.trim() || draft.quantity !== undefined || draft.timePeriod)}
             >
-              Add schedule
+                {t('plantAdmin.watering.addSchedule', 'Add schedule')}
             </Button>
           </div>
         </div>
@@ -534,20 +535,27 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
   const isAdvice = field.key.toLowerCase().includes("advice")
     const isMonthMultiField = field.key.startsWith("growth.") && field.key.toLowerCase().includes("month")
     const isPromotionMonthField = field.key === "identity.promotionMonth"
+  const translateOption = (optionKey: string, fallback: string) => {
+    const fieldScoped = t(`${translationBase}.options.${optionKey}`, { defaultValue: '' })
+    if (fieldScoped) return fieldScoped
+    const globalScoped = t(`plantAdmin.optionLabels.${optionKey}`, { defaultValue: '' })
+    if (globalScoped) return globalScoped
+    return fallback
+  }
+
   const normalizedOptions = (field.options || []).map((opt) => {
-    if (typeof opt === "string") {
-      return {
-        label: t(`${translationBase}.options.${sanitizeOptionKey(opt)}`, { defaultValue: opt }),
-        value: opt,
-        key: opt,
-      }
-    }
-    const optionValue = opt.value
-    const optionKey = String(optionValue)
+    const isString = typeof opt === "string"
+    const optionValue = isString ? opt : opt.value
+    const defaultLabel = isString ? opt : (opt.label ?? String(opt.value))
+    const optionKeySource =
+      isString
+        ? opt
+        : (typeof opt.label === "string" && opt.label.trim().length ? opt.label : String(opt.value))
+    const optionKey = sanitizeOptionKey(optionKeySource)
     return {
-      label: t(`${translationBase}.options.${sanitizeOptionKey(optionValue)}`, { defaultValue: opt.label }),
+      label: translateOption(optionKey, defaultLabel),
       value: optionValue,
-      key: optionKey,
+      key: typeof optionValue === "string" ? optionValue : String(optionValue),
     }
   })
 
@@ -571,7 +579,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
               <option value="">{selectStatusPlaceholder}</option>
               {statusOptions.map((opt) => (
                 <option key={opt} value={opt} style={{ color: statusColors[opt] || "inherit" }}>
-                  ● {t(`${translationBase}.options.${sanitizeOptionKey(opt)}`, { defaultValue: opt })}
+                  ● {translateOption(sanitizeOptionKey(opt), opt)}
                 </option>
               ))}
             </select>
@@ -1036,6 +1044,7 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
 }
 
 function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v: PlantColor[]) => void }) {
+  const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
   const [available, setAvailable] = React.useState<PlantColor[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -1091,18 +1100,18 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
           </span>
         ))}
       </div>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button type="button" variant="outline">Add color</Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Select or add a color</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search colors by name" />
-            <div className="max-h-64 overflow-auto border rounded p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {loading ? <div className="col-span-full text-center text-sm text-muted-foreground">Loading colors...</div> : (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button type="button" variant="outline">{t('plantAdmin.colors.addColorButton', 'Add color')}</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{t('plantAdmin.colors.dialogTitle', 'Select or add a color')}</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3">
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('plantAdmin.colors.searchPlaceholder', 'Search colors by name')} />
+              <div className="max-h-64 overflow-auto border rounded p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {loading ? <div className="col-span-full text-center text-sm text-muted-foreground">{t('plantAdmin.colors.loading', 'Loading colors...')}</div> : (
                 (available || []).map((c) => (
                   <button
                     key={c.id || c.name}
@@ -1113,24 +1122,26 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
                     <span className="w-6 h-6 rounded-full border" style={{ backgroundColor: c.hexCode || "transparent" }} />
                     <span className="text-left">
                       <div className="font-medium text-sm">{c.name}</div>
-                      <div className="text-xs text-muted-foreground">{c.hexCode || "No hex"}</div>
+                        <div className="text-xs text-muted-foreground">{c.hexCode || t('plantAdmin.colors.noHex', 'No hex')}</div>
                     </span>
                   </button>
                 ))
               )}
               {!loading && (available || []).length === 0 && (
-                <div className="col-span-full text-center text-sm text-muted-foreground">No colors found.</div>
+                  <div className="col-span-full text-center text-sm text-muted-foreground">{t('plantAdmin.colors.empty', 'No colors found.')}</div>
               )}
             </div>
             <div className="grid gap-2 border-t pt-3">
-              <div className="font-medium text-sm">Insert a new color</div>
+                <div className="font-medium text-sm">{t('plantAdmin.colors.insertHeading', 'Insert a new color')}</div>
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-center">
-                <Input value={insertName} onChange={(e) => setInsertName(e.target.value)} placeholder="Color name" />
+                  <Input value={insertName} onChange={(e) => setInsertName(e.target.value)} placeholder={t('plantAdmin.colors.colorNamePlaceholder', 'Color name')} />
                 <div className="flex items-center gap-2">
-                  <Input value={insertHex} onChange={(e) => setInsertHex(e.target.value)} placeholder="#hexcode" />
+                    <Input value={insertHex} onChange={(e) => setInsertHex(e.target.value)} placeholder={t('plantAdmin.colors.hexPlaceholder', '#hexcode')} />
                   <span className="w-8 h-8 rounded border" style={{ backgroundColor: normalizeHex(insertHex) || "transparent" }} />
                 </div>
-                <Button type="button" onClick={handleInsert} disabled={inserting || !insertName.trim()}>{inserting ? 'Saving...' : 'Insert'}</Button>
+                  <Button type="button" onClick={handleInsert} disabled={inserting || !insertName.trim()}>
+                    {inserting ? t('plantAdmin.colors.saving', 'Saving...') : t('plantAdmin.colors.insertButton', 'Insert')}
+                  </Button>
               </div>
             </div>
           </div>
@@ -1447,7 +1458,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                             )}
                           </div>
                         ) : null}
-                        <Label>{t('plantAdmin.colorsLabel', 'Colors')}</Label>
+                          <Label>{t('plantAdmin.colorsLabel', 'Colors')}</Label>
                         {!colorSuggestions?.length && (
                           <p className="text-xs text-muted-foreground mb-2">
                             {t('plantAdmin.colorSuggestionPlaceholder', 'AI recommendations will show up here when available.')}
@@ -1461,7 +1472,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                               checked={!!value.identity?.multicolor}
                               onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
                             />
-                            Multicolor
+                              {t('plantAdmin.colors.multicolor', 'Multicolor')}
                           </label>
                           <label className="flex items-center gap-2">
                             <input
@@ -1469,10 +1480,10 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                               checked={!!value.identity?.bicolor}
                               onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
                             />
-                            Bicolor
+                              {t('plantAdmin.colors.bicolor', 'Bicolor')}
                           </label>
                         </div>
-                        <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
+                          <p className="text-xs text-muted-foreground">{t('plantAdmin.colors.paletteHelp', 'Link existing palette colors or insert new ones for this plant.')}</p>
                       </div>
                     )}
                 </CardContent>
