@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, Routes, Route, Outlet, Link, useLocation, Navigate } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -256,6 +256,8 @@ const toPromotionMonthSlug = (
 
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = location.pathname;
   const { effectiveTheme } = useTheme();
   const { user, profile } = useAuth();
   const isDark = effectiveTheme === "dark";
@@ -2762,18 +2764,6 @@ export const AdminPage: React.FC = () => {
   }, [loadVisitorsStats]);
 
   // ---- Members tab state ----
-  const getTabPath = (tab: AdminTab): string => {
-    switch (tab) {
-      case "overview": return "/admin";
-      case "members": return "/admin/members";
-      case "requests": return "/admin/requests";
-      case "upload": return "/admin/upload";
-      case "notifications": return "/admin/notifications";
-      case "admin_logs": return "/admin/logs";
-      default: return "/admin";
-    }
-  };
-
   const navItems: Array<{
     key: AdminTab;
     label: string;
@@ -2788,8 +2778,6 @@ export const AdminPage: React.FC = () => {
     { key: "admin_logs", label: "Admin Logs", Icon: ScrollText, path: "/admin/logs" },
   ];
 
-  const location = useLocation();
-  const currentPath = location.pathname;
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
     if (currentPath.includes("/admin/requests")) return "requests";
