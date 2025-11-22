@@ -26,6 +26,7 @@ import {
   Gavel,
   Search,
   ChevronDown,
+  ChevronUp,
   GitBranch,
   Trash2,
   EyeOff,
@@ -1279,6 +1280,12 @@ export const AdminPage: React.FC = () => {
   >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
+  const [isStatusRepartitionCollapsed, setIsStatusRepartitionCollapsed] =
+    React.useState<boolean>(false);
+  const [isRequestsVsApprovedCollapsed, setIsRequestsVsApprovedCollapsed] =
+    React.useState<boolean>(false);
+  const [isPromotionCadenceCollapsed, setIsPromotionCadenceCollapsed] =
+    React.useState<boolean>(false);
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -5260,7 +5267,10 @@ export const AdminPage: React.FC = () => {
                                 </div>
                                 <div className="grid gap-4 md:grid-cols-2">
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
-                                    <div className="flex items-start justify-between gap-3">
+                                    <button
+                                      onClick={() => setIsStatusRepartitionCollapsed(!isStatusRepartitionCollapsed)}
+                                      className="flex items-start justify-between gap-3 w-full text-left hover:opacity-80 transition-opacity"
+                                    >
                                       <div>
                                         <div className="text-sm font-semibold">
                                           Status repartition
@@ -5269,16 +5279,24 @@ export const AdminPage: React.FC = () => {
                                           In progress, review and rework.
                                         </div>
                                       </div>
-                                      <div className="text-right">
-                                        <div className="text-[11px] uppercase tracking-wide opacity-60">
-                                          Approved
+                                      <div className="flex items-center gap-3">
+                                        <div className="text-right">
+                                          <div className="text-[11px] uppercase tracking-wide opacity-60">
+                                            Approved
+                                          </div>
+                                          <div className="text-2xl font-semibold">
+                                            {approvedPlantsCount}
+                                          </div>
                                         </div>
-                                        <div className="text-2xl font-semibold">
-                                          {approvedPlantsCount}
-                                        </div>
+                                        {isStatusRepartitionCollapsed ? (
+                                          <ChevronDown className="h-4 w-4 opacity-60" />
+                                        ) : (
+                                          <ChevronUp className="h-4 w-4 opacity-60" />
+                                        )}
                                       </div>
-                                    </div>
-                                    <div className="relative mt-4 h-48">
+                                    </button>
+                                    {!isStatusRepartitionCollapsed && (
+                                      <div className="relative mt-4 h-48">
                                       {plantTableLoading ? (
                                         <div className="flex h-full items-center justify-center text-sm opacity-60">
                                           Loading chart...
@@ -5335,9 +5353,13 @@ export const AdminPage: React.FC = () => {
                                         </div>
                                       )}
                                     </div>
+                                    )}
                                   </div>
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
-                                    <div className="flex items-center justify-between gap-2">
+                                    <button
+                                      onClick={() => setIsRequestsVsApprovedCollapsed(!isRequestsVsApprovedCollapsed)}
+                                      className="flex items-center justify-between gap-2 w-full text-left hover:opacity-80 transition-opacity"
+                                    >
                                       <div>
                                         <div className="text-sm font-semibold">
                                           Requests vs approved
@@ -5346,6 +5368,7 @@ export const AdminPage: React.FC = () => {
                                           Ratio between incoming requests and approved plants.
                                         </div>
                                       </div>
+                                      <div className="flex items-center gap-3">
                                         <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-300">
                                           {requestsVsApproved.ratio !== null
                                             ? `${requestsVsApproved.percent.toFixed(0)}%`
@@ -5354,7 +5377,15 @@ export const AdminPage: React.FC = () => {
                                               ? "∞"
                                               : "0%"}
                                         </div>
-                                    </div>
+                                        {isRequestsVsApprovedCollapsed ? (
+                                          <ChevronDown className="h-4 w-4 opacity-60" />
+                                        ) : (
+                                          <ChevronUp className="h-4 w-4 opacity-60" />
+                                        )}
+                                      </div>
+                                    </button>
+                                    {!isRequestsVsApprovedCollapsed && (
+                                      <>
                                       <div className="mt-3 flex-1">
                                       {plantTableLoading && totalPlantRequestsCount === 0 ? (
                                         <div className="flex h-full items-center justify-center text-sm opacity-60">
@@ -5435,16 +5466,31 @@ export const AdminPage: React.FC = () => {
                                           </div>
                                         )}
                                     </div>
+                                    </>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/90 dark:bg-[#131318] p-4 flex flex-col">
-                                  <div className="text-sm font-semibold">
-                                    Promotion cadence
-                                  </div>
-                                  <div className="text-xs opacity-60 mb-4">
-                                    Number of plants promoted per month.
-                                  </div>
-                                  <div className="w-full h-[320px] md:h-[360px]">
+                                  <button
+                                    onClick={() => setIsPromotionCadenceCollapsed(!isPromotionCadenceCollapsed)}
+                                    className="flex items-center justify-between gap-2 w-full text-left hover:opacity-80 transition-opacity mb-4"
+                                  >
+                                    <div>
+                                      <div className="text-sm font-semibold">
+                                        Promotion cadence
+                                      </div>
+                                      <div className="text-xs opacity-60">
+                                        Number of plants promoted per month.
+                                      </div>
+                                    </div>
+                                    {isPromotionCadenceCollapsed ? (
+                                      <ChevronDown className="h-4 w-4 opacity-60" />
+                                    ) : (
+                                      <ChevronUp className="h-4 w-4 opacity-60" />
+                                    )}
+                                  </button>
+                                  {!isPromotionCadenceCollapsed && (
+                                    <div className="w-full h-[320px] md:h-[360px]">
                                     {plantTableLoading ? (
                                       <div className="flex h-full items-center justify-center text-sm opacity-60">
                                         Loading chart...
@@ -5491,6 +5537,7 @@ export const AdminPage: React.FC = () => {
                                       </ChartSuspense>
                                     )}
                                   </div>
+                                  )}
                                 </div>
                               </CardContent>
                             </Card>
