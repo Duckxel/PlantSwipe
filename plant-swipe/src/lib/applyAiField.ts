@@ -196,16 +196,37 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       }
       // Explicitly handle temperature fields - ensure they're numbers or undefined
       if ('temperatureMax' in payload) {
-        const val = payload.temperatureMax
-        (payload as any).temperatureMax = typeof val === 'number' && Number.isFinite(val) ? val : (typeof val === 'string' && val.trim() ? Number(val) : undefined)
+        const val: unknown = payload.temperatureMax
+        if (typeof val === 'number' && Number.isFinite(val)) {
+          (payload as any).temperatureMax = val
+        } else if (typeof val === 'string' && val.trim()) {
+          const parsed = Number(val.trim())
+          (payload as any).temperatureMax = Number.isFinite(parsed) ? parsed : undefined
+        } else {
+          (payload as any).temperatureMax = undefined
+        }
       }
       if ('temperatureMin' in payload) {
-        const val = payload.temperatureMin
-        (payload as any).temperatureMin = typeof val === 'number' && Number.isFinite(val) ? val : (typeof val === 'string' && val.trim() ? Number(val) : undefined)
+        const val: unknown = payload.temperatureMin
+        if (typeof val === 'number' && Number.isFinite(val)) {
+          (payload as any).temperatureMin = val
+        } else if (typeof val === 'string' && val.trim()) {
+          const parsed = Number(val.trim())
+          (payload as any).temperatureMin = Number.isFinite(parsed) ? parsed : undefined
+        } else {
+          (payload as any).temperatureMin = undefined
+        }
       }
       if ('temperatureIdeal' in payload) {
-        const val = payload.temperatureIdeal
-        (payload as any).temperatureIdeal = typeof val === 'number' && Number.isFinite(val) ? val : (typeof val === 'string' && val.trim() ? Number(val) : undefined)
+        const val: unknown = payload.temperatureIdeal
+        if (typeof val === 'number' && Number.isFinite(val)) {
+          (payload as any).temperatureIdeal = val
+        } else if (typeof val === 'string' && val.trim()) {
+          const parsed = Number(val.trim())
+          (payload as any).temperatureIdeal = Number.isFinite(parsed) ? parsed : undefined
+        } else {
+          (payload as any).temperatureIdeal = undefined
+        }
       }
       // Explicitly handle origin array
       if ('origin' in payload) {
