@@ -6,13 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
 import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel";
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
@@ -44,7 +37,8 @@ import {
   Users,
   FileText,
   ScrollText,
-  CloudUpload,
+    CloudUpload,
+    Check,
   BellRing,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
@@ -112,8 +106,6 @@ type NormalizedPlantStatus =
   | "rework"
   | "approved"
   | "other";
-type PlantStatusFilterValue = NormalizedPlantStatus | "all";
-
 const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
   { key: "requests", label: "Request" },
   { key: "plants", label: "PLANTS" },
@@ -148,17 +140,21 @@ const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = {
     "bg-slate-200 text-slate-800 dark:bg-slate-600/40 dark:text-slate-100",
 };
 
-const PLANT_STATUS_FILTERS: Array<{
-  value: PlantStatusFilterValue;
-  label: string;
-}> = [
-  { value: "all", label: "All statuses" },
-  { value: "in progres", label: PLANT_STATUS_LABELS["in progres"] },
-  { value: "review", label: PLANT_STATUS_LABELS.review },
-  { value: "rework", label: PLANT_STATUS_LABELS.rework },
-  { value: "approved", label: PLANT_STATUS_LABELS.approved },
-  { value: "other", label: PLANT_STATUS_LABELS.other },
+const PLANT_STATUS_KEYS: NormalizedPlantStatus[] = [
+  "in progres",
+  "review",
+  "rework",
+  "approved",
+  "other",
 ];
+
+const DEFAULT_VISIBLE_PLANT_STATUSES: NormalizedPlantStatus[] =
+  PLANT_STATUS_KEYS.filter((status) => status !== "approved");
+
+const PLANT_STATUS_FILTER_OPTIONS = PLANT_STATUS_KEYS.map((status) => ({
+  value: status,
+  label: PLANT_STATUS_LABELS[status],
+}));
 
 const STATUS_DONUT_SEGMENTS: NormalizedPlantStatus[] = [
   "in progres",
@@ -1249,8 +1245,9 @@ export const AdminPage: React.FC = () => {
   >(null);
   const [plantDashboardInitialized, setPlantDashboardInitialized] =
     React.useState<boolean>(false);
-  const [plantStatusFilter, setPlantStatusFilter] =
-    React.useState<PlantStatusFilterValue>("all");
+  const [visiblePlantStatuses, setVisiblePlantStatuses] = React.useState<
+    NormalizedPlantStatus[]
+  >(DEFAULT_VISIBLE_PLANT_STATUSES);
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
 
@@ -1458,6 +1455,17 @@ export const AdminPage: React.FC = () => {
     },
     [navigate],
   );
+  const togglePlantStatusFilter = React.useCallback(
+    (status: NormalizedPlantStatus) => {
+      setVisiblePlantStatuses((prev) => {
+        if (prev.includes(status)) {
+          return prev.filter((s) => s !== status);
+        }
+        return [...prev, status];
+      });
+    },
+    [],
+  );
 
   const loadPlantDashboard = React.useCallback(async () => {
     setPlantDashboardError(null);
@@ -1602,21 +1610,28 @@ export const AdminPage: React.FC = () => {
 
   const filteredPlantRows = React.useMemo(() => {
     const term = plantSearchQuery.trim().toLowerCase();
+    const statuses = new Set(visiblePlantStatuses);
     return plantDashboardRows
       .filter((plant) => {
         const matchesStatus =
-          plantStatusFilter === "all" || plant.status === plantStatusFilter;
+          statuses.size === 0 ? false : statuses.has(plant.status);
+        if (!matchesStatus) return false;
         const matchesSearch = term
           ? plant.name.toLowerCase().includes(term)
           : true;
-        return matchesStatus && matchesSearch;
+        return matchesSearch;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [plantDashboardRows, plantStatusFilter, plantSearchQuery]);
+  }, [plantDashboardRows, visiblePlantStatuses, plantSearchQuery]);
 
   const plantViewIsPlants = requestViewMode === "plants";
   const plantTableLoading =
     plantDashboardLoading && !plantDashboardInitialized;
+  const visiblePlantStatusesSet = React.useMemo(
+    () => new Set(visiblePlantStatuses),
+    [visiblePlantStatuses],
+  );
+  const noPlantStatusesSelected = visiblePlantStatusesSet.size === 0;
 
   const handlePlantCreated = React.useCallback(async () => {
     // Optionally complete the request after plant is created
@@ -5384,36 +5399,16 @@ export const AdminPage: React.FC = () => {
                             </Card>
                             <Card className="rounded-2xl">
                               <CardContent className="p-4 space-y-4">
-                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                  <div>
-                                    <div className="text-sm font-medium">
-                                      Plant inventory
+                                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                      <div className="text-sm font-medium">
+                                        Plant inventory
+                                      </div>
+                                      <div className="text-xs opacity-60">
+                                        Toggle statuses or search to focus the list.
+                                      </div>
                                     </div>
-                                    <div className="text-xs opacity-60">
-                                      Filter by status or search by name.
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                    <div className="w-full sm:w-48">
-                                      <Select
-                                        value={plantStatusFilter}
-                                        onValueChange={(value) =>
-                                          setPlantStatusFilter(value as PlantStatusFilterValue)
-                                        }
-                                      >
-                                        <SelectTrigger className="rounded-xl">
-                                          <SelectValue placeholder="Filter status" />
-                                        </SelectTrigger>
-                                        <SelectContent align="end">
-                                          {PLANT_STATUS_FILTERS.map((option) => (
-                                            <SelectItem key={option.value} value={option.value}>
-                                              {option.label}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div className="w-full sm:w-64 relative">
+                                    <div className="w-full md:w-64 relative">
                                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
                                       <Input
                                         value={plantSearchQuery}
@@ -5423,23 +5418,50 @@ export const AdminPage: React.FC = () => {
                                       />
                                     </div>
                                   </div>
-                                </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {PLANT_STATUS_FILTER_OPTIONS.map((option) => {
+                                      const selected = visiblePlantStatusesSet.has(option.value);
+                                      return (
+                                        <button
+                                          key={option.value}
+                                          type="button"
+                                          aria-pressed={selected}
+                                          onClick={() => togglePlantStatusFilter(option.value)}
+                                          className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
+                                            selected
+                                              ? "bg-emerald-600 text-white border-emerald-600 shadow"
+                                              : "border-stone-200 text-stone-600 dark:border-[#3e3e42] dark:text-stone-200 hover:border-emerald-400 hover:text-emerald-200"
+                                          }`}
+                                        >
+                                          <Check
+                                            className={`h-3 w-3 transition-opacity ${selected ? "opacity-100" : "opacity-0"}`}
+                                          />
+                                          <span>{option.label}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="text-[11px] text-stone-500 dark:text-stone-400">
+                                    Approved plants are hidden by default—enable statuses to include them.
+                                  </div>
                                 <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden">
                                   <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-4 bg-stone-50/60 dark:bg-[#1c1c1f] px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-300">
                                     <span>Plant</span>
                                     <span className="text-right">Status</span>
                                   </div>
-                                  {plantTableLoading ? (
-                                    <div className="p-4 text-sm opacity-60">
-                                      Loading plants...
-                                    </div>
-                                  ) : filteredPlantRows.length === 0 ? (
-                                    <div className="p-4 text-sm opacity-60">
-                                      {plantDashboardRows.length === 0
-                                        ? "No plants available yet."
-                                        : "No plants match the current filters."}
-                                    </div>
-                                  ) : (
+                                    {plantTableLoading ? (
+                                      <div className="p-4 text-sm opacity-60">
+                                        Loading plants...
+                                      </div>
+                                    ) : filteredPlantRows.length === 0 ? (
+                                      <div className="p-4 text-sm opacity-60">
+                                        {plantDashboardRows.length === 0
+                                          ? "No plants available yet."
+                                          : noPlantStatusesSelected
+                                            ? "Select at least one status to see plants."
+                                            : "No plants match the current filters."}
+                                      </div>
+                                    ) : (
                                     <div className="divide-y divide-stone-200 dark:divide-[#2f2f35]">
                                       {filteredPlantRows.map((plant) => (
                                         <div
