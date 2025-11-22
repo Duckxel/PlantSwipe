@@ -684,7 +684,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         </div>
       
         {/* Dynamic Grid Layout */}
-        <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3 items-stretch">
+        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-stretch">
           {(height !== null || wingspan !== null || spacing !== null) && (
             <motion.section
               {...SECTION_ANIMATION}
