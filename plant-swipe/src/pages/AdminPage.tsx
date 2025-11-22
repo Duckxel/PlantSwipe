@@ -5419,7 +5419,7 @@ export const AdminPage: React.FC = () => {
                                   <div className="text-xs opacity-60 mb-4">
                                     Number of plants promoted per month.
                                   </div>
-                                  <div className="flex-1 min-h-[260px]">
+                                    <div className="flex-1 min-h-[320px]">
                                     {plantTableLoading ? (
                                       <div className="flex h-full items-center justify-center text-sm opacity-60">
                                         Loading chart...
@@ -5436,7 +5436,7 @@ export const AdminPage: React.FC = () => {
                                           </div>
                                         }
                                       >
-                                        <ResponsiveContainer width="100%" height="100%">
+                                          <ResponsiveContainer width="100%" height="100%">
                                           <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 32, right: 32, top: 16, bottom: 12 }}>
                                             <CartesianGrid
                                               strokeDasharray="3 3"
