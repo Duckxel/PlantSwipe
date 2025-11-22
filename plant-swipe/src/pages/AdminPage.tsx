@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
 import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel";
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
@@ -70,6 +77,11 @@ const {
   PieChart,
   Pie,
   Cell,
+  BarChart,
+  Bar,
+  RadialBarChart,
+  RadialBar,
+  PolarAngleAxis,
 } = LazyCharts;
 
 type AdminTab =
@@ -92,6 +104,132 @@ type ListedMember = {
 type MemberListSort = "newest" | "oldest" | "rpm";
 
 const MEMBER_LIST_PAGE_SIZE = 20;
+
+type RequestViewMode = "requests" | "plants";
+type NormalizedPlantStatus =
+  | "in progres"
+  | "review"
+  | "rework"
+  | "approved"
+  | "other";
+type PlantStatusFilterValue = NormalizedPlantStatus | "all";
+
+const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
+  { key: "requests", label: "Request" },
+  { key: "plants", label: "PLANTS" },
+];
+
+const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
+  "in progres": "In Progress",
+  review: "Review",
+  rework: "Rework",
+  approved: "Approved",
+  other: "Other",
+};
+
+const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = {
+  "in progres": "#f97316",
+  review: "#facc15",
+  rework: "#f43f5e",
+  approved: "#10b981",
+  other: "#94a3b8",
+};
+
+const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = {
+  "in progres":
+    "bg-orange-100 text-orange-800 dark:bg-orange-500/30 dark:text-orange-100",
+  review:
+    "bg-amber-100 text-amber-800 dark:bg-amber-500/30 dark:text-amber-100",
+  rework:
+    "bg-rose-100 text-rose-800 dark:bg-rose-500/30 dark:text-rose-100",
+  approved:
+    "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/30 dark:text-emerald-100",
+  other:
+    "bg-slate-200 text-slate-800 dark:bg-slate-600/40 dark:text-slate-100",
+};
+
+const PLANT_STATUS_FILTERS: Array<{
+  value: PlantStatusFilterValue;
+  label: string;
+}> = [
+  { value: "all", label: "All statuses" },
+  { value: "in progres", label: PLANT_STATUS_LABELS["in progres"] },
+  { value: "review", label: PLANT_STATUS_LABELS.review },
+  { value: "rework", label: PLANT_STATUS_LABELS.rework },
+  { value: "approved", label: PLANT_STATUS_LABELS.approved },
+  { value: "other", label: PLANT_STATUS_LABELS.other },
+];
+
+const STATUS_DONUT_SEGMENTS: NormalizedPlantStatus[] = [
+  "in progres",
+  "review",
+  "rework",
+  "other",
+];
+
+const PROMOTION_MONTH_SLUGS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+] as const;
+
+type PromotionMonthSlug = (typeof PROMOTION_MONTH_SLUGS)[number];
+
+const PROMOTION_MONTH_LABELS: Record<PromotionMonthSlug, string> = {
+  january: "Jan",
+  february: "Feb",
+  march: "Mar",
+  april: "Apr",
+  may: "May",
+  june: "Jun",
+  july: "Jul",
+  august: "Aug",
+  september: "Sep",
+  october: "Oct",
+  november: "Nov",
+  december: "Dec",
+};
+
+type PlantDashboardRow = {
+  id: string;
+  name: string;
+  status: NormalizedPlantStatus;
+  promotionMonth: PromotionMonthSlug | null;
+  primaryImage: string | null;
+};
+
+const normalizePlantStatus = (
+  status?: string | null,
+): NormalizedPlantStatus => {
+  if (!status) return "other";
+  const normalized = status.toLowerCase();
+  if (normalized === "in progres" || normalized === "in progress") {
+    return "in progres";
+  }
+  if (normalized === "review") return "review";
+  if (normalized === "rework") return "rework";
+  if (normalized === "approved") return "approved";
+  return "other";
+};
+
+const toPromotionMonthSlug = (
+  value?: string | null,
+): PromotionMonthSlug | null => {
+  if (!value) return null;
+  const normalized = value.toLowerCase() as PromotionMonthSlug;
+  return (PROMOTION_MONTH_SLUGS as readonly string[]).includes(normalized)
+    ? normalized
+    : null;
+};
 
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -1099,6 +1237,22 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
   const [createPlantName, setCreatePlantName] = React.useState<string>("");
+  const [requestViewMode, setRequestViewMode] =
+    React.useState<RequestViewMode>("requests");
+  const [plantDashboardRows, setPlantDashboardRows] = React.useState<
+    PlantDashboardRow[]
+  >([]);
+  const [plantDashboardLoading, setPlantDashboardLoading] =
+    React.useState<boolean>(false);
+  const [plantDashboardError, setPlantDashboardError] = React.useState<
+    string | null
+  >(null);
+  const [plantDashboardInitialized, setPlantDashboardInitialized] =
+    React.useState<boolean>(false);
+  const [plantStatusFilter, setPlantStatusFilter] =
+    React.useState<PlantStatusFilterValue>("all");
+  const [plantSearchQuery, setPlantSearchQuery] =
+    React.useState<string>("");
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -1297,6 +1451,165 @@ export const AdminPage: React.FC = () => {
     },
     [],
   );
+
+  const loadPlantDashboard = React.useCallback(async () => {
+    setPlantDashboardError(null);
+    setPlantDashboardLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("plants")
+        .select(
+          `
+            id,
+            name,
+            status,
+            promotion_month,
+            plant_images (
+              link,
+              use
+            )
+          `,
+        )
+        .order("name", { ascending: true });
+
+      if (error) throw new Error(error.message);
+
+      const rows: PlantDashboardRow[] = (data ?? [])
+        .map((row: any) => {
+          if (!row?.id) return null;
+          const images = Array.isArray(row?.plant_images)
+            ? row.plant_images
+            : [];
+          const primaryImage =
+            images.find((img: any) => img?.use === "primary") ??
+            images.find((img: any) => img?.use === "discovery") ??
+            images[0];
+
+          return {
+            id: String(row.id),
+            name: row?.name ? String(row.name) : "Unnamed plant",
+            status: normalizePlantStatus(row?.status),
+            promotionMonth: toPromotionMonthSlug(row?.promotion_month),
+            primaryImage: primaryImage?.link
+              ? String(primaryImage.link)
+              : null,
+          } as PlantDashboardRow;
+        })
+        .filter((row): row is PlantDashboardRow => row !== null);
+
+      setPlantDashboardRows(rows);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setPlantDashboardError(message);
+    } finally {
+      setPlantDashboardInitialized(true);
+      setPlantDashboardLoading(false);
+    }
+  }, [supabase]);
+
+  const plantStatusCounts = React.useMemo(() => {
+    return plantDashboardRows.reduce(
+      (acc, plant) => {
+        acc[plant.status] = (acc[plant.status] ?? 0) + 1;
+        return acc;
+      },
+      {
+        "in progres": 0,
+        review: 0,
+        rework: 0,
+        approved: 0,
+        other: 0,
+      } as Record<NormalizedPlantStatus, number>,
+    );
+  }, [plantDashboardRows]);
+
+  const approvedPlantsCount = plantStatusCounts.approved ?? 0;
+
+  const plantStatusDonutData = React.useMemo(
+    () =>
+      STATUS_DONUT_SEGMENTS.map((status) => ({
+        key: status,
+        label: PLANT_STATUS_LABELS[status],
+        value: plantStatusCounts[status] ?? 0,
+        color: PLANT_STATUS_COLORS[status],
+      })).filter((entry) => entry.value > 0),
+    [plantStatusCounts],
+  );
+
+  const promotionMonthData = React.useMemo(() => {
+    const counts = PROMOTION_MONTH_SLUGS.reduce(
+      (acc, slug) => {
+        acc[slug] = 0;
+        return acc;
+      },
+      {} as Record<PromotionMonthSlug, number>,
+    );
+    plantDashboardRows.forEach((plant) => {
+      if (plant.promotionMonth) {
+        counts[plant.promotionMonth] += 1;
+      }
+    });
+    return PROMOTION_MONTH_SLUGS.map((slug) => ({
+      slug,
+      label: PROMOTION_MONTH_LABELS[slug],
+      value: counts[slug],
+    }));
+  }, [plantDashboardRows]);
+
+  const hasPromotionMonthData = React.useMemo(
+    () => promotionMonthData.some((entry) => entry.value > 0),
+    [promotionMonthData],
+  );
+
+  const totalPlantRequestsCount = React.useMemo(
+    () =>
+      plantRequests.reduce(
+        (sum, req) => sum + (Number(req.request_count) || 0),
+        0,
+      ),
+    [plantRequests],
+  );
+
+  const requestsVsApproved = React.useMemo(() => {
+    const ratio =
+      approvedPlantsCount > 0
+        ? totalPlantRequestsCount / approvedPlantsCount
+        : null;
+    const percent =
+      ratio !== null
+        ? ratio * 100
+        : totalPlantRequestsCount > 0
+          ? 100
+          : 0;
+    const normalizedPercent = Number.isFinite(percent) ? percent : 0;
+    const domainMax = Math.max(100, Math.ceil(normalizedPercent / 25) * 25);
+    return {
+      ratio,
+      percent: normalizedPercent,
+      gaugeValue: Math.min(normalizedPercent, domainMax),
+      domainMax,
+      approved: approvedPlantsCount,
+      requests: totalPlantRequestsCount,
+    };
+  }, [approvedPlantsCount, totalPlantRequestsCount]);
+
+  const filteredPlantRows = React.useMemo(() => {
+    const term = plantSearchQuery.trim().toLowerCase();
+    return plantDashboardRows
+      .filter((plant) => {
+        const matchesStatus =
+          plantStatusFilter === "all" || plant.status === plantStatusFilter;
+        const matchesSearch = term
+          ? plant.name.toLowerCase().includes(term)
+          : true;
+        return matchesStatus && matchesSearch;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [plantDashboardRows, plantStatusFilter, plantSearchQuery]);
+
+  const plantViewIsPlants = requestViewMode === "plants";
+  const plantTableLoading =
+    plantDashboardLoading && !plantDashboardInitialized;
 
   const handlePlantCreated = React.useCallback(async () => {
     // Optionally complete the request after plant is created
@@ -2377,6 +2690,24 @@ export const AdminPage: React.FC = () => {
     if (activeTab !== "requests" || plantRequestsInitialized) return;
     loadPlantRequests({ initial: true });
   }, [activeTab, plantRequestsInitialized, loadPlantRequests]);
+
+  React.useEffect(() => {
+    if (
+      activeTab !== "requests" ||
+      !plantViewIsPlants ||
+      plantDashboardInitialized ||
+      plantDashboardLoading
+    ) {
+      return;
+    }
+    loadPlantDashboard();
+  }, [
+    activeTab,
+    plantViewIsPlants,
+    plantDashboardInitialized,
+    plantDashboardLoading,
+    loadPlantDashboard,
+  ]);
   const [membersView, setMembersView] =
     React.useState<"search" | "list">("search");
   const [memberList, setMemberList] = React.useState<ListedMember[]>([]);
@@ -4748,9 +5079,408 @@ export const AdminPage: React.FC = () => {
                 )}
 
                 {/* Requests Tab */}
-                {activeTab === "requests" && (
-                  <div className="space-y-4">
-                    <Card className="rounded-2xl">
+                  {activeTab === "requests" && (
+                    <div className="space-y-4">
+                      <div className="flex justify-center">
+                        <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
+                          {REQUEST_VIEW_TABS.map((tab) => {
+                            const isActive = requestViewMode === tab.key;
+                            return (
+                              <button
+                                key={tab.key}
+                                type="button"
+                                className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
+                                  isActive
+                                    ? "bg-emerald-600 text-white shadow"
+                                    : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
+                                }`}
+                                onClick={() => setRequestViewMode(tab.key)}
+                              >
+                                {tab.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                        {plantViewIsPlants ? (
+                          <>
+                            {plantDashboardError && (
+                              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
+                                {plantDashboardError}
+                              </div>
+                            )}
+                            <Card className="rounded-2xl">
+                              <CardContent className="p-4 space-y-4">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <div>
+                                    <div className="text-sm font-medium">
+                                      Plant health overview
+                                    </div>
+                                    <div className="text-xs opacity-60">
+                                      Status mix, promotion calendar and approval coverage.
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="rounded-xl"
+                                    onClick={() => loadPlantDashboard()}
+                                    disabled={plantDashboardLoading}
+                                  >
+                                    <RefreshCw
+                                      className={`h-4 w-4 mr-2 ${plantDashboardLoading ? "animate-spin" : ""}`}
+                                    />
+                                    Refresh
+                                  </Button>
+                                </div>
+                                <div className="grid gap-4 md:grid-cols-3">
+                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1c1c1f]/80 p-4 flex flex-col">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <div className="text-sm font-semibold">
+                                          Status repartition
+                                        </div>
+                                        <div className="text-xs opacity-60">
+                                          In progress, review and rework.
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className="text-[11px] uppercase tracking-wide opacity-60">
+                                          Approved
+                                        </div>
+                                        <div className="text-2xl font-semibold">
+                                          {approvedPlantsCount}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="relative mt-4 h-48">
+                                      {plantTableLoading ? (
+                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                          Loading chart...
+                                        </div>
+                                      ) : plantStatusDonutData.length === 0 ? (
+                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                          No status data yet.
+                                        </div>
+                                      ) : (
+                                        <ChartSuspense
+                                          fallback={
+                                            <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                              Loading chart...
+                                            </div>
+                                          }
+                                        >
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                              <Pie
+                                                data={plantStatusDonutData}
+                                                dataKey="value"
+                                                nameKey="label"
+                                                innerRadius="60%"
+                                                outerRadius="90%"
+                                                startAngle={90}
+                                                endAngle={-270}
+                                                paddingAngle={3}
+                                              >
+                                                {plantStatusDonutData.map((slice) => (
+                                                  <Cell key={slice.key} fill={slice.color} />
+                                                ))}
+                                              </Pie>
+                                              <Tooltip
+                                                formatter={(value: number, name: string) => [
+                                                  `${value} plants`,
+                                                  name,
+                                                ]}
+                                              />
+                                            </PieChart>
+                                          </ResponsiveContainer>
+                                        </ChartSuspense>
+                                      )}
+                                      {plantStatusDonutData.length > 0 && (
+                                        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                                          <span className="text-xs uppercase tracking-wide opacity-60">
+                                            Total
+                                          </span>
+                                          <span className="text-2xl font-semibold">
+                                            {plantStatusDonutData.reduce(
+                                              (sum, slice) => sum + slice.value,
+                                              0,
+                                            )}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="mt-4 space-y-1 text-xs">
+                                      {STATUS_DONUT_SEGMENTS.map((status) => (
+                                        <div
+                                          key={status}
+                                          className="flex items-center justify-between"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <span
+                                              className="inline-block h-2.5 w-2.5 rounded-full"
+                                              style={{
+                                                backgroundColor: PLANT_STATUS_COLORS[status],
+                                              }}
+                                            />
+                                            <span>{PLANT_STATUS_LABELS[status]}</span>
+                                          </div>
+                                          <span className="font-medium">
+                                            {plantStatusCounts[status] ?? 0}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1c1c1f]/80 p-4 flex flex-col">
+                                    <div className="text-sm font-semibold">
+                                      Promotion cadence
+                                    </div>
+                                    <div className="text-xs opacity-60 mb-4">
+                                      Number of plants promoted per month.
+                                    </div>
+                                    <div className="flex-1">
+                                      {plantTableLoading ? (
+                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                          Loading chart...
+                                        </div>
+                                      ) : !hasPromotionMonthData ? (
+                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                          No promotion data yet.
+                                        </div>
+                                      ) : (
+                                        <ChartSuspense
+                                          fallback={
+                                            <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                              Loading chart...
+                                            </div>
+                                          }
+                                        >
+                                          <ResponsiveContainer width="100%" height={220}>
+                                            <BarChart data={promotionMonthData}>
+                                              <CartesianGrid
+                                                strokeDasharray="3 3"
+                                                stroke={
+                                                  isDark
+                                                    ? "rgba(255,255,255,0.08)"
+                                                    : "rgba(0,0,0,0.06)"
+                                                }
+                                              />
+                                              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                                              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                                              <Tooltip
+                                                cursor={{
+                                                  fill: isDark
+                                                    ? "rgba(255,255,255,0.05)"
+                                                    : "rgba(0,0,0,0.03)",
+                                                }}
+                                                formatter={(value: number) => [`${value} plants`, "Promotions"]}
+                                              />
+                                              <Bar
+                                                dataKey="value"
+                                                fill={accentColor}
+                                                radius={[6, 6, 0, 0]}
+                                              />
+                                            </BarChart>
+                                          </ResponsiveContainer>
+                                        </ChartSuspense>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1c1c1f]/80 p-4 flex flex-col">
+                                    <div className="text-sm font-semibold">
+                                      Requests vs approved
+                                    </div>
+                                    <div className="text-xs opacity-60">
+                                      Ratio between incoming requests and approved plants.
+                                    </div>
+                                    <div className="mt-4 flex-1">
+                                      {plantTableLoading && totalPlantRequestsCount === 0 ? (
+                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                          Loading gauge...
+                                        </div>
+                                      ) : requestsVsApproved.requests === 0 &&
+                                        requestsVsApproved.approved === 0 ? (
+                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                          No requests or approved plants yet.
+                                        </div>
+                                      ) : (
+                                        <div className="h-48">
+                                          <ChartSuspense
+                                            fallback={
+                                              <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                                Loading gauge...
+                                              </div>
+                                            }
+                                          >
+                                            <ResponsiveContainer width="100%" height="100%">
+                                              <RadialBarChart
+                                                data={[
+                                                  {
+                                                    name: "ratio",
+                                                    value: requestsVsApproved.gaugeValue,
+                                                  },
+                                                ]}
+                                                startAngle={180}
+                                                endAngle={0}
+                                                innerRadius="80%"
+                                                outerRadius="100%"
+                                              >
+                                                <PolarAngleAxis
+                                                  type="number"
+                                                  domain={[
+                                                    0,
+                                                    Math.max(1, requestsVsApproved.domainMax),
+                                                  ]}
+                                                  tick={false}
+                                                />
+                                                <RadialBar
+                                                  dataKey="value"
+                                                  cornerRadius={10}
+                                                  fill={accentColor}
+                                                  clockWise
+                                                  background
+                                                />
+                                              </RadialBarChart>
+                                            </ResponsiveContainer>
+                                          </ChartSuspense>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="mt-4 text-center">
+                                      <div className="text-3xl font-semibold">
+                                        {requestsVsApproved.ratio !== null
+                                          ? `${requestsVsApproved.percent.toFixed(0)}%`
+                                          : requestsVsApproved.approved === 0 &&
+                                              requestsVsApproved.requests > 0
+                                            ? "∞"
+                                            : "0%"}
+                                      </div>
+                                      <div className="text-xs uppercase tracking-wide opacity-60">
+                                        Requests coverage
+                                      </div>
+                                      <div className="text-sm mt-2">
+                                        {requestsVsApproved.requests} requests /{" "}
+                                        {requestsVsApproved.approved} approved
+                                      </div>
+                                      {requestsVsApproved.ratio === null &&
+                                        requestsVsApproved.approved === 0 &&
+                                        requestsVsApproved.requests > 0 && (
+                                          <div className="text-xs opacity-60 mt-1">
+                                            Approve at least one plant to compute the ratio.
+                                          </div>
+                                        )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                            <Card className="rounded-2xl">
+                              <CardContent className="p-4 space-y-4">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                  <div>
+                                    <div className="text-sm font-medium">
+                                      Plant inventory
+                                    </div>
+                                    <div className="text-xs opacity-60">
+                                      Filter by status or search by name.
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                    <div className="w-full sm:w-48">
+                                      <Select
+                                        value={plantStatusFilter}
+                                        onValueChange={(value) =>
+                                          setPlantStatusFilter(value as PlantStatusFilterValue)
+                                        }
+                                      >
+                                        <SelectTrigger className="rounded-xl">
+                                          <SelectValue placeholder="Filter status" />
+                                        </SelectTrigger>
+                                        <SelectContent align="end">
+                                          {PLANT_STATUS_FILTERS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                              {option.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="w-full sm:w-64 relative">
+                                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+                                      <Input
+                                        value={plantSearchQuery}
+                                        onChange={(e) => setPlantSearchQuery(e.target.value)}
+                                        placeholder="Search by plant name..."
+                                        className="pl-10 rounded-xl"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden">
+                                  <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-4 bg-stone-50/60 dark:bg-[#1c1c1f] px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-300">
+                                    <span>Plant</span>
+                                    <span className="text-right">Status</span>
+                                  </div>
+                                  {plantTableLoading ? (
+                                    <div className="p-4 text-sm opacity-60">
+                                      Loading plants...
+                                    </div>
+                                  ) : filteredPlantRows.length === 0 ? (
+                                    <div className="p-4 text-sm opacity-60">
+                                      {plantDashboardRows.length === 0
+                                        ? "No plants available yet."
+                                        : "No plants match the current filters."}
+                                    </div>
+                                  ) : (
+                                    <div className="divide-y divide-stone-200 dark:divide-[#2f2f35]">
+                                      {filteredPlantRows.map((plant) => (
+                                        <div
+                                          key={plant.id}
+                                          className="grid grid-cols-[minmax(0,1fr)_120px] gap-4 px-4 py-3 items-center"
+                                        >
+                                          <div className="flex items-center gap-3 min-w-0">
+                                            <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl bg-neutral-100 dark:bg-[#2d2d30] text-sm font-semibold text-neutral-500 flex items-center justify-center">
+                                              {plant.primaryImage ? (
+                                                <img
+                                                  src={plant.primaryImage}
+                                                  alt={plant.name}
+                                                  className="h-full w-full object-cover"
+                                                  loading="lazy"
+                                                />
+                                              ) : (
+                                                plant.name.charAt(0).toUpperCase()
+                                              )}
+                                            </div>
+                                            <div className="min-w-0">
+                                              <div className="text-sm font-medium truncate">
+                                                {plant.name}
+                                              </div>
+                                              {plant.promotionMonth && (
+                                                <div className="text-xs opacity-60">
+                                                  Promotion:{" "}
+                                                  {PROMOTION_MONTH_LABELS[plant.promotionMonth]}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="text-right">
+                                            <span
+                                              className={`inline-flex items-center justify-end rounded-full px-2 py-1 text-xs font-medium ${PLANT_STATUS_BADGE_CLASSES[plant.status]}`}
+                                            >
+                                              {PLANT_STATUS_LABELS[plant.status]}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </>
+                        ) : (
+                      <Card className="rounded-2xl">
                       <CardContent className="p-4 space-y-4">
                         <div className="flex items-center justify-between gap-3">
                           <div>
