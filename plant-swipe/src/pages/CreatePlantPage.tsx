@@ -387,9 +387,10 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   if (error) throw new Error(error.message)
   if (!data) return null
   
-  // Load translation if language is provided and not English (base language)
+  // Load translation if language is provided
+  // For English, also check if there's a translation entry to ensure consistency
   let translation: any = null
-  if (language && language !== 'en') {
+  if (language) {
     const { data: translationData } = await supabase
       .from('plant_translations')
       .select('*')
@@ -829,6 +830,51 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           })
           await upsertSources(savedId, sources)
           await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
+          
+          // Also update the English translation entry to keep it in sync with the base name
+          const englishTranslationPayload = {
+            plant_id: savedId,
+            language: 'en',
+            name: trimmedName,
+            given_names: plantToSave.identity?.givenNames || [],
+            scientific_name: plantToSave.identity?.scientificName || null,
+            family: plantToSave.identity?.family || null,
+            overview: plantToSave.identity?.overview || null,
+            promotion_month: normalizedPromotionMonth,
+            life_cycle: normalizedLifeCycle || null,
+            season: normalizedIdentitySeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
+            toxicity_human: normalizedToxicityHuman || null,
+            toxicity_pets: normalizedToxicityPets || null,
+            allergens: plantToSave.identity?.allergens || [],
+            symbolism: plantToSave.identity?.symbolism || [],
+            living_space: normalizedLivingSpace || null,
+            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+            maintenance_level: normalizedMaintenance || null,
+            origin: plantToSave.plantCare?.origin || [],
+            habitat: normalizedHabitat,
+            advice_soil: plantToSave.plantCare?.adviceSoil || null,
+            advice_mulching: plantToSave.plantCare?.adviceMulching || null,
+            advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
+            advice_tutoring: plantToSave.growth?.adviceTutoring || null,
+            advice_sowing: plantToSave.growth?.adviceSowing || null,
+            cut: plantToSave.growth?.cut || null,
+            advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+            nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
+            recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+            advice_infusion: plantToSave.usage?.adviceInfusion || null,
+            ground_effect: plantToSave.ecology?.groundEffect || null,
+            admin_commentary: plantToSave.meta?.adminCommentary || null,
+            source_name: primarySource?.name || null,
+            source_url: primarySource?.url || null,
+            tags: plantToSave.miscellaneous?.tags || [],
+          }
+          const { error: englishTranslationError } = await supabase
+            .from('plant_translations')
+            .upsert(englishTranslationPayload, { onConflict: 'plant_id,language' })
+          if (englishTranslationError) {
+            throw new Error(englishTranslationError.message)
+          }
         }
 
         if (!isEnglish) {
