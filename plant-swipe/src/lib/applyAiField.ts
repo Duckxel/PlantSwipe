@@ -197,33 +197,33 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       // Explicitly handle temperature fields - ensure they're numbers or undefined
       if ('temperatureMax' in payload) {
         const val: unknown = payload.temperatureMax
-        if (typeof val === 'number' && Number.isFinite(val)) {
+        if (typeof val === 'number' && isFinite(val)) {
           (payload as any).temperatureMax = val
         } else if (typeof val === 'string' && val.trim()) {
-          const parsed: number = parseFloat(val.trim())
-          (payload as any).temperatureMax = Number.isFinite(parsed) ? parsed : undefined
+          const parsed = parseFloat(val.trim())
+          (payload as any).temperatureMax = isFinite(parsed) ? parsed : undefined
         } else {
           (payload as any).temperatureMax = undefined
         }
       }
       if ('temperatureMin' in payload) {
         const val: unknown = payload.temperatureMin
-        if (typeof val === 'number' && Number.isFinite(val)) {
+        if (typeof val === 'number' && isFinite(val)) {
           (payload as any).temperatureMin = val
         } else if (typeof val === 'string' && val.trim()) {
-          const parsed: number = parseFloat(val.trim())
-          (payload as any).temperatureMin = Number.isFinite(parsed) ? parsed : undefined
+          const parsed = parseFloat(val.trim())
+          (payload as any).temperatureMin = isFinite(parsed) ? parsed : undefined
         } else {
           (payload as any).temperatureMin = undefined
         }
       }
       if ('temperatureIdeal' in payload) {
         const val: unknown = payload.temperatureIdeal
-        if (typeof val === 'number' && Number.isFinite(val)) {
+        if (typeof val === 'number' && isFinite(val)) {
           (payload as any).temperatureIdeal = val
         } else if (typeof val === 'string' && val.trim()) {
-          const parsed: number = parseFloat(val.trim())
-          (payload as any).temperatureIdeal = Number.isFinite(parsed) ? parsed : undefined
+          const parsed = parseFloat(val.trim())
+          (payload as any).temperatureIdeal = isFinite(parsed) ? parsed : undefined
         } else {
           (payload as any).temperatureIdeal = undefined
         }
