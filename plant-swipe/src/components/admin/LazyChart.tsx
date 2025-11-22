@@ -96,6 +96,31 @@ const CellImpl: React.FC<any> = (props) => {
   return <charts.Cell {...props} />
 }
 
+const BarChartImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.BarChart {...props} />
+}
+
+const BarImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.Bar {...props} />
+}
+
+const RadialBarChartImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.RadialBarChart {...props} />
+}
+
+const RadialBarImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.RadialBar {...props} />
+}
+
+const PolarAngleAxisImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.PolarAngleAxis {...props} />
+}
+
 // Export chart components wrapped in provider
 export const LazyCharts = {
   ResponsiveContainer: (props: any) => (
@@ -116,6 +141,11 @@ export const LazyCharts = {
   PieChart: PieChartImpl,
   Pie: PieImpl,
   Cell: CellImpl,
+  BarChart: BarChartImpl,
+  Bar: BarImpl,
+  RadialBarChart: RadialBarChartImpl,
+  RadialBar: RadialBarImpl,
+  PolarAngleAxis: PolarAngleAxisImpl,
 }
 
 // Helper to wrap chart sections in Suspense with provider
