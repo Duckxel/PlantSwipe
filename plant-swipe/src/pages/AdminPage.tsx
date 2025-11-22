@@ -5233,7 +5233,7 @@ export const AdminPage: React.FC = () => {
                                     Refresh
                                   </Button>
                                 </div>
-                                <div className="grid gap-4 md:grid-cols-3">
+                                  <div className="grid gap-4 md:grid-cols-2">
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
                                     <div className="flex items-start justify-between gap-3">
                                       <div>
@@ -5311,6 +5311,106 @@ export const AdminPage: React.FC = () => {
                                       )}
                                     </div>
                                   </div>
+                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div>
+                                        <div className="text-sm font-semibold">
+                                          Requests vs approved
+                                        </div>
+                                        <div className="text-xs opacity-60">
+                                          Ratio between incoming requests and approved plants.
+                                        </div>
+                                      </div>
+                                        <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-300">
+                                          {requestsVsApproved.ratio !== null
+                                            ? `${requestsVsApproved.percent.toFixed(0)}%`
+                                            : requestsVsApproved.approved === 0 &&
+                                                requestsVsApproved.requests > 0
+                                              ? "∞"
+                                              : "0%"}
+                                        </div>
+                                    </div>
+                                      <div className="mt-3 flex-1">
+                                      {plantTableLoading && totalPlantRequestsCount === 0 ? (
+                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                          Loading gauge...
+                                        </div>
+                                      ) : requestsVsApproved.requests === 0 &&
+                                        requestsVsApproved.approved === 0 ? (
+                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                          No requests or approved plants yet.
+                                        </div>
+                                      ) : (
+                                          <div className="relative h-40 sm:h-48">
+                                          <ChartSuspense
+                                            fallback={
+                                              <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                                Loading gauge...
+                                              </div>
+                                            }
+                                          >
+                                            <ResponsiveContainer width="100%" height="100%">
+                                              <RadialBarChart
+                                                data={[
+                                                  {
+                                                    name: "ratio",
+                                                    value: requestsVsApproved.gaugeValue,
+                                                  },
+                                                ]}
+                                                startAngle={180}
+                                                endAngle={0}
+                                                  innerRadius="70%"
+                                                  outerRadius="100%"
+                                                  margin={{ top: 0, bottom: 0, left: 0, right: 0 }}
+                                              >
+                                                <PolarAngleAxis
+                                                  type="number"
+                                                  domain={[
+                                                    0,
+                                                    Math.max(1, requestsVsApproved.domainMax),
+                                                  ]}
+                                                  tick={false}
+                                                />
+                                                <RadialBar
+                                                  dataKey="value"
+                                                  cornerRadius={10}
+                                                  fill={accentColor}
+                                                  clockWise
+                                                  background
+                                                />
+                                              </RadialBarChart>
+                                            </ResponsiveContainer>
+                                          </ChartSuspense>
+                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                              <div className="text-2xl font-semibold text-emerald-600 dark:text-emerald-300">
+                                                {requestsVsApproved.ratio !== null
+                                                  ? `${requestsVsApproved.percent.toFixed(0)}%`
+                                                  : requestsVsApproved.approved === 0 &&
+                                                      requestsVsApproved.requests > 0
+                                                    ? "∞"
+                                                    : "0%"}
+                                              </div>
+                                            </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                      <div className="mt-1 text-center text-sm font-medium">
+                                      <div className="text-xs uppercase tracking-wide opacity-60">
+                                        Requests coverage
+                                      </div>
+                                      <div className="text-sm mt-2">
+                                        {requestsVsApproved.requests} requests /{" "}
+                                        {requestsVsApproved.approved} approved
+                                      </div>
+                                      {requestsVsApproved.ratio === null &&
+                                        requestsVsApproved.approved === 0 &&
+                                        requestsVsApproved.requests > 0 && (
+                                          <div className="text-xs opacity-60 mt-1">
+                                            Approve at least one plant to compute the ratio.
+                                          </div>
+                                        )}
+                                    </div>
+                                  </div>
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/90 dark:bg-[#131318] p-4 flex flex-col">
                                     <div className="text-sm font-semibold">
                                       Promotion cadence
@@ -5336,7 +5436,7 @@ export const AdminPage: React.FC = () => {
                                           }
                                         >
                                           <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={promotionMonthData}>
+                                            <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 12, right: 12, top: 12, bottom: 8 }}>
                                               <CartesianGrid
                                                 strokeDasharray="3 3"
                                                 stroke={
@@ -5358,101 +5458,12 @@ export const AdminPage: React.FC = () => {
                                               <Bar
                                                 dataKey="value"
                                                 fill={accentColor}
-                                                radius={[6, 6, 0, 0]}
+                                                radius={6}
                                               />
                                             </BarChart>
                                           </ResponsiveContainer>
                                         </ChartSuspense>
                                       )}
-                                    </div>
-                                  </div>
-                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div>
-                                        <div className="text-sm font-semibold">
-                                          Requests vs approved
-                                        </div>
-                                        <div className="text-xs opacity-60">
-                                          Ratio between incoming requests and approved plants.
-                                        </div>
-                                      </div>
-                                      <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-300">
-                                        {requestsVsApproved.ratio !== null
-                                          ? `${requestsVsApproved.percent.toFixed(0)}%`
-                                          : requestsVsApproved.approved === 0 &&
-                                              requestsVsApproved.requests > 0
-                                            ? "∞"
-                                            : "0%"}
-                                      </div>
-                                    </div>
-                                    <div className="mt-3 flex-1">
-                                      {plantTableLoading && totalPlantRequestsCount === 0 ? (
-                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                          Loading gauge...
-                                        </div>
-                                      ) : requestsVsApproved.requests === 0 &&
-                                        requestsVsApproved.approved === 0 ? (
-                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                          No requests or approved plants yet.
-                                        </div>
-                                      ) : (
-                                        <div className="h-48">
-                                          <ChartSuspense
-                                            fallback={
-                                              <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                                Loading gauge...
-                                              </div>
-                                            }
-                                          >
-                                            <ResponsiveContainer width="100%" height="100%">
-                                              <RadialBarChart
-                                                data={[
-                                                  {
-                                                    name: "ratio",
-                                                    value: requestsVsApproved.gaugeValue,
-                                                  },
-                                                ]}
-                                                startAngle={180}
-                                                endAngle={0}
-                                                innerRadius="80%"
-                                                outerRadius="100%"
-                                              >
-                                                <PolarAngleAxis
-                                                  type="number"
-                                                  domain={[
-                                                    0,
-                                                    Math.max(1, requestsVsApproved.domainMax),
-                                                  ]}
-                                                  tick={false}
-                                                />
-                                                <RadialBar
-                                                  dataKey="value"
-                                                  cornerRadius={10}
-                                                  fill={accentColor}
-                                                  clockWise
-                                                  background
-                                                />
-                                              </RadialBarChart>
-                                            </ResponsiveContainer>
-                                          </ChartSuspense>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="mt-2 text-center text-sm font-medium">
-                                      <div className="text-xs uppercase tracking-wide opacity-60">
-                                        Requests coverage
-                                      </div>
-                                      <div className="text-sm mt-2">
-                                        {requestsVsApproved.requests} requests /{" "}
-                                        {requestsVsApproved.approved} approved
-                                      </div>
-                                      {requestsVsApproved.ratio === null &&
-                                        requestsVsApproved.approved === 0 &&
-                                        requestsVsApproved.requests > 0 && (
-                                          <div className="text-xs opacity-60 mt-1">
-                                            Approve at least one plant to compute the ratio.
-                                          </div>
-                                        )}
                                     </div>
                                   </div>
                                 </div>
