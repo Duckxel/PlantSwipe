@@ -67,7 +67,7 @@ const normalizeEnumArrayInput = (enumTool: EnumTools, value: unknown): EnumArray
 export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown): Plant {
   const next: Plant = { ...prev }
 
-  const shouldIgnore = ['colors', 'identity.colors', 'miscellaneous.source', 'source', 'sources'].some(
+  const shouldIgnore = ['colors', 'identity.colors', 'miscellaneous.source', 'source', 'sources', 'images'].some(
     (blocked) => fieldKey.toLowerCase() === blocked.toLowerCase(),
   )
   if (shouldIgnore) return next
@@ -96,7 +96,8 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       return { ...next, fruitType: result.value as Plant['fruitType'] }
     }
     case 'images':
-      return { ...next, images: Array.isArray(data) ? (data as any) : next.images }
+      // Always preserve existing images - AI should never overwrite user-added images
+      return next
     case 'colors':
       return { ...next, colors: Array.isArray(data) ? (data as any) : next.colors }
     case 'seasons': {
@@ -151,6 +152,13 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
             : String(payload.foliagePersistance ?? ''),
         )
       }
+      // Explicitly handle multicolor and bicolor booleans
+      if ('multicolor' in payload) {
+        (payload as any).multicolor = typeof payload.multicolor === 'boolean' ? payload.multicolor : Boolean(payload.multicolor)
+      }
+      if ('bicolor' in payload) {
+        (payload as any).bicolor = typeof payload.bicolor === 'boolean' ? payload.bicolor : Boolean(payload.bicolor)
+      }
       return { ...next, identity: { ...(next.identity || {}), ...payload } }
     }
     case 'plantCare': {
@@ -186,6 +194,66 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       const fertilizerResult = normalizeEnumArrayInput(fertilizerEnum as EnumTools, (payload as any).fertilizer)
       if (fertilizerResult.shouldUpdate) {
         (payload as any).fertilizer = fertilizerResult.value
+      }
+      // Explicitly handle temperature fields - ensure they're numbers or undefined
+      if ('temperatureMax' in payload) {
+        const val: unknown = payload.temperatureMax
+        if (typeof val === 'number' && isFinite(val)) {
+          (payload as any).temperatureMax = val
+        } else if (typeof val === 'string' && val.trim()) {
+          const trimmed = val.trim()
+          const parsed = parseFloat(trimmed)
+          if (isFinite(parsed) && !isNaN(parsed)) {
+            (payload as any).temperatureMax = parsed
+          } else {
+            (payload as any).temperatureMax = undefined
+          }
+        } else {
+          (payload as any).temperatureMax = undefined
+        }
+      }
+      if ('temperatureMin' in payload) {
+        const val: unknown = payload.temperatureMin
+        if (typeof val === 'number' && isFinite(val)) {
+          (payload as any).temperatureMin = val
+        } else if (typeof val === 'string' && val.trim()) {
+          const trimmed = val.trim()
+          const parsed = parseFloat(trimmed)
+          if (isFinite(parsed) && !isNaN(parsed)) {
+            (payload as any).temperatureMin = parsed
+          } else {
+            (payload as any).temperatureMin = undefined
+          }
+        } else {
+          (payload as any).temperatureMin = undefined
+        }
+      }
+      if ('temperatureIdeal' in payload) {
+        const val: unknown = payload.temperatureIdeal
+        if (typeof val === 'number' && isFinite(val)) {
+          (payload as any).temperatureIdeal = val
+        } else if (typeof val === 'string' && val.trim()) {
+          const trimmed = val.trim()
+          const parsed = parseFloat(trimmed)
+          if (isFinite(parsed) && !isNaN(parsed)) {
+            (payload as any).temperatureIdeal = parsed
+          } else {
+            (payload as any).temperatureIdeal = undefined
+          }
+        } else {
+          (payload as any).temperatureIdeal = undefined
+        }
+      }
+      // Explicitly handle origin array
+      if ('origin' in payload) {
+        const originVal = payload.origin
+        if (Array.isArray(originVal)) {
+          (payload as any).origin = originVal.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map(item => item.trim())
+        } else if (typeof originVal === 'string' && originVal.trim()) {
+          (payload as any).origin = [originVal.trim()]
+        } else {
+          (payload as any).origin = []
+        }
       }
       return { ...next, plantCare: { ...(next.plantCare || {}), ...payload } }
     }

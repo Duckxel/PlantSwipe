@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp } from "lucide-react"
 
 export type PlantProfileFormProps = {
   value: Plant
@@ -43,6 +43,7 @@ type FieldType =
   | "companions"
   | "sources"
   | "readonly"
+  | "temperature"
 
 type FieldOption = string | { label: string; value: string | number }
 
@@ -242,7 +243,7 @@ const WateringScheduleEditor: React.FC<{
       <div className="grid gap-3">
         {schedules.map((schedule, idx) => (
           <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <Input
                 placeholder="Season (optional)"
                 value={schedule.season || ""}
@@ -278,7 +279,7 @@ const WateringScheduleEditor: React.FC<{
           </div>
         ))}
         <div className="grid gap-2 rounded border border-dashed p-3">
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <Input
               placeholder="Season (optional)"
               value={draft.season}
@@ -445,9 +446,7 @@ const identityFields: FieldConfig[] = [
 const careFields: FieldConfig[] = [
   { key: "plantCare.origin", label: "Origin", description: "Where the plant originates from", type: "tags" },
   { key: "plantCare.habitat", label: "Habitat", description: "Habitat types", type: "multiselect", options: ["Aquatic","Semi-Aquatic","Wetland","Tropical","Temperate","Arid","Mediterranean","Mountain","Grassland","Forest","Coastal","Urban"] },
-  { key: "plantCare.temperatureMax", label: "Temperature Max", description: "Maximum temperature (°C)", type: "number" },
-  { key: "plantCare.temperatureMin", label: "Temperature Min", description: "Minimum temperature (°C)", type: "number" },
-  { key: "plantCare.temperatureIdeal", label: "Temperature Ideal", description: "Ideal temperature (°C)", type: "number" },
+  { key: "plantCare.temperature", label: "Temperature", description: "Temperature range (°C)", type: "temperature" },
   { key: "plantCare.levelSun", label: "Level Sun", description: "Sun exposure level", type: "select", options: ["Low Light","Shade","Partial Sun","Full Sun"] },
   { key: "plantCare.hygrometry", label: "Hygrometry", description: "Ideal humidity percentage", type: "number" },
   { key: "plantCare.watering.schedules", label: "Watering Schedule", description: "Seasonal watering (season + quantity + period)", type: "watering" },
@@ -706,6 +705,45 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
             <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
         )
+      case "temperature":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid gap-1">
+                <Label htmlFor={`${id}-min`} className="text-xs text-muted-foreground">Min (°C)</Label>
+                <Input
+                  id={`${id}-min`}
+                  type="number"
+                  value={getValue(plant, "plantCare.temperatureMin") ?? ""}
+                  onChange={(e) => onChange("plantCare.temperatureMin", e.target.value === "" ? undefined : Number(e.target.value))}
+                  placeholder="Min"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor={`${id}-ideal`} className="text-xs text-muted-foreground">Ideal (°C)</Label>
+                <Input
+                  id={`${id}-ideal`}
+                  type="number"
+                  value={getValue(plant, "plantCare.temperatureIdeal") ?? ""}
+                  onChange={(e) => onChange("plantCare.temperatureIdeal", e.target.value === "" ? undefined : Number(e.target.value))}
+                  placeholder="Ideal"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor={`${id}-max`} className="text-xs text-muted-foreground">Max (°C)</Label>
+                <Input
+                  id={`${id}-max`}
+                  type="number"
+                  value={getValue(plant, "plantCare.temperatureMax") ?? ""}
+                  onChange={(e) => onChange("plantCare.temperatureMax", e.target.value === "" ? undefined : Number(e.target.value))}
+                  placeholder="Max"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
       default:
         return null
     }
@@ -744,6 +782,7 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
 function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void }) {
   const list = Array.isArray(images) ? images : []
   const [previewErrors, setPreviewErrors] = React.useState<Record<string, boolean>>({})
+  const [isCollapsed, setIsCollapsed] = React.useState<boolean>(true)
 
   const getPreviewKey = (img: PlantImage, idx: number) => img.id || img.link || `idx-${idx}`
 
@@ -775,6 +814,8 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
   const addImage = () => {
     const hasPrimary = list.some((img) => img.use === "primary")
     onChange([...list, { link: "", use: hasPrimary ? "other" : "primary" }])
+    // Auto-expand when adding an image
+    setIsCollapsed(false)
   }
 
   const removeImage = (idx: number) => {
@@ -794,33 +835,52 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Label className="font-semibold">Images</Label>
-          <p className="text-xs text-muted-foreground">Primary appears on detail pages; Discovery on list cards.</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="flex items-center gap-1 text-sm font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+          >
+            <Label className="font-semibold cursor-pointer">Images</Label>
+            {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </button>
+          {list.length > 0 && (
+            <span className="text-xs text-muted-foreground">({list.length})</span>
+          )}
         </div>
-        <Button type="button" variant="outline" onClick={addImage}>
-          Add image
-        </Button>
+        <div className="flex items-center gap-2">
+          {!isCollapsed && (
+            <Button type="button" variant="outline" onClick={addImage}>
+              Add image
+            </Button>
+          )}
+        </div>
       </div>
-      {!list.length && (
-        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          No images yet. Click "Add image" to start.
-        </div>
-      )}
-      <div className="space-y-3">
-        {list.map((img, idx) => {
-          const previewKey = getPreviewKey(img, idx)
-          const hasError = previewErrors[previewKey]
-          return (
-            <div key={previewKey} className="rounded-xl border p-3 space-y-3">
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="sm:w-48">
-                  <div className="relative h-32 rounded-lg border bg-muted/30 flex items-center justify-center overflow-hidden">
+      
+      {isCollapsed ? (
+        // Collapsed view: Show small thumbnails
+        <div>
+          {list.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              No images yet. Click to expand and add images.
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {list.map((img, idx) => {
+                const previewKey = getPreviewKey(img, idx)
+                const hasError = previewErrors[previewKey]
+                const useLabel = img.use === 'primary' ? 'P' : img.use === 'discovery' ? 'D' : 'O'
+                return (
+                  <div
+                    key={previewKey}
+                    className="relative group rounded-lg border overflow-hidden bg-muted/30"
+                    style={{ width: '80px', height: '80px' }}
+                  >
                     {img.link && !hasError ? (
                       <img
                         src={img.link}
                         alt={`Plant image ${idx + 1}`}
-                        className="h-full w-full object-cover"
+                        className="w-full h-full object-cover"
                         onError={() => setPreviewErrors((prev) => ({ ...prev, [previewKey]: true }))}
                         onLoad={() =>
                           setPreviewErrors((prev) => {
@@ -832,59 +892,113 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
                         }
                       />
                     ) : (
-                      <span className="px-4 text-center text-xs text-muted-foreground">
-                        {img.link && hasError ? 'Preview failed - double-check the URL.' : 'Preview appears after entering a valid URL.'}
-                      </span>
+                      <div className="w-full h-full flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground">No image</span>
+                      </div>
                     )}
+                    <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                      {useLabel}
+                    </div>
                   </div>
-                </div>
-                <div className="flex-1 space-y-3">
-                  <Input
-                    value={img.link || ""}
-                    onChange={(e) => updateImage(idx, { link: e.target.value })}
-                    placeholder="https://example.com/photo.jpg"
-                  />
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Usage</span>
-                    {(["primary","discovery","other"] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setUse(idx, opt)}
-                        className={`px-3 py-1 rounded-full border text-xs uppercase tracking-wide ${
-                          (img.use || 'other') === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {img.use === 'primary'
-                      ? 'Shown as the hero/detail image.'
-                      : img.use === 'discovery'
-                        ? 'Used in discovery cards and lists.'
-                        : 'Supports the gallery.'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex gap-2">
-                  <Button type="button" variant="ghost" onClick={() => moveImage(idx, -1)} disabled={idx === 0}>
-                    Move up
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => moveImage(idx, 1)} disabled={idx === list.length - 1}>
-                    Move down
-                  </Button>
-                </div>
-                <Button type="button" variant="ghost" className="text-red-600" onClick={() => removeImage(idx)}>
-                  Remove
-                </Button>
-              </div>
+                )
+              })}
             </div>
-          )
-        })}
-      </div>
+          )}
+          <p className="text-xs text-muted-foreground mt-2">Click to expand and edit images. Primary appears on detail pages; Discovery on list cards.</p>
+        </div>
+      ) : (
+        // Expanded view: Show full editor
+        <>
+          {!list.length && (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              No images yet. Click "Add image" to start.
+            </div>
+          )}
+          <div className="space-y-3">
+            {list.map((img, idx) => {
+              const previewKey = getPreviewKey(img, idx)
+              const hasError = previewErrors[previewKey]
+              return (
+                <div key={previewKey} className="rounded-xl border p-3 space-y-3">
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <div className="sm:w-48">
+                      <div className="relative h-32 rounded-lg border bg-muted/30 flex items-center justify-center overflow-hidden">
+                        {img.link && !hasError ? (
+                          <img
+                            src={img.link}
+                            alt={`Plant image ${idx + 1}`}
+                            className="h-full w-full object-cover"
+                            onError={() => setPreviewErrors((prev) => ({ ...prev, [previewKey]: true }))}
+                            onLoad={() =>
+                              setPreviewErrors((prev) => {
+                                if (!prev[previewKey]) return prev
+                                const clone = { ...prev }
+                                delete clone[previewKey]
+                                return clone
+                              })
+                            }
+                          />
+                        ) : (
+                          <span className="px-4 text-center text-xs text-muted-foreground">
+                            {img.link && hasError ? 'Preview failed - double-check the URL.' : 'Preview appears after entering a valid URL.'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-3">
+                      <Input
+                        value={img.link || ""}
+                        onChange={(e) => updateImage(idx, { link: e.target.value })}
+                        placeholder="https://example.com/photo.jpg"
+                      />
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">Usage</span>
+                        {(["primary","discovery","other"] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => setUse(idx, opt)}
+                            className={`px-3 py-1 rounded-full border text-xs uppercase tracking-wide ${
+                              (img.use || 'other') === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {img.use === 'primary'
+                          ? 'Shown as the hero/detail image.'
+                          : img.use === 'discovery'
+                            ? 'Used in discovery cards and lists.'
+                            : 'Supports the gallery.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex gap-2">
+                      <Button type="button" variant="ghost" onClick={() => moveImage(idx, -1)} disabled={idx === 0}>
+                        Move up
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => moveImage(idx, 1)} disabled={idx === list.length - 1}>
+                        Move down
+                      </Button>
+                    </div>
+                    <Button type="button" variant="ghost" className="text-red-600" onClick={() => removeImage(idx)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={addImage}>
+              Add image
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

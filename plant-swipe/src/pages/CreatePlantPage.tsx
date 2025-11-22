@@ -227,25 +227,94 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
     const list = images && images.length ? images : []
     let primaryUsed = false
     let discoveryUsed = false
+    
+    // First pass: normalize the use values, ensuring only one primary and one discovery
     const mapped = list.map((img, idx) => {
       let use = img.use || (idx === 0 ? 'primary' : 'other')
+      
+      // Handle primary: only allow the first one
       if (use === 'primary') {
-        if (primaryUsed) use = 'other'
-        primaryUsed = true
+        if (primaryUsed) {
+          use = 'other' // Convert subsequent primary images to other
+        } else {
+          primaryUsed = true
+        }
       }
+      
+      // Handle discovery: only allow the first one
       if (use === 'discovery') {
-        if (discoveryUsed) use = 'other'
-        discoveryUsed = true
+        if (discoveryUsed) {
+          use = 'other' // Convert subsequent discovery images to other
+        } else {
+          discoveryUsed = true
+        }
       }
+      
+      // Ensure other images stay as 'other'
+      if (use !== 'primary' && use !== 'discovery') {
+        use = 'other'
+      }
+      
       return { ...img, use }
     })
-    if (!primaryUsed && mapped.length) mapped[0] = { ...mapped[0], use: 'primary' }
+    
+    // If no primary was set and we have images, set the first one as primary
+    if (!primaryUsed && mapped.length > 0) {
+      mapped[0] = { ...mapped[0], use: 'primary' }
+      primaryUsed = true
+    }
+    
     return mapped
   })()
+  
+  // Delete all existing images for this plant
   await supabase.from('plant_images').delete().eq('plant_id', plantId)
+  
   if (!normalized?.length) return
-  const inserts = normalized.filter((img) => img.link).map((img) => ({ plant_id: plantId, link: img.link, use: img.use || 'other' }))
+  
+  // Filter out images without links and ensure use is always set
+  const inserts = normalized
+    .filter((img) => img.link && img.link.trim())
+    .map((img) => ({ 
+      plant_id: plantId, 
+      link: img.link!.trim(), 
+      use: (img.use === 'primary' || img.use === 'discovery') ? img.use : 'other' 
+    }))
+  
   if (inserts.length === 0) return
+  
+  // Verify we only have one primary and one discovery before inserting
+  const primaryCount = inserts.filter(i => i.use === 'primary').length
+  const discoveryCount = inserts.filter(i => i.use === 'discovery').length
+  
+  if (primaryCount > 1) {
+    // Keep only the first primary, convert rest to other
+    let foundPrimary = false
+    for (let i = 0; i < inserts.length; i++) {
+      if (inserts[i].use === 'primary') {
+        if (foundPrimary) {
+          inserts[i].use = 'other'
+        } else {
+          foundPrimary = true
+        }
+      }
+    }
+  }
+  
+  if (discoveryCount > 1) {
+    // Keep only the first discovery, convert rest to other
+    let foundDiscovery = false
+    for (let i = 0; i < inserts.length; i++) {
+      if (inserts[i].use === 'discovery') {
+        if (foundDiscovery) {
+          inserts[i].use = 'other'
+        } else {
+          foundDiscovery = true
+        }
+      }
+    }
+  }
+  
   const { error } = await supabase.from('plant_images').insert(inserts)
   if (error) throw new Error(error.message)
 }
@@ -625,8 +694,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       setError(null)
       try {
         const plantId = existingPlantId || generateUUIDv4()
-        const createdByValue = existingLoaded ? plantToSave.meta?.createdBy || null : (plantToSave.meta?.createdBy || (profile as any)?.full_name || null)
-        const createdTimeValue = existingLoaded ? plantToSave.meta?.createdAt || null : (plantToSave.meta?.createdAt || new Date().toISOString())
+        // For new plants: set creator to current user's display name, preserve existing if already set
+        // For existing plants: preserve the original creator
+        const createdByValue = existingLoaded 
+          ? (plantToSave.meta?.createdBy || null)
+          : (plantToSave.meta?.createdBy || profile?.display_name || null)
+        const createdTimeValue = existingLoaded 
+          ? (plantToSave.meta?.createdAt || null)
+          : (plantToSave.meta?.createdAt || new Date().toISOString())
+        // Always set the updater to the current user when saving
+        const updatedByValue = profile?.display_name || plantToSave.meta?.updatedBy || null
         const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
@@ -732,7 +809,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             admin_commentary: plantToSave.meta?.adminCommentary || null,
             created_by: createdByValue,
             created_time: createdTimeValue,
-            updated_by: (profile as any)?.full_name || plantToSave.meta?.updatedBy || null,
+            updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
           }
           payloadUpdatedTime = payload.updated_time
@@ -810,7 +887,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 ...plantToSave.meta,
                 createdBy: createdByValue || undefined,
                 createdAt: createdTimeValue || undefined,
-                updatedBy: isEnglish ? ((profile as any)?.full_name || plantToSave.meta?.updatedBy) : plantToSave.meta?.updatedBy,
+                updatedBy: isEnglish ? (updatedByValue || plantToSave.meta?.updatedBy) : plantToSave.meta?.updatedBy,
                 updatedAt: isEnglish ? payloadUpdatedTime || new Date().toISOString() : plantToSave.meta?.updatedAt,
               },
             })
@@ -839,9 +916,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
     let aiSucceeded = false
     let finalPlant: Plant | null = null
+    // Capture current images at the start to preserve them throughout AI fill
+    const currentImages = plant.images || []
     const plantNameForAi = trimmedName
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
+      // Always preserve images from the current state
+      images: candidate.images && candidate.images.length > 0 ? candidate.images : currentImages,
       meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
     })
     const needsMonths = (p: Plant) =>
@@ -867,9 +948,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             const applied = applyAiFieldToPlant(prev, fieldKey, fieldData)
             const normalized = normalizePlantWatering(applied)
             const withStatus = applyWithStatus(normalized)
-            finalPlant = withStatus
+            // Ensure images are always preserved from the most recent state
+            const withImages = {
+              ...withStatus,
+              images: prev.images && prev.images.length > 0 ? prev.images : (withStatus.images || currentImages),
+            }
+            finalPlant = withImages
             markFieldComplete(fieldKey)
-            return withStatus
+            return withImages
           })
           return true
         } catch (err: any) {
@@ -912,8 +998,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 const applied = applyAiFieldToPlant(prev, field, data)
                 const normalized = normalizePlantWatering(applied)
                 const withStatus = applyWithStatus(normalized)
-                finalPlant = withStatus
-                return withStatus
+                // Ensure images are always preserved from the most recent state
+                const withImages = {
+                  ...withStatus,
+                  images: prev.images && prev.images.length > 0 ? prev.images : (withStatus.images || currentImages),
+                }
+                finalPlant = withImages
+                return withImages
               })
               markFieldComplete(field)
             },
@@ -929,6 +1020,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (aiData && typeof aiData === 'object') {
         setPlant((prev) => {
           let updated = { ...prev }
+          // Preserve images before processing AI data
+          const preservedImages = prev.images && prev.images.length > 0 ? prev.images : currentImages
           for (const [fieldKey, data] of Object.entries(aiData as Record<string, unknown>)) {
             if (fieldKey.toLowerCase().includes('color')) captureColorSuggestions(data)
             if (fieldKey === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
@@ -938,8 +1031,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const withId = { ...updated, id: updated.id || generateUUIDv4() }
           const normalized = normalizePlantWatering(withId)
           const withStatus = applyWithStatus(normalized)
-          finalPlant = withStatus
-          return withStatus
+          // Always restore preserved images
+          const withImages = {
+            ...withStatus,
+            images: preservedImages,
+          }
+          finalPlant = withImages
+          return withImages
         })
       }
 
@@ -953,6 +1051,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
       setPlant((prev) => {
         const target = normalizePlantWatering(finalPlant || prev)
+        // Preserve images from current state
+        const preservedImages = prev.images && prev.images.length > 0 ? prev.images : currentImages
         const ensuredWater = (target.plantCare?.watering?.schedules || []).length
           ? normalizeSchedules(target.plantCare?.watering?.schedules)
           : [{ season: undefined, quantity: 1, timePeriod: 'week' as const }]
@@ -963,6 +1063,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         }
         const next = {
           ...target,
+          images: preservedImages,
           plantCare: {
             ...(target.plantCare || {}),
             origin: (target.plantCare?.origin || []).length ? target.plantCare?.origin : ['Unknown'],
