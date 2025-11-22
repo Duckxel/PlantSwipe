@@ -1024,6 +1024,8 @@
         "categoryProgressTitle": "Category fill progress",
         "categoryProgressSummary": "Latest AI fill summary",
         "categoryMenuTitle": "Quick category menu",
+          "backToPrevious": "Back to previous page",
+          "viewPlantInfo": "Open plant page",
         "sectionFilled": "Filled",
         "sectionInProgress": "Filling",
         "sectionLogTitle": "Sections completed",

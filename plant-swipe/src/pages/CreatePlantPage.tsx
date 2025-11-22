@@ -1,7 +1,7 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, Check, Loader2, Sparkles } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Loader2, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
@@ -9,11 +9,11 @@ import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateri
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
-import { saveLanguagePreference } from "@/lib/i18nRouting"
+import { saveLanguagePreference, useLanguageNavigate } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
-import { useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
 import {
@@ -529,12 +529,12 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
 export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: string) => void; initialName?: string }> = ({ onCancel, onSaved, initialName }) => {
   const { t, i18n } = useTranslation('common')
   const { id } = useParams<{ id?: string }>()
+  const navigate = useNavigate()
+  const languageNavigate = useLanguageNavigate()
   const { profile } = useAuth()
-    const initialLanguage = SUPPORTED_LANGUAGES.includes(i18n.language as SupportedLanguage)
-      ? (i18n.language as SupportedLanguage)
-      : 'en'
-    const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
-    const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
+  const initialLanguage: SupportedLanguage = 'en'
+  const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
+  const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
   const [loading, setLoading] = React.useState<boolean>(!!id)
   const [saving, setSaving] = React.useState(false)
@@ -1257,6 +1257,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     }
   }
 
+  const handleBackClick = React.useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    onCancel()
+  }, [navigate, onCancel])
+
+  const handleViewPlantInfo = React.useCallback(() => {
+    if (!id) return
+    languageNavigate(`/plants/${id}`)
+  }, [id, languageNavigate])
+
   return (
     <div className="max-w-6xl mx-auto px-4 pb-12 space-y-6">
       <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b2a21] dark:via-[#101712] dark:to-[#0c120e] shadow-[0_24px_80px_-40px_rgba(16,185,129,0.45)] dark:shadow-[0_28px_90px_-50px_rgba(34,197,94,0.35)]">
@@ -1264,13 +1277,37 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         <div className="absolute -right-12 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/40 dark:bg-emerald-600/10 blur-3xl" aria-hidden="true" />
         <div className="relative p-6 sm:p-8 flex flex-col gap-6">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-            <div className="space-y-2">
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="rounded-full px-3"
+                  onClick={handleBackClick}
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  {t('plantAdmin.backToPrevious', 'Back to previous page')}
+                </Button>
+                {id ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="rounded-full px-3"
+                    onClick={handleViewPlantInfo}
+                  >
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
+                    {t('plantAdmin.viewPlantInfo', 'Open plant page')}
+                  </Button>
+                ) : null}
+              </div>
+              <div className="space-y-2">
               <h1 className="text-3xl font-semibold tracking-tight">
                 {id ? t('plantAdmin.editTitle', 'Edit Plant') : t('plantAdmin.createTitle', 'Create Plant')}
               </h1>
               <p className="text-sm text-muted-foreground max-w-2xl">
                 {t('plantAdmin.createSubtitle', 'Fill every field with the supplied descriptions or let AI help.')}
               </p>
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-2 rounded-full bg-white/80 dark:bg-[#151b15]/80 border border-stone-200/70 dark:border-stone-700/60 px-3 py-1.5 shadow-inner shadow-emerald-100/40 dark:shadow-[inset_0_1px_0_rgba(16,185,129,0.25)]">

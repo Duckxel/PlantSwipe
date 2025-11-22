@@ -1024,6 +1024,8 @@
         "categoryProgressTitle": "Progression par catégorie",
         "categoryProgressSummary": "Dernier récapitulatif du remplissage IA",
         "categoryMenuTitle": "Menu rapide des catégories",
+          "backToPrevious": "Revenir à la page précédente",
+          "viewPlantInfo": "Voir la fiche plante",
         "sectionFilled": "Rempli",
         "sectionInProgress": "En cours",
         "sectionLogTitle": "Sections terminées",
