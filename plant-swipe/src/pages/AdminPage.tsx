@@ -5699,6 +5699,7 @@ export const AdminPage: React.FC = () => {
                         )}
                       </CardContent>
                     </Card>
+                        )}
 
                     {/* Info Dialog */}
                     <Dialog
