@@ -5419,7 +5419,7 @@ export const AdminPage: React.FC = () => {
                                   <div className="text-xs opacity-60 mb-4">
                                     Number of plants promoted per month.
                                   </div>
-                                    <div className="flex-1 min-h-[320px]">
+                                  <div className="w-full h-[320px] md:h-[360px]">
                                     {plantTableLoading ? (
                                       <div className="flex h-full items-center justify-center text-sm opacity-60">
                                         Loading chart...
