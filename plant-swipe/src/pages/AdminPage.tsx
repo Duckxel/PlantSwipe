@@ -5233,7 +5233,7 @@ export const AdminPage: React.FC = () => {
                                     Refresh
                                   </Button>
                                 </div>
-                                  <div className="grid gap-4 md:grid-cols-2">
+                                <div className="grid gap-4 md:grid-cols-2">
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
                                     <div className="flex items-start justify-between gap-3">
                                       <div>
@@ -5411,60 +5411,60 @@ export const AdminPage: React.FC = () => {
                                         )}
                                     </div>
                                   </div>
-                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/90 dark:bg-[#131318] p-4 flex flex-col">
-                                    <div className="text-sm font-semibold">
-                                      Promotion cadence
-                                    </div>
-                                    <div className="text-xs opacity-60 mb-4">
-                                      Number of plants promoted per month.
-                                    </div>
-                                    <div className="flex-1 min-h-[260px]">
-                                      {plantTableLoading ? (
-                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                          Loading chart...
-                                        </div>
-                                      ) : !hasPromotionMonthData ? (
-                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                          No promotion data yet.
-                                        </div>
-                                      ) : (
-                                        <ChartSuspense
-                                          fallback={
-                                            <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                              Loading chart...
-                                            </div>
-                                          }
-                                        >
-                                          <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 12, right: 12, top: 12, bottom: 8 }}>
-                                              <CartesianGrid
-                                                strokeDasharray="3 3"
-                                                stroke={
-                                                  isDark
-                                                    ? "rgba(255,255,255,0.08)"
-                                                    : "rgba(0,0,0,0.06)"
-                                                }
-                                              />
-                                              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                                              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                                              <Tooltip
-                                                cursor={{
-                                                  fill: isDark
-                                                    ? "rgba(255,255,255,0.05)"
-                                                    : "rgba(0,0,0,0.03)",
-                                                }}
-                                                formatter={(value: number) => [`${value} plants`, "Promotions"]}
-                                              />
-                                              <Bar
-                                                dataKey="value"
-                                                fill={accentColor}
-                                                radius={6}
-                                              />
-                                            </BarChart>
-                                          </ResponsiveContainer>
-                                        </ChartSuspense>
-                                      )}
-                                    </div>
+                                </div>
+                                <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/90 dark:bg-[#131318] p-4 flex flex-col">
+                                  <div className="text-sm font-semibold">
+                                    Promotion cadence
+                                  </div>
+                                  <div className="text-xs opacity-60 mb-4">
+                                    Number of plants promoted per month.
+                                  </div>
+                                  <div className="flex-1 min-h-[260px]">
+                                    {plantTableLoading ? (
+                                      <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                        Loading chart...
+                                      </div>
+                                    ) : !hasPromotionMonthData ? (
+                                      <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                        No promotion data yet.
+                                      </div>
+                                    ) : (
+                                      <ChartSuspense
+                                        fallback={
+                                          <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                            Loading chart...
+                                          </div>
+                                        }
+                                      >
+                                        <ResponsiveContainer width="100%" height="100%">
+                                          <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 32, right: 32, top: 16, bottom: 12 }}>
+                                            <CartesianGrid
+                                              strokeDasharray="3 3"
+                                              stroke={
+                                                isDark
+                                                  ? "rgba(255,255,255,0.08)"
+                                                  : "rgba(0,0,0,0.06)"
+                                              }
+                                            />
+                                            <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                                            <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                                            <Tooltip
+                                              cursor={{
+                                                fill: isDark
+                                                  ? "rgba(255,255,255,0.05)"
+                                                  : "rgba(0,0,0,0.03)",
+                                              }}
+                                              formatter={(value: number) => [`${value} plants`, "Promotions"]}
+                                            />
+                                            <Bar
+                                              dataKey="value"
+                                              fill={accentColor}
+                                              radius={6}
+                                            />
+                                          </BarChart>
+                                        </ResponsiveContainer>
+                                      </ChartSuspense>
+                                    )}
                                   </div>
                                 </div>
                               </CardContent>
