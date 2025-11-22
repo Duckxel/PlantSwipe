@@ -200,8 +200,13 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
         if (typeof val === 'number' && isFinite(val)) {
           (payload as any).temperatureMax = val
         } else if (typeof val === 'string' && val.trim()) {
-          const parsed: number = Number.parseFloat(val.trim())
-          (payload as any).temperatureMax = isFinite(parsed) && !isNaN(parsed) ? parsed : undefined
+          const trimmed = val.trim()
+          const parsed = parseFloat(trimmed)
+          if (isFinite(parsed) && !isNaN(parsed)) {
+            (payload as any).temperatureMax = parsed
+          } else {
+            (payload as any).temperatureMax = undefined
+          }
         } else {
           (payload as any).temperatureMax = undefined
         }
@@ -211,8 +216,13 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
         if (typeof val === 'number' && isFinite(val)) {
           (payload as any).temperatureMin = val
         } else if (typeof val === 'string' && val.trim()) {
-          const parsed: number = Number.parseFloat(val.trim())
-          (payload as any).temperatureMin = isFinite(parsed) && !isNaN(parsed) ? parsed : undefined
+          const trimmed = val.trim()
+          const parsed = parseFloat(trimmed)
+          if (isFinite(parsed) && !isNaN(parsed)) {
+            (payload as any).temperatureMin = parsed
+          } else {
+            (payload as any).temperatureMin = undefined
+          }
         } else {
           (payload as any).temperatureMin = undefined
         }
@@ -222,8 +232,13 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
         if (typeof val === 'number' && isFinite(val)) {
           (payload as any).temperatureIdeal = val
         } else if (typeof val === 'string' && val.trim()) {
-          const parsed: number = Number.parseFloat(val.trim())
-          (payload as any).temperatureIdeal = isFinite(parsed) && !isNaN(parsed) ? parsed : undefined
+          const trimmed = val.trim()
+          const parsed = parseFloat(trimmed)
+          if (isFinite(parsed) && !isNaN(parsed)) {
+            (payload as any).temperatureIdeal = parsed
+          } else {
+            (payload as any).temperatureIdeal = undefined
+          }
         } else {
           (payload as any).temperatureIdeal = undefined
         }
