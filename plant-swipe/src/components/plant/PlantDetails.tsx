@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { Plant, PlantSource, PlantWateringSchedule } from "@/types/plant"
-  import {
+import type { Plant, PlantWateringSchedule } from "@/types/plant"
+import {
     SunMedium,
     Droplets,
     Thermometer,
@@ -208,7 +208,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     return "Scheduled"
   }
 
-    const sunExposure = plant.plantCare?.levelSun || "Adaptive"
     const maintenanceLevel =
       plant.identity?.maintenanceLevel || plant.plantCare?.maintenanceLevel || plant.care?.maintenanceLevel || undefined
 
@@ -223,7 +222,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       {
         label: "Watering Need",
         value: formatWateringNeed(plant.plantCare?.watering?.schedules),
-        detail: `Sun Exposure: ${sunExposure}`,
         gradient: "from-blue-400/90 to-cyan-600",
         icon: <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
         visible: Boolean(plant.plantCare?.watering?.schedules?.length),
@@ -231,7 +229,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     {
       label: "Humidity",
       value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : "Ambient",
-        detail: `Sun Exposure: ${sunExposure}`,
       gradient: "from-cyan-400/90 to-teal-600",
       icon: <Droplets className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible: plant.plantCare?.hygrometry !== undefined,
@@ -262,109 +259,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
   ]
 
   const visibleStats = stats.filter((stat) => stat.visible)
-
-  const identity = plant.identity ?? {}
-  const plantCare = plant.plantCare ?? {}
-  const growth = plant.growth ?? {}
-  const usage = plant.usage ?? {}
-  const ecology = plant.ecology ?? {}
-  const danger = plant.danger ?? {}
-  const misc = plant.miscellaneous ?? {}
-  const meta = plant.meta ?? {}
-
-    const compositionList = compactStrings(identity.composition as string[] | undefined)
-    const symbolismList = compactStrings(identity.symbolism)
-    const allergenList = compactStrings(identity.allergens)
-    const colorTraitChips = [
-      (identity.multicolor ?? plant.multicolor) ? "Multicolor" : null,
-      (identity.bicolor ?? plant.bicolor) ? "Bicolor" : null,
-    ].filter((label): label is string => Boolean(label))
-
-    const originList = compactStrings(plantCare.origin)
-    const wateringTypeList = compactStrings(plantCare.wateringType as string[] | undefined)
-    const divisionList = compactStrings(plantCare.division as string[] | undefined)
-    const soilList = compactStrings(plantCare.soil as string[] | undefined)
-    const mulchingMaterials = compactStrings([
-      typeof plantCare.mulching === "string" ? plantCare.mulching : plantCare.mulching?.material,
-    ] as (string | undefined)[])
-    const nutritionNeeds = compactStrings(plantCare.nutritionNeed as string[] | undefined)
-    const fertilizerList = compactStrings(plantCare.fertilizer as string[] | undefined)
-
-    const sowTypeList = compactStrings(growth.sowType as string[] | undefined)
-
-    const nutritionalIntakeList = compactStrings(usage.nutritionalIntake)
-    const spiceMixes = compactStrings(usage.spiceMixes)
-    const infusionMixEntries =
-      usage.infusionMix && typeof usage.infusionMix === "object"
-        ? Object.entries(usage.infusionMix).filter(
-            ([mix, benefit]) => typeof mix === "string" && typeof benefit === "string" && mix.trim().length > 0,
-          )
-        : []
-
-    const companions = compactStrings(misc.companions)
-    const tagList = compactStrings(misc.tags)
-    const sources = (misc.sources ?? []).filter((source): source is PlantSource => Boolean(source && source.name))
-
-    const comestiblePartList = compactStrings(plant.comestiblePart as string[] | undefined)
-    const fruitTypeList = compactStrings(plant.fruitType as string[] | undefined)
-
-    const pestList = compactStrings(danger.pests)
-    const diseaseList = compactStrings(danger.diseases)
-
-  const hasIdentityDetails =
-    hasMeaningfulText(identity.family) ||
-    hasMeaningfulText(identity.lifeCycle) ||
-    hasMeaningfulText(identity.foliagePersistance) ||
-    identity.spiked !== undefined ||
-    identity.scent !== undefined ||
-    allergenList.length > 0 ||
-    symbolismList.length > 0 ||
-    compositionList.length > 0 ||
-    colorTraitChips.length > 0
-
-  const hasCareDetails =
-    originList.length > 0 ||
-    wateringTypeList.length > 0 ||
-    divisionList.length > 0 ||
-    soilList.length > 0 ||
-    mulchingMaterials.length > 0 ||
-    nutritionNeeds.length > 0 ||
-    fertilizerList.length > 0 ||
-    hasMeaningfulText(plantCare.adviceSoil) ||
-    hasMeaningfulText(plantCare.adviceMulching) ||
-    hasMeaningfulText(plantCare.adviceFertilizer) ||
-    plantCare.temperatureMin !== undefined ||
-    plantCare.temperatureMax !== undefined ||
-    plantCare.temperatureIdeal !== undefined
-
-  const hasGrowthDetails =
-    sowTypeList.length > 0 ||
-    growth.tutoring !== undefined ||
-    hasMeaningfulText(growth.adviceTutoring) ||
-    growth.transplanting !== undefined ||
-    hasMeaningfulText(growth.adviceSowing) ||
-    hasMeaningfulText(growth.cut)
-
-  const hasUsageDetails =
-    hasMeaningfulText(usage.adviceMedicinal) ||
-    nutritionalIntakeList.length > 0 ||
-    usage.infusion !== undefined ||
-    hasMeaningfulText(usage.adviceInfusion) ||
-    infusionMixEntries.length > 0 ||
-    usage.aromatherapy !== undefined ||
-    spiceMixes.length > 0
-
-  const hasEcologyDetails = ecology.melliferous !== undefined || ecology.beFertilizer !== undefined
-
-  const hasDangerDetails = pestList.length > 0 || diseaseList.length > 0
-
-  const hasMiscDetails = companions.length > 0 || tagList.length > 0 || sources.length > 0
-
-  const createdStamp = formatAuditStamp(meta.createdBy, meta.createdAt ?? meta.createdTime)
-  const updatedStamp = formatAuditStamp(meta.updatedBy, meta.updatedAt ?? meta.updatedTime)
-  const hasMetaDetails = Boolean(hasMeaningfulText(meta.adminCommentary) || createdStamp || updatedStamp)
-
-  const hasBasicDetails = comestiblePartList.length > 0 || fruitTypeList.length > 0
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
@@ -488,195 +382,32 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
               </div>
             )}
           </div>
-
-            <div className="relative mx-3 mb-6 mt-4 space-y-6 rounded-[28px] border border-white/20 bg-white/10 p-4 shadow-inner backdrop-blur-sm sm:mx-4 sm:p-6 md:mx-6 lg:mx-8">
-              {visibleStats.length > 0 && (
-                <div
-                  className="grid gap-y-3 gap-x-2 sm:gap-3"
-                  style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}
-                >
-                  {visibleStats.map((stat) => (
-                    <Card key={stat.label} className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}>
-                      <CardContent className="flex items-center justify-between p-3 sm:p-4">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
-                          <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
-                          {stat.detail ? (
-                            <p className="text-[11px] sm:text-xs mt-1 text-white/80 truncate">{stat.detail}</p>
-                          ) : null}
-                        </div>
-                        <div className="ml-2 flex-shrink-0">{stat.icon}</div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-            <div className="space-y-4 sm:space-y-5">
-              {hasIdentityDetails && (
-                <SectionCard title="Botanical Identity">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow label="Family" value={identity.family} />
-                    <DetailRow label="Life Cycle" value={identity.lifeCycle} />
-                    <DetailRow label="Foliage Persistence" value={identity.foliagePersistance} />
-                    <DetailRow
-                      label="Spiked"
-                      value={<BooleanBadge value={identity.spiked} positive="Has spikes" negative="Smooth stems" />}
-                    />
-                    <DetailRow label="Allergens" value={<ChipList items={allergenList} />} />
-                    <DetailRow
-                      label="Fragrance"
-                      value={<BooleanBadge value={identity.scent} positive="Scented" negative="No noticeable scent" />}
-                    />
-                    <DetailRow label="Symbolism" value={<ChipList items={symbolismList} />} />
-                    <DetailRow label="Composition Uses" value={<ChipList items={compositionList} />} />
-                    <DetailRow label="Color Traits" value={<ChipList items={colorTraitChips} />} />
-                  </div>
-                </SectionCard>
-              )}
-
-              {hasCareDetails && (
-                <SectionCard title="Plant Care">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow label="Origin" value={<ChipList items={originList} />} />
-                    <DetailRow label="Watering Type" value={<ChipList items={wateringTypeList} />} />
-                    <DetailRow label="Division" value={<ChipList items={divisionList} />} />
-                    <DetailRow label="Soil Mix" value={<ChipList items={soilList} />} />
-                    <DetailRow label="Mulching Materials" value={<ChipList items={mulchingMaterials} />} />
-                    <DetailRow label="Nutrition Need" value={<ChipList items={nutritionNeeds} />} />
-                    <DetailRow label="Fertilizer Types" value={<ChipList items={fertilizerList} />} />
-                    <DetailRow label="Soil Advice" value={plantCare.adviceSoil} />
-                    <DetailRow label="Mulching Advice" value={plantCare.adviceMulching} />
-                    <DetailRow label="Fertilizer Advice" value={plantCare.adviceFertilizer} />
-                    <DetailRow
-                      className="sm:col-span-2"
-                      label="Temperature Comfort"
-                      value={
-                        <ThermostatGauge
-                          min={plantCare.temperatureMin}
-                          ideal={plantCare.temperatureIdeal}
-                          max={plantCare.temperatureMax}
-                        />
-                      }
-                    />
-                  </div>
-                </SectionCard>
-              )}
-
-              {hasGrowthDetails && (
-                <SectionCard title="Growth">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow
-                      label="Needs Support"
-                      value={<BooleanBadge value={growth.tutoring} positive="Requires tutoring" negative="Self-supporting" />}
-                    />
-                    <DetailRow label="Support Notes" value={growth.adviceTutoring} />
-                    <DetailRow label="Sow Type" value={<ChipList items={sowTypeList} />} />
-                    <DetailRow
-                      label="Needs Transplanting"
-                      value={<BooleanBadge value={growth.transplanting} positive="Transplant recommended" negative="No transplant" />}
-                    />
-                    <DetailRow label="Sowing Notes" value={growth.adviceSowing} />
-                    <DetailRow label="Cut Type" value={growth.cut} />
-                  </div>
-                </SectionCard>
-              )}
-
-              {hasUsageDetails && (
-                <SectionCard title="Usage & Flavor">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow label="Medicinal Notes" value={usage.adviceMedicinal} />
-                    <DetailRow label="Nutritional Intake" value={<ChipList items={nutritionalIntakeList} />} />
-                    <DetailRow
-                      label="Infusion Friendly"
-                      value={<BooleanBadge value={usage.infusion} positive="Infusion ready" negative="Not used for infusions" />}
-                    />
-                    <DetailRow label="Infusion Notes" value={usage.adviceInfusion} />
-                    <DetailRow
-                      className="sm:col-span-2"
-                      label="Infusion Mix"
-                      value={
-                        infusionMixEntries.length ? (
-                          <ul className="space-y-2 text-sm">
-                            {infusionMixEntries.map(([mix, benefit]) => (
-                              <li key={`infusion-${mix}`} className="rounded-lg border border-muted/40 bg-muted/20 p-2">
-                                <p className="font-semibold">{mix}</p>
-                                <p className="text-xs text-muted-foreground">{benefit}</p>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null
-                      }
-                    />
-                    <DetailRow
-                      label="Aromatherapy"
-                      value={<BooleanBadge value={usage.aromatherapy} positive="Essential oils" negative="Not for oils" />}
-                    />
-                    <DetailRow label="Spice Mixes" value={<ChipList items={spiceMixes} />} />
-                  </div>
-                </SectionCard>
-              )}
-
-              {hasEcologyDetails && (
-                <SectionCard title="Ecology">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow
-                      label="Melliferous"
-                      value={<BooleanBadge value={ecology.melliferous} positive="Pollinator magnet" negative="Not melliferous" />}
-                    />
-                    <DetailRow
-                      label="Green Manure"
-                      value={<BooleanBadge value={ecology.beFertilizer} positive="Feeds neighboring plants" negative="Neutral" />}
-                    />
-                  </div>
-                </SectionCard>
-              )}
-
-              {hasDangerDetails && (
-                <SectionCard title="Danger">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow label="Pests" value={<ChipList items={pestList} />} />
-                    <DetailRow label="Diseases" value={<ChipList items={diseaseList} />} />
-                  </div>
-                </SectionCard>
-              )}
-
-              {hasMiscDetails && (
-                <SectionCard title="Companions & References">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow label="Companions" value={<ChipList items={companions} />} />
-                    <DetailRow label="Tags" value={<ChipList items={tagList} />} />
-                    <DetailRow
-                      className="sm:col-span-2"
-                      label="Sources"
-                      value={<SourceList sources={sources} />}
-                    />
-                  </div>
-                </SectionCard>
-              )}
-
-              {hasMetaDetails && (
-                <SectionCard title="Meta">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow label="Admin Commentary" value={meta.adminCommentary} />
-                    <DetailRow label="Created" value={createdStamp} />
-                    <DetailRow label="Updated" value={updatedStamp} />
-                  </div>
-                </SectionCard>
-              )}
-
-              {hasBasicDetails && (
-                <SectionCard title="Basic Profile">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <DetailRow label="Edible Parts" value={<ChipList items={comestiblePartList} />} />
-                    <DetailRow label="Fruit Type" value={<ChipList items={fruitTypeList} />} />
-                  </div>
-                </SectionCard>
-              )}
-            </div>
-          </div>
         </div>
       </div>
+
+      {visibleStats.length > 0 && (
+          <div className="rounded-[28px] border border-white/40 bg-white/70 px-4 py-4 shadow-inner backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:px-6 sm:py-6">
+            <div className="flex flex-wrap gap-3 sm:gap-4">
+              {visibleStats.map((stat) => (
+                <Card
+                  key={stat.label}
+                  className={`flex-1 min-w-[180px] bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}
+                >
+                  <CardContent className="flex items-center justify-between p-3 sm:p-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
+                      <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
+                      {stat.detail ? (
+                        <p className="text-[11px] sm:text-xs mt-1 text-white/80 truncate">{stat.detail}</p>
+                      ) : null}
+                    </div>
+                    <div className="ml-2 flex-shrink-0">{stat.icon}</div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
       {viewerOpen && activeImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={closeViewer}>
@@ -706,185 +437,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       )}
     </div>
   )
-  }
-  
-  interface SectionCardProps {
-    title: string
-    children: React.ReactNode
-  }
-  
-const SectionCard = ({ title, children }: SectionCardProps) => (
-  <section className="rounded-2xl border border-muted/40 bg-white/90 p-4 shadow-sm dark:border-stone-800/60 dark:bg-slate-900/70 sm:p-5">
-    <h3 className="text-[11px] font-semibold uppercase tracking-[0.35em] text-muted-foreground">{title}</h3>
-    <div className="mt-4 space-y-4">{children}</div>
-  </section>
-)
-  
-  interface DetailRowProps {
-    label: string
-    value?: React.ReactNode
-    className?: string
-  }
-  
-const DetailRow = ({ label, value, className }: DetailRowProps) => {
-  if (value === undefined || value === null) {
-    return null
-  }
-  if (typeof value === "string") {
-    if (!isMeaningfulString(value)) {
-      return null
-    }
-  }
-  const content =
-    typeof value === "string" || typeof value === "number" ? (
-      <p className="text-sm font-medium text-foreground">{value}</p>
-    ) : (
-      value
-    )
-  return (
-    <div className={className ? `space-y-1 ${className}` : "space-y-1"}>
-      <p className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground">{label}</p>
-      {content}
-    </div>
-  )
-}
-  
-  const ChipList = ({ items }: { items: string[] }) => {
-    if (!items.length) return null
-    return (
-      <div className="flex flex-wrap gap-1.5">
-        {items.map((item, idx) => (
-          <span
-            key={`chip-${idx}-${item}`}
-            className="rounded-full border border-muted/40 bg-white/80 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:border-stone-700/60 dark:bg-slate-900/60"
-          >
-            {item}
-          </span>
-        ))}
-      </div>
-    )
-  }
-  
-  interface BooleanBadgeProps {
-    value?: boolean | null
-    positive: string
-    negative: string
-  }
-  
-  const BooleanBadge = ({ value, positive, negative }: BooleanBadgeProps) => {
-    if (value === undefined || value === null) return null
-    const isPositive = Boolean(value)
-    const classes = isPositive
-      ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200"
-      : "bg-stone-200 text-stone-700 dark:bg-stone-700/40 dark:text-stone-200"
-    return (
-      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${classes}`}>
-        {isPositive ? positive : negative}
-      </span>
-    )
-  }
-  
-  const ThermostatGauge = ({ min, ideal, max }: { min?: number; ideal?: number; max?: number }) => {
-    if (min === undefined && ideal === undefined && max === undefined) return null
-    const fallbackMin = min ?? (ideal !== undefined ? ideal - 5 : max !== undefined ? max - 10 : 0)
-    const fallbackMax = max ?? (ideal !== undefined ? ideal + 5 : min !== undefined ? min + 10 : fallbackMin + 20)
-    const resolvedMin = Math.min(fallbackMin, fallbackMax)
-    const resolvedMax = Math.max(fallbackMin, fallbackMax)
-    const pointerValue =
-      ideal ?? (max !== undefined ? max : min !== undefined ? min : (resolvedMin + resolvedMax) / 2)
-    const pointerPercent = ((pointerValue - resolvedMin) / Math.max(1, resolvedMax - resolvedMin)) * 100
-    const clampedPercent = Math.min(100, Math.max(0, pointerPercent))
-    const formattedPointer = Number.isFinite(pointerValue) ? `${Math.round(pointerValue * 10) / 10}°C` : "N/A"
-  
-    return (
-      <div className="space-y-2">
-        <div className="flex justify-between text-[11px] uppercase tracking-widest text-muted-foreground">
-          <span>Min {min !== undefined ? `${min}°C` : "?"}</span>
-          <span>Max {max !== undefined ? `${max}°C` : "?"}</span>
-        </div>
-        <div className="relative h-16">
-          <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-gradient-to-r from-sky-500 via-amber-300 to-rose-500 shadow-inner" />
-          <div className="absolute top-0 flex flex-col items-center" style={{ left: `calc(${clampedPercent}% - 14px)` }}>
-            <span className="rounded-full bg-slate-900/80 px-2 py-0.5 text-[11px] font-semibold text-white shadow">
-              {formattedPointer}
-            </span>
-            <span className="mt-1 block h-8 w-[2px] bg-white/90" />
-          </div>
-        </div>
-        {ideal !== undefined && <p className="text-center text-xs text-muted-foreground">Ideal {ideal}°C</p>}
-      </div>
-    )
-  }
-  
-  const SourceList = ({ sources }: { sources: PlantSource[] }) => {
-    if (!sources.length) return null
-    return (
-      <ul className="space-y-2 text-sm">
-        {sources.map((source, idx) => (
-          <li key={source.id ?? `${source.name}-${idx}`} className="space-y-0.5">
-            {source.url ? (
-              <a href={source.url} target="_blank" rel="noreferrer" className="font-semibold text-emerald-600 hover:underline">
-                {source.name}
-              </a>
-            ) : (
-              <span className="font-semibold text-foreground">{source.name}</span>
-            )}
-            {source.url && (
-              <span className="block text-xs text-muted-foreground break-all">{source.url}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-    )
-  }
-  
-const NON_VALUE_TOKENS = new Set([
-  "none",
-  "no",
-  "n/a",
-  "na",
-  "not applicable",
-  "not specified",
-  "unknown",
-  "unspecified",
-  "not provided",
-  "not available",
-  "aucun",
-  "aucune",
-  "sin datos",
-  "none noted",
-])
-
-const isMeaningfulString = (raw?: string | null) => {
-  if (!raw) return false
-  const trimmed = raw.trim()
-  if (!trimmed) return false
-  const normalized = trimmed.toLowerCase()
-  return !NON_VALUE_TOKENS.has(normalized)
 }
 
-const compactStrings = (values?: (string | null | undefined)[]): string[] => {
-  if (!values) return []
-  return values
-    .map((value) => (typeof value === "string" ? value.trim() : ""))
-    .filter((value): value is string => Boolean(value) && isMeaningfulString(value))
-}
-
-const hasMeaningfulText = (value?: string | null) => isMeaningfulString(value)
-  
-  const formatDateLabel = (value?: string) => {
-    if (!value) return null
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return value
-    return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-  }
-  
-  const formatAuditStamp = (user?: string, timestamp?: string) => {
-    const dateLabel = formatDateLabel(timestamp)
-    if (user && dateLabel) return `${user} • ${dateLabel}`
-    if (user) return user
-    return dateLabel
-  }
-  
-  export default PlantDetails
-  
+export default PlantDetails
