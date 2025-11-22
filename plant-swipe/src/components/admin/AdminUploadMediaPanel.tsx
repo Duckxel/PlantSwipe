@@ -1,5 +1,6 @@
 import React from "react"
 import { CloudUpload, ImageIcon } from "lucide-react"
+import { Link, useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { AdminUploadPanel } from "@/components/admin/AdminUploadPanel"
 import { AdminMediaPanel } from "@/components/admin/AdminMediaPanel"
@@ -11,9 +12,10 @@ const sectionTabs: Array<{
   key: UploadMediaSection
   label: string
   Icon: React.ComponentType<{ className?: string }>
+  path: string
 }> = [
-  { key: "upload", label: "Upload", Icon: CloudUpload },
-  { key: "media", label: "Media library", Icon: ImageIcon },
+  { key: "upload", label: "Upload", Icon: CloudUpload, path: "/admin/upload" },
+  { key: "media", label: "Media library", Icon: ImageIcon, path: "/admin/upload/library" },
 ]
 
 const mediaBucketOptions: Array<{
@@ -25,7 +27,12 @@ const mediaBucketOptions: Array<{
 ]
 
 export const AdminUploadMediaPanel: React.FC = () => {
-  const [section, setSection] = React.useState<UploadMediaSection>("upload")
+  const location = useLocation()
+  const currentPath = location.pathname
+  const section: UploadMediaSection = React.useMemo(() => {
+    if (currentPath.includes("/admin/upload/library")) return "media"
+    return "upload"
+  }, [currentPath])
   const [bucketView, setBucketView] = React.useState<MediaBucketView>("utility")
 
   const bucketFilters = React.useMemo(() => {
@@ -52,22 +59,21 @@ export const AdminUploadMediaPanel: React.FC = () => {
           </div>
           <div className="inline-flex flex-wrap gap-2">
             <div className="inline-flex rounded-full bg-stone-100 p-1 shadow-inner dark:bg-[#2d2d30]">
-              {sectionTabs.map(({ key, label, Icon }) => (
-                <button
+              {sectionTabs.map(({ key, label, Icon, path }) => (
+                <Link
                   key={key}
-                  type="button"
+                  to={path}
                   className={cn(
                     "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
                     section === key
                       ? "bg-white text-emerald-600 shadow-sm dark:bg-white/90"
                       : "text-stone-600 hover:text-black dark:text-stone-200 dark:hover:text-white",
                   )}
-                  onClick={() => setSection(key)}
                   aria-pressed={section === key}
                 >
                   <Icon className="h-4 w-4" />
                   {label}
-                </button>
+                </Link>
               ))}
             </div>
           </div>
