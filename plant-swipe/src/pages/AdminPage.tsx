@@ -5367,13 +5367,25 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   </div>
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
-                                    <div className="text-sm font-semibold">
-                                      Requests vs approved
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div>
+                                        <div className="text-sm font-semibold">
+                                          Requests vs approved
+                                        </div>
+                                        <div className="text-xs opacity-60">
+                                          Ratio between incoming requests and approved plants.
+                                        </div>
+                                      </div>
+                                      <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-300">
+                                        {requestsVsApproved.ratio !== null
+                                          ? `${requestsVsApproved.percent.toFixed(0)}%`
+                                          : requestsVsApproved.approved === 0 &&
+                                              requestsVsApproved.requests > 0
+                                            ? "∞"
+                                            : "0%`}
+                                      </div>
                                     </div>
-                                    <div className="text-xs opacity-60">
-                                      Ratio between incoming requests and approved plants.
-                                    </div>
-                                    <div className="mt-4 flex-1">
+                                    <div className="mt-3 flex-1">
                                       {plantTableLoading && totalPlantRequestsCount === 0 ? (
                                         <div className="flex h-full items-center justify-center text-sm opacity-60">
                                           Loading gauge...
@@ -5426,15 +5438,7 @@ export const AdminPage: React.FC = () => {
                                         </div>
                                       )}
                                     </div>
-                                    <div className="mt-4 text-center">
-                                      <div className="text-3xl font-semibold">
-                                        {requestsVsApproved.ratio !== null
-                                          ? `${requestsVsApproved.percent.toFixed(0)}%`
-                                          : requestsVsApproved.approved === 0 &&
-                                              requestsVsApproved.requests > 0
-                                            ? "∞"
-                                            : "0%"}
-                                      </div>
+                                    <div className="mt-2 text-center text-sm font-medium">
                                       <div className="text-xs uppercase tracking-wide opacity-60">
                                         Requests coverage
                                       </div>
