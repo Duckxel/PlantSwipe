@@ -1624,11 +1624,26 @@ export const AdminPage: React.FC = () => {
       ),
     [plantRequests],
   );
+  const totalUniquePlantRequests = React.useMemo(
+    () =>
+      plantRequests.reduce(
+        (sum, req) => sum + (req.request_count > 0 ? 1 : 0),
+        0,
+      ),
+    [plantRequests],
+  );
 
   const requestsVsApproved = React.useMemo(() => {
+    const denominator = approvedPlantsCount > 0 ? approvedPlantsCount : null;
+    const numerator =
+      totalUniquePlantRequests > 0
+        ? totalUniquePlantRequests
+        : totalPlantRequestsCount > 0
+          ? totalPlantRequestsCount
+          : null;
     const ratio =
-      approvedPlantsCount > 0
-        ? totalPlantRequestsCount / approvedPlantsCount
+      denominator !== null && numerator !== null
+        ? numerator / denominator
         : null;
     const percent =
       ratio !== null
