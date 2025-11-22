@@ -420,14 +420,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     const timelineColClass = showPalette ? 'col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return 'Flexible'
-      return schedules
-        .map((schedule) => {
-          const season = schedule.season ? `${schedule.season}: ` : ''
-          const quantity = schedule.quantity ? `${schedule.quantity}` : ''
-          const period = schedule.timePeriod ? ` / ${schedule.timePeriod}` : ''
-          return `${season}${quantity}${period}`.trim() || 'Scheduled'
-        })
-        .join(' • ')
+      const schedule = schedules[0]
+      const season = schedule.season ? `${schedule.season}: ` : ''
+      const quantity = schedule.quantity ? `${schedule.quantity}` : ''
+      const period = schedule.timePeriod ? ` / ${schedule.timePeriod}` : ''
+      return `${season}${quantity}${period}`.trim() || 'Scheduled'
     }
       const identity = plant.identity ?? {}
       const plantCare = plant.plantCare ?? {}
