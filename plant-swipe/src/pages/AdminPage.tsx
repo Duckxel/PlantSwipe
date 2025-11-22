@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,7 @@ import {
   Gavel,
   Search,
   ChevronDown,
+  ChevronUp,
   GitBranch,
   Trash2,
   EyeOff,
@@ -255,6 +256,8 @@ const toPromotionMonthSlug = (
 
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = location.pathname;
   const { effectiveTheme } = useTheme();
   const { user, profile } = useAuth();
   const isDark = effectiveTheme === "dark";
@@ -1259,8 +1262,10 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
   const [createPlantName, setCreatePlantName] = React.useState<string>("");
-  const [requestViewMode, setRequestViewMode] =
-    React.useState<RequestViewMode>("requests");
+  const requestViewMode: RequestViewMode = React.useMemo(() => {
+    if (currentPath.includes("/admin/requests/plants")) return "plants";
+    return "requests";
+  }, [currentPath]);
   const [plantDashboardRows, setPlantDashboardRows] = React.useState<
     PlantDashboardRow[]
   >([]);
@@ -1279,6 +1284,12 @@ export const AdminPage: React.FC = () => {
   >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
+  const [isStatusRepartitionCollapsed, setIsStatusRepartitionCollapsed] =
+    React.useState<boolean>(false);
+  const [isRequestsVsApprovedCollapsed, setIsRequestsVsApprovedCollapsed] =
+    React.useState<boolean>(false);
+  const [isPromotionCadenceCollapsed, setIsPromotionCadenceCollapsed] =
+    React.useState<boolean>(false);
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -2757,16 +2768,24 @@ export const AdminPage: React.FC = () => {
     key: AdminTab;
     label: string;
     Icon: React.ComponentType<{ className?: string }>;
+    path: string;
   }> = [
-    { key: "overview", label: "Overview", Icon: LayoutDashboard },
-    { key: "members", label: "Members", Icon: Users },
-    { key: "requests", label: "Requests", Icon: FileText },
-    { key: "upload", label: "Upload and Media", Icon: CloudUpload },
-    { key: "notifications", label: "Notifications", Icon: BellRing },
-    { key: "admin_logs", label: "Admin Logs", Icon: ScrollText },
+    { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin" },
+    { key: "members", label: "Members", Icon: Users, path: "/admin/members" },
+    { key: "requests", label: "Requests", Icon: FileText, path: "/admin/requests" },
+    { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
+    { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
+    { key: "admin_logs", label: "Admin Logs", Icon: ScrollText, path: "/admin/logs" },
   ];
 
-  const [activeTab, setActiveTab] = React.useState<AdminTab>("overview");
+  const activeTab: AdminTab = React.useMemo(() => {
+    if (currentPath.includes("/admin/members")) return "members";
+    if (currentPath.includes("/admin/requests")) return "requests";
+    if (currentPath.includes("/admin/upload")) return "upload";
+    if (currentPath.includes("/admin/notifications")) return "notifications";
+    if (currentPath.includes("/admin/logs")) return "admin_logs";
+    return "overview";
+  }, [currentPath]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const toggleSidebarCollapsed = React.useCallback(
     () => setSidebarCollapsed((prev) => !prev),
@@ -2802,8 +2821,10 @@ export const AdminPage: React.FC = () => {
     plantDashboardLoading,
     loadPlantDashboard,
   ]);
-  const [membersView, setMembersView] =
-    React.useState<"search" | "list">("search");
+  const membersView: "search" | "list" = React.useMemo(() => {
+    if (currentPath.includes("/admin/members/list")) return "list";
+    return "search";
+  }, [currentPath]);
   const [memberList, setMemberList] = React.useState<ListedMember[]>([]);
   const [memberListLoading, setMemberListLoading] = React.useState(false);
   const [memberListError, setMemberListError] = React.useState<string | null>(
@@ -3345,8 +3366,7 @@ export const AdminPage: React.FC = () => {
     (ip: string) => {
       const next = String(ip || "").trim();
       if (!next) return;
-      setActiveTab("members");
-      setMembersView("search");
+      navigate("/admin/members");
       setIpLookup(next);
       setTimeout(() => {
         try {
@@ -3356,7 +3376,7 @@ export const AdminPage: React.FC = () => {
         lookupByIp(next);
       }, 0);
     },
-    [lookupByIp],
+    [lookupByIp, navigate],
   );
 
   const handleMemberCardClick = React.useCallback(
@@ -3366,12 +3386,12 @@ export const AdminPage: React.FC = () => {
         entry.email?.trim() ||
         "";
       if (!value) return;
-      setMembersView("search");
+      navigate("/admin/members");
       setTimeout(() => {
         lookupMember(value);
       }, 0);
     },
-    [lookupMember],
+    [lookupMember, navigate],
   );
 
   const handleMemberSortChange = React.useCallback(
@@ -3634,12 +3654,12 @@ export const AdminPage: React.FC = () => {
               <div className="text-sm font-semibold">Admin Panel</div>
             </div>
             <div className="grid grid-cols-2 gap-2">
-                {navItems.map(({ key, label, Icon }) => {
+                {navItems.map(({ key, label, Icon, path }) => {
                   const isActive = activeTab === key;
                   return (
-                    <button
+                    <Link
                       key={key}
-                      onClick={() => setActiveTab(key)}
+                      to={path}
                       className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition ${
                         isActive
                           ? "bg-white text-black shadow-sm dark:bg-[#1f1f24] dark:text-stone-100"
@@ -3660,7 +3680,7 @@ export const AdminPage: React.FC = () => {
                           {uniqueRequestedPlantsCount}
                         </span>
                       )}
-                    </button>
+                    </Link>
                   );
                 })}
             </div>
@@ -3707,12 +3727,12 @@ export const AdminPage: React.FC = () => {
                 <nav
                   className={`relative z-10 p-4 flex-1 overflow-y-auto ${sidebarCollapsed ? "space-y-3" : "space-y-2"}`}
                 >
-                  {navItems.map(({ key, label, Icon }) => {
+                  {navItems.map(({ key, label, Icon, path }) => {
                     const isActive = activeTab === key;
                     return (
-                      <button
+                      <Link
                         key={key}
-                        onClick={() => setActiveTab(key)}
+                        to={path}
                         title={sidebarCollapsed ? label : undefined}
                         className={`w-full flex ${
                           sidebarCollapsed ? "flex-col items-center gap-1 py-3" : "items-center gap-3 px-4 py-3"
@@ -3742,7 +3762,7 @@ export const AdminPage: React.FC = () => {
                             {uniqueRequestedPlantsCount}
                           </span>
                         )}
-                      </button>
+                      </Link>
                     );
                   })}
                 </nav>
@@ -5210,19 +5230,19 @@ export const AdminPage: React.FC = () => {
                         <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
                           {REQUEST_VIEW_TABS.map((tab) => {
                             const isActive = requestViewMode === tab.key;
+                            const tabPath = tab.key === "plants" ? "/admin/requests/plants" : "/admin/requests";
                             return (
-                              <button
+                              <Link
                                 key={tab.key}
-                                type="button"
+                                to={tabPath}
                                 className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
                                   isActive
                                     ? "bg-emerald-600 text-white shadow"
                                     : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
                                 }`}
-                                onClick={() => setRequestViewMode(tab.key)}
                               >
                                 {tab.label}
-                              </button>
+                              </Link>
                             );
                           })}
                         </div>
@@ -5260,7 +5280,10 @@ export const AdminPage: React.FC = () => {
                                 </div>
                                 <div className="grid gap-4 md:grid-cols-2">
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
-                                    <div className="flex items-start justify-between gap-3">
+                                    <button
+                                      onClick={() => setIsStatusRepartitionCollapsed(!isStatusRepartitionCollapsed)}
+                                      className="flex items-start justify-between gap-3 w-full text-left hover:opacity-80 transition-opacity"
+                                    >
                                       <div>
                                         <div className="text-sm font-semibold">
                                           Status repartition
@@ -5269,16 +5292,24 @@ export const AdminPage: React.FC = () => {
                                           In progress, review and rework.
                                         </div>
                                       </div>
-                                      <div className="text-right">
-                                        <div className="text-[11px] uppercase tracking-wide opacity-60">
-                                          Approved
+                                      <div className="flex items-center gap-3">
+                                        <div className="text-right">
+                                          <div className="text-[11px] uppercase tracking-wide opacity-60">
+                                            Approved
+                                          </div>
+                                          <div className="text-2xl font-semibold">
+                                            {approvedPlantsCount}
+                                          </div>
                                         </div>
-                                        <div className="text-2xl font-semibold">
-                                          {approvedPlantsCount}
-                                        </div>
+                                        {isStatusRepartitionCollapsed ? (
+                                          <ChevronDown className="h-4 w-4 opacity-60" />
+                                        ) : (
+                                          <ChevronUp className="h-4 w-4 opacity-60" />
+                                        )}
                                       </div>
-                                    </div>
-                                    <div className="relative mt-4 h-48">
+                                    </button>
+                                    {!isStatusRepartitionCollapsed && (
+                                      <div className="relative mt-4 h-48">
                                       {plantTableLoading ? (
                                         <div className="flex h-full items-center justify-center text-sm opacity-60">
                                           Loading chart...
@@ -5335,9 +5366,13 @@ export const AdminPage: React.FC = () => {
                                         </div>
                                       )}
                                     </div>
+                                    )}
                                   </div>
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
-                                    <div className="flex items-center justify-between gap-2">
+                                    <button
+                                      onClick={() => setIsRequestsVsApprovedCollapsed(!isRequestsVsApprovedCollapsed)}
+                                      className="flex items-center justify-between gap-2 w-full text-left hover:opacity-80 transition-opacity"
+                                    >
                                       <div>
                                         <div className="text-sm font-semibold">
                                           Requests vs approved
@@ -5346,6 +5381,7 @@ export const AdminPage: React.FC = () => {
                                           Ratio between incoming requests and approved plants.
                                         </div>
                                       </div>
+                                      <div className="flex items-center gap-3">
                                         <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-300">
                                           {requestsVsApproved.ratio !== null
                                             ? `${requestsVsApproved.percent.toFixed(0)}%`
@@ -5354,7 +5390,15 @@ export const AdminPage: React.FC = () => {
                                               ? "∞"
                                               : "0%"}
                                         </div>
-                                    </div>
+                                        {isRequestsVsApprovedCollapsed ? (
+                                          <ChevronDown className="h-4 w-4 opacity-60" />
+                                        ) : (
+                                          <ChevronUp className="h-4 w-4 opacity-60" />
+                                        )}
+                                      </div>
+                                    </button>
+                                    {!isRequestsVsApprovedCollapsed && (
+                                      <>
                                       <div className="mt-3 flex-1">
                                       {plantTableLoading && totalPlantRequestsCount === 0 ? (
                                         <div className="flex h-full items-center justify-center text-sm opacity-60">
@@ -5435,16 +5479,31 @@ export const AdminPage: React.FC = () => {
                                           </div>
                                         )}
                                     </div>
+                                    </>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/90 dark:bg-[#131318] p-4 flex flex-col">
-                                  <div className="text-sm font-semibold">
-                                    Promotion cadence
-                                  </div>
-                                  <div className="text-xs opacity-60 mb-4">
-                                    Number of plants promoted per month.
-                                  </div>
-                                  <div className="w-full h-[320px] md:h-[360px]">
+                                  <button
+                                    onClick={() => setIsPromotionCadenceCollapsed(!isPromotionCadenceCollapsed)}
+                                    className="flex items-center justify-between gap-2 w-full text-left hover:opacity-80 transition-opacity mb-4"
+                                  >
+                                    <div>
+                                      <div className="text-sm font-semibold">
+                                        Promotion cadence
+                                      </div>
+                                      <div className="text-xs opacity-60">
+                                        Number of plants promoted per month.
+                                      </div>
+                                    </div>
+                                    {isPromotionCadenceCollapsed ? (
+                                      <ChevronDown className="h-4 w-4 opacity-60" />
+                                    ) : (
+                                      <ChevronUp className="h-4 w-4 opacity-60" />
+                                    )}
+                                  </button>
+                                  {!isPromotionCadenceCollapsed && (
+                                    <div className="w-full h-[320px] md:h-[360px]">
                                     {plantTableLoading ? (
                                       <div className="flex h-full items-center justify-center text-sm opacity-60">
                                         Loading chart...
@@ -5491,6 +5550,7 @@ export const AdminPage: React.FC = () => {
                                       </ChartSuspense>
                                     )}
                                   </div>
+                                  )}
                                 </div>
                               </CardContent>
                             </Card>
@@ -5935,21 +5995,19 @@ export const AdminPage: React.FC = () => {
                   <div className="space-y-4" ref={membersContainerRef}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2 text-sm font-semibold">
-                        <button
-                          type="button"
+                        <Link
+                          to="/admin/members"
                           className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "search" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
-                          onClick={() => setMembersView("search")}
                         >
                           Search
-                        </button>
+                        </Link>
                         <span className="text-xs opacity-50">|</span>
-                        <button
-                          type="button"
+                        <Link
+                          to="/admin/members/list"
                           className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "list" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
-                          onClick={() => setMembersView("list")}
                         >
                           List
-                        </button>
+                        </Link>
                       </div>
                       {membersView === "list" && (
                         <Button

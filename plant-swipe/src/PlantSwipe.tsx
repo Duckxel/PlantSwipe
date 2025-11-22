@@ -1204,7 +1204,7 @@ export default function PlantSwipe() {
               }
             />
             <Route
-              path="/admin"
+              path="/admin/*"
               element={
                 <RequireAdmin>
                   <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
