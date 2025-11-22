@@ -120,11 +120,11 @@ const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
 };
 
 const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = {
-  "in progres": "#f97316",
-  review: "#facc15",
-  rework: "#f43f5e",
-  approved: "#10b981",
-  other: "#94a3b8",
+  "in progres": "#ea580c",
+  review: "#f59e0b",
+  rework: "#dc2626",
+  approved: "#059669",
+  other: "#475569",
 };
 
 const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = {
@@ -155,6 +155,29 @@ const PLANT_STATUS_FILTER_OPTIONS = PLANT_STATUS_KEYS.map((status) => ({
   value: status,
   label: PLANT_STATUS_LABELS[status],
 }));
+
+const PRIORITIZED_STATUS_ORDER: Partial<Record<NormalizedPlantStatus, number>> =
+  {
+    review: 0,
+    rework: 1,
+    "in progres": 2,
+  };
+const FALLBACK_STATUS_ORDER = PLANT_STATUS_KEYS.filter(
+  (status) => PRIORITIZED_STATUS_ORDER[status] === undefined,
+)
+  .sort((a, b) =>
+    PLANT_STATUS_LABELS[a].localeCompare(PLANT_STATUS_LABELS[b]),
+  )
+  .reduce<Record<NormalizedPlantStatus, number>>((acc, status, index) => {
+    acc[status] = 10 + index;
+    return acc;
+  }, {} as Record<NormalizedPlantStatus, number>);
+const getStatusSortPriority = (status: NormalizedPlantStatus): number => {
+  if (PRIORITIZED_STATUS_ORDER[status] !== undefined) {
+    return PRIORITIZED_STATUS_ORDER[status]!;
+  }
+  return FALLBACK_STATUS_ORDER[status] ?? 99;
+};
 
 const STATUS_DONUT_SEGMENTS: NormalizedPlantStatus[] = [
   "in progres",
@@ -201,6 +224,7 @@ type PlantDashboardRow = {
   status: NormalizedPlantStatus;
   promotionMonth: PromotionMonthSlug | null;
   primaryImage: string | null;
+  updatedAt: number | null;
 };
 
 const normalizePlantStatus = (
@@ -1479,6 +1503,7 @@ export const AdminPage: React.FC = () => {
             name,
             status,
             promotion_month,
+            updated_time,
             plant_images (
               link,
               use
@@ -1500,15 +1525,25 @@ export const AdminPage: React.FC = () => {
             images.find((img: any) => img?.use === "discovery") ??
             images[0];
 
-          return {
-            id: String(row.id),
-            name: row?.name ? String(row.name) : "Unnamed plant",
-            status: normalizePlantStatus(row?.status),
-            promotionMonth: toPromotionMonthSlug(row?.promotion_month),
-            primaryImage: primaryImage?.link
-              ? String(primaryImage.link)
-              : null,
-          } as PlantDashboardRow;
+            return {
+              id: String(row.id),
+              name: row?.name ? String(row.name) : "Unnamed plant",
+              status: normalizePlantStatus(row?.status),
+              promotionMonth: toPromotionMonthSlug(row?.promotion_month),
+              primaryImage: primaryImage?.link
+                ? String(primaryImage.link)
+                : null,
+              updatedAt: (() => {
+                const timestamp =
+                  row?.updated_time ??
+                  row?.updated_at ??
+                  row?.updatedTime ??
+                  null;
+                if (!timestamp) return null;
+                const parsed = Date.parse(timestamp);
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
+            } as PlantDashboardRow;
         })
         .filter((row): row is PlantDashboardRow => row !== null);
 
@@ -1621,7 +1656,12 @@ export const AdminPage: React.FC = () => {
           : true;
         return matchesSearch;
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        const statusDiff =
+          getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
+        if (statusDiff !== 0) return statusDiff;
+        return a.name.localeCompare(b.name);
+      });
   }, [plantDashboardRows, visiblePlantStatuses, plantSearchQuery]);
 
   const plantViewIsPlants = requestViewMode === "plants";
@@ -5500,6 +5540,11 @@ export const AdminPage: React.FC = () => {
                                                   {PROMOTION_MONTH_LABELS[plant.promotionMonth]}
                                                 </div>
                                               )}
+                                                {plant.updatedAt && (
+                                                  <div className="text-xs text-stone-500 dark:text-stone-400">
+                                                    Last update {formatTimeAgo(plant.updatedAt)}
+                                                  </div>
+                                                )}
                                             </div>
                                           </div>
                                           <div className="text-right">
