@@ -200,7 +200,7 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
         if (typeof val === 'number' && Number.isFinite(val)) {
           (payload as any).temperatureMax = val
         } else if (typeof val === 'string' && val.trim()) {
-          const parsed = Number(val.trim())
+          const parsed: number = parseFloat(val.trim())
           (payload as any).temperatureMax = Number.isFinite(parsed) ? parsed : undefined
         } else {
           (payload as any).temperatureMax = undefined
@@ -211,7 +211,7 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
         if (typeof val === 'number' && Number.isFinite(val)) {
           (payload as any).temperatureMin = val
         } else if (typeof val === 'string' && val.trim()) {
-          const parsed = Number(val.trim())
+          const parsed: number = parseFloat(val.trim())
           (payload as any).temperatureMin = Number.isFinite(parsed) ? parsed : undefined
         } else {
           (payload as any).temperatureMin = undefined
@@ -222,7 +222,7 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
         if (typeof val === 'number' && Number.isFinite(val)) {
           (payload as any).temperatureIdeal = val
         } else if (typeof val === 'string' && val.trim()) {
-          const parsed = Number(val.trim())
+          const parsed: number = parseFloat(val.trim())
           (payload as any).temperatureIdeal = Number.isFinite(parsed) ? parsed : undefined
         } else {
           (payload as any).temperatureIdeal = undefined
