@@ -9,7 +9,7 @@ import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateri
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
-import { saveLanguagePreference, useLanguageNavigate } from "@/lib/i18nRouting"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
@@ -527,7 +527,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
 }
 
 export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: string) => void; initialName?: string }> = ({ onCancel, onSaved, initialName }) => {
-  const { t, i18n } = useTranslation('common')
+  const { t } = useTranslation('common')
   const { id } = useParams<{ id?: string }>()
   const navigate = useNavigate()
   const languageNavigate = useLanguageNavigate()
@@ -589,9 +589,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
     React.useEffect(() => {
       languageRef.current = language
-      i18n.changeLanguage(language)
-      saveLanguagePreference(language)
-    }, [language, i18n])
+    }, [language])
 
     React.useEffect(() => {
       if (!id) { setLoading(false); return }

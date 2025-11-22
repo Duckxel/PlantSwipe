@@ -1029,13 +1029,360 @@
         "sectionFilled": "Rempli",
         "sectionInProgress": "En cours",
         "sectionLogTitle": "Sections terminées",
-        "errors": {
-          "loadPlant": "Échec du chargement de la plante",
-          "savePlant": "Échec de l'enregistrement de la plante",
-          "aiFill": "Échec du remplissage IA",
-          "translation": "Échec de la traduction"
+          "errors": {
+            "loadPlant": "Échec du chargement de la plante",
+            "savePlant": "Échec de l'enregistrement de la plante",
+            "aiFill": "Échec du remplissage IA",
+            "translation": "Échec de la traduction"
+          },
+      "selectOption": "Sélectionner une option",
+      "selectStatus": "Sélectionner un statut",
+      "optionalLabel": "facultatif",
+      "temperature": {
+        "min": "Min (°C)",
+        "minShort": "Min",
+        "ideal": "Idéal (°C)",
+        "idealShort": "Idéal",
+        "max": "Max (°C)",
+        "maxShort": "Max"
+      },
+      "basics": {
+        "name": {
+          "label": "Nom",
+          "placeholder": "Nom unique de la plante",
+          "description": "Nom de la plante (obligatoire et unique)."
         },
-      "categories": {
+        "plantType": {
+          "label": "Type de plante",
+          "placeholder": "Sélectionner un type",
+          "description": "Classification principale de la plante"
+        },
+        "utility": {
+          "label": "Utilité",
+          "description": "Sélectionnez toutes les utilités pertinentes"
+        },
+        "comestiblePart": {
+          "label": "Partie comestible",
+          "description": "Parties comestibles (uniquement si la plante est comestible)."
+        },
+        "fruitType": {
+          "label": "Type de fruit",
+          "description": "Classification du fruit (si la plante en produit)."
+        }
+      },
+      "options": {
+        "plantType": {
+          "plant": "Plante",
+          "flower": "Fleur",
+          "bamboo": "Bambou",
+          "shrub": "Arbuste",
+          "tree": "Arbre"
+        },
+        "utility": {
+          "comestible": "Comestible",
+          "ornemental": "Ornementale",
+          "produce_fruit": "Produit des fruits",
+          "aromatic": "Aromatique",
+          "medicinal": "Médicinale",
+          "odorous": "Odorante",
+          "climbing": "Grimpante",
+          "cereal": "Céréalière",
+          "spice": "Épice"
+        },
+        "comestible": {
+          "flower": "Fleur",
+          "fruit": "Fruit",
+          "seed": "Graine",
+          "leaf": "Feuille",
+          "stem": "Tige",
+          "root": "Racine",
+          "bulb": "Bulbe",
+          "bark": "Écorce",
+          "wood": "Bois"
+        },
+        "fruit": {
+          "nut": "Noix",
+          "seed": "Graine",
+          "stone": "Fruit à noyau"
+        }
+      },
+      "fields": {
+        "identity": {
+          "givenNames": {
+            "label": "Noms usuels",
+            "description": "Noms communs attribués à la plante"
+          },
+          "scientificName": {
+            "label": "Nom scientifique",
+            "description": "Nom botanique officiel"
+          },
+          "family": {
+            "label": "Famille",
+            "description": "Famille botanique"
+          },
+          "overview": {
+            "label": "Présentation",
+            "description": "Description détaillée de la plante"
+          },
+          "promotionMonth": {
+            "label": "Mois de mise en avant",
+            "description": "Mois durant lequel la plante est promue"
+          },
+          "lifeCycle": {
+            "label": "Cycle de vie",
+            "description": "Classification du cycle de vie"
+          },
+          "season": {
+            "label": "Saison",
+            "description": "Saisons où la plante est active"
+          },
+          "foliagePersistance": {
+            "label": "Persistance du feuillage",
+            "description": "Type de persistance du feuillage"
+          },
+          "spiked": {
+            "label": "Épineuse",
+            "description": "La plante possède-t-elle des épines ?"
+          },
+          "toxicityHuman": {
+            "label": "Toxicité (humain)",
+            "description": "Niveau de toxicité pour l'humain"
+          },
+          "toxicityPets": {
+            "label": "Toxicité (animaux)",
+            "description": "Niveau de toxicité pour les animaux"
+          },
+          "allergens": {
+            "label": "Allergènes",
+            "description": "Liste d'allergènes potentiels"
+          },
+          "scent": {
+            "label": "Parfum",
+            "description": "La plante est-elle parfumée ?"
+          },
+          "symbolism": {
+            "label": "Symbolique",
+            "description": "Symbolique et significations culturelles"
+          },
+          "livingSpace": {
+            "label": "Espace de vie",
+            "description": "Intérieur, extérieur ou les deux"
+          },
+          "composition": {
+            "label": "Implantation",
+            "description": "Emplacements recommandés (massif, pot, etc.)"
+          },
+          "maintenanceLevel": {
+            "label": "Niveau d'entretien",
+            "description": "Niveau d'effort requis"
+          }
+        },
+        "plantCare": {
+          "origin": {
+            "label": "Origine",
+            "description": "Origines géographiques de la plante"
+          },
+          "habitat": {
+            "label": "Habitat",
+            "description": "Types d'habitats"
+          },
+          "temperature": {
+            "label": "Température",
+            "description": "Plage de températures (°C)"
+          },
+          "levelSun": {
+            "label": "Exposition solaire",
+            "description": "Niveau d'ensoleillement"
+          },
+          "hygrometry": {
+            "label": "Hygrométrie",
+            "description": "Humidité idéale (%)"
+          },
+          "watering": {
+            "schedules": {
+              "label": "Calendrier d'arrosage",
+              "description": "Arrosages saisonniers (saison + quantité + période)"
+            }
+          },
+          "wateringType": {
+            "label": "Type d'arrosage",
+            "description": "Méthodes d'arrosage"
+          },
+          "division": {
+            "label": "Multiplication",
+            "description": "Techniques de propagation"
+          },
+          "soil": {
+            "label": "Sol",
+            "description": "Types de substrat"
+          },
+          "adviceSoil": {
+            "label": "Conseils sur le sol",
+            "description": "Recommandations sur le sol"
+          },
+          "mulching": {
+            "label": "Paillage",
+            "description": "Matériaux de paillage"
+          },
+          "adviceMulching": {
+            "label": "Conseils de paillage",
+            "description": "Notes sur le paillage"
+          },
+          "nutritionNeed": {
+            "label": "Besoins nutritifs",
+            "description": "Apports nécessaires"
+          },
+          "fertilizer": {
+            "label": "Engrais",
+            "description": "Types d'engrais"
+          },
+          "adviceFertilizer": {
+            "label": "Conseils sur l'engrais",
+            "description": "Recommandations d'apport"
+          }
+        },
+        "growth": {
+          "sowingMonth": {
+            "label": "Mois de semis",
+            "description": "Périodes de semis"
+          },
+          "floweringMonth": {
+            "label": "Mois de floraison",
+            "description": "Périodes de floraison"
+          },
+          "fruitingMonth": {
+            "label": "Mois de fructification",
+            "description": "Périodes de fructification"
+          },
+          "height": {
+            "label": "Hauteur (cm)",
+            "description": "Hauteur moyenne"
+          },
+          "wingspan": {
+            "label": "Envergure (cm)",
+            "description": "Envergure moyenne"
+          },
+          "tutoring": {
+            "label": "Tuteurage",
+            "description": "Nécessite un support"
+          },
+          "adviceTutoring": {
+            "label": "Conseils de tuteurage",
+            "description": "Détails sur le support"
+          },
+          "sowType": {
+            "label": "Type de semis",
+            "description": "Méthodes de plantation"
+          },
+          "separation": {
+            "label": "Espacement (cm)",
+            "description": "Espacement recommandé"
+          },
+          "transplanting": {
+            "label": "Repiquage",
+            "description": "Nécessite un repiquage"
+          },
+          "adviceSowing": {
+            "label": "Conseils de semis",
+            "description": "Notes sur le semis"
+          },
+          "cut": {
+            "label": "Taille",
+            "description": "Type de taille"
+          }
+        },
+        "usage": {
+          "adviceMedicinal": {
+            "label": "Conseils médicinaux",
+            "description": "Détails sur les usages médicinaux"
+          },
+          "nutritionalIntake": {
+            "label": "Valeur nutritionnelle",
+            "description": "Étiquettes nutritionnelles"
+          },
+          "infusion": {
+            "label": "Infusion",
+            "description": "Peut être utilisée en infusion"
+          },
+          "adviceInfusion": {
+            "label": "Conseils d'infusion",
+            "description": "Notes d'infusion"
+          },
+          "infusionMix": {
+            "label": "Mélanges d'infusion",
+            "description": "Nom du mélange et bénéfice"
+          },
+          "recipesIdeas": {
+            "label": "Idées de recettes",
+            "description": "Noms de recettes"
+          },
+          "aromatherapy": {
+            "label": "Aromathérapie",
+            "description": "Utilisable pour les huiles essentielles"
+          },
+          "spiceMixes": {
+            "label": "Mélanges d'épices",
+            "description": "Noms de mélanges d'épices"
+          }
+        },
+        "ecology": {
+          "melliferous": {
+            "label": "Mellifère",
+            "description": "Bénéfique pour les pollinisateurs"
+          },
+          "polenizer": {
+            "label": "Pollinisateur",
+            "description": "Espèces pollinisatrices"
+          },
+          "beFertilizer": {
+            "label": "Fertilisant naturel",
+            "description": "Agit comme fertilisant pour d'autres"
+          },
+          "groundEffect": {
+            "label": "Effet sur le sol",
+            "description": "Impact sur la structure du sol"
+          },
+          "conservationStatus": {
+            "label": "Statut de conservation",
+            "description": "Statut dans la nature"
+          }
+        },
+        "danger": {
+          "pests": {
+            "label": "Ravageurs",
+            "description": "Liste des ravageurs"
+          },
+          "diseases": {
+            "label": "Maladies",
+            "description": "Liste des maladies"
+          }
+        },
+        "miscellaneous": {
+          "companions": {
+            "label": "Plantes compagnes",
+            "description": "Associations recommandées"
+          },
+          "tags": {
+            "label": "Étiquettes",
+            "description": "Mots-clés de recherche"
+          },
+          "sources": {
+            "label": "Sources",
+            "description": "Liens de référence"
+          }
+        },
+        "meta": {
+          "status": {
+            "label": "Statut",
+            "description": "Statut éditorial"
+          },
+          "adminCommentary": {
+            "label": "Commentaires admin",
+            "description": "Retour du modérateur"
+          }
+        }
+      },
+        "categories": {
       "basics": "Bases",
       "identity": "Identité",
       "plantCare": "Entretien",

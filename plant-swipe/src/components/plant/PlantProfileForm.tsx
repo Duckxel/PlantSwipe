@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
@@ -53,6 +54,11 @@ interface FieldConfig {
   description: string
   type: FieldType
   options?: ReadonlyArray<FieldOption>
+}
+
+const sanitizeOptionKey = (value: unknown) => {
+  if (value === null || value === undefined) return "value"
+  return String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_") || "value"
 }
 
 const monthOptions = [
@@ -516,17 +522,34 @@ const comestibleOptions = ["flower","fruit","seed","leaf","stem","root","bulb","
 const fruitOptions = ["nut","seed","stone"] as const
 const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
 
-  function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig) {
+function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'common'>) {
     const value = getValue(plant, field.key)
     const id = field.key.replace(/\./g, "-")
-    const isAdvice = field.label.toLowerCase().includes("advice")
+  const translationBase = `plantAdmin.fields.${field.key}`
+  const label = t(`${translationBase}.label`, { defaultValue: field.label })
+  const description = t(`${translationBase}.description`, { defaultValue: field.description })
+  const selectPlaceholder = t('plantAdmin.selectOption', 'Select option')
+  const selectStatusPlaceholder = t('plantAdmin.selectStatus', 'Select status')
+  const optionalLabel = t('plantAdmin.optionalLabel', 'optional')
+  const isAdvice = field.key.toLowerCase().includes("advice")
     const isMonthMultiField = field.key.startsWith("growth.") && field.key.toLowerCase().includes("month")
     const isPromotionMonthField = field.key === "identity.promotionMonth"
-    const normalizedOptions = (field.options || []).map((opt) =>
-      typeof opt === "string"
-        ? { label: opt, value: opt, key: opt }
-        : { label: opt.label, value: opt.value, key: String(opt.value) },
-    )
+  const normalizedOptions = (field.options || []).map((opt) => {
+    if (typeof opt === "string") {
+      return {
+        label: t(`${translationBase}.options.${sanitizeOptionKey(opt)}`, { defaultValue: opt }),
+        value: opt,
+        key: opt,
+      }
+    }
+    const optionValue = opt.value
+    const optionKey = String(optionValue)
+    return {
+      label: t(`${translationBase}.options.${sanitizeOptionKey(optionValue)}`, { defaultValue: opt.label }),
+      value: optionValue,
+      key: optionKey,
+    }
+  })
 
   const body = (() => {
     if (field.key === "meta.status") {
@@ -537,66 +560,72 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
         Approved: "#10b981",
       }
         const statusOptions = (field.options || []).map((opt) => (typeof opt === "string" ? opt : String(opt.value)))
-      return (
-        <div className="grid gap-2">
-          <Label>{field.label}</Label>
-          <select
-            className="h-9 rounded-md border px-3 text-sm"
-            value={value || ""}
-            onChange={(e) => onChange(field.key, e.target.value)}
-          >
-            <option value="">Select status</option>
+        return (
+          <div className="grid gap-2">
+            <Label>{label}</Label>
+            <select
+              className="h-9 rounded-md border px-3 text-sm"
+              value={value || ""}
+              onChange={(e) => onChange(field.key, e.target.value)}
+            >
+              <option value="">{selectStatusPlaceholder}</option>
               {statusOptions.map((opt) => (
                 <option key={opt} value={opt} style={{ color: statusColors[opt] || "inherit" }}>
-                  ● {opt}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        </div>
-      )
+                  ● {t(`${translationBase}.options.${sanitizeOptionKey(opt)}`, { defaultValue: opt })}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">{description}</p>
+          </div>
+        )
     }
 
     switch (field.type) {
       case "text":
         return (
-          <div className="grid gap-2">
-            <Label htmlFor={id}>{field.label}</Label>
-            <Input id={id} value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value)} placeholder={field.description} />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
+        <div className="grid gap-2">
+          <Label htmlFor={id}>{label}</Label>
+          <Input id={id} value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value)} placeholder={description} />
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
         )
-      case "textarea":
-        return (
-          <div className="grid gap-2">
-            <Label htmlFor={id}>{field.label}</Label>
-            <Textarea id={id} value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value)} placeholder={field.description} />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
-      case "number":
-        return (
-          <div className="grid gap-2">
-            <Label htmlFor={id}>{field.label}</Label>
-            <Input id={id} type="number" value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value === "" ? undefined : Number(e.target.value))} placeholder={field.description} />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
-      case "boolean":
-        return (
-          <div className="grid gap-2">
-            <Label className="inline-flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border"
-                checked={Boolean(value)}
-                onChange={(e) => onChange(field.key, e.target.checked)}
+        case "textarea":
+          return (
+            <div className="grid gap-2">
+              <Label htmlFor={id}>{label}</Label>
+              <Textarea id={id} value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value)} placeholder={description} />
+              <p className="text-xs text-muted-foreground">{description}</p>
+            </div>
+          )
+        case "number":
+          return (
+            <div className="grid gap-2">
+              <Label htmlFor={id}>{label}</Label>
+              <Input
+                id={id}
+                type="number"
+                value={value ?? ""}
+                onChange={(e) => onChange(field.key, e.target.value === "" ? undefined : Number(e.target.value))}
+                placeholder={description}
               />
-              {field.label}
-            </Label>
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
+              <p className="text-xs text-muted-foreground">{description}</p>
+            </div>
+          )
+        case "boolean":
+          return (
+            <div className="grid gap-2">
+              <Label className="inline-flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border"
+                  checked={Boolean(value)}
+                  onChange={(e) => onChange(field.key, e.target.checked)}
+                />
+                {label}
+              </Label>
+              <p className="text-xs text-muted-foreground">{description}</p>
+            </div>
+          )
         case "select": {
           const selectValue = isPromotionMonthField ? normalizeMonthValue(value) ?? value : value
           const valueKey =
@@ -604,7 +633,7 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
             (selectValue === null || selectValue === undefined ? "" : String(selectValue))
           return (
             <div className="grid gap-2">
-              <Label>{field.label}</Label>
+              <Label>{label}</Label>
               <select
                 className="h-9 rounded-md border px-2 text-sm"
                 value={valueKey}
@@ -617,12 +646,12 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
                   onChange(field.key, selectedOption ? selectedOption.value : undefined)
                 }}
               >
-                <option value="">Select option</option>
+                <option value="">{selectPlaceholder}</option>
                 {normalizedOptions.map((opt) => (
                   <option key={opt.key} value={opt.key}>{opt.label}</option>
                 ))}
               </select>
-              <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
             </div>
           )
         }
@@ -632,7 +661,7 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
             currentValues.some((entry) => Object.is(entry, candidate) || (typeof entry === "string" && typeof candidate === "string" && entry === candidate))
           return (
             <div className="grid gap-2">
-              <Label>{field.label}</Label>
+              <Label>{label}</Label>
               <div className="flex flex-wrap gap-2">
                 {normalizedOptions.map((opt) => {
                   const selected = includesValue(opt.value)
@@ -653,97 +682,103 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
                   )
                 })}
               </div>
-              <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
             </div>
           )
         }
       case "tags":
         return (
           <div className="grid gap-2">
-            <Label>{field.label}</Label>
+              <Label>{label}</Label>
             <TagInput value={Array.isArray(value) ? value : []} onChange={(v) => onChange(field.key, v)} />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
       case "dict":
         return (
           <div className="grid gap-2">
-            <Label>{field.label}</Label>
+              <Label>{label}</Label>
             <KeyValueList value={(value as Record<string, string>) || {}} onChange={(v) => onChange(field.key, v)} />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
       case "watering":
         return (
           <div className="grid gap-2">
-            <Label>{field.label}</Label>
+              <Label>{label}</Label>
             <WateringScheduleEditor value={value as any} onChange={(v) => onChange(field.key, v)} />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
       case "companions":
         return (
           <div className="grid gap-2">
-            <Label>{field.label}</Label>
+              <Label>{label}</Label>
             <CompanionSelector value={Array.isArray(value) ? value : []} onChange={(v) => onChange(field.key, v)} />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
       case "sources":
         return (
           <div className="grid gap-2">
-            <Label>{field.label}</Label>
+              <Label>{label}</Label>
             <SourcesEditor value={Array.isArray(value) ? value : []} onChange={(v) => onChange(field.key, v)} />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
       case "readonly":
         return (
           <div className="grid gap-2">
-            <Label>{field.label}</Label>
+              <Label>{label}</Label>
             <Input value={(value as string) || ""} readOnly />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
-      case "temperature":
-        return (
-          <div className="grid gap-2">
-            <Label>{field.label}</Label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div className="grid gap-1">
-                <Label htmlFor={`${id}-min`} className="text-xs text-muted-foreground">Min (°C)</Label>
-                <Input
-                  id={`${id}-min`}
-                  type="number"
-                  value={getValue(plant, "plantCare.temperatureMin") ?? ""}
-                  onChange={(e) => onChange("plantCare.temperatureMin", e.target.value === "" ? undefined : Number(e.target.value))}
-                  placeholder="Min"
-                />
+        case "temperature":
+          return (
+            <div className="grid gap-2">
+              <Label>{label}</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid gap-1">
+                  <Label htmlFor={`${id}-min`} className="text-xs text-muted-foreground">
+                    {t('plantAdmin.temperature.min', 'Min (°C)')}
+                  </Label>
+                  <Input
+                    id={`${id}-min`}
+                    type="number"
+                    value={getValue(plant, "plantCare.temperatureMin") ?? ""}
+                    onChange={(e) => onChange("plantCare.temperatureMin", e.target.value === "" ? undefined : Number(e.target.value))}
+                    placeholder={t('plantAdmin.temperature.minShort', 'Min')}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor={`${id}-ideal`} className="text-xs text-muted-foreground">
+                    {t('plantAdmin.temperature.ideal', 'Ideal (°C)')}
+                  </Label>
+                  <Input
+                    id={`${id}-ideal`}
+                    type="number"
+                    value={getValue(plant, "plantCare.temperatureIdeal") ?? ""}
+                    onChange={(e) => onChange("plantCare.temperatureIdeal", e.target.value === "" ? undefined : Number(e.target.value))}
+                    placeholder={t('plantAdmin.temperature.idealShort', 'Ideal')}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor={`${id}-max`} className="text-xs text-muted-foreground">
+                    {t('plantAdmin.temperature.max', 'Max (°C)')}
+                  </Label>
+                  <Input
+                    id={`${id}-max`}
+                    type="number"
+                    value={getValue(plant, "plantCare.temperatureMax") ?? ""}
+                    onChange={(e) => onChange("plantCare.temperatureMax", e.target.value === "" ? undefined : Number(e.target.value))}
+                    placeholder={t('plantAdmin.temperature.maxShort', 'Max')}
+                  />
+                </div>
               </div>
-              <div className="grid gap-1">
-                <Label htmlFor={`${id}-ideal`} className="text-xs text-muted-foreground">Ideal (°C)</Label>
-                <Input
-                  id={`${id}-ideal`}
-                  type="number"
-                  value={getValue(plant, "plantCare.temperatureIdeal") ?? ""}
-                  onChange={(e) => onChange("plantCare.temperatureIdeal", e.target.value === "" ? undefined : Number(e.target.value))}
-                  placeholder="Ideal"
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label htmlFor={`${id}-max`} className="text-xs text-muted-foreground">Max (°C)</Label>
-                <Input
-                  id={`${id}-max`}
-                  type="number"
-                  value={getValue(plant, "plantCare.temperatureMax") ?? ""}
-                  onChange={(e) => onChange("plantCare.temperatureMax", e.target.value === "" ? undefined : Number(e.target.value))}
-                  placeholder="Max"
-                />
-              </div>
+              <p className="text-xs text-muted-foreground">{description}</p>
             </div>
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
+          )
       default:
         return null
     }
@@ -768,12 +803,14 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
           </div>
         )
       }
-      return (
-        <details key={field.key} className="rounded border bg-muted/20 p-3" open={false}>
-          <summary className="cursor-pointer text-sm font-semibold">{field.label} (optional)</summary>
-          <div className="mt-3">{body}</div>
-        </details>
-      )
+    return (
+      <details key={field.key} className="rounded border bg-muted/20 p-3" open={false}>
+        <summary className="cursor-pointer text-sm font-semibold">
+          {label} ({optionalLabel})
+        </summary>
+        <div className="mt-3">{body}</div>
+      </details>
+    )
     }
 
   return <div key={field.key}>{body}</div>
@@ -1168,27 +1205,36 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
             <CardTitle>{categoryLabels.basics}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label>Name</Label>
-              <Input value={value.name} required onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Unique plant name" />
-              <p className="text-xs text-muted-foreground">Name of the Plant (unique and mandatory)</p>
-            </div>
-            <div className="grid gap-2">
-              <Label>Plant Type</Label>
+              <div className="grid gap-2">
+                <Label>{t('plantAdmin.basics.name.label', 'Name')}</Label>
+                <Input
+                  value={value.name}
+                  required
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                  placeholder={t('plantAdmin.basics.name.placeholder', 'Unique plant name')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('plantAdmin.basics.name.description', 'Name of the plant (unique and mandatory).')}
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label>{t('plantAdmin.basics.plantType.label', 'Plant Type')}</Label>
               <select
                 className="h-9 rounded-md border px-2 text-sm"
                 value={value.plantType || ""}
                 onChange={(e) => onChange({ ...value, plantType: (e.target.value || undefined) as PlantType | undefined })}
               >
-                <option value="">Select type</option>
+                  <option value="">{t('plantAdmin.basics.plantType.placeholder', 'Select type')}</option>
                 {plantTypeOptions.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
+                    <option key={opt} value={opt}>{t(`plantAdmin.options.plantType.${opt}`, opt)}</option>
                 ))}
               </select>
-              <p className="text-xs text-muted-foreground">Primary plant type</p>
+                <p className="text-xs text-muted-foreground">
+                  {t('plantAdmin.basics.plantType.description', 'Primary plant type')}
+                </p>
             </div>
             <div className="grid gap-2">
-              <Label>Utility</Label>
+                <Label>{t('plantAdmin.basics.utility.label', 'Utility')}</Label>
               <div className="flex flex-wrap gap-2">
                 {utilityOptions.map((opt) => {
                   const selected = value.utility?.includes(opt)
@@ -1203,16 +1249,18 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                       }}
                       className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
                     >
-                      {opt}
+                        {t(`plantAdmin.options.utility.${opt}`, opt)}
                     </button>
                   )
                 })}
               </div>
-              <p className="text-xs text-muted-foreground">Select all utilities that apply</p>
+                <p className="text-xs text-muted-foreground">
+                  {t('plantAdmin.basics.utility.description', 'Select every utility that applies')}
+                </p>
             </div>
             {value.utility?.includes("comestible") && (
               <div className="grid gap-2">
-                <Label>Comestible Part</Label>
+                  <Label>{t('plantAdmin.basics.comestiblePart.label', 'Comestible Part')}</Label>
                 <div className="flex flex-wrap gap-2">
                   {comestibleOptions.map((opt) => {
                     const selected = value.comestiblePart?.includes(opt)
@@ -1227,17 +1275,19 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                         }}
                         className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
                       >
-                        {opt}
+                          {t(`plantAdmin.options.comestible.${opt}`, opt)}
                       </button>
                     )
                   })}
                 </div>
-                <p className="text-xs text-muted-foreground">Edible parts (only if comestible)</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('plantAdmin.basics.comestiblePart.description', 'Edible parts (only if utility includes edible).')}
+                  </p>
               </div>
             )}
             {value.utility?.includes("produce_fruit") && (
               <div className="grid gap-2">
-                <Label>Fruit Type</Label>
+                  <Label>{t('plantAdmin.basics.fruitType.label', 'Fruit Type')}</Label>
                 <div className="flex flex-wrap gap-2">
                   {fruitOptions.map((opt) => {
                     const selected = value.fruitType?.includes(opt)
@@ -1252,12 +1302,14 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                         }}
                         className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
                       >
-                        {opt}
+                          {t(`plantAdmin.options.fruit.${opt}`, opt)}
                       </button>
                     )
                   })}
                 </div>
-                <p className="text-xs text-muted-foreground">Fruit classification (if produce fruit)</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('plantAdmin.basics.fruitType.description', 'Fruit classification (if the plant produces fruit).')}
+                  </p>
               </div>
             )}
             <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} />
@@ -1333,7 +1385,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
-                    {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
+                      {fieldGroups[cat].map((f) => renderField(value, setPath, f, t))}
                     {cat === 'identity' && (
                       <div className="md:col-span-2">
                         {colorSuggestions?.length ? (
