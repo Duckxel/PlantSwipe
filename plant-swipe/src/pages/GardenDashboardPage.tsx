@@ -1621,10 +1621,10 @@ export const GardenDashboardPage: React.FC = () => {
         return;
       }
 
-      // Load full plant data for all matching IDs
+      // Load full plant data with images for all matching IDs
         const { data: fullPlants, error: fullError } = await supabase
           .from("plants")
-          .select("*")
+          .select("*, plant_images (id,link,use)")
         .in("id", Array.from(allPlantIds))
         .limit(20);
 
@@ -1653,8 +1653,22 @@ export const GardenDashboardPage: React.FC = () => {
       // Merge translations with base plants and filter by search query
       const merged: Plant[] = fullPlants
         .map((p: any) => {
-          const translation = translationMap.get(p.id);
-          const mergedPlant = mergePlantWithTranslation(p, translation);
+          const translation = translationMap.get(p.id) || null;
+          // Convert plant_images to photos format expected by mergePlantWithTranslation
+          const images = Array.isArray(p.plant_images) ? p.plant_images : []
+          const photos = images.map((img: any) => ({
+            url: img.link || '',
+            isPrimary: img.use === 'primary',
+            isVertical: false
+          }))
+          // Find primary image or use first image as fallback
+          const primaryImageUrl = images.find((img: any) => img.use === 'primary')?.link 
+            || images.find((img: any) => img.use === 'discovery')?.link 
+            || images[0]?.link 
+            || p.image_url 
+            || p.image
+          const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl }
+          const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation);
           return mergedPlant;
         })
         .filter((p: Plant) => {
@@ -2423,11 +2437,11 @@ export const GardenDashboardPage: React.FC = () => {
                             </div>
                             <div className="col-span-2 p-3">
                               <div className="font-medium">
-                                {gp.nickname || gp.plant?.name}
+                                {gp.nickname || gp.plant?.name || 'Unknown Plant'}
                               </div>
-                              {gp.nickname && (
+                              {gp.nickname && gp.plant?.name && (
                                 <div className="text-xs opacity-60">
-                                  {gp.plant?.name}
+                                  {gp.plant.name}
                                 </div>
                               )}
                               <div className="text-xs opacity-60">
@@ -2741,7 +2755,7 @@ export const GardenDashboardPage: React.FC = () => {
                     >
                       <div className="font-medium">{p.name}</div>
                       <div className="text-xs opacity-60">
-                        {p.scientificName}
+                        {p.identifiers?.scientificName || p.scientificName || ''}
                       </div>
                     </button>
                   ))}
@@ -3304,7 +3318,7 @@ function RoutineSection({
               )}
               <div className="text-sm opacity-70">
                 {t("gardenDashboard.routineSection.waterNeed")}{" "}
-                {gp.plant?.care.water}
+                {gp.plant?.care?.water || '-'}
               </div>
               <div className="text-xs opacity-70">
                 {t("gardenDashboard.routineSection.dueThisWeek")}:{" "}
