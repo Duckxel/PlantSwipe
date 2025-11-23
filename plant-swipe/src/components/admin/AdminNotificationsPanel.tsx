@@ -1,5 +1,5 @@
 import React from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -138,15 +138,6 @@ function formatDateTime(value?: string | null): string {
   if (!value) return '—'
   try {
     return new Date(value).toLocaleString()
-  } catch {
-    return value
-  }
-}
-
-function formatDateShort(value?: string | null): string {
-  if (!value) return '—'
-  try {
-    return new Date(value).toLocaleDateString()
   } catch {
     return value
   }
