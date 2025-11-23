@@ -75,12 +75,12 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             filter: brightness(0) saturate(100%) invert(100%);
           }
         `}</style>
-        <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 pt-5 overflow-x-hidden desktop-drag-region">
-          <div className="flex-shrink-0">
+        <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden desktop-drag-region" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
+          <div className="flex-shrink-0" style={{ marginTop: '-1.25rem' }}>
             <img 
               src="/icons/plant-swipe-icon.svg" 
               alt="Aphylia" 
-              className="h-16 w-14 plant-icon-theme -mt-5"
+              className="h-16 w-14 plant-icon-theme"
             />
           </div>
       <Link
