@@ -374,7 +374,7 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
     const { data: plantRows } = await supabase
       .from('plants')
-      .select('*')
+      .select('*, plant_images (id,link,use)')
       .in('id', plantIds)
   
   // Always load translations for the specified language (including English)
@@ -395,25 +395,50 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   }
   
   const idToPlant: Record<string, Plant> = {}
-  for (const p of plantRows || []) {
-    const translation = translationMap.get(p.id) || null
-    const mergedPlant = mergePlantWithTranslation(p, translation)
-    idToPlant[String(p.id)] = mergedPlant
+  if (plantRows && plantRows.length > 0) {
+    for (const p of plantRows) {
+      if (!p || !p.id) continue
+      try {
+        const translation = translationMap.get(p.id) || null
+        // Convert plant_images to photos format expected by mergePlantWithTranslation
+        const images = Array.isArray(p.plant_images) ? p.plant_images : []
+        const photos = images.map((img: any) => ({
+          url: img.link || '',
+          isPrimary: img.use === 'primary',
+          isVertical: false
+        }))
+        // Find primary image or use first image as fallback
+        const primaryImageUrl = images.find((img: any) => img.use === 'primary')?.link 
+          || images.find((img: any) => img.use === 'discovery')?.link 
+          || images[0]?.link 
+          || p.image_url 
+          || p.image
+        const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl }
+        const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation)
+        idToPlant[String(p.id)] = mergedPlant
+      } catch (err) {
+        console.error(`Error processing plant ${p.id}:`, err)
+        // Continue processing other plants even if one fails
+      }
+    }
   }
-  return rows.map(r => ({
-    id: String(r.id),
-    gardenId: String(r.garden_id),
-    plantId: String(r.plant_id),
-    nickname: r.nickname,
-    seedsPlanted: Number(r.seeds_planted ?? 0),
-    plantedAt: r.planted_at,
-    expectedBloomDate: r.expected_bloom_date,
-    overrideWaterFreqUnit: r.override_water_freq_unit || null,
-    overrideWaterFreqValue: r.override_water_freq_value ?? null,
-    plantsOnHand: Number(r.plants_on_hand ?? 0),
-    plant: idToPlant[String(r.plant_id)] || null,
-    sortIndex: (r as any).sort_index ?? null,
-  }))
+  return rows.map(r => {
+    const plantId = String(r.plant_id)
+    return {
+      id: String(r.id),
+      gardenId: String(r.garden_id),
+      plantId,
+      nickname: r.nickname,
+      seedsPlanted: Number(r.seeds_planted ?? 0),
+      plantedAt: r.planted_at,
+      expectedBloomDate: r.expected_bloom_date,
+      overrideWaterFreqUnit: r.override_water_freq_unit || null,
+      overrideWaterFreqValue: r.override_water_freq_value ?? null,
+      plantsOnHand: Number(r.plants_on_hand ?? 0),
+      plant: idToPlant[plantId] || null,
+      sortIndex: (r as any).sort_index ?? null,
+    }
+  })
 }
 
 export async function addPlantToGarden(params: { gardenId: string; plantId: string; nickname?: string | null; seedsPlanted?: number; plantedAt?: string | null; expectedBloomDate?: string | null }): Promise<GardenPlant> {
