@@ -8553,12 +8553,14 @@ async function getUserLanguages(userIds) {
 }
 
 // Get user timezones for multiple users (batch fetch)
+// Falls back to most recent timezone from web visits if not in profile
 async function getUserTimezones(userIds) {
   if (!sql || !userIds.length) return new Map()
   
   const timezoneMap = new Map()
   
   try {
+    // First, get timezones from profiles
     const profiles = await sql`
       select id::text as id, timezone
       from public.profiles
@@ -8570,6 +8572,31 @@ async function getUserTimezones(userIds) {
       const tz = String(row.timezone).trim()
       if (tz) {
         timezoneMap.set(row.id, tz)
+      }
+    }
+    
+    // For users without timezone in profile, try to get from web visits
+    const missingIds = userIds.filter(id => !timezoneMap.has(String(id)))
+    if (missingIds.length > 0) {
+      // Extract timezone from web visits extra JSONB field
+      const visitTimezones = await sql`
+        select distinct on (user_id) 
+          user_id::text as user_id,
+          (extra->>'timezone')::text as timezone
+        from public.web_visits
+        where user_id = any(${sql.array(missingIds)}::uuid[])
+          and extra->>'timezone' is not null
+          and (extra->>'timezone')::text != ''
+        order by user_id, occurred_at desc
+      `.catch(() => null)
+      
+      for (const row of visitTimezones || []) {
+        if (!timezoneMap.has(row.user_id)) {
+          const tz = String(row.timezone).trim()
+          if (tz && tz !== 'null') {
+            timezoneMap.set(row.user_id, tz)
+          }
+        }
       }
     }
   } catch (err) {

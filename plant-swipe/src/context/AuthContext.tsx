@@ -52,6 +52,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .maybeSingle()
     if (!error) {
       setProfile(data as any)
+      
+      // Auto-update timezone if missing (detect from browser)
+      if (data && !data.timezone && typeof Intl !== 'undefined') {
+        const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        if (detectedTimezone) {
+          // Update in background (non-blocking)
+          supabase
+            .from('profiles')
+            .update({ timezone: detectedTimezone })
+            .eq('id', currentId)
+            .then(({ data: updatedData }) => {
+              // Update local state if update succeeded
+              if (updatedData && updatedData.length > 0) {
+                const updatedProfile = { ...data, timezone: detectedTimezone }
+                setProfile(updatedProfile as any)
+                try { localStorage.setItem('plantswipe.profile', JSON.stringify(updatedProfile)) } catch {}
+              }
+            })
+            .catch(() => {})
+        }
+      }
+      
       // Persist profile alongside session so reloads can hydrate faster
       try { localStorage.setItem('plantswipe.profile', JSON.stringify(data)) } catch {}
       // Apply accent if present
@@ -93,11 +115,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const uid = data.user?.id
     if (!uid) return { error: 'Signup failed' }
 
+    // Auto-detect timezone from browser
+    const detectedTimezone = typeof Intl !== 'undefined' 
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone 
+      : 'UTC'
+    
     // Create profile row
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
       display_name: displayName,
       liked_plant_ids: [],
+      timezone: detectedTimezone,
       accent_key: 'emerald',
     })
     if (perr) return { error: perr.message }
