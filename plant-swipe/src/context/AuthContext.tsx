@@ -67,15 +67,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .from('profiles')
           .update({ timezone: detectedTimezone })
           .eq('id', currentId)
-          .then(({ data: updatedData }) => {
+          .then(({ data: updatedData, error }) => {
             // Update local state if update succeeded
-            if (updatedData && updatedData.length > 0) {
+            if (!error && updatedData && Array.isArray(updatedData) && updatedData.length > 0) {
               const updatedProfile = { ...data, timezone: detectedTimezone }
               setProfile(updatedProfile as any)
               try { localStorage.setItem('plantswipe.profile', JSON.stringify(updatedProfile)) } catch {}
             }
           })
-          .catch(() => {})
+          .catch(() => {
+            // Silently fail - timezone update is non-critical
+          })
       }
       
       // Persist profile alongside session so reloads can hydrate faster
