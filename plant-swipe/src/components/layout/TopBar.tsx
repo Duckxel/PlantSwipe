@@ -79,7 +79,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
           <img 
             src="/icons/plant-swipe-icon.svg" 
             alt="Aphylia" 
-            className="h-14 w-14 plant-icon-theme"
+            className="h-16 w-14 plant-icon-theme"
           />
       <Link
         to="/"
