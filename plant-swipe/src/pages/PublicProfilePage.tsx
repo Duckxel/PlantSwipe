@@ -1076,7 +1076,6 @@ export default function PublicProfilePage() {
                 display_name: (pp.display_name || ''),
                 country: (pp.country || ''),
                 bio: (pp.bio || ''),
-                timezone: (profile?.timezone || ''),
                 experience_years: (profile?.experience_years != null ? String(profile.experience_years) : ''),
                 accent_key: null,
               }}
@@ -1103,7 +1102,6 @@ export default function PublicProfilePage() {
                     display_name: dn,
                     country: vals.country || null,
                     bio: vals.bio || null,
-                    timezone: vals.timezone || null,
                     experience_years: vals.experience_years ? Number(vals.experience_years) : null,
                   }
 
