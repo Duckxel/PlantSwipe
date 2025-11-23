@@ -3762,11 +3762,79 @@ app.post('/api/admin/notifications', async (req, res) => {
     return
   }
   const deliveryMode = parsed.deliveryMode
-  const plannedFor = parsed.plannedFor && parsed.plannedFor.length ? new Date(parsed.plannedFor).toISOString() : null
-  const scheduleStartAt =
-    parsed.scheduleStartAt && parsed.scheduleStartAt.length
-      ? new Date(parsed.scheduleStartAt).toISOString()
-      : null
+  const campaignTimezone = parsed.timezone || DEFAULT_TIMEZONE
+  
+  // Convert datetime-local input to UTC timestamp in campaign timezone
+  const convertDatetimeLocalToUTC = (datetimeLocal, tz) => {
+    if (!datetimeLocal || !datetimeLocal.length) return null
+    try {
+      const match = datetimeLocal.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+      if (!match) {
+        const fallback = new Date(datetimeLocal)
+        return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
+      }
+      
+      const [, year, month, day, hour, minute] = match
+      const y = parseInt(year)
+      const m = parseInt(month) - 1
+      const d = parseInt(day)
+      const h = parseInt(hour)
+      const min = parseInt(minute)
+      
+      let candidateUtc = new Date(Date.UTC(y, m, d, h, min, 0))
+      
+      for (let iteration = 0; iteration < 10; iteration++) {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        })
+        
+        const parts = formatter.formatToParts(candidateUtc)
+        const getPart = (type) => parseInt(parts.find(p => p.type === type)?.value || '0')
+        
+        const tzYear = getPart('year')
+        const tzMonth = getPart('month') - 1
+        const tzDay = getPart('day')
+        const tzHour = getPart('hour')
+        const tzMinute = getPart('minute')
+        const tzSecond = getPart('second')
+        
+        if (tzYear === y && tzMonth === m && tzDay === d && 
+            tzHour === h && tzMinute === min && tzSecond === 0) {
+          return candidateUtc.toISOString()
+        }
+        
+        const desiredLocal = new Date(y, m, d, h, min, 0)
+        const actualLocal = new Date(tzYear, tzMonth, tzDay, tzHour, tzMinute, tzSecond)
+        const diffMs = desiredLocal.getTime() - actualLocal.getTime()
+        
+        if (Math.abs(diffMs) < 1000) {
+          return candidateUtc.toISOString()
+        }
+        
+        candidateUtc = new Date(candidateUtc.getTime() + diffMs)
+      }
+      
+      return candidateUtc.toISOString()
+    } catch (err) {
+      console.error('[notifications] Error converting datetime-local:', err)
+      const fallback = new Date(datetimeLocal)
+      return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
+    }
+  }
+  
+  const plannedFor = deliveryMode === 'planned' && parsed.plannedFor 
+    ? convertDatetimeLocalToUTC(parsed.plannedFor, campaignTimezone)
+    : null
+  const scheduleStartAt = deliveryMode === 'scheduled' && parsed.scheduleStartAt
+    ? convertDatetimeLocalToUTC(parsed.scheduleStartAt, campaignTimezone)
+    : null
   const nextRunAt = determineInitialNextRunAt({
     deliveryMode,
     plannedFor,
@@ -3775,7 +3843,7 @@ app.post('/api/admin/notifications', async (req, res) => {
   const audience = parsed.audience
   const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
-  const timezone = parsed.timezone || DEFAULT_TIMEZONE
+  const timezone = campaignTimezone
   const state = deliveryMode === 'scheduled' ? 'scheduled' : 'draft'
   try {
     const rows = await sql`
@@ -3852,19 +3920,6 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
     return
   }
   const deliveryMode = parsed.deliveryMode
-  const plannedFor = parsed.plannedFor && parsed.plannedFor.length ? new Date(parsed.plannedFor).toISOString() : null
-  const scheduleStartAt =
-    parsed.scheduleStartAt && parsed.scheduleStartAt.length
-      ? new Date(parsed.scheduleStartAt).toISOString()
-      : null
-  const nextRunAt = determineInitialNextRunAt({
-    deliveryMode,
-    plannedFor,
-    scheduleStartAt,
-  })
-  const audience = parsed.audience
-  const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
-  const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
   const campaignTimezone = parsed.timezone || DEFAULT_TIMEZONE
   
   // Convert datetime-local input to UTC timestamp in campaign timezone (same logic as create)
@@ -3943,6 +3998,9 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
     plannedFor,
     scheduleStartAt,
   })
+  const audience = parsed.audience
+  const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
+  const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
   const timezone = campaignTimezone
   const nextState = deliveryMode === 'scheduled' ? (existingRows[0].state === 'paused' ? 'paused' : 'scheduled') : 'draft'
   try {
