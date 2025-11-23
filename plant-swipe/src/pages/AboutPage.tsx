@@ -74,7 +74,7 @@ export default function AboutPage() {
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
-          className="absolute -left-12 -top-12 md:-left-16 md:-top-16 z-0"
+          className="absolute -right-12 -bottom-12 md:-right-16 md:-bottom-16 z-0"
         >
           <style>{`
             .about-logo {

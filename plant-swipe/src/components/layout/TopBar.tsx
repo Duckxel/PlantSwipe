@@ -75,7 +75,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             filter: brightness(0) saturate(100%) invert(100%);
           }
         `}</style>
-        <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden desktop-drag-region">
+        <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 pt-5 overflow-x-hidden desktop-drag-region">
           <div className="flex-shrink-0">
             <img 
               src="/icons/plant-swipe-icon.svg" 
