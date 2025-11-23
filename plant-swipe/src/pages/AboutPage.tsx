@@ -74,7 +74,7 @@ export default function AboutPage() {
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
-          className="absolute -right-8 -bottom-12 md:-right-12 md:-bottom-16 z-0"
+          className="absolute -right-4 -bottom-12 md:-right-8 md:-bottom-16 z-0"
         >
           <style>{`
             .about-logo {
@@ -88,7 +88,7 @@ export default function AboutPage() {
           <img 
             src="/icons/plant-swipe-icon.svg" 
             alt="Aphylia Logo" 
-            className="about-logo relative h-96 w-96 md:h-[36rem] md:w-[36rem] opacity-60 dark:opacity-50"
+            className="about-logo relative h-64 w-64 md:h-96 md:w-96 opacity-60 dark:opacity-50"
           />
         </motion.div>
         <motion.div
