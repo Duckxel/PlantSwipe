@@ -71,6 +71,27 @@ export default function AboutPage() {
         <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <div className="absolute -left-16 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
+          className="absolute -right-2 -bottom-8 md:-right-4 md:-bottom-12 z-0"
+        >
+          <style>{`
+            .about-logo {
+              filter: brightness(0) saturate(100%);
+              transform: scaleX(-1);
+            }
+            .dark .about-logo {
+              filter: brightness(0) saturate(100%) invert(100%);
+            }
+          `}</style>
+          <img 
+            src="/icons/plant-swipe-icon.svg" 
+            alt="Aphylia Logo" 
+            className="about-logo relative h-64 w-64 md:h-96 md:w-96 opacity-60 dark:opacity-50"
+          />
+        </motion.div>
+        <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: "easeOut" }}
