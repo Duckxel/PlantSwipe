@@ -754,6 +754,10 @@ export function AdminNotificationsPanel() {
             </DialogTitle>
             <DialogDescription>
               Configure the schedule, audience, and messages that will be delivered to users.
+              <br />
+              <span className="text-xs text-muted-foreground mt-1 block">
+                💡 Notifications are automatically translated based on each user's language preference (English or French).
+              </span>
             </DialogDescription>
           </DialogHeader>
           

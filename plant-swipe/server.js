@@ -8456,35 +8456,160 @@ async function resolveNotificationAudience(campaign) {
   return Array.from(recipients)
 }
 
+// Helper function to translate text using DeepL API
+async function translateNotificationText(text, targetLang, sourceLang = 'EN') {
+  if (!text || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return text
+  }
+  
+  const deeplApiKey = process.env.DEEPL_API_KEY
+  if (!deeplApiKey) {
+    console.warn('[notifications] DeepL API key not configured, skipping translation')
+    return text
+  }
+  
+  try {
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        source_lang: sourceLang.toUpperCase(),
+        target_lang: targetLang.toUpperCase(),
+      }),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[notifications] DeepL translation failed:', response.status, errorText)
+      return text // Return original text on translation failure
+    }
+    
+    const data = await response.json()
+    return data.translations?.[0]?.text || text
+  } catch (err) {
+    console.error('[notifications] Translation error:', err)
+    return text // Return original text on error
+  }
+}
+
+// Get user language preferences for multiple users (batch fetch)
+async function getUserLanguages(userIds) {
+  if (!sql || !userIds.length) return new Map()
+  
+  const languageMap = new Map()
+  
+  try {
+    // Try to get from profiles table (if preferred_language column exists)
+    // This will fail gracefully if the column doesn't exist
+    try {
+      const profileLangs = await sql`
+        select id::text as id, preferred_language
+        from public.profiles
+        where id = any(${sql.array(userIds)}::uuid[])
+          and preferred_language is not null
+      `
+      for (const row of profileLangs || []) {
+        const lang = String(row.preferred_language).toLowerCase()
+        if (lang === 'fr' || lang === 'en') {
+          languageMap.set(row.id, lang)
+        }
+      }
+    } catch (err) {
+      // Column doesn't exist or other error - continue to fallback
+    }
+    
+    // Fallback: get most recent language from web visits for users we don't have yet
+    const missingIds = userIds.filter(id => !languageMap.has(String(id)))
+    if (missingIds.length > 0) {
+      const visitLangs = await sql`
+        select distinct on (user_id) user_id::text as user_id, language
+        from public.web_visits
+        where user_id = any(${sql.array(missingIds)}::uuid[])
+          and language is not null
+        order by user_id, occurred_at desc
+      `.catch(() => null)
+      
+      for (const row of visitLangs || []) {
+        if (!languageMap.has(row.user_id)) {
+          const lang = String(row.language).toLowerCase()
+          if (lang.startsWith('fr')) {
+            languageMap.set(row.user_id, 'fr')
+          } else if (lang.startsWith('en')) {
+            languageMap.set(row.user_id, 'en')
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[notifications] Error getting user languages:', err)
+  }
+  
+  return languageMap
+}
+
 async function insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor) {
   if (!sql || !recipients.length) return []
   const insertedRows = []
   let processedCount = 0
   const chunks = chunkArray(recipients, 200)
+  
+  // Detect source language from campaign title/message (assume English if not specified)
+  const sourceLang = 'EN'
+  
   for (const chunk of chunks) {
-    // Fetch user display names for this chunk
+    // Fetch user display names and language preferences for this chunk
     const userProfiles = await sql`
       select id::text as id, display_name, username, email
       from public.profiles
       where id = any(${sql.array(chunk)}::uuid[])
     `
     const userDisplayNames = new Map()
+    const userLanguages = new Map()
+    
+    // Get display names
     for (const profile of userProfiles || []) {
       const displayName = profile.display_name || profile.username || profile.email || 'User'
       userDisplayNames.set(profile.id, displayName)
     }
     
-    const payload = chunk.map((userId, index) => {
+    // Get language preferences for all users in this chunk (batch fetch)
+    const chunkLanguageMap = await getUserLanguages(chunk)
+    for (const userId of chunk) {
+      const lang = chunkLanguageMap.get(String(userId)) || 'en'
+      userLanguages.set(String(userId), lang)
+    }
+    
+    // Prepare payloads with personalized and translated messages
+    const payloadPromises = chunk.map(async (userId, index) => {
       const baseMessage = pickNotificationMessage(campaign, processedCount + index)
       const userDisplayName = userDisplayNames.get(String(userId)) || 'User'
       // Replace {{user}} with the actual user display name
-      const personalizedMessage = baseMessage.replace(/\{\{user\}\}/g, userDisplayName)
+      let personalizedMessage = baseMessage.replace(/\{\{user\}\}/g, userDisplayName)
+      
+      // Translate message based on user's language preference
+      const userLang = userLanguages.get(String(userId)) || 'en'
+      const targetLang = userLang === 'fr' ? 'FR' : 'EN'
+      
+      if (targetLang !== sourceLang) {
+        personalizedMessage = await translateNotificationText(personalizedMessage, targetLang, sourceLang)
+      }
+      
+      // Translate title if needed
+      let translatedTitle = campaign.title
+      if (targetLang !== sourceLang) {
+        translatedTitle = await translateNotificationText(campaign.title, targetLang, sourceLang)
+      }
       
       return {
         campaign_id: campaign.id,
         iteration,
         user_id: userId,
-        title: campaign.title,
+        title: translatedTitle,
         message: personalizedMessage,
         payload: { ctaUrl: campaign.ctaUrl || null },
         cta_url: campaign.ctaUrl || null,
@@ -8494,6 +8619,8 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
         delivery_error: null,
       }
     })
+    
+    const payload = await Promise.all(payloadPromises)
     const inserted = await sql`
       insert into public.user_notifications ${sql(
         payload,
