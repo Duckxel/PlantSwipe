@@ -76,17 +76,23 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
           }
         `}</style>
         <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden desktop-drag-region" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
-          <div className="flex-shrink-0" style={{ marginTop: '-1.25rem' }}>
+          <Link
+            to="/"
+            className="flex-shrink-0 no-underline cursor-pointer"
+            style={{ marginTop: '-1.25rem', WebkitTapHighlightColor: 'transparent', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+          >
             <img 
               src="/icons/plant-swipe-icon.svg" 
               alt="Aphylia" 
               className="h-16 w-14 plant-icon-theme"
+              draggable="false"
+              style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
             />
-          </div>
+          </Link>
       <Link
         to="/"
         className="font-brand text-[1.925rem] md:text-[2.625rem] leading-none font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90 whitespace-nowrap shrink-0"
-        style={{ WebkitTapHighlightColor: 'transparent' }}
+        style={{ WebkitTapHighlightColor: 'transparent', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       >
         {t('common.appName')}
       </Link>
