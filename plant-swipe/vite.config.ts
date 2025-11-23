@@ -42,6 +42,7 @@ export default defineConfig({
         'env-loader.js',
         'env.js',
         'icons/plant-swipe-icon.svg',
+        'icons/plant-swipe-icon-outline.svg',
         'icons/icon-192x192.png',
         'icons/icon-512x512.png',
         'icons/icon-maskable-512.png',
@@ -71,6 +72,7 @@ export default defineConfig({
           { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable any' },
           { src: 'icons/plant-swipe-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+          { src: 'icons/plant-swipe-icon-outline.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
         ],
         shortcuts: [
           { name: 'Swipe plants', url: scope === '/' ? '/swipe' : `${scope}swipe`, description: 'Jump directly into swipe mode' },

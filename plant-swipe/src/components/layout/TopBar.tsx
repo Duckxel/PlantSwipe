@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -66,10 +66,23 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
 
   const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
     return (
-      <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden desktop-drag-region">
-      <div className="h-10 w-10 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow">
-        <Leaf className="h-5 w-5 text-green-800 dark:text-green-200" />
-      </div>
+      <>
+        <style>{`
+          .plant-icon-green {
+            filter: brightness(0) saturate(100%) invert(27%) sepia(95%) saturate(1234%) hue-rotate(100deg) brightness(95%) contrast(85%);
+          }
+          .dark .plant-icon-green {
+            filter: brightness(0) saturate(100%) invert(67%) sepia(95%) saturate(1234%) hue-rotate(100deg) brightness(120%) contrast(85%);
+          }
+        `}</style>
+        <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden desktop-drag-region">
+        <div className="h-10 w-10 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow">
+          <img 
+            src="/icons/plant-swipe-icon-outline.svg" 
+            alt="Aphylia" 
+            className="h-5 w-5 plant-icon-green"
+          />
+        </div>
       <Link
         to="/"
         className="font-brand text-[1.925rem] md:text-[2.625rem] leading-none font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90 whitespace-nowrap shrink-0"
@@ -130,6 +143,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         )}
       </div>
     </header>
+      </>
   )
 }
 
