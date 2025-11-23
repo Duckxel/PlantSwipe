@@ -2867,7 +2867,7 @@ async function ensureNotificationTables() {
         filters jsonb not null default '{}'::jsonb,
         message_variants text[] not null default '{}'::text[],
         randomize boolean not null default true,
-        timezone text default 'UTC',
+        timezone text default 'Europe/London',
         planned_for timestamptz,
         schedule_start_at timestamptz,
         schedule_interval text check (schedule_interval in ('daily','weekly','monthly')),
@@ -3777,7 +3777,7 @@ app.post('/api/admin/notifications', async (req, res) => {
   const audience = parsed.audience
   const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
-  const timezone = parsed.timezone || 'UTC'
+  const timezone = parsed.timezone || DEFAULT_TIMEZONE
   const state = deliveryMode === 'scheduled' ? 'scheduled' : 'draft'
   try {
     const rows = await sql`
@@ -3867,7 +3867,7 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
   const audience = parsed.audience
   const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
-  const timezone = parsed.timezone || 'UTC'
+  const timezone = parsed.timezone || DEFAULT_TIMEZONE
   const nextState = deliveryMode === 'scheduled' ? (existingRows[0].state === 'paused' ? 'paused' : 'scheduled') : 'draft'
   try {
     const rows = await sql`
@@ -8315,6 +8315,9 @@ function toUuidArray(value) {
   return toStringArray(value)
 }
 
+// Default timezone for users and campaigns
+const DEFAULT_TIMEZONE = 'Europe/London'
+
 function normalizeNotificationCampaign(row) {
   if (!row) return null
   const stats = {
@@ -8337,7 +8340,7 @@ function normalizeNotificationCampaign(row) {
     filters,
     messageVariants: toStringArray(row.message_variants),
     randomize: row.randomize !== false,
-    timezone: row.timezone || 'UTC',
+    timezone: row.timezone || DEFAULT_TIMEZONE,
     plannedFor: isoOrNull(row.planned_for),
     scheduleStartAt: isoOrNull(row.schedule_start_at),
     scheduleInterval: row.schedule_interval || null,
@@ -8554,6 +8557,7 @@ async function getUserLanguages(userIds) {
 
 // Get user timezones for multiple users (batch fetch)
 // Falls back to most recent timezone from web visits if not in profile
+// Final fallback is Europe/London
 async function getUserTimezones(userIds) {
   if (!sql || !userIds.length) return new Map()
   
@@ -8619,7 +8623,7 @@ function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) 
     }
     
     // If same timezone, return as-is
-    if (userTimezone === campaignTimezone || !userTimezone || userTimezone === 'UTC') {
+    if (userTimezone === campaignTimezone || !userTimezone) {
       return targetLocalTime
     }
     
@@ -8711,8 +8715,8 @@ function calculateUserScheduledTime(campaign, userTimezone) {
       return now.toISOString()
     }
     
-    const campaignTz = campaign.timezone || 'UTC'
-    return convertToUserTimezone(campaign.plannedFor, campaignTz, userTimezone || 'UTC')
+    const campaignTz = campaign.timezone || DEFAULT_TIMEZONE
+    return convertToUserTimezone(campaign.plannedFor, campaignTz, userTimezone || DEFAULT_TIMEZONE)
   }
   
   // For scheduled notifications, convert scheduled time to user's timezone
@@ -8728,8 +8732,8 @@ function calculateUserScheduledTime(campaign, userTimezone) {
       return now.toISOString()
     }
     
-    const campaignTz = campaign.timezone || 'UTC'
-    return convertToUserTimezone(baseTime, campaignTz, userTimezone || 'UTC')
+    const campaignTz = campaign.timezone || DEFAULT_TIMEZONE
+    return convertToUserTimezone(baseTime, campaignTz, userTimezone || DEFAULT_TIMEZONE)
   }
   
   return now.toISOString()
@@ -8795,7 +8799,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
       // Calculate scheduled time based on user's timezone
       // For instant notifications, use provided scheduledFor (current time)
       // For planned/scheduled, calculate per-user timezone
-      const userTimezone = userTimezones.get(String(userId)) || 'UTC'
+      const userTimezone = userTimezones.get(String(userId)) || DEFAULT_TIMEZONE
       const userScheduledTime = campaign.deliveryMode === 'send_now' 
         ? scheduledFor 
         : calculateUserScheduledTime(campaign, userTimezone)

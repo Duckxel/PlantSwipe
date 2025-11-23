@@ -98,7 +98,7 @@ const defaultFormState = (): FormState => ({
   deliveryMode: 'send_now',
   audience: 'all',
   timezone:
-    (typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC',
+    (typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || DEFAULT_TIMEZONE,
   messageVariants: [],
   randomize: true,
   plannedFor: '',
@@ -111,6 +111,9 @@ const defaultFormState = (): FormState => ({
 const TEMPLATE_VARIABLES = [
   { variable: '{{user}}', description: 'User display name' },
 ]
+
+// Default timezone for notification campaigns
+const DEFAULT_TIMEZONE = 'Europe/London'
 
 function isoToInputValue(value?: string | null): string {
   if (!value) return ''
@@ -258,7 +261,7 @@ export function AdminNotificationsPanel() {
       deliveryMode: notification.deliveryMode as FormState['deliveryMode'],
       audience: (notification.audience as FormState['audience']) || 'all',
       timezone: notification.timezone ||
-        ((typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC'),
+        ((typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || DEFAULT_TIMEZONE),
       messageVariants: [...notification.messageVariants],
       randomize: notification.randomize,
       plannedFor: isoToInputValue(notification.plannedFor),

@@ -2,6 +2,9 @@ import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
 
+// Default timezone for users who haven't set one
+const DEFAULT_TIMEZONE = 'Europe/London'
+
 type AuthUser = {
   id: string
   email: string | null
@@ -53,25 +56,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!error) {
       setProfile(data as any)
       
-      // Auto-update timezone if missing (detect from browser)
-      if (data && !data.timezone && typeof Intl !== 'undefined') {
-        const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-        if (detectedTimezone) {
-          // Update in background (non-blocking)
-          supabase
-            .from('profiles')
-            .update({ timezone: detectedTimezone })
-            .eq('id', currentId)
-            .then(({ data: updatedData }) => {
-              // Update local state if update succeeded
-              if (updatedData && updatedData.length > 0) {
-                const updatedProfile = { ...data, timezone: detectedTimezone }
-                setProfile(updatedProfile as any)
-                try { localStorage.setItem('plantswipe.profile', JSON.stringify(updatedProfile)) } catch {}
-              }
-            })
-            .catch(() => {})
-        }
+      // Auto-update timezone if missing (detect from browser, fallback to London)
+      if (data && !data.timezone) {
+        const detectedTimezone = typeof Intl !== 'undefined'
+          ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
+          : DEFAULT_TIMEZONE
+        
+        // Update in background (non-blocking)
+        supabase
+          .from('profiles')
+          .update({ timezone: detectedTimezone })
+          .eq('id', currentId)
+          .then(({ data: updatedData }) => {
+            // Update local state if update succeeded
+            if (updatedData && updatedData.length > 0) {
+              const updatedProfile = { ...data, timezone: detectedTimezone }
+              setProfile(updatedProfile as any)
+              try { localStorage.setItem('plantswipe.profile', JSON.stringify(updatedProfile)) } catch {}
+            }
+          })
+          .catch(() => {})
       }
       
       // Persist profile alongside session so reloads can hydrate faster
@@ -115,10 +119,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const uid = data.user?.id
     if (!uid) return { error: 'Signup failed' }
 
-    // Auto-detect timezone from browser
+    // Auto-detect timezone from browser, fallback to London
     const detectedTimezone = typeof Intl !== 'undefined' 
-      ? Intl.DateTimeFormat().resolvedOptions().timeZone 
-      : 'UTC'
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
+      : DEFAULT_TIMEZONE
     
     // Create profile row
     const { error: perr } = await supabase.from('profiles').insert({
