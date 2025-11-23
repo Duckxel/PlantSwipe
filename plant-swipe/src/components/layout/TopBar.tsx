@@ -68,18 +68,18 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
     return (
       <>
         <style>{`
-          .plant-icon-green {
-            filter: brightness(0) saturate(100%) invert(27%) sepia(95%) saturate(1234%) hue-rotate(100deg) brightness(95%) contrast(85%);
+          .plant-icon-theme {
+            filter: brightness(0) saturate(100%);
           }
-          .dark .plant-icon-green {
-            filter: brightness(0) saturate(100%) invert(67%) sepia(95%) saturate(1234%) hue-rotate(100deg) brightness(120%) contrast(85%);
+          .dark .plant-icon-theme {
+            filter: brightness(0) saturate(100%) invert(100%);
           }
         `}</style>
         <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden desktop-drag-region">
           <img 
             src="/icons/plant-swipe-icon.svg" 
             alt="Aphylia" 
-            className="h-10 w-10 plant-icon-green"
+            className="h-10 w-10 plant-icon-theme"
           />
       <Link
         to="/"
