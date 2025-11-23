@@ -3644,8 +3644,8 @@ export const AdminPage: React.FC = () => {
   }, [activeTab]);
 
   return (
-    <div className="px-4 py-6 md:px-8">
-      <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
+    <div className="px-4 pb-6 md:px-8">
+      <div className="max-w-6xl mx-auto mt-8 space-y-4 md:space-y-6">
         {/* Mobile Navigation */}
         <div className={`md:hidden ${mobileNavPanelClass}`}>
           <div className="p-4">
