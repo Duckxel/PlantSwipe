@@ -109,13 +109,7 @@ const defaultFormState = (): FormState => ({
 })
 
 const TEMPLATE_VARIABLES = [
-  { variable: '{{user}}', description: 'User name or display name' },
-  { variable: '{{username}}', description: 'Username' },
-  { variable: '{{email}}', description: 'User email address' },
-  { variable: '{{garden}}', description: 'Garden name' },
-  { variable: '{{plant}}', description: 'Plant name' },
-  { variable: '{{task}}', description: 'Task name' },
-  { variable: '{{count}}', description: 'Count or number' },
+  { variable: '{{user}}', description: 'User display name' },
 ]
 
 function isoToInputValue(value?: string | null): string {

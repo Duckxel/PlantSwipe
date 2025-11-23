@@ -8462,19 +8462,38 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
   let processedCount = 0
   const chunks = chunkArray(recipients, 200)
   for (const chunk of chunks) {
-    const payload = chunk.map((userId, index) => ({
-      campaign_id: campaign.id,
-      iteration,
-      user_id: userId,
-      title: campaign.title,
-      message: pickNotificationMessage(campaign, processedCount + index),
-      payload: { ctaUrl: campaign.ctaUrl || null },
-      cta_url: campaign.ctaUrl || null,
-      scheduled_for: scheduledFor,
-      delivery_status: 'pending',
-      delivery_attempts: 0,
-      delivery_error: null,
-    }))
+    // Fetch user display names for this chunk
+    const userProfiles = await sql`
+      select id::text as id, display_name, username, email
+      from public.profiles
+      where id = any(${sql.array(chunk)}::uuid[])
+    `
+    const userDisplayNames = new Map()
+    for (const profile of userProfiles || []) {
+      const displayName = profile.display_name || profile.username || profile.email || 'User'
+      userDisplayNames.set(profile.id, displayName)
+    }
+    
+    const payload = chunk.map((userId, index) => {
+      const baseMessage = pickNotificationMessage(campaign, processedCount + index)
+      const userDisplayName = userDisplayNames.get(String(userId)) || 'User'
+      // Replace {{user}} with the actual user display name
+      const personalizedMessage = baseMessage.replace(/\{\{user\}\}/g, userDisplayName)
+      
+      return {
+        campaign_id: campaign.id,
+        iteration,
+        user_id: userId,
+        title: campaign.title,
+        message: personalizedMessage,
+        payload: { ctaUrl: campaign.ctaUrl || null },
+        cta_url: campaign.ctaUrl || null,
+        scheduled_for: scheduledFor,
+        delivery_status: 'pending',
+        delivery_attempts: 0,
+        delivery_error: null,
+      }
+    })
     const inserted = await sql`
       insert into public.user_notifications ${sql(
         payload,
