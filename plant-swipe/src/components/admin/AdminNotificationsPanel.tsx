@@ -37,9 +37,9 @@ import {
 } from 'lucide-react'
 
 const deliveryModeOptions = [
-  { value: 'send_now', label: 'Send now', icon: Zap },
-  { value: 'planned', label: 'Planned (one-time)', icon: Calendar },
-  { value: 'scheduled', label: 'Scheduled (recurring)', icon: Clock },
+  { value: 'send_now', label: 'Send now (Instant - all users receive immediately)', icon: Zap },
+  { value: 'planned', label: 'Planned (one-time, timezone-aware)', icon: Calendar },
+  { value: 'scheduled', label: 'Scheduled (recurring, timezone-aware)', icon: Clock },
 ] as const
 
 const audienceOptions = [
@@ -757,6 +757,8 @@ export function AdminNotificationsPanel() {
               <br />
               <span className="text-xs text-muted-foreground mt-1 block">
                 💡 Notifications are automatically translated based on each user's language preference (English or French).
+                <br />
+                ⏰ <strong>Instant</strong> notifications are sent immediately to all users. <strong>Planned/Scheduled</strong> notifications are sent at the same local time in each user's timezone.
               </span>
             </DialogDescription>
           </DialogHeader>

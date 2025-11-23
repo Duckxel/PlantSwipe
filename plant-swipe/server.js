@@ -8552,6 +8552,162 @@ async function getUserLanguages(userIds) {
   return languageMap
 }
 
+// Get user timezones for multiple users (batch fetch)
+async function getUserTimezones(userIds) {
+  if (!sql || !userIds.length) return new Map()
+  
+  const timezoneMap = new Map()
+  
+  try {
+    const profiles = await sql`
+      select id::text as id, timezone
+      from public.profiles
+      where id = any(${sql.array(userIds)}::uuid[])
+        and timezone is not null
+    `.catch(() => null)
+    
+    for (const row of profiles || []) {
+      const tz = String(row.timezone).trim()
+      if (tz) {
+        timezoneMap.set(row.id, tz)
+      }
+    }
+  } catch (err) {
+    console.error('[notifications] Error getting user timezones:', err)
+  }
+  
+  return timezoneMap
+}
+
+// Convert a UTC timestamp to represent the same local time in user's timezone
+// Example: If campaign time is "2024-01-15 09:00:00" in America/New_York (UTC-5),
+//          and user is in Europe/Paris (UTC+1), we want "2024-01-15 09:00:00" in Paris time
+// Strategy: Extract local time components from campaign timezone, then find UTC time
+//           that represents those same components in user's timezone
+function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) {
+  try {
+    const targetDate = new Date(targetLocalTime)
+    if (Number.isNaN(targetDate.getTime())) {
+      return targetLocalTime
+    }
+    
+    // If same timezone, return as-is
+    if (userTimezone === campaignTimezone || !userTimezone || userTimezone === 'UTC') {
+      return targetLocalTime
+    }
+    
+    // Extract local time components when displayed in campaign timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: campaignTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+    
+    const parts = formatter.formatToParts(targetDate)
+    const getPart = (type) => parseInt(parts.find(p => p.type === type)?.value || '0')
+    
+    const year = getPart('year')
+    const month = getPart('month') - 1 // 0-indexed
+    const day = getPart('day')
+    const hour = getPart('hour')
+    const minute = getPart('minute')
+    const second = getPart('second')
+    
+    // Now find the UTC time that represents this same local time in user's timezone
+    // We'll use binary search or iterative approach to find the right UTC time
+    // Start with a guess and adjust
+    
+    // Create a date object with these components (interpreted as UTC)
+    let candidateUtc = new Date(Date.UTC(year, month, day, hour, minute, second))
+    
+    // Check what local time this represents in user's timezone
+    const userFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: userTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+    
+    let userParts = userFormatter.formatToParts(candidateUtc)
+    let userHour = parseInt(userParts.find(p => p.type === 'hour')?.value || '0')
+    let userMinute = parseInt(userParts.find(p => p.type === 'minute')?.value || '0')
+    
+    // Calculate offset difference
+    const campaignOffset = getTimezoneOffsetAt(targetDate, campaignTimezone)
+    const userOffset = getTimezoneOffsetAt(candidateUtc, userTimezone)
+    const offsetDiff = campaignOffset - userOffset
+    
+    // Adjust candidate UTC by the offset difference
+    candidateUtc = new Date(candidateUtc.getTime() - offsetDiff)
+    
+    return candidateUtc.toISOString()
+  } catch (err) {
+    console.error('[notifications] Error converting timezone:', err)
+    return targetLocalTime
+  }
+}
+
+// Get timezone offset in milliseconds at a specific date
+function getTimezoneOffsetAt(date, timezone) {
+  try {
+    // Create two formatters: one for UTC, one for the timezone
+    const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }))
+    const tzDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }))
+    return utcDate.getTime() - tzDate.getTime()
+  } catch {
+    return 0
+  }
+}
+
+// Calculate scheduled time for a user based on campaign and user timezone
+function calculateUserScheduledTime(campaign, userTimezone) {
+  const now = new Date()
+  
+  // For instant notifications, send immediately
+  if (campaign.deliveryMode === 'send_now') {
+    return now.toISOString()
+  }
+  
+  // For planned notifications, convert planned time to user's timezone
+  if (campaign.deliveryMode === 'planned' && campaign.plannedFor) {
+    const plannedDate = new Date(campaign.plannedFor)
+    if (Number.isNaN(plannedDate.getTime())) {
+      return now.toISOString()
+    }
+    
+    const campaignTz = campaign.timezone || 'UTC'
+    return convertToUserTimezone(campaign.plannedFor, campaignTz, userTimezone || 'UTC')
+  }
+  
+  // For scheduled notifications, convert scheduled time to user's timezone
+  if (campaign.deliveryMode === 'scheduled') {
+    // Use next_run_at if available, otherwise schedule_start_at
+    const baseTime = campaign.nextRunAt || campaign.scheduleStartAt
+    if (!baseTime) {
+      return now.toISOString()
+    }
+    
+    const baseDate = new Date(baseTime)
+    if (Number.isNaN(baseDate.getTime())) {
+      return now.toISOString()
+    }
+    
+    const campaignTz = campaign.timezone || 'UTC'
+    return convertToUserTimezone(baseTime, campaignTz, userTimezone || 'UTC')
+  }
+  
+  return now.toISOString()
+}
+
 async function insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor) {
   if (!sql || !recipients.length) return []
   const insertedRows = []
@@ -8562,19 +8718,23 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
   const sourceLang = 'EN'
   
   for (const chunk of chunks) {
-    // Fetch user display names and language preferences for this chunk
+    // Fetch user display names, language preferences, and timezones for this chunk
     const userProfiles = await sql`
-      select id::text as id, display_name, username, email
+      select id::text as id, display_name, username, email, timezone
       from public.profiles
       where id = any(${sql.array(chunk)}::uuid[])
     `
     const userDisplayNames = new Map()
     const userLanguages = new Map()
+    const userTimezones = new Map()
     
-    // Get display names
+    // Get display names and timezones
     for (const profile of userProfiles || []) {
       const displayName = profile.display_name || profile.username || profile.email || 'User'
       userDisplayNames.set(profile.id, displayName)
+      if (profile.timezone) {
+        userTimezones.set(profile.id, String(profile.timezone))
+      }
     }
     
     // Get language preferences for all users in this chunk (batch fetch)
@@ -8584,7 +8744,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
       userLanguages.set(String(userId), lang)
     }
     
-    // Prepare payloads with personalized and translated messages
+    // Prepare payloads with personalized, translated messages, and timezone-adjusted scheduled times
     const payloadPromises = chunk.map(async (userId, index) => {
       const baseMessage = pickNotificationMessage(campaign, processedCount + index)
       const userDisplayName = userDisplayNames.get(String(userId)) || 'User'
@@ -8605,6 +8765,14 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
         translatedTitle = await translateNotificationText(campaign.title, targetLang, sourceLang)
       }
       
+      // Calculate scheduled time based on user's timezone
+      // For instant notifications, use provided scheduledFor (current time)
+      // For planned/scheduled, calculate per-user timezone
+      const userTimezone = userTimezones.get(String(userId)) || 'UTC'
+      const userScheduledTime = campaign.deliveryMode === 'send_now' 
+        ? scheduledFor 
+        : calculateUserScheduledTime(campaign, userTimezone)
+      
       return {
         campaign_id: campaign.id,
         iteration,
@@ -8613,7 +8781,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
         message: personalizedMessage,
         payload: { ctaUrl: campaign.ctaUrl || null },
         cta_url: campaign.ctaUrl || null,
-        scheduled_for: scheduledFor,
+        scheduled_for: userScheduledTime,
         delivery_status: 'pending',
         delivery_attempts: 0,
         delivery_error: null,
