@@ -32,6 +32,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Zap,
+  Info,
+  X,
 } from 'lucide-react'
 
 const deliveryModeOptions = [
@@ -81,7 +83,7 @@ type FormState = {
   deliveryMode: 'send_now' | 'planned' | 'scheduled'
   audience: 'all' | 'tasks_open' | 'inactive_week' | 'admins' | 'custom'
   timezone: string
-  messageVariantsText: string
+  messageVariants: string[]
   randomize: boolean
   plannedFor: string
   scheduleStart: string
@@ -97,7 +99,7 @@ const defaultFormState = (): FormState => ({
   audience: 'all',
   timezone:
     (typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC',
-  messageVariantsText: '',
+  messageVariants: [],
   randomize: true,
   plannedFor: '',
   scheduleStart: '',
@@ -105,6 +107,16 @@ const defaultFormState = (): FormState => ({
   ctaUrl: '',
   customUserIds: '',
 })
+
+const TEMPLATE_VARIABLES = [
+  { variable: '{{user}}', description: 'User name or display name' },
+  { variable: '{{username}}', description: 'Username' },
+  { variable: '{{email}}', description: 'User email address' },
+  { variable: '{{garden}}', description: 'Garden name' },
+  { variable: '{{plant}}', description: 'Plant name' },
+  { variable: '{{task}}', description: 'Task name' },
+  { variable: '{{count}}', description: 'Count or number' },
+]
 
 function isoToInputValue(value?: string | null): string {
   if (!value) return ''
@@ -199,6 +211,9 @@ export function AdminNotificationsPanel() {
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [editingId, setEditingId] = React.useState<string | null>(null)
+  const [editingVariantIndex, setEditingVariantIndex] = React.useState<number | null>(null)
+  const [newVariantText, setNewVariantText] = React.useState('')
+  const [showTemplateInfo, setShowTemplateInfo] = React.useState(false)
 
   const loadNotifications = React.useCallback(async () => {
     setLoading(true)
@@ -232,6 +247,8 @@ export function AdminNotificationsPanel() {
     setFormState(defaultFormState())
     setEditingId(null)
     setFormError(null)
+    setEditingVariantIndex(null)
+    setNewVariantText('')
     setFormOpen(true)
   }, [])
 
@@ -239,6 +256,8 @@ export function AdminNotificationsPanel() {
     setFormMode('edit')
     setEditingId(notification.id)
     setFormError(null)
+    setEditingVariantIndex(null)
+    setNewVariantText('')
     setFormState({
       title: notification.title,
       description: notification.description || '',
@@ -246,7 +265,7 @@ export function AdminNotificationsPanel() {
       audience: (notification.audience as FormState['audience']) || 'all',
       timezone: notification.timezone ||
         ((typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC'),
-      messageVariantsText: notification.messageVariants.join('\n'),
+      messageVariants: [...notification.messageVariants],
       randomize: notification.randomize,
       plannedFor: isoToInputValue(notification.plannedFor),
       scheduleStart: isoToInputValue(notification.scheduleStartAt),
@@ -270,15 +289,53 @@ export function AdminNotificationsPanel() {
     [],
   )
 
+  const addMessageVariant = React.useCallback(() => {
+    const text = newVariantText.trim()
+    if (!text) return
+    setFormState((prev) => ({
+      ...prev,
+      messageVariants: [...prev.messageVariants, text],
+    }))
+    setNewVariantText('')
+  }, [newVariantText])
+
+  const updateMessageVariant = React.useCallback((index: number, text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    setFormState((prev) => {
+      const updated = [...prev.messageVariants]
+      updated[index] = trimmed
+      return { ...prev, messageVariants: updated }
+    })
+    setEditingVariantIndex(null)
+  }, [])
+
+  const deleteMessageVariant = React.useCallback((index: number) => {
+    setFormState((prev) => ({
+      ...prev,
+      messageVariants: prev.messageVariants.filter((_, i) => i !== index),
+    }))
+    if (editingVariantIndex === index) {
+      setEditingVariantIndex(null)
+    }
+  }, [editingVariantIndex])
+
+  const startEditingVariant = React.useCallback((index: number) => {
+    setEditingVariantIndex(index)
+    setNewVariantText(formState.messageVariants[index])
+  }, [formState.messageVariants])
+
+  const cancelEditingVariant = React.useCallback(() => {
+    setEditingVariantIndex(null)
+    setNewVariantText('')
+  }, [])
+
   const submitForm = React.useCallback(async () => {
     if (submitting) return
     setSubmitting(true)
     setFormError(null)
     try {
-      const messageVariants = formState.messageVariantsText
-        .split(/\n+/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
+      const messageVariants = formState.messageVariants.filter((v) => v.trim().length > 0)
       if (!messageVariants.length) {
         setFormError('Add at least one message variant')
         setSubmitting(false)
@@ -325,6 +382,8 @@ export function AdminNotificationsPanel() {
       setFormOpen(false)
       setFormState(defaultFormState())
       setEditingId(null)
+      setEditingVariantIndex(null)
+      setNewVariantText('')
       loadNotifications().catch(() => {})
     } catch (err) {
       setFormError((err as Error)?.message || 'Failed to save notification')
@@ -683,7 +742,17 @@ export function AdminNotificationsPanel() {
       )}
 
       {/* Create/Edit Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      <Dialog 
+        open={formOpen} 
+        onOpenChange={(open) => {
+          setFormOpen(open)
+          if (!open) {
+            setEditingVariantIndex(null)
+            setNewVariantText('')
+            setShowTemplateInfo(false)
+          }
+        }}
+      >
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl">
           <DialogHeader>
             <DialogTitle className="text-xl">
@@ -856,26 +925,191 @@ export function AdminNotificationsPanel() {
               <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide border-b pb-2">
                 Message Content
               </h3>
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="messageVariantsText" className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    Message Variants * (one per line)
-                  </Label>
-                  <Textarea
-                    id="messageVariantsText"
-                    name="messageVariantsText"
-                    value={formState.messageVariantsText}
-                    onChange={handleFormChange}
-                    placeholder="Enter message variants, one per line&#10;Don't forget to water your plants!&#10;Time to check on your garden!"
-                    className="rounded-xl min-h-[120px]"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {formState.randomize 
-                      ? 'One message will be randomly selected for each user'
-                      : 'The first message will be used for all users'}
-                  </p>
+              <div className="space-y-4">
+                {/* Message Variants List */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      Message Variants * ({formState.messageVariants.length})
+                    </Label>
+                    <div className="relative">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl h-8 w-8 p-0"
+                        onMouseEnter={() => setShowTemplateInfo(true)}
+                        onMouseLeave={() => setShowTemplateInfo(false)}
+                      >
+                        <Info className="h-4 w-4" />
+                      </Button>
+                      {showTemplateInfo && (
+                        <div 
+                          className="absolute right-0 top-full mt-2 z-50 w-80 bg-card border border-border rounded-xl shadow-lg p-4"
+                          onMouseEnter={() => setShowTemplateInfo(true)}
+                          onMouseLeave={() => setShowTemplateInfo(false)}
+                        >
+                          <div className="text-sm font-semibold mb-3 text-foreground">Available Template Variables</div>
+                          <div className="space-y-2.5 text-xs">
+                            {TEMPLATE_VARIABLES.map((item) => (
+                              <div key={item.variable} className="flex items-start gap-2">
+                                <code className="bg-muted px-2 py-1 rounded text-emerald-600 dark:text-emerald-400 font-mono text-xs flex-shrink-0">
+                                  {item.variable}
+                                </code>
+                                <span className="text-muted-foreground flex-1 pt-0.5">{item.description}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+                            Use these variables in your messages to personalize notifications
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Variants List */}
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {formState.messageVariants.length === 0 ? (
+                      <div className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-xl">
+                        No message variants yet. Add one below.
+                      </div>
+                    ) : (
+                      formState.messageVariants.map((variant, index) => (
+                        <div
+                          key={index}
+                          className="flex items-start gap-2 p-3 border rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
+                        >
+                          {editingVariantIndex === index ? (
+                            <div className="flex-1 space-y-2">
+                              <Textarea
+                                value={newVariantText}
+                                onChange={(e) => setNewVariantText(e.target.value)}
+                                placeholder="Enter message variant..."
+                                className="rounded-xl min-h-[60px] text-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                    e.preventDefault()
+                                    updateMessageVariant(index, newVariantText)
+                                  }
+                                  if (e.key === 'Escape') {
+                                    cancelEditingVariant()
+                                  }
+                                }}
+                                autoFocus
+                              />
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="rounded-xl h-8"
+                                  onClick={() => updateMessageVariant(index, newVariantText)}
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                                  Save
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="rounded-xl h-8"
+                                  onClick={cancelEditingVariant}
+                                >
+                                  <X className="h-3.5 w-3.5 mr-1.5" />
+                                  Cancel
+                                </Button>
+                                <span className="text-xs text-muted-foreground ml-auto">
+                                  Press Ctrl+Enter to save
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm text-foreground break-words">
+                                  {variant}
+                                </div>
+                                {variant.includes('{{') && (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {TEMPLATE_VARIABLES
+                                      .filter((tv) => variant.includes(tv.variable))
+                                      .map((tv) => (
+                                        <Badge
+                                          key={tv.variable}
+                                          variant="outline"
+                                          className="text-xs px-1.5 py-0"
+                                        >
+                                          {tv.variable}
+                                        </Badge>
+                                      ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="rounded-xl h-8 w-8 p-0"
+                                  onClick={() => startEditingVariant(index)}
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="rounded-xl h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  onClick={() => deleteMessageVariant(index)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Add New Variant */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={newVariantText}
+                        onChange={(e) => setNewVariantText(e.target.value)}
+                        placeholder="Enter new message variant..."
+                        className="rounded-xl flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            addMessageVariant()
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                        onClick={addMessageVariant}
+                        disabled={!newVariantText.trim()}
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        Add
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {formState.randomize 
+                        ? 'One message will be randomly selected for each user'
+                        : 'The first message will be used for all users'}
+                      {' • '}
+                      Press Enter to add
+                    </p>
+                  </div>
                 </div>
+
+                {/* CTA URL */}
                 <div className="space-y-2">
                   <Label htmlFor="ctaUrl" className="flex items-center gap-2">
                     <LinkIcon className="h-4 w-4" />
@@ -911,7 +1145,11 @@ export function AdminNotificationsPanel() {
             <Button 
               variant="outline" 
               className="rounded-xl" 
-              onClick={() => setFormOpen(false)}
+              onClick={() => {
+                setFormOpen(false)
+                setEditingVariantIndex(null)
+                setNewVariantText('')
+              }}
               disabled={submitting}
             >
               Cancel
