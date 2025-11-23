@@ -71,27 +71,25 @@ export default function AboutPage() {
         <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <div className="absolute -left-16 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <motion.div
-          initial={{ opacity: 0, scale: 0.8, rotate: -5 }}
-          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
-          className="absolute top-8 right-8 md:top-12 md:right-12 z-10"
+          className="absolute -left-12 -top-12 md:-left-16 md:-top-16 z-0"
         >
           <style>{`
             .about-logo {
               filter: brightness(0) saturate(100%);
+              transform: scaleX(-1);
             }
             .dark .about-logo {
               filter: brightness(0) saturate(100%) invert(100%);
             }
           `}</style>
-          <div className="relative">
-            <div className="absolute inset-0 bg-white/60 dark:bg-white/10 rounded-2xl blur-xl" aria-hidden="true" />
-            <img 
-              src="/icons/plant-swipe-icon.svg" 
-              alt="Aphylia Logo" 
-              className="about-logo relative h-16 w-16 md:h-20 md:w-20 opacity-80 dark:opacity-70"
-            />
-          </div>
+          <img 
+            src="/icons/plant-swipe-icon.svg" 
+            alt="Aphylia Logo" 
+            className="about-logo relative h-32 w-32 md:h-48 md:w-48 opacity-60 dark:opacity-50"
+          />
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 30 }}

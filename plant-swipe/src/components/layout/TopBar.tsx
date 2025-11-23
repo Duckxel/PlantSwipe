@@ -76,11 +76,13 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
           }
         `}</style>
         <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden desktop-drag-region">
-          <img 
-            src="/icons/plant-swipe-icon.svg" 
-            alt="Aphylia" 
-            className="h-16 w-14 plant-icon-theme -mt-5"
-          />
+          <div className="flex-shrink-0">
+            <img 
+              src="/icons/plant-swipe-icon.svg" 
+              alt="Aphylia" 
+              className="h-16 w-14 plant-icon-theme -mt-5"
+            />
+          </div>
       <Link
         to="/"
         className="font-brand text-[1.925rem] md:text-[2.625rem] leading-none font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90 whitespace-nowrap shrink-0"
