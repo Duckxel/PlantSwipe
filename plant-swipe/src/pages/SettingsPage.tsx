@@ -57,37 +57,6 @@ export default function SettingsPage() {
     return 'Europe/London'
   }, [])
 
-  // Get UTC offset for a timezone
-  const getTimezoneOffset = React.useCallback((tz: string): string => {
-    try {
-      const now = new Date()
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: tz,
-        timeZoneName: 'short',
-      })
-      const parts = formatter.formatToParts(now)
-      const tzName = parts.find(p => p.type === 'timeZoneName')?.value || ''
-      
-      // Calculate UTC offset
-      const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }))
-      const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tz }))
-      const offsetMs = tzDate.getTime() - utcDate.getTime()
-      const offsetHours = offsetMs / (1000 * 60 * 60)
-      
-      // Format offset
-      const sign = offsetHours >= 0 ? '+' : ''
-      const hours = Math.floor(Math.abs(offsetHours))
-      const minutes = Math.floor((Math.abs(offsetHours) - hours) * 60)
-      const offsetStr = minutes === 0 
-        ? `UTC${sign}${hours}` 
-        : `UTC${sign}${hours}:${String(minutes).padStart(2, '0')}`
-      
-      return offsetStr
-    } catch {
-      return ''
-    }
-  }, [])
-
   // Common timezones list with UTC offsets
   const commonTimezones = React.useMemo(() => {
     const now = new Date()

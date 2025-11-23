@@ -132,22 +132,6 @@ function isoToInputValue(value?: string | null): string {
   }
 }
 
-// Convert datetime-local input to ISO string
-// Note: datetime-local inputs are always in browser's local timezone
-// We'll convert it properly on the server side using the campaign timezone
-function inputToIso(value: string): string | null {
-  if (!value || value.trim().length === 0) return null
-  try {
-    // datetime-local format: "YYYY-MM-DDTHH:mm"
-    // Parse as local time (browser timezone)
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return null
-    return date.toISOString()
-  } catch {
-    return null
-  }
-}
-
 function formatDateTime(value?: string | null): string {
   if (!value) return '—'
   try {
