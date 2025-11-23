@@ -57,12 +57,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProfile(data as any)
       
       // Auto-update timezone if missing (detect from browser, fallback to London)
+      // Only auto-update if user hasn't manually set a timezone
       if (data && !data.timezone) {
         const detectedTimezone = typeof Intl !== 'undefined'
           ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
           : DEFAULT_TIMEZONE
         
         // Update in background (non-blocking)
+        // This ensures users get a timezone even if they haven't visited Settings yet
         void (async () => {
           try {
             const { error: updateError } = await supabase
