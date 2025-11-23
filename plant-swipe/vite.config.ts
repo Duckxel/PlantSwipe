@@ -79,7 +79,7 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff,woff2,ttf}'],
-        globIgnores: ['**/*.map', '**/node_modules/**'],
+        globIgnores: ['**/*.map', '**/node_modules/**', '**/plant-swipe-icon-outline.svg'],
       },
       devOptions: {
         enabled: process.env.VITE_ENABLE_PWA === 'true',
