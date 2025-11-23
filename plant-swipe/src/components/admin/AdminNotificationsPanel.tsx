@@ -132,9 +132,14 @@ function isoToInputValue(value?: string | null): string {
   }
 }
 
+// Convert datetime-local input to ISO string
+// Note: datetime-local inputs are always in browser's local timezone
+// We'll convert it properly on the server side using the campaign timezone
 function inputToIso(value: string): string | null {
   if (!value || value.trim().length === 0) return null
   try {
+    // datetime-local format: "YYYY-MM-DDTHH:mm"
+    // Parse as local time (browser timezone)
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return null
     return date.toISOString()
@@ -346,11 +351,12 @@ export function AdminNotificationsPanel() {
         messageVariants,
         randomize: formState.randomize,
         timezone: formState.timezone,
+        // Send raw datetime-local strings - server will convert using campaign timezone
         plannedFor:
-          formState.deliveryMode === 'planned' ? inputToIso(formState.plannedFor) || undefined : undefined,
+          formState.deliveryMode === 'planned' ? (formState.plannedFor || undefined) : undefined,
         scheduleStartAt:
           formState.deliveryMode === 'scheduled'
-            ? inputToIso(formState.scheduleStart || formState.plannedFor) || undefined
+            ? (formState.scheduleStart || formState.plannedFor || undefined)
             : undefined,
         scheduleInterval: formState.deliveryMode === 'scheduled' ? formState.scheduleInterval : undefined,
         ctaUrl: formState.ctaUrl.trim() || undefined,

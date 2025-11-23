@@ -57,42 +57,91 @@ export default function SettingsPage() {
     return 'Europe/London'
   }, [])
 
-  // Common timezones list
+  // Get UTC offset for a timezone
+  const getTimezoneOffset = React.useCallback((tz: string): string => {
+    try {
+      const now = new Date()
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        timeZoneName: 'short',
+      })
+      const parts = formatter.formatToParts(now)
+      const tzName = parts.find(p => p.type === 'timeZoneName')?.value || ''
+      
+      // Calculate UTC offset
+      const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }))
+      const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tz }))
+      const offsetMs = tzDate.getTime() - utcDate.getTime()
+      const offsetHours = offsetMs / (1000 * 60 * 60)
+      
+      // Format offset
+      const sign = offsetHours >= 0 ? '+' : ''
+      const hours = Math.floor(Math.abs(offsetHours))
+      const minutes = Math.floor((Math.abs(offsetHours) - hours) * 60)
+      const offsetStr = minutes === 0 
+        ? `UTC${sign}${hours}` 
+        : `UTC${sign}${hours}:${String(minutes).padStart(2, '0')}`
+      
+      return offsetStr
+    } catch {
+      return ''
+    }
+  }, [])
+
+  // Common timezones list with UTC offsets
   const commonTimezones = React.useMemo(() => {
+    const now = new Date()
+    const getOffset = (tz: string): string => {
+      try {
+        const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }))
+        const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tz }))
+        const offsetMs = tzDate.getTime() - utcDate.getTime()
+        const offsetHours = offsetMs / (1000 * 60 * 60)
+        const sign = offsetHours >= 0 ? '+' : ''
+        const hours = Math.floor(Math.abs(offsetHours))
+        const minutes = Math.floor((Math.abs(offsetHours) - hours) * 60)
+        return minutes === 0 
+          ? `UTC${sign}${hours}` 
+          : `UTC${sign}${hours}:${String(minutes).padStart(2, '0')}`
+      } catch {
+        return ''
+      }
+    }
+
     return [
-      { value: 'Europe/London', label: 'London (GMT/BST)' },
-      { value: 'Europe/Paris', label: 'Paris (CET/CEST)' },
-      { value: 'Europe/Berlin', label: 'Berlin (CET/CEST)' },
-      { value: 'Europe/Rome', label: 'Rome (CET/CEST)' },
-      { value: 'Europe/Madrid', label: 'Madrid (CET/CEST)' },
-      { value: 'Europe/Amsterdam', label: 'Amsterdam (CET/CEST)' },
-      { value: 'Europe/Stockholm', label: 'Stockholm (CET/CEST)' },
-      { value: 'Europe/Zurich', label: 'Zurich (CET/CEST)' },
-      { value: 'Europe/Vienna', label: 'Vienna (CET/CEST)' },
-      { value: 'Europe/Brussels', label: 'Brussels (CET/CEST)' },
-      { value: 'America/New_York', label: 'New York (EST/EDT)' },
-      { value: 'America/Chicago', label: 'Chicago (CST/CDT)' },
-      { value: 'America/Denver', label: 'Denver (MST/MDT)' },
-      { value: 'America/Los_Angeles', label: 'Los Angeles (PST/PDT)' },
-      { value: 'America/Toronto', label: 'Toronto (EST/EDT)' },
-      { value: 'America/Vancouver', label: 'Vancouver (PST/PDT)' },
-      { value: 'America/Mexico_City', label: 'Mexico City (CST/CDT)' },
-      { value: 'America/Sao_Paulo', label: 'São Paulo (BRT/BRST)' },
-      { value: 'America/Buenos_Aires', label: 'Buenos Aires (ART)' },
-      { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
-      { value: 'Asia/Shanghai', label: 'Shanghai (CST)' },
-      { value: 'Asia/Hong_Kong', label: 'Hong Kong (HKT)' },
-      { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
-      { value: 'Asia/Dubai', label: 'Dubai (GST)' },
-      { value: 'Asia/Kolkata', label: 'Mumbai/Delhi (IST)' },
-      { value: 'Asia/Seoul', label: 'Seoul (KST)' },
-      { value: 'Australia/Sydney', label: 'Sydney (AEDT/AEST)' },
-      { value: 'Australia/Melbourne', label: 'Melbourne (AEDT/AEST)' },
-      { value: 'Australia/Brisbane', label: 'Brisbane (AEST)' },
-      { value: 'Pacific/Auckland', label: 'Auckland (NZDT/NZST)' },
-      { value: 'Africa/Cairo', label: 'Cairo (EET)' },
-      { value: 'Africa/Johannesburg', label: 'Johannesburg (SAST)' },
-      { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
+      { value: 'Europe/London', label: `London (GMT/BST) - ${getOffset('Europe/London')}` },
+      { value: 'Europe/Paris', label: `Paris (CET/CEST) - ${getOffset('Europe/Paris')}` },
+      { value: 'Europe/Berlin', label: `Berlin (CET/CEST) - ${getOffset('Europe/Berlin')}` },
+      { value: 'Europe/Rome', label: `Rome (CET/CEST) - ${getOffset('Europe/Rome')}` },
+      { value: 'Europe/Madrid', label: `Madrid (CET/CEST) - ${getOffset('Europe/Madrid')}` },
+      { value: 'Europe/Amsterdam', label: `Amsterdam (CET/CEST) - ${getOffset('Europe/Amsterdam')}` },
+      { value: 'Europe/Stockholm', label: `Stockholm (CET/CEST) - ${getOffset('Europe/Stockholm')}` },
+      { value: 'Europe/Zurich', label: `Zurich (CET/CEST) - ${getOffset('Europe/Zurich')}` },
+      { value: 'Europe/Vienna', label: `Vienna (CET/CEST) - ${getOffset('Europe/Vienna')}` },
+      { value: 'Europe/Brussels', label: `Brussels (CET/CEST) - ${getOffset('Europe/Brussels')}` },
+      { value: 'America/New_York', label: `New York (EST/EDT) - ${getOffset('America/New_York')}` },
+      { value: 'America/Chicago', label: `Chicago (CST/CDT) - ${getOffset('America/Chicago')}` },
+      { value: 'America/Denver', label: `Denver (MST/MDT) - ${getOffset('America/Denver')}` },
+      { value: 'America/Los_Angeles', label: `Los Angeles (PST/PDT) - ${getOffset('America/Los_Angeles')}` },
+      { value: 'America/Toronto', label: `Toronto (EST/EDT) - ${getOffset('America/Toronto')}` },
+      { value: 'America/Vancouver', label: `Vancouver (PST/PDT) - ${getOffset('America/Vancouver')}` },
+      { value: 'America/Mexico_City', label: `Mexico City (CST/CDT) - ${getOffset('America/Mexico_City')}` },
+      { value: 'America/Sao_Paulo', label: `São Paulo (BRT/BRST) - ${getOffset('America/Sao_Paulo')}` },
+      { value: 'America/Buenos_Aires', label: `Buenos Aires (ART) - ${getOffset('America/Buenos_Aires')}` },
+      { value: 'Asia/Tokyo', label: `Tokyo (JST) - ${getOffset('Asia/Tokyo')}` },
+      { value: 'Asia/Shanghai', label: `Shanghai (CST) - ${getOffset('Asia/Shanghai')}` },
+      { value: 'Asia/Hong_Kong', label: `Hong Kong (HKT) - ${getOffset('Asia/Hong_Kong')}` },
+      { value: 'Asia/Singapore', label: `Singapore (SGT) - ${getOffset('Asia/Singapore')}` },
+      { value: 'Asia/Dubai', label: `Dubai (GST) - ${getOffset('Asia/Dubai')}` },
+      { value: 'Asia/Kolkata', label: `Mumbai/Delhi (IST) - ${getOffset('Asia/Kolkata')}` },
+      { value: 'Asia/Seoul', label: `Seoul (KST) - ${getOffset('Asia/Seoul')}` },
+      { value: 'Australia/Sydney', label: `Sydney (AEDT/AEST) - ${getOffset('Australia/Sydney')}` },
+      { value: 'Australia/Melbourne', label: `Melbourne (AEDT/AEST) - ${getOffset('Australia/Melbourne')}` },
+      { value: 'Australia/Brisbane', label: `Brisbane (AEST) - ${getOffset('Australia/Brisbane')}` },
+      { value: 'Pacific/Auckland', label: `Auckland (NZDT/NZST) - ${getOffset('Pacific/Auckland')}` },
+      { value: 'Africa/Cairo', label: `Cairo (EET) - ${getOffset('Africa/Cairo')}` },
+      { value: 'Africa/Johannesburg', label: `Johannesburg (SAST) - ${getOffset('Africa/Johannesburg')}` },
+      { value: 'UTC', label: 'UTC (Coordinated Universal Time) - UTC+0' },
     ]
   }, [])
 

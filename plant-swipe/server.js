@@ -2954,14 +2954,12 @@ const notificationInputSchema = z.object({
     .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   plannedFor: z
     .string()
-    .datetime({ offset: true })
     .optional()
-    .transform((value) => (value && value.trim().length > 0 ? value : null)),
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   scheduleStartAt: z
     .string()
-    .datetime({ offset: true })
     .optional()
-    .transform((value) => (value && value.trim().length > 0 ? value : null)),
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   scheduleInterval: z
     .enum(notificationIntervalValues)
     .optional()
@@ -3867,7 +3865,85 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
   const audience = parsed.audience
   const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
-  const timezone = parsed.timezone || DEFAULT_TIMEZONE
+  const campaignTimezone = parsed.timezone || DEFAULT_TIMEZONE
+  
+  // Convert datetime-local input to UTC timestamp in campaign timezone (same logic as create)
+  const convertDatetimeLocalToUTC = (datetimeLocal, tz) => {
+    if (!datetimeLocal || !datetimeLocal.length) return null
+    try {
+      const match = datetimeLocal.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+      if (!match) {
+        const fallback = new Date(datetimeLocal)
+        return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
+      }
+      
+      const [, year, month, day, hour, minute] = match
+      const y = parseInt(year)
+      const m = parseInt(month) - 1
+      const d = parseInt(day)
+      const h = parseInt(hour)
+      const min = parseInt(minute)
+      
+      let candidateUtc = new Date(Date.UTC(y, m, d, h, min, 0))
+      
+      for (let iteration = 0; iteration < 10; iteration++) {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        })
+        
+        const parts = formatter.formatToParts(candidateUtc)
+        const getPart = (type) => parseInt(parts.find(p => p.type === type)?.value || '0')
+        
+        const tzYear = getPart('year')
+        const tzMonth = getPart('month') - 1
+        const tzDay = getPart('day')
+        const tzHour = getPart('hour')
+        const tzMinute = getPart('minute')
+        const tzSecond = getPart('second')
+        
+        if (tzYear === y && tzMonth === m && tzDay === d && 
+            tzHour === h && tzMinute === min && tzSecond === 0) {
+          return candidateUtc.toISOString()
+        }
+        
+        const desiredLocal = new Date(y, m, d, h, min, 0)
+        const actualLocal = new Date(tzYear, tzMonth, tzDay, tzHour, tzMinute, tzSecond)
+        const diffMs = desiredLocal.getTime() - actualLocal.getTime()
+        
+        if (Math.abs(diffMs) < 1000) {
+          return candidateUtc.toISOString()
+        }
+        
+        candidateUtc = new Date(candidateUtc.getTime() + diffMs)
+      }
+      
+      return candidateUtc.toISOString()
+    } catch (err) {
+      console.error('[notifications] Error converting datetime-local:', err)
+      const fallback = new Date(datetimeLocal)
+      return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
+    }
+  }
+  
+  const plannedFor = deliveryMode === 'planned' && parsed.plannedFor 
+    ? convertDatetimeLocalToUTC(parsed.plannedFor, campaignTimezone)
+    : null
+  const scheduleStartAt = deliveryMode === 'scheduled' && parsed.scheduleStartAt
+    ? convertDatetimeLocalToUTC(parsed.scheduleStartAt, campaignTimezone)
+    : null
+  const nextRunAt = determineInitialNextRunAt({
+    deliveryMode,
+    plannedFor,
+    scheduleStartAt,
+  })
+  const timezone = campaignTimezone
   const nextState = deliveryMode === 'scheduled' ? (existingRows[0].state === 'paused' ? 'paused' : 'scheduled') : 'draft'
   try {
     const rows = await sql`
@@ -8611,10 +8687,11 @@ async function getUserTimezones(userIds) {
 }
 
 // Convert a UTC timestamp to represent the same local time in user's timezone
-// Example: If campaign time is "2024-01-15 09:00:00" in America/New_York (UTC-5),
-//          and user is in Europe/Paris (UTC+1), we want "2024-01-15 09:00:00" in Paris time
-// Strategy: Extract local time components from campaign timezone, then find UTC time
-//           that represents those same components in user's timezone
+// Example: Admin schedules "2024-01-15 09:00:00" in America/New_York timezone (stored as UTC)
+//          User in Europe/Paris should receive it at "2024-01-15 09:00:00" Paris time
+// Strategy: 
+//   1. Extract the local time components (year, month, day, hour, minute) from the campaign timezone
+//   2. Find the UTC timestamp that represents those same components in the user's timezone
 function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) {
   try {
     const targetDate = new Date(targetLocalTime)
@@ -8628,7 +8705,7 @@ function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) 
     }
     
     // Extract local time components when displayed in campaign timezone
-    const formatter = new Intl.DateTimeFormat('en-US', {
+    const campaignFormatter = new Intl.DateTimeFormat('en-US', {
       timeZone: campaignTimezone,
       year: 'numeric',
       month: '2-digit',
@@ -8639,63 +8716,76 @@ function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) 
       hour12: false
     })
     
-    const parts = formatter.formatToParts(targetDate)
-    const getPart = (type) => parseInt(parts.find(p => p.type === type)?.value || '0')
+    const campaignParts = campaignFormatter.formatToParts(targetDate)
+    const getPart = (type) => parseInt(campaignParts.find(p => p.type === type)?.value || '0')
     
     const year = getPart('year')
-    const month = getPart('month') - 1 // 0-indexed
+    const month = getPart('month') - 1 // JavaScript months are 0-indexed
     const day = getPart('day')
     const hour = getPart('hour')
     const minute = getPart('minute')
     const second = getPart('second')
     
-    // Now find the UTC time that represents this same local time in user's timezone
-    // We'll use binary search or iterative approach to find the right UTC time
-    // Start with a guess and adjust
+    // Now find the UTC timestamp that represents this same local time in user's timezone
+    // We'll use a binary search-like approach: start with a reasonable guess and refine
     
-    // Create a date object with these components (interpreted as UTC)
-    let candidateUtc = new Date(Date.UTC(year, month, day, hour, minute, second))
+    // Create an ISO string with the desired local time components
+    // Format: "YYYY-MM-DDTHH:mm:ss"
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
     
-    // Check what local time this represents in user's timezone
-    const userFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: userTimezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    })
+    // Start with a guess: assume the date string represents UTC
+    let candidateUtc = new Date(dateStr + 'Z') // 'Z' means UTC
     
-    let userParts = userFormatter.formatToParts(candidateUtc)
-    let userHour = parseInt(userParts.find(p => p.type === 'hour')?.value || '0')
-    let userMinute = parseInt(userParts.find(p => p.type === 'minute')?.value || '0')
+    // Refine the guess by checking what local time this UTC represents in user's timezone
+    // and adjusting until we get the right local time
+    for (let iteration = 0; iteration < 10; iteration++) {
+      const userFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: userTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      })
+      
+      const userParts = userFormatter.formatToParts(candidateUtc)
+      const getUserPart = (type) => parseInt(userParts.find(p => p.type === type)?.value || '0')
+      
+      const userYear = getUserPart('year')
+      const userMonth = getUserPart('month') - 1
+      const userDay = getUserPart('day')
+      const userHour = getUserPart('hour')
+      const userMinute = getUserPart('minute')
+      const userSecond = getUserPart('second')
+      
+      // Check if we've found the exact match
+      if (userYear === year && userMonth === month && userDay === day && 
+          userHour === hour && userMinute === minute && Math.abs(userSecond - second) <= 1) {
+        return candidateUtc.toISOString()
+      }
+      
+      // Calculate how far off we are
+      // Create Date objects in local time for comparison
+      const desiredLocal = new Date(year, month, day, hour, minute, second)
+      const actualLocal = new Date(userYear, userMonth, userDay, userHour, userMinute, userSecond)
+      const diffMs = desiredLocal.getTime() - actualLocal.getTime()
+      
+      // If difference is very small, we're close enough
+      if (Math.abs(diffMs) < 1000) {
+        return candidateUtc.toISOString()
+      }
+      
+      // Adjust candidate UTC by the difference
+      candidateUtc = new Date(candidateUtc.getTime() + diffMs)
+    }
     
-    // Calculate offset difference
-    const campaignOffset = getTimezoneOffsetAt(targetDate, campaignTimezone)
-    const userOffset = getTimezoneOffsetAt(candidateUtc, userTimezone)
-    const offsetDiff = campaignOffset - userOffset
-    
-    // Adjust candidate UTC by the offset difference
-    candidateUtc = new Date(candidateUtc.getTime() - offsetDiff)
-    
+    // Return the best guess we found
     return candidateUtc.toISOString()
   } catch (err) {
     console.error('[notifications] Error converting timezone:', err)
     return targetLocalTime
-  }
-}
-
-// Get timezone offset in milliseconds at a specific date
-function getTimezoneOffsetAt(date, timezone) {
-  try {
-    // Create two formatters: one for UTC, one for the timezone
-    const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }))
-    const tzDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }))
-    return utcDate.getTime() - tzDate.getTime()
-  } catch {
-    return 0
   }
 }
 
