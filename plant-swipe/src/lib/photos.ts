@@ -1,4 +1,4 @@
-import type { Plant, PlantPhoto } from "@/types/plant"
+import type { PlantPhoto } from "@/types/plant"
 
 export const MAX_PLANT_PHOTOS = 5
 
@@ -118,38 +118,4 @@ export function ensureAtLeastOnePhoto(photos: PlantPhoto[]): PlantPhoto[] {
     sanitized = [...sanitized, createEmptyPhoto(sanitized.every((photo) => !photo.isPrimary))]
   }
   return sanitized
-}
-
-const normalizeImageLink = (value?: string | null) => (typeof value === "string" ? value.trim() : "")
-
-const pickImageByUse = (images: PlantPhoto[], use: NonNullable<PlantPhoto["use"]>): string => {
-  const match = images.find((image) => image?.use === use && normalizeImageLink(image.link || image.url))
-  return match ? normalizeImageLink(match.link || match.url) : ""
-}
-
-const pickFirstImageLink = (images: PlantPhoto[]): string => {
-  const match = images.find((image) => normalizeImageLink(image?.link || image?.url))
-  return match ? normalizeImageLink(match.link || match.url) : ""
-}
-
-export function getDiscoveryImageUrl(
-  plant?: Pick<Plant, "images" | "photos" | "image"> | null,
-): string {
-  if (!plant) return ""
-
-  const images = Array.isArray(plant.images) ? plant.images : []
-  const discoveryImage = pickImageByUse(images, "discovery")
-  if (discoveryImage) return discoveryImage
-
-  const primaryImage = pickImageByUse(images, "primary")
-  if (primaryImage) return primaryImage
-
-  const fallbackImage = pickFirstImageLink(images)
-  if (fallbackImage) return fallbackImage
-
-  const photos = Array.isArray(plant.photos) ? plant.photos : []
-  const verticalPhoto = photos.length ? getVerticalPhotoUrl(photos) : ""
-  if (verticalPhoto) return verticalPhoto
-
-  return normalizeImageLink(plant.image)
 }
