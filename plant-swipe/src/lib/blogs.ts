@@ -119,7 +119,7 @@ export async function saveBlogPost(params: SaveBlogPostParams) {
   const baseSlug = params.slug?.trim() || slugifyTitle(params.title)
   const slug = await ensureUniqueSlug(baseSlug, params.id)
 
-  const payload = {
+  const basePayload = {
     title: params.title.trim(),
     slug,
     body_html: params.bodyHtml,
@@ -129,8 +129,14 @@ export async function saveBlogPost(params: SaveBlogPostParams) {
     cover_image_url: params.coverImageUrl ?? null,
     excerpt: params.excerpt ?? normalizeExcerpt(params.bodyHtml),
     is_published: params.isPublished ?? true,
-    published_at: params.publishedAt ?? new Date().toISOString(),
   }
+
+  const payload = isUpdate
+    ? basePayload
+    : {
+        ...basePayload,
+        published_at: params.publishedAt ?? new Date().toISOString(),
+      }
 
   const query = supabase.from('blog_posts')
   const response = isUpdate

@@ -1,17 +1,59 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
-import { EditorContent, useEditor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Link from '@tiptap/extension-link'
-import Image from '@tiptap/extension-image'
-import Underline from '@tiptap/extension-underline'
-import Placeholder from '@tiptap/extension-placeholder'
-import CharacterCount from '@tiptap/extension-character-count'
-import Typography from '@tiptap/extension-typography'
-import TaskList from '@tiptap/extension-task-list'
-import TaskItem from '@tiptap/extension-task-item'
-import type { JSONContent } from '@tiptap/core'
-import { Bold, Heading1, Heading2, Heading3, ImageIcon, Italic, LinkIcon, ListOrdered, List, Underline as UnderlineIcon } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react"
+import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
+import StarterKit from "@tiptap/starter-kit"
+import Placeholder from "@tiptap/extension-placeholder"
+import Link from "@tiptap/extension-link"
+import Underline from "@tiptap/extension-underline"
+import CharacterCount from "@tiptap/extension-character-count"
+import Typography from "@tiptap/extension-typography"
+import TextAlign from "@tiptap/extension-text-align"
+import TaskList from "@tiptap/extension-task-list"
+import TaskItem from "@tiptap/extension-task-item"
+import Highlight from "@tiptap/extension-highlight"
+import Superscript from "@tiptap/extension-superscript"
+import Subscript from "@tiptap/extension-subscript"
+import { Selection } from "@tiptap/extensions"
+import Image from "@tiptap/extension-image"
+import type { JSONContent } from "@tiptap/core"
+
+import { cn } from "@/lib/utils"
+import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
+import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension"
+import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
+
+import { Toolbar, ToolbarGroup, ToolbarSeparator } from "@/components/tiptap-ui-primitive/toolbar"
+import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
+import { Button } from "@/components/tiptap-ui-primitive/button"
+import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu"
+import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu"
+import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button"
+import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button"
+import {
+  ColorHighlightPopover,
+  ColorHighlightPopoverButton,
+  ColorHighlightPopoverContent,
+} from "@/components/tiptap-ui/color-highlight-popover"
+import { LinkPopover, LinkButton, LinkContent } from "@/components/tiptap-ui/link-popover"
+import { MarkButton } from "@/components/tiptap-ui/mark-button"
+import { TextAlignButton } from "@/components/tiptap-ui/text-align-button"
+import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button"
+import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button"
+import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
+import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
+import { LinkIcon } from "@/components/tiptap-icons/link-icon"
+
+import { useIsBreakpoint } from "@/hooks/use-is-breakpoint"
+import { useWindowSize } from "@/hooks/use-window-size"
+import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
+
+import "@/components/tiptap-node/blockquote-node/blockquote-node.scss"
+import "@/components/tiptap-node/code-block-node/code-block-node.scss"
+import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss"
+import "@/components/tiptap-node/list-node/list-node.scss"
+import "@/components/tiptap-node/image-node/image-node.scss"
+import "@/components/tiptap-node/heading-node/heading-node.scss"
+import "@/components/tiptap-node/paragraph-node/paragraph-node.scss"
+import "@/components/tiptap-templates/simple/simple-editor.scss"
 
 export type BlogEditorHandle = {
   getHtml: () => string
@@ -23,224 +65,255 @@ type BlogEditorProps = {
   initialHtml?: string | null
   initialDocument?: JSONContent | null
   className?: string
+  uploadFolder: string
+  onUpdate?: (payload: { html: string; doc: JSONContent | null; plainText: string }) => void
 }
 
-const DEFAULT_CONTENT = `<h2>New Aphylia story</h2><p>Use the slash menu to insert headings, quotes, dividers, galleries, or embeds.</p>`
+const DEFAULT_CONTENT =
+  '<h2>New Aphylia story</h2><p>Use the toolbar to add headings, embeds, dividers, or quotes.</p>'
 
-const toolbarButton =
-  'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] text-stone-600 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#2a2a2a] transition disabled:opacity-40'
+const MainToolbarContent: React.FC<{
+  onHighlighterClick: () => void
+  onLinkClick: () => void
+  isMobile: boolean
+}> = ({ onHighlighterClick, onLinkClick, isMobile }) => (
+  <>
+    <Spacer />
 
-const floatingButton =
-  'flex w-full items-center gap-3 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white/90 dark:bg-[#1a1a1a] px-3 py-2 text-sm text-stone-700 dark:text-stone-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+    <ToolbarGroup>
+      <UndoRedoButton action="undo" />
+      <UndoRedoButton action="redo" />
+    </ToolbarGroup>
 
-export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(({ initialHtml, initialDocument, className }, ref) => {
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
-      }),
-      Underline,
-      Link.configure({
-        openOnClick: false,
-        defaultProtocol: 'https',
-      }),
-      Image.configure({
-        HTMLAttributes: {
-          class: 'rounded-2xl w-full h-auto',
-        },
-      }),
-      TaskList.configure({
-        HTMLAttributes: {
-          class: 'notion-task-list space-y-2',
-        },
-      }),
-      TaskItem.configure({
-        nested: true,
-      }),
-      Placeholder.configure({
-        placeholder: 'Type "/" for commands or just start writing…',
-      }),
-      Typography,
-      CharacterCount.configure({
-        limit: 20000,
-      }),
-    ],
-    content: initialDocument ?? initialHtml ?? DEFAULT_CONTENT,
-    editable: true,
-  })
+    <ToolbarSeparator />
 
-  const [slashMenu, setSlashMenu] = useState<{ visible: boolean; top: number; left: number }>({
-    visible: false,
-    top: 0,
-    left: 0,
-  })
+    <ToolbarGroup>
+      <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal={isMobile} />
+      <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} portal={isMobile} />
+      <BlockquoteButton />
+      <CodeBlockButton />
+    </ToolbarGroup>
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      getHtml: () => editor?.getHTML() ?? '',
-      getDocument: () => editor?.getJSON() ?? null,
-      setContent: ({ html, doc }) => {
-        if (!editor) return
-        if (doc) {
-          editor.commands.setContent(doc)
-        } else if (html) {
-          editor.commands.setContent(html)
-        }
-      },
-    }),
-    [editor],
-  )
+    <ToolbarSeparator />
 
-  const addImage = () => {
-    const url = window.prompt('Image URL')
-    if (!url) return
-    editor?.chain().focus().setImage({ src: url }).run()
-  }
+    <ToolbarGroup>
+      <MarkButton type="bold" />
+      <MarkButton type="italic" />
+      <MarkButton type="strike" />
+      <MarkButton type="code" />
+      <MarkButton type="underline" />
+      {!isMobile ? (
+        <ColorHighlightPopover />
+      ) : (
+        <ColorHighlightPopoverButton onClick={onHighlighterClick} />
+      )}
+      {!isMobile ? <LinkPopover /> : <LinkButton onClick={onLinkClick} />}
+    </ToolbarGroup>
 
-  const addLink = () => {
-    const previous = editor?.getAttributes('link').href
-    const url = window.prompt('Link URL', previous || 'https://')
-    if (url === null) return
-    if (url === '') {
-      editor?.chain().focus().unsetLink().run()
-      return
-    }
-    editor?.chain().focus().setLink({ href: url }).run()
-  }
+    <ToolbarSeparator />
 
-  const slashCommands = [
-    { label: 'Heading 1', description: 'Large section title', action: () => editor?.chain().focus().toggleHeading({ level: 1 }).run() },
-    { label: 'Heading 2', description: 'Medium section heading', action: () => editor?.chain().focus().toggleHeading({ level: 2 }).run() },
-    { label: 'Heading 3', description: 'Small section heading', action: () => editor?.chain().focus().toggleHeading({ level: 3 }).run() },
-    { label: 'Checklist', description: 'Track todos with checkboxes', action: () => editor?.chain().focus().toggleTaskList().run() },
-    { label: 'Bullet list', description: 'Classic unordered bullets', action: () => editor?.chain().focus().toggleBulletList().run() },
-    { label: 'Quote', description: 'Emphasize cited text', action: () => editor?.chain().focus().toggleBlockquote().run() },
-    { label: 'Divider', description: 'Visual section break', action: () => editor?.chain().focus().setHorizontalRule().run() },
-    { label: 'Code block', description: 'Snippets or terminal output', action: () => editor?.chain().focus().toggleCodeBlock().run() },
-  ]
+    <ToolbarGroup>
+      <MarkButton type="superscript" />
+      <MarkButton type="subscript" />
+    </ToolbarGroup>
 
-  const hideSlashMenu = () => {
-    setSlashMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev))
-  }
+    <ToolbarSeparator />
 
-  useEffect(() => {
-    if (!editor) return
-    const updateMenu = () => {
-      const { state } = editor
-      const { $from } = state.selection
-      const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '\uffff')
-      if (textBefore === '/') {
-        const coords = editor.view.coordsAtPos($from.pos)
-        setSlashMenu({
-          visible: true,
-          top: coords.bottom + window.scrollY + 6,
-          left: coords.left + window.scrollX,
-        })
-      } else {
-        hideSlashMenu()
-      }
-    }
-    editor.on('selectionUpdate', updateMenu)
-    editor.on('transaction', updateMenu)
-    return () => {
-      editor.off('selectionUpdate', updateMenu)
-      editor.off('transaction', updateMenu)
-    }
-  }, [editor])
+    <ToolbarGroup>
+      <TextAlignButton align="left" />
+      <TextAlignButton align="center" />
+      <TextAlignButton align="right" />
+      <TextAlignButton align="justify" />
+    </ToolbarGroup>
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        hideSlashMenu()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+    <ToolbarSeparator />
 
-  const handleSlashCommand = (run?: () => void) => {
-    if (!editor) return
-    const from = editor.state.selection.from
-    editor.chain().focus().deleteRange({ from: Math.max(0, from - 1), to: from }).run()
-    run?.()
-    hideSlashMenu()
-  }
+    <ToolbarGroup>
+      <ImageUploadButton text="Image" />
+    </ToolbarGroup>
 
-  return (
-    <div className={cn('space-y-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#111]', className)}>
-      <div className="flex flex-wrap gap-2 border-b border-stone-200 dark:border-[#3e3e42] p-3">
-        <button
-          type="button"
-          className={toolbarButton}
-          onClick={() => editor?.chain().focus().toggleBold().run()}
-          disabled={!editor?.can().chain().focus().toggleBold().run()}
-        >
-          <Bold className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          className={toolbarButton}
-          onClick={() => editor?.chain().focus().toggleItalic().run()}
-          disabled={!editor?.can().chain().focus().toggleItalic().run()}
-        >
-          <Italic className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          className={toolbarButton}
-          onClick={() => editor?.chain().focus().toggleUnderline().run()}
-          disabled={!editor?.can().chain().focus().toggleUnderline().run()}
-        >
-          <UnderlineIcon className="h-4 w-4" />
-        </button>
-        <button type="button" className={toolbarButton} onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}>
-          <Heading1 className="h-4 w-4" />
-        </button>
-        <button type="button" className={toolbarButton} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>
-          <Heading2 className="h-4 w-4" />
-        </button>
-        <button type="button" className={toolbarButton} onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}>
-          <Heading3 className="h-4 w-4" />
-        </button>
-        <button type="button" className={toolbarButton} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
-          <List className="h-4 w-4" />
-        </button>
-        <button type="button" className={toolbarButton} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
-          <ListOrdered className="h-4 w-4" />
-        </button>
-        <button type="button" className={toolbarButton} onClick={addImage}>
-          <ImageIcon className="h-4 w-4" />
-        </button>
-        <button type="button" className={toolbarButton} onClick={addLink}>
-          <LinkIcon className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="px-4 pb-4 relative">
-        {slashMenu.visible && (
-          <div
-            className="fixed z-50 w-64 space-y-1 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white/95 dark:bg-[#0d0d0d] p-2 shadow-xl"
-            style={{ top: slashMenu.top, left: slashMenu.left }}
-          >
-            <p className="px-2 text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">Blocks</p>
-            {slashCommands.map(({ label, description, action }) => (
-              <button key={label} type="button" className={floatingButton} onClick={() => handleSlashCommand(action)}>
-                <div className="text-left">
-                  <div className="text-sm font-medium">{label}</div>
-                  <div className="text-xs text-stone-500 dark:text-stone-400">{description}</div>
-                </div>
-              </button>
-            ))}
-          </div>
+  </>
+)
+
+const MobileToolbarContent: React.FC<{
+  type: "highlighter" | "link"
+  onBack: () => void
+}> = ({ type, onBack }) => (
+  <>
+    <ToolbarGroup>
+      <Button data-style="ghost" onClick={onBack}>
+        <ArrowLeftIcon className="tiptap-button-icon" />
+        {type === "highlighter" ? (
+          <HighlighterIcon className="tiptap-button-icon" />
+        ) : (
+          <LinkIcon className="tiptap-button-icon" />
         )}
-        <EditorContent editor={editor} className="prose prose-stone dark:prose-invert max-w-none min-h-[320px] focus:outline-none [&_*]:text-base" />
-      </div>
-      <div className="flex items-center justify-between border-t border-stone-200 dark:border-[#3e3e42] px-4 py-3 text-xs text-stone-500 dark:text-stone-400">
-        <span>Use "/" for quick block insertions • Drag images between blocks</span>
-        <span>{editor ? `${editor.storage.characterCount.words()} words` : '0 words'}</span>
-      </div>
-    </div>
-  )
-})
+      </Button>
+    </ToolbarGroup>
 
-BlogEditor.displayName = 'BlogEditor'
+    <ToolbarSeparator />
+
+    {type === "highlighter" ? <ColorHighlightPopoverContent /> : <LinkContent />}
+  </>
+)
+
+export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
+  ({ initialHtml, initialDocument, className, uploadFolder, onUpdate }, ref) => {
+    const isMobile = useIsBreakpoint()
+    const { height } = useWindowSize()
+    const toolbarRef = useRef<HTMLDivElement>(null)
+    const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">("main")
+    const [wordCount, setWordCount] = useState(0)
+    const uploadFolderRef = useRef(uploadFolder)
+    uploadFolderRef.current = uploadFolder
+
+    const uploadHandler = useCallback(
+      (file: File, onProgress?: (event: { progress: number }) => void, signal?: AbortSignal) =>
+        handleImageUpload(file, onProgress, signal, { folder: uploadFolderRef.current }),
+      [],
+    )
+
+    const editor = useEditor({
+      immediatelyRender: false,
+      editorProps: {
+        attributes: {
+          autocomplete: "off",
+          autocorrect: "off",
+          autocapitalize: "off",
+          class: "simple-editor",
+        },
+      },
+      extensions: [
+        StarterKit.configure({
+          horizontalRule: false,
+          heading: { levels: [1, 2, 3, 4] },
+          dropcursor: { color: "#34d399", width: 2 },
+        }),
+        Placeholder.configure({
+          placeholder: 'Type "/" for quick commands or start writing…',
+        }),
+        Link.configure({
+          openOnClick: false,
+          defaultProtocol: "https",
+        }),
+        Underline,
+        TextAlign.configure({ types: ["heading", "paragraph"] }),
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        Highlight.configure({ multicolor: true }),
+        CharacterCount.configure({ limit: 30000 }),
+        Typography,
+        Superscript,
+        Subscript,
+        Selection,
+        Image,
+        HorizontalRule,
+        ImageUploadNode.configure({
+          accept: "image/*",
+          limit: 3,
+          maxSize: MAX_FILE_SIZE,
+          upload: uploadHandler,
+          onError: (error) => console.error("[BlogEditor] upload failed", error),
+          HTMLAttributes: { class: "rounded-3xl overflow-hidden" },
+        }),
+      ],
+      content: initialDocument ?? initialHtml ?? DEFAULT_CONTENT,
+      onUpdate: ({ editor: editorInstance }) => {
+        onUpdate?.({
+          html: editorInstance.getHTML(),
+          doc: editorInstance.getJSON(),
+          plainText: editorInstance.getText(),
+        })
+        setWordCount(editorInstance.storage?.characterCount?.words?.() ?? 0)
+      },
+    })
+
+    useEffect(() => {
+      if (!editor) return
+      if (initialDocument) {
+        editor.commands.setContent(initialDocument)
+        return
+      }
+      if (initialHtml) {
+        editor.commands.setContent(initialHtml, { emitUpdate: false })
+      }
+    }, [editor, initialDocument, initialHtml])
+
+    const rect = useCursorVisibility({
+      editor,
+      overlayHeight: toolbarRef.current?.getBoundingClientRect().height ?? 0,
+    })
+
+    useEffect(() => {
+      if (!isMobile && mobileView !== "main") {
+        setMobileView("main")
+      }
+    }, [isMobile, mobileView])
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        getHtml: () => editor?.getHTML() ?? "",
+        getDocument: () => editor?.getJSON() ?? null,
+        setContent: ({ html, doc }) => {
+          if (!editor) return
+          if (doc) {
+            editor.commands.setContent(doc)
+          } else if (html) {
+            editor.commands.setContent(html, { emitUpdate: false })
+          }
+        },
+      }),
+      [editor],
+    )
+
+    useEffect(() => {
+      if (!editor) return
+      setWordCount(editor.storage?.characterCount?.words?.() ?? 0)
+    }, [editor])
+
+    return (
+      <div
+        className={cn(
+          "rounded-3xl border border-stone-200/80 bg-white/90 p-0 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f11]",
+          className,
+        )}
+      >
+        <EditorContext.Provider value={{ editor }}>
+          <Toolbar
+            ref={toolbarRef}
+            style={
+              isMobile
+                ? ({
+                    bottom: `calc(100% - ${height - rect.y}px)`,
+                  } as React.CSSProperties)
+                : undefined
+            }
+          >
+            {mobileView === "main" ? (
+              <MainToolbarContent
+                onHighlighterClick={() => setMobileView("highlighter")}
+                onLinkClick={() => setMobileView("link")}
+                isMobile={isMobile}
+              />
+            ) : (
+              <MobileToolbarContent
+                type={mobileView === "highlighter" ? "highlighter" : "link"}
+                onBack={() => setMobileView("main")}
+              />
+            )}
+          </Toolbar>
+
+          <EditorContent editor={editor} role="presentation" className="simple-editor-content" />
+        </EditorContext.Provider>
+
+        <div className="flex items-center justify-between border-t border-stone-200 px-4 py-3 text-xs text-stone-500 dark:border-[#3e3e42] dark:text-stone-400">
+          <span>Use "/" for quick commands · Drag blocks to rearrange</span>
+          <span>{wordCount} words</span>
+        </div>
+      </div>
+    )
+  },
+)
+
+BlogEditor.displayName = "BlogEditor"
