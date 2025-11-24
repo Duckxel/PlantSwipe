@@ -809,6 +809,74 @@ function pickPrimaryPhotoUrlFromArray(photos, fallback) {
   return typeof fallback === 'string' && fallback ? fallback : ''
 }
 
+const EMAIL_VARIABLE_REGEX = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g
+
+function extractEmailTemplateVariables(...inputs) {
+  const result = new Set()
+  for (const input of inputs) {
+    if (!input || typeof input !== 'string') continue
+    let match
+    while ((match = EMAIL_VARIABLE_REGEX.exec(input)) !== null) {
+      const key = (match[1] || '').trim().toLowerCase()
+      if (key) result.add(key)
+    }
+  }
+  return Array.from(result).sort()
+}
+
+function stripHtmlToPlainText(html = '', maxLength = 240) {
+  if (!html || typeof html !== 'string') return ''
+  const withoutTags = html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (withoutTags.length <= maxLength) return withoutTags
+  return `${withoutTags.slice(0, maxLength - 1).trim()}…`
+}
+
+function coerceJsonValue(value, fallback = null) {
+  if (value === null || value === undefined) return fallback
+  if (typeof value === 'object') return value
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
+function normalizeScheduledDate(value) {
+  if (!value || typeof value !== 'string') return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
+
+function resolvePreviewText(previewText, bodyHtml) {
+  if (previewText && typeof previewText === 'string' && previewText.trim().length > 0) {
+    return previewText.trim()
+  }
+  return stripHtmlToPlainText(bodyHtml || '', 200)
+}
+
+function coerceVariableArray(value) {
+  const raw = coerceJsonValue(value, [])
+  if (!Array.isArray(raw)) return []
+  const set = new Set()
+  for (const entry of raw) {
+    if (entry === null || entry === undefined) continue
+    const key = String(entry).trim().toLowerCase()
+    if (key) set.add(key)
+  }
+  return Array.from(set).sort()
+}
+
 const JsonValueSchema = z.lazy(() =>
   z.union([
     z.string(),
@@ -3172,6 +3240,86 @@ const notificationStateSchema = z.object({
   state: z.enum(['paused', 'scheduled']),
 })
 
+const emailTemplateInputSchema = z.object({
+  title: z.string().trim().min(3).max(120),
+  subject: z.string().trim().min(3).max(240),
+  description: z
+    .string()
+    .trim()
+    .max(600)
+    .optional()
+    .nullable(),
+  previewText: z
+    .string()
+    .trim()
+    .max(240)
+    .optional()
+    .nullable(),
+  bodyHtml: z.string().min(1),
+  bodyJson: JsonValueSchema.optional().nullable(),
+  isActive: z.boolean().optional(),
+})
+
+const emailCampaignInputSchema = z.object({
+  title: z.string().trim().min(3).max(160),
+  description: z
+    .string()
+    .trim()
+    .max(600)
+    .optional()
+    .nullable(),
+  templateId: z.string().uuid(),
+  scheduledFor: z.string().trim().min(6),
+  timezone: z
+    .string()
+    .trim()
+    .max(64)
+    .optional()
+    .nullable(),
+  previewText: z
+    .string()
+    .trim()
+    .max(240)
+    .optional()
+    .nullable(),
+})
+
+const emailCampaignUpdateSchema = z.object({
+  title: z.string().trim().min(3).max(160).optional(),
+  description: z
+    .string()
+    .trim()
+    .max(600)
+    .optional()
+    .nullable(),
+  templateId: z.string().uuid().optional(),
+  scheduledFor: z
+    .string()
+    .trim()
+    .min(6)
+    .optional()
+    .nullable(),
+  timezone: z
+    .string()
+    .trim()
+    .max(64)
+    .optional()
+    .nullable(),
+  previewText: z
+    .string()
+    .trim()
+    .max(240)
+    .optional()
+    .nullable(),
+  refreshTemplate: z.boolean().optional(),
+})
+
+const emailCampaignRunSchema = z
+  .object({
+    recipientLimit: z.number().int().min(1).max(5000).optional(),
+  })
+  .optional()
+
 async function ensureRequestedPlantsSchema() {
   if (!sql) return
   const ddl = `
@@ -4268,6 +4416,700 @@ app.post('/api/admin/notifications/:id/state', async (req, res) => {
     res.status(500).json({ error: err?.message || 'Failed to update notification state' })
   }
 })
+
+// ---- Admin email templates ----
+app.get('/api/admin/email-templates', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const limitParam = Number(req.query?.limit) || 100
+  const limit = Math.min(Math.max(limitParam, 1), 200)
+  try {
+    const rows = await sql`
+      select t.*, stats.campaign_count, stats.last_campaign_at
+      from public.admin_email_templates t
+      left join lateral (
+        select count(*)::bigint as campaign_count,
+               max(created_at) as last_campaign_at
+        from public.admin_email_campaigns c
+        where c.template_id = t.id
+      ) stats on true
+      order by t.updated_at desc
+      limit ${limit}
+    `
+    const templates = (rows || []).map((row) => normalizeEmailTemplateRow(row)).filter(Boolean)
+    res.json({ templates })
+  } catch (err) {
+    console.error('[email-templates] failed to load templates', err)
+    res.status(500).json({ error: err?.message || 'Failed to load templates' })
+  }
+})
+
+app.get('/api/admin/email-templates/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select t.*, stats.campaign_count, stats.last_campaign_at
+      from public.admin_email_templates t
+      left join lateral (
+        select count(*)::bigint as campaign_count,
+               max(created_at) as last_campaign_at
+        from public.admin_email_campaigns c
+        where c.template_id = t.id
+      ) stats on true
+      where t.id = ${templateId}
+      limit 1
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    const template = normalizeEmailTemplateRow(rows[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[email-templates] failed to load template', err)
+    res.status(500).json({ error: err?.message || 'Failed to load template' })
+  }
+})
+
+app.post('/api/admin/email-templates', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  let parsed
+  try {
+    parsed = emailTemplateInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const description = parsed.description && parsed.description.length ? parsed.description : null
+  const previewText = resolvePreviewText(parsed.previewText, parsed.bodyHtml)
+  const bodyJsonFragment =
+    parsed.bodyJson === null || parsed.bodyJson === undefined ? null : sql.json(parsed.bodyJson)
+  const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
+  const isActive = parsed.isActive !== false
+  try {
+    const rows = await sql`
+      insert into public.admin_email_templates (
+        title, subject, description, preview_text, body_html, body_json, variables,
+        is_active, created_by, updated_by, created_at, updated_at
+      )
+      values (
+        ${parsed.title},
+        ${parsed.subject},
+        ${description},
+        ${previewText},
+        ${parsed.bodyHtml},
+        ${bodyJsonFragment},
+        ${sql.json(variables)},
+        ${isActive},
+        ${adminId},
+        ${adminId},
+        now(),
+        now()
+      )
+      returning *
+    `
+    const template = normalizeEmailTemplateRow(rows?.[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[email-templates] failed to create template', err)
+    res.status(500).json({ error: err?.message || 'Failed to create template' })
+  }
+})
+
+app.put('/api/admin/email-templates/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = emailTemplateInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  try {
+    const existing = await sql`
+      select * from public.admin_email_templates
+      where id = ${templateId}
+      limit 1
+    `
+    if (!existing || !existing.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    const current = existing[0]
+    const description = parsed.description && parsed.description.length ? parsed.description : null
+    const previewText = resolvePreviewText(parsed.previewText, parsed.bodyHtml)
+    const bodyJsonFragment =
+      parsed.bodyJson === null || parsed.bodyJson === undefined ? null : sql.json(parsed.bodyJson)
+    const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
+    const isActive =
+      parsed.isActive === undefined ? current.is_active !== false : parsed.isActive
+
+    const rows = await sql`
+      update public.admin_email_templates
+      set title = ${parsed.title},
+          subject = ${parsed.subject},
+          description = ${description},
+          preview_text = ${previewText},
+          body_html = ${parsed.bodyHtml},
+          body_json = ${bodyJsonFragment},
+          variables = ${sql.json(variables)},
+          is_active = ${isActive},
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${templateId}
+      returning *
+    `
+    const template = normalizeEmailTemplateRow(rows?.[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[email-templates] failed to update template', err)
+    res.status(500).json({ error: err?.message || 'Failed to update template' })
+  }
+})
+
+app.delete('/api/admin/email-templates/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  try {
+    const usage = await sql`
+      select count(*)::bigint as cnt
+      from public.admin_email_campaigns
+      where template_id = ${templateId}
+        and status in ('draft','scheduled','running')
+    `
+    const activeCount = usage && usage[0] ? Number(usage[0].cnt) : 0
+    if (activeCount > 0) {
+      res.status(409).json({ error: 'Template is used by active campaigns' })
+      return
+    }
+    const rows = await sql`
+      delete from public.admin_email_templates
+      where id = ${templateId}
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    const template = normalizeEmailTemplateRow(rows[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[email-templates] failed to delete template', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete template' })
+  }
+})
+
+// ---- Admin email campaigns ----
+app.get('/api/admin/email-campaigns', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const limitParam = Number(req.query?.limit) || 100
+  const limit = Math.min(Math.max(limitParam, 1), 200)
+  try {
+    const rows = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      order by coalesce(c.scheduled_for, c.created_at) desc
+      limit ${limit}
+    `
+    const campaigns = (rows || []).map((row) => normalizeEmailCampaignRow(row)).filter(Boolean)
+    res.json({ campaigns })
+  } catch (err) {
+    console.error('[email-campaigns] failed to load campaigns', err)
+    res.status(500).json({ error: err?.message || 'Failed to load campaigns' })
+  }
+})
+
+app.get('/api/admin/email-campaigns/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      where c.id = ${campaignId}
+      limit 1
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+    const campaign = normalizeEmailCampaignRow(rows[0])
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to load campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to load campaign' })
+  }
+})
+
+app.post('/api/admin/email-campaigns', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  let parsed
+  try {
+    parsed = emailCampaignInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const scheduledFor = normalizeScheduledDate(parsed.scheduledFor)
+  if (!scheduledFor) {
+    res.status(400).json({ error: 'scheduledFor must be a valid ISO date' })
+    return
+  }
+  try {
+    const templateRows = await sql`
+      select * from public.admin_email_templates
+      where id = ${parsed.templateId}
+      limit 1
+    `
+    if (!templateRows || !templateRows.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    const template = templateRows[0]
+    if (!template.body_html || !template.subject) {
+      res.status(400).json({ error: 'Template is missing subject or body' })
+      return
+    }
+    const description = parsed.description && parsed.description.length ? parsed.description : null
+    const previewText = resolvePreviewText(parsed.previewText || template.preview_text, template.body_html)
+    const bodyJsonSnapshot = coerceJsonValue(template.body_json, null)
+    const bodyJsonFragment = bodyJsonSnapshot == null ? null : sql.json(bodyJsonSnapshot)
+    const variables = extractEmailTemplateVariables(template.subject, template.body_html)
+    const timezone = parsed.timezone && parsed.timezone.length ? parsed.timezone : 'UTC'
+
+    const rows = await sql`
+      insert into public.admin_email_campaigns (
+        template_id,
+        template_version,
+        title,
+        description,
+        subject,
+        preview_text,
+        body_html,
+        body_json,
+        variables,
+        timezone,
+        scheduled_for,
+        status,
+        total_recipients,
+        sent_count,
+        failed_count,
+        created_by,
+        updated_by,
+        created_at,
+        updated_at
+      )
+      values (
+        ${template.id},
+        ${template.version || 1},
+        ${parsed.title},
+        ${description},
+        ${template.subject},
+        ${previewText},
+        ${template.body_html},
+        ${bodyJsonFragment},
+        ${sql.json(variables)},
+        ${timezone || 'UTC'},
+        ${scheduledFor},
+        'scheduled',
+        0,
+        0,
+        0,
+        ${adminId},
+        ${adminId},
+        now(),
+        now()
+      )
+      returning *
+    `
+    const campaign = normalizeEmailCampaignRow({ ...rows[0], template_title: template.title })
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to create campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to create campaign' })
+  }
+})
+
+app.put('/api/admin/email-campaigns/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = emailCampaignUpdateSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  if (!parsed || Object.keys(parsed).length === 0) {
+    res.status(400).json({ error: 'No changes provided' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      where c.id = ${campaignId}
+      limit 1
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+    const current = rows[0]
+    if (!['draft', 'scheduled', 'cancelled'].includes(current.status)) {
+      res.status(400).json({ error: 'Campaign can no longer be edited' })
+      return
+    }
+    let templateId = current.template_id
+    let templateVersion = current.template_version || 1
+    let subject = current.subject
+    let bodyHtml = current.body_html || ''
+    let bodyJsonSnapshot = coerceJsonValue(current.body_json, null)
+    let variablesSnapshot = coerceVariableArray(current.variables)
+    let previewText = current.preview_text || resolvePreviewText(null, bodyHtml)
+    let templateTitle = current.template_title || null
+
+    const wantsRefresh =
+      parsed.refreshTemplate === true ||
+      (parsed.templateId && parsed.templateId !== current.template_id)
+
+    if (wantsRefresh) {
+      templateId = parsed.templateId || current.template_id
+      const templateRows = await sql`
+        select * from public.admin_email_templates
+        where id = ${templateId}
+        limit 1
+      `
+      if (!templateRows || !templateRows.length) {
+        res.status(404).json({ error: 'Template not found' })
+        return
+      }
+      const template = templateRows[0]
+      if (!template.body_html || !template.subject) {
+        res.status(400).json({ error: 'Template is missing subject or body' })
+        return
+      }
+      subject = template.subject
+      bodyHtml = template.body_html
+      bodyJsonSnapshot = coerceJsonValue(template.body_json, null)
+      variablesSnapshot = extractEmailTemplateVariables(subject, bodyHtml)
+      previewText = resolvePreviewText(parsed.previewText || template.preview_text, bodyHtml)
+      templateVersion = template.version || 1
+      templateTitle = template.title || null
+    } else if (parsed.previewText !== undefined) {
+      previewText = resolvePreviewText(parsed.previewText, bodyHtml)
+    }
+
+    const description =
+      parsed.description === undefined
+        ? current.description
+        : parsed.description && parsed.description.length
+          ? parsed.description
+          : null
+    const title = parsed.title || current.title
+    const scheduledFor =
+      parsed.scheduledFor === undefined || parsed.scheduledFor === null
+        ? current.scheduled_for
+        : normalizeScheduledDate(parsed.scheduledFor)
+    if (!scheduledFor) {
+      res.status(400).json({ error: 'scheduledFor must be a valid ISO date' })
+      return
+    }
+    const timezone =
+      parsed.timezone === undefined || parsed.timezone === null
+        ? current.timezone || 'UTC'
+        : parsed.timezone.length
+          ? parsed.timezone
+          : 'UTC'
+    let status = current.status
+    if (['draft', 'cancelled'].includes(status)) {
+      status = 'scheduled'
+    }
+    const bodyJsonFragment = bodyJsonSnapshot == null ? null : sql.json(bodyJsonSnapshot)
+
+    const updated = await sql`
+      update public.admin_email_campaigns
+      set title = ${title},
+          description = ${description},
+          subject = ${subject},
+          preview_text = ${previewText},
+          body_html = ${bodyHtml},
+          body_json = ${bodyJsonFragment},
+          variables = ${sql.json(variablesSnapshot)},
+          template_id = ${templateId},
+          template_version = ${templateVersion},
+          timezone = ${timezone},
+          scheduled_for = ${scheduledFor},
+          status = ${status},
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${campaignId}
+      returning *
+    `
+    const campaign = normalizeEmailCampaignRow({
+      ...updated[0],
+      template_title: templateTitle,
+    })
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to update campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to update campaign' })
+  }
+})
+
+app.delete('/api/admin/email-campaigns/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      delete from public.admin_email_campaigns
+      where id = ${campaignId}
+        and status in ('draft','scheduled','cancelled')
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found or already sent' })
+      return
+    }
+    const campaign = normalizeEmailCampaignRow(rows[0])
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to delete campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete campaign' })
+  }
+})
+
+app.post('/api/admin/email-campaigns/:id/cancel', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      update public.admin_email_campaigns
+      set status = 'cancelled',
+          send_error = 'Cancelled by admin',
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${campaignId}
+        and status in ('draft','scheduled')
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found or already in progress' })
+      return
+    }
+    const campaign = normalizeEmailCampaignRow(rows[0])
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to cancel campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to cancel campaign' })
+  }
+})
+
+app.post('/api/admin/email-campaigns/:id/run', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service client not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  let params
+  try {
+    params = emailCampaignRunSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  try {
+    const existing = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      where c.id = ${campaignId}
+      limit 1
+    `
+    if (!existing || !existing.length) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+    const invokePayload = {
+      campaignId,
+      ...(params?.recipientLimit ? { recipientLimit: params.recipientLimit } : {}),
+    }
+    const invocation = await supabaseServiceClient.functions.invoke('email-campaign-runner', {
+      body: invokePayload,
+    })
+    if (invocation.error) {
+      throw new Error(invocation.error.message || 'Edge function failed')
+    }
+    const refreshed = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      where c.id = ${campaignId}
+      limit 1
+    `
+    const campaign = refreshed && refreshed.length ? normalizeEmailCampaignRow(refreshed[0]) : null
+    res.json({ campaign, runner: invocation.data })
+  } catch (err) {
+    console.error('[email-campaigns] failed to trigger run', err)
+    res.status(500).json({ error: err?.message || 'Failed to trigger campaign run' })
+  }
+})
+
+function normalizeEmailTemplateRow(row) {
+  if (!row) return null
+  const bodyJson = coerceJsonValue(row.body_json, null)
+  const variables = coerceVariableArray(row.variables)
+  const campaignCount =
+    row && Object.prototype.hasOwnProperty.call(row, 'campaign_count')
+      ? Number(row.campaign_count || 0)
+      : 0
+  return {
+    id: row.id,
+    title: row.title,
+    subject: row.subject,
+    description: row.description || null,
+    previewText: row.preview_text || resolvePreviewText(null, row.body_html),
+    bodyHtml: row.body_html || '',
+    bodyJson,
+    variables,
+    isActive: row.is_active !== false,
+    version: Number(row.version || 1),
+    lastUsedAt: row.last_used_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    campaignCount: Number.isFinite(campaignCount) ? campaignCount : 0,
+    lastCampaignAt: row.last_campaign_at || null,
+  }
+}
+
+function normalizeEmailCampaignRow(row) {
+  if (!row) return null
+  const bodyJson = coerceJsonValue(row.body_json, null)
+  const variables = coerceVariableArray(row.variables)
+  const sendSummary = coerceJsonValue(row.send_summary, null)
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || null,
+    status: row.status,
+    templateId: row.template_id,
+    templateTitle: row.template_title || null,
+    templateVersion: Number(row.template_version || 1),
+    subject: row.subject,
+    previewText: row.preview_text || resolvePreviewText(null, row.body_html),
+    bodyHtml: row.body_html || '',
+    bodyJson,
+    variables,
+    timezone: row.timezone || 'UTC',
+    scheduledFor: row.scheduled_for,
+    totalRecipients: Number(row.total_recipients || 0),
+    sentCount: Number(row.sent_count || 0),
+    failedCount: Number(row.failed_count || 0),
+    sendSummary,
+    sendError: row.send_error || null,
+    sendStartedAt: row.send_started_at || null,
+    sendCompletedAt: row.send_completed_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
 
   // Admin: global stats (bypass RLS via server connection)
   app.get('/api/admin/stats', async (req, res) => {

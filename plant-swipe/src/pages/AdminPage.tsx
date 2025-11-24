@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
 import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel";
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
+import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -40,6 +41,7 @@ import {
   Users,
   FileText,
   ScrollText,
+  Mail,
     CloudUpload,
     Check,
   BellRing,
@@ -87,6 +89,7 @@ type AdminTab =
   | "requests"
   | "upload"
   | "notifications"
+  | "emails"
   | "admin_logs";
 
 type ListedMember = {
@@ -2775,6 +2778,7 @@ export const AdminPage: React.FC = () => {
     { key: "requests", label: "Requests", Icon: FileText, path: "/admin/requests" },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
+    { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
     { key: "admin_logs", label: "Admin Logs", Icon: ScrollText, path: "/admin/logs" },
   ];
 
@@ -2783,6 +2787,7 @@ export const AdminPage: React.FC = () => {
     if (currentPath.includes("/admin/requests")) return "requests";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
+    if (currentPath.includes("/admin/emails")) return "emails";
     if (currentPath.includes("/admin/logs")) return "admin_logs";
     return "overview";
   }, [currentPath]);
@@ -6001,6 +6006,9 @@ export const AdminPage: React.FC = () => {
 
                     {/* Notifications Tab */}
                     {activeTab === "notifications" && <AdminNotificationsPanel />}
+
+                    {/* Emails Tab */}
+                    {activeTab === "emails" && <AdminEmailsPanel />}
 
                   {/* Admin Logs Tab */}
                   {activeTab === "admin_logs" && <AdminLogs />}

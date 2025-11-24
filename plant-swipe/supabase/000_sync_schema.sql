@@ -43,6 +43,8 @@ do $$ declare
     'blog_posts',
     'profile_admin_notes',
     'admin_activity_logs',
+    'admin_email_templates',
+    'admin_email_campaigns',
     'garden_activity_logs',
     'friend_requests',
     'friends',
