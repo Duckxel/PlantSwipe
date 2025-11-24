@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import '@/lib/runtimeEnvLoader'
 import './lib/i18n' // Initialize i18n before App
+import './index.scss'
 import App from './App.tsx'
 import { initAccentFromStorage } from '@/lib/accent'
 
