@@ -330,7 +330,7 @@ export async function getGardenMemberCountsBatch(gardenIds: string[]): Promise<R
   return counts
 }
 
-export async function listTasksForMultipleGardensMinimal(gardenIds: string[], limitPerGarden: number = 500): Promise<Record<string, Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>>> {
+export async function listTasksForMultipleGardensMinimal(gardenIds: string[], _limitPerGarden: number = 500): Promise<Record<string, Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>>> {
   const { valid: safeIds } = normalizeGardenIdList(gardenIds)
   if (safeIds.length === 0) return {}
 
