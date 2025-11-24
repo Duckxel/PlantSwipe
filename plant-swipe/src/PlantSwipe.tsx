@@ -21,7 +21,7 @@ import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
-import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
+import { loadPlantsWithTranslations, loadPlantPreviews } from "@/lib/plantTranslationLoader";
 import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { formatClassificationLabel } from "@/constants/classification";
@@ -193,7 +193,8 @@ export default function PlantSwipe() {
       // Always use Supabase with translations to ensure plants created in one language
       // display correctly when viewed in another language
       // This ensures translations are properly loaded for all languages, including English
-      const plantsWithTranslations = await loadPlantsWithTranslations(currentLang)
+      // Using optimized preview loader for faster initial render
+      const plantsWithTranslations = await loadPlantPreviews(currentLang)
       setPlants(plantsWithTranslations)
       ok = true
     } catch (e: unknown) {
