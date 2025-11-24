@@ -222,6 +222,8 @@ const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || process.env.VITE
 const adminUploadBucket = (process.env.ADMIN_UPLOAD_BUCKET || process.env.SUPABASE_UTILITY_BUCKET || 'UTILITY').trim() || 'UTILITY'
 const adminUploadPrefixRaw = (process.env.ADMIN_UPLOAD_PREFIX || 'admin/uploads').trim()
 const adminUploadPrefix = adminUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'admin/uploads'
+const blogUploadPrefixRaw = (process.env.BLOG_UPLOAD_PREFIX || 'blog').trim()
+const blogUploadPrefix = blogUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'blog'
 const adminUploadMaxBytes = (() => {
   const raw = Number(process.env.ADMIN_UPLOAD_MAX_BYTES)
   if (Number.isFinite(raw) && raw > 0) return raw
@@ -285,6 +287,178 @@ const gardenCoverMulter = multer({
 })
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
 
+async function handleScopedImageUpload(req, res, options = {}) {
+  const { prefixBuilder, auditLabel = 'admin', actorId = null, uploaderInfo = null } = options
+
+  singleAdminImageUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(adminUploadMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      try {
+        optimizedBuffer = await sharp(file.buffer)
+          .rotate()
+          .resize({
+            width: adminUploadMaxDimension,
+            height: adminUploadMaxDimension,
+            fit: 'inside',
+            withoutEnlargement: true,
+            fastShrinkOnLoad: true,
+          })
+          .webp({
+            quality: adminUploadWebpQuality,
+            effort: 5,
+            smartSubsample: true,
+          })
+          .toBuffer()
+      } catch (sharpErr) {
+        console.error('[upload-image] failed to convert image to webp', sharpErr)
+        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+        return
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const finalTypeSegment = sanitizePathSegment('webp', 'webp')
+      const originalTypeSegment = deriveUploadTypeSegment(file.originalname, mime)
+      const scopedPrefix =
+        typeof prefixBuilder === 'function'
+          ? prefixBuilder({ req, file })
+          : adminUploadPrefix
+      const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient.storage.from(adminUploadBucket).upload(objectPath, optimizedBuffer, {
+          cacheControl: '31536000',
+          contentType: 'image/webp',
+          upsert: false,
+        })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[upload-image] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient.storage.from(adminUploadBucket).getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      const uploadedAt = new Date().toISOString()
+      const compressionPercent =
+        file.size > 0 ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100)) : 0
+
+      const payload = {
+        ok: true,
+        bucket: adminUploadBucket,
+        path: objectPath,
+        url: publicUrl,
+        mimeType: 'image/webp',
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        uploadedAt,
+        quality: adminUploadWebpQuality,
+        compressionPercent,
+      }
+      if (!publicUrl) {
+        payload.warning = 'Bucket is not public; no public URL is available'
+      }
+
+      await recordAdminMediaUpload({
+        adminId: uploaderInfo?.id || null,
+        adminEmail: uploaderInfo?.email || null,
+        adminName: uploaderInfo?.name || null,
+        bucket: adminUploadBucket,
+        path: objectPath,
+        publicUrl,
+        mimeType: 'image/webp',
+        originalMimeType: mime,
+        sizeBytes: optimizedBuffer.length,
+        originalSizeBytes: file.size,
+        quality: adminUploadWebpQuality,
+        compressionPercent,
+        metadata: {
+          originalName: file.originalname,
+          typeSegment: finalTypeSegment,
+          originalTypeSegment,
+          scope: auditLabel,
+        },
+      })
+
+      if (actorId) {
+        try {
+          const detail = {
+            bucket: adminUploadBucket,
+            path: objectPath,
+            url: publicUrl,
+            originalMimeType: mime,
+            originalSize: file.size,
+            optimizedSize: optimizedBuffer.length,
+            quality: adminUploadWebpQuality,
+            scope: auditLabel,
+          }
+          let logged = false
+          if (sql) {
+            try {
+              await sql`
+                insert into public.admin_activity_logs (admin_id, action, target, detail)
+                values (${actorId}, 'upload_image', ${objectPath}, ${sql.json(detail)})
+              `
+              logged = true
+            } catch (logErr) {
+              console.error('[upload-image] failed to log admin activity (db)', logErr)
+            }
+          }
+          if (!logged) {
+            try {
+              await insertAdminActivityViaRest(req, {
+                admin_id: actorId,
+                admin_name: null,
+                action: 'upload_image',
+                target: objectPath,
+                detail,
+              })
+            } catch (restErr) {
+              console.error('[upload-image] failed to log admin activity (rest)', restErr)
+            }
+          }
+        } catch {}
+      }
+
+      res.json(payload)
+    })().catch((unhandled) => {
+      console.error('[upload-image] unexpected failure', unhandled)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
+      }
+    })
+  })
+}
 function sanitizeUploadBaseName(name) {
   try {
     const parsed = path.parse(String(name || '')).name || 'upload'
@@ -337,6 +511,15 @@ function buildUploadObjectPath(baseName, typeSegment, prefix = adminUploadPrefix
   return segments.join('/').replace(/\/{2,}/g, '/')
 }
 
+function sanitizeFolderInput(value) {
+  if (!value) return ''
+  return String(value)
+    .split('/')
+    .map((segment) => sanitizePathSegment(segment))
+    .filter(Boolean)
+    .join('/')
+}
+
 function parseStoragePublicUrl(url) {
   try {
     if (!url || !supabaseUrlEnv) return null
@@ -353,6 +536,20 @@ function parseStoragePublicUrl(url) {
   } catch {
     return null
   }
+}
+
+function extractPlainText(html, limit = 4000) {
+  if (!html) return ''
+  const cleaned = String(html)
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\/?(?:p|div|br|li|h\d)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!cleaned) return ''
+  if (cleaned.length <= limit) return cleaned
+  return cleaned.slice(0, limit)
 }
 
 async function deleteGardenCoverObject(publicUrl) {
@@ -3348,180 +3545,106 @@ app.post('/api/admin/upload-image', async (req, res) => {
     adminDisplayName = await getAdminProfileName(adminUser.id)
   }
 
-  singleAdminImageUpload(req, res, (err) => {
-    if (err) {
-      const message =
-        err?.code === 'LIMIT_FILE_SIZE'
-          ? `File exceeds the maximum size of ${(adminUploadMaxBytes / (1024 * 1024)).toFixed(1)} MB`
-          : err?.message || 'Failed to process upload'
-      res.status(400).json({ error: message })
-      return
-    }
-    ;(async () => {
-      const file = req.file
-      if (!file) {
-        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
-        return
-      }
-      const mime = (file.mimetype || '').toLowerCase()
-      if (!mime.startsWith('image/')) {
-        res.status(400).json({ error: 'Only image uploads are supported' })
-        return
-      }
-      if (!adminUploadAllowedMimeTypes.has(mime)) {
-        res.status(400).json({ error: `Unsupported image type: ${mime}` })
-        return
-      }
-      if (!file.buffer || file.buffer.length === 0) {
-        res.status(400).json({ error: 'Uploaded file is empty' })
-        return
-      }
-
-      let optimizedBuffer
-      try {
-        optimizedBuffer = await sharp(file.buffer)
-          .rotate()
-          .resize({
-            width: adminUploadMaxDimension,
-            height: adminUploadMaxDimension,
-            fit: 'inside',
-            withoutEnlargement: true,
-            fastShrinkOnLoad: true,
-          })
-          .webp({
-            quality: adminUploadWebpQuality,
-            effort: 5,
-            smartSubsample: true,
-          })
-          .toBuffer()
-      } catch (sharpErr) {
-        console.error('[upload-image] failed to convert image to webp', sharpErr)
-        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
-        return
-      }
-
-        const baseName = sanitizeUploadBaseName(file.originalname)
-        const finalTypeSegment = sanitizePathSegment('webp', 'webp')
-        const objectPath = buildUploadObjectPath(baseName, finalTypeSegment)
-        const originalTypeSegment = deriveUploadTypeSegment(file.originalname, mime)
-
-      try {
-        const { error: uploadError } = await supabaseServiceClient
-          .storage
-          .from(adminUploadBucket)
-          .upload(objectPath, optimizedBuffer, {
-            cacheControl: '31536000',
-            contentType: 'image/webp',
-            upsert: false,
-          })
-        if (uploadError) {
-          throw new Error(uploadError.message || 'Supabase storage upload failed')
-        }
-      } catch (storageErr) {
-        console.error('[upload-image] supabase storage upload failed', storageErr)
-        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
-        return
-      }
-
-      const { data: publicData } = supabaseServiceClient
-        .storage
-        .from(adminUploadBucket)
-        .getPublicUrl(objectPath)
-      const publicUrl = publicData?.publicUrl || null
-      const uploadedAt = new Date().toISOString()
-      const compressionPercent =
-        file.size > 0
-          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
-          : 0
-
-      const payload = {
-        ok: true,
-        bucket: adminUploadBucket,
-        path: objectPath,
-        url: publicUrl,
-        mimeType: 'image/webp',
-        size: optimizedBuffer.length,
-        originalMimeType: mime,
-        originalSize: file.size,
-        uploadedAt,
-        quality: adminUploadWebpQuality,
-        compressionPercent,
-      }
-      if (!publicUrl) {
-        payload.warning = 'Bucket is not public; no public URL is available'
-      }
-
-        await recordAdminMediaUpload({
-          adminId: adminUser?.id || null,
-          adminEmail: adminUser?.email || null,
-          adminName: adminDisplayName || null,
-          bucket: adminUploadBucket,
-          path: objectPath,
-          publicUrl,
-          mimeType: 'image/webp',
-          originalMimeType: mime,
-          sizeBytes: optimizedBuffer.length,
-          originalSizeBytes: file.size,
-          quality: adminUploadWebpQuality,
-          compressionPercent,
-          metadata: {
-            originalName: file.originalname,
-            typeSegment: finalTypeSegment,
-            originalTypeSegment,
-          },
-        })
-
-      try {
-        const actorId =
-          adminUser?.id ||
-          (typeof adminPrincipal === 'string' && adminPrincipal.length > 0
-            ? adminPrincipal
-            : null)
-        const detail = {
-          bucket: adminUploadBucket,
-          path: objectPath,
-          url: publicUrl,
-          originalMimeType: mime,
-          originalSize: file.size,
-          optimizedSize: optimizedBuffer.length,
-          quality: adminUploadWebpQuality,
-        }
-        let logged = false
-        if (sql) {
-          try {
-            await sql`
-              insert into public.admin_activity_logs (admin_id, action, target, detail)
-              values (${actorId}, 'upload_image', ${objectPath}, ${sql.json(detail)})
-            `
-            logged = true
-          } catch (logErr) {
-            console.error('[upload-image] failed to log admin activity (db)', logErr)
-          }
-        }
-        if (!logged) {
-          try {
-            await insertAdminActivityViaRest(req, {
-              admin_id: actorId,
-              admin_name: null,
-              action: 'upload_image',
-              target: objectPath,
-              detail,
-            })
-            logged = true
-          } catch (restErr) {
-            console.error('[upload-image] failed to log admin activity (rest)', restErr)
-          }
-        }
-      } catch {}
-
-        res.json(payload)
-    })().catch((unhandled) => {
-      console.error('[upload-image] unexpected failure', unhandled)
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Unexpected upload failure' })
-      }
-    })
+  await handleScopedImageUpload(req, res, {
+    actorId: adminPrincipal,
+    auditLabel: 'admin',
+    uploaderInfo: {
+      id: adminUser?.id || null,
+      email: adminUser?.email || null,
+      name: adminDisplayName || null,
+    },
+    prefixBuilder: ({ req }) => {
+      const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
+      return [adminUploadPrefix, folder].filter(Boolean).join('/')
+    },
   })
+})
+
+app.post('/api/blog/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureAdmin(req, res)
+  if (!adminPrincipal) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch {}
+
+  let adminUser = null
+  try {
+    adminUser = await getUserFromRequest(req)
+  } catch {}
+  let adminDisplayName = null
+  if (adminUser?.id) {
+    adminDisplayName = await getAdminProfileName(adminUser.id)
+  }
+
+  await handleScopedImageUpload(req, res, {
+    actorId: adminPrincipal,
+    auditLabel: 'blog',
+    uploaderInfo: {
+      id: adminUser?.id || null,
+      email: adminUser?.email || null,
+      name: adminDisplayName || null,
+    },
+    prefixBuilder: ({ req }) => {
+      const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
+      return [blogUploadPrefix, folder].filter(Boolean).join('/')
+    },
+  })
+})
+
+app.post('/api/blog/summarize', async (req, res) => {
+  if (!openaiClient) {
+    res.status(503).json({ error: 'OpenAI client not configured' })
+    return
+  }
+  const adminPrincipal = await ensureAdmin(req, res)
+  if (!adminPrincipal) return
+
+  const html = typeof req.body?.html === 'string' ? req.body.html : ''
+  const title = typeof req.body?.title === 'string' ? req.body.title : ''
+
+  if (!html.trim()) {
+    res.status(400).json({ error: 'Missing html content to summarize' })
+    return
+  }
+
+  const bodyText = extractPlainText(html, 6000)
+  if (!bodyText) {
+    res.json({ summary: '' })
+    return
+  }
+
+  const instructions = [
+    'Summarize the provided Aphylia blog article into a single compelling sentence under 240 characters.',
+    'Write in active voice and avoid emojis or hashtags.',
+    'Mention the core outcome or insight so it can be shown on cards.',
+  ].join('\n')
+  const promptSections = [
+    title ? `Title: ${title}` : null,
+    `Body:\n${bodyText}`,
+  ].filter(Boolean)
+
+  try {
+    const response = await openaiClient.responses.create(
+      {
+        model: openaiModel,
+        reasoning: { effort: 'low' },
+        instructions,
+        input: promptSections.join('\n\n'),
+        max_output_tokens: 150,
+      },
+      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+    )
+    const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+    res.json({ summary })
+  } catch (err) {
+    console.error('[blog] summary generation failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to generate summary' })
+  }
 })
 
 app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {

@@ -43,6 +43,9 @@ const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
 const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
+const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
+const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
+const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -1202,6 +1205,42 @@ export default function PlantSwipe() {
               element={
                 <Suspense fallback={routeLoadingFallback}>
                   <TermsPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/blog"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <BlogPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/blog/create"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <BlogComposerPageLazy />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/blog/:postId/edit"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <BlogComposerPageLazy />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/blog/:slug"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <BlogPostPageLazy />
                 </Suspense>
               }
             />

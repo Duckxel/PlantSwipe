@@ -63,6 +63,12 @@
       "title": "Download the Aphylia PWA",
       "description": "Follow step-by-step install guides for iOS, Android, and desktop so every tester stays up to date."
     },
+    "blog": {
+      "listTitle": "Aphylia Blog",
+      "listDescription": "Stories, product updates, and horticulture lessons from the Aphylia team.",
+      "postTitle": "{{title}} · Aphylia Blog",
+      "postDescription": "{{title}} — published {{date}} by {{author}}."
+    },
     "terms": {
       "title": "Aphylia terms & testing rules",
       "description": "Review the internal usage guidelines that keep our private beta safe, secure, and respectful."
@@ -244,6 +250,67 @@
       "title": "You're all caught up",
       "subtitle": "Adjust your filters or reset the deck to keep discovering fresh plants.",
       "reset": "Reset deck"
+    }
+  },
+  "blogPage": {
+    "hero": {
+      "badge": "Stories & releases",
+      "title": "Aphylia Blog",
+      "subtitle": "Product updates, greenroom experiments, and gardening stories from our worldwide testers.",
+      "helper": "Admins can author new posts with the Notion-style editor below. Drafts remain private until published."
+    },
+    "actions": {
+      "addPost": "Add post"
+    },
+    "state": {
+      "loading": "Fetching the latest posts…",
+      "empty": "No blog posts yet. Check back soon!",
+      "error": "Failed to load blog posts.",
+      "retry": "Try again"
+    },
+    "card": {
+      "readMore": "Read article",
+      "imagePlaceholder": "Image placeholder",
+      "draftBadge": "Draft",
+      "scheduledBadge": "Scheduled",
+      "excerptFallback": "Pull up the full article to explore every detail.",
+      "edit": "Edit",
+      "unknownAuthor": "Team Aphylia"
+    },
+    "editor": {
+      "createTitle": "Create blog post",
+      "editTitle": "Edit blog post",
+      "description": "Use the Notion-style TipTap canvas to compose your article without writing code.",
+      "titleLabel": "Title",
+      "titlePlaceholder": "A new field report",
+      "coverLabel": "Cover image URL",
+      "coverHelper": "Paste a public image URL or leave blank for a placeholder.",
+      "excerptLabel": "Short summary (optional)",
+      "excerptPlaceholder": "One or two sentences that appear on the card.",
+      "visibilityLabel": "Visibility",
+      "publishModeDraft": "Draft (keep hidden)",
+      "publishModeScheduled": "Schedule / publish",
+      "publishAtLabel": "Publish on",
+      "publishAtHelper": "This page becomes visible after this local date/time.",
+      "canvasHelper": "Use the toolbar or slash menu to add blocks, quotes, dividers, and embeds. Everything is auto-sanitized.",
+      "save": "Save post",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "saveError": "Failed to save post.",
+      "errorNoEditor": "Editor not ready yet.",
+      "createdAtLabel": "Created",
+      "validation": {
+        "title": "Please enter a title.",
+        "author": "Missing author information.",
+        "publishAt": "Please provide a publish date."
+      }
+    },
+    "detail": {
+      "back": "Back to blog",
+      "error": "Unable to load this post.",
+      "notFound": "This post does not exist anymore.",
+      "statusDraftNotice": "This story is still a draft. Only admins can see this preview.",
+      "statusScheduledNotice": "This story is scheduled. Readers will see it when the publish date is reached."
     }
   },
   "auth": {

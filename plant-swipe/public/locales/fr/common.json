@@ -63,6 +63,12 @@
       "title": "Télécharger l'application PWA Aphylia",
       "description": "Suivez les guides d'installation iOS, Android et desktop pour garder chaque testeur à jour."
     },
+    "blog": {
+      "listTitle": "Blog Aphylia",
+      "listDescription": "Histoires, mises à jour produit et conseils jardinage signés Aphylia.",
+      "postTitle": "{{title}} · Blog Aphylia",
+      "postDescription": "{{title}} — publié le {{date}} par {{author}}."
+    },
     "terms": {
       "title": "Règles & conditions Aphylia",
       "description": "Consultez les directives internes qui sécurisent et cadrent notre bêta privée."
@@ -244,6 +250,67 @@
       "title": "Vous avez tout parcouru",
       "subtitle": "Ajustez vos filtres ou réinitialisez le paquet pour poursuivre la découverte.",
       "reset": "Réinitialiser le paquet"
+    }
+  },
+  "blogPage": {
+    "hero": {
+      "badge": "Histoires & lancements",
+      "title": "Blog Aphylia",
+      "subtitle": "Actualités produit, expériences en serre et récits de nos testeurs partout dans le monde.",
+      "helper": "Les admins composent ici avec l’éditeur façon Notion. Les brouillons restent invisibles tant qu’ils ne sont pas publiés."
+    },
+    "actions": {
+      "addPost": "Ajouter un article"
+    },
+    "state": {
+      "loading": "Chargement des derniers articles…",
+      "empty": "Aucun article pour le moment. Revenez vite !",
+      "error": "Impossible de charger les articles.",
+      "retry": "Réessayer"
+    },
+    "card": {
+      "readMore": "Lire l'article",
+      "imagePlaceholder": "Visuel à venir",
+      "draftBadge": "Brouillon",
+      "scheduledBadge": "Planifié",
+      "excerptFallback": "Ouvrez l'article complet pour découvrir tous les détails.",
+      "edit": "Modifier",
+      "unknownAuthor": "Équipe Aphylia"
+    },
+    "editor": {
+      "createTitle": "Créer un article",
+      "editTitle": "Modifier l'article",
+      "description": "Composez votre article sans code grâce à la surface TipTap façon Notion.",
+      "titleLabel": "Titre",
+      "titlePlaceholder": "Nouveau rapport de terrain",
+      "coverLabel": "URL de l'image de couverture",
+      "coverHelper": "Collez une image publique ou laissez vide pour afficher un espace réservé.",
+      "excerptLabel": "Résumé court (optionnel)",
+      "excerptPlaceholder": "Une ou deux phrases visibles sur la carte.",
+      "visibilityLabel": "Visibilité",
+      "publishModeDraft": "Brouillon (reste caché)",
+      "publishModeScheduled": "Planifier / publier",
+      "publishAtLabel": "Publier le",
+      "publishAtHelper": "Cet article devient public une fois cette date/heure locale atteinte.",
+      "canvasHelper": "Servez-vous de la barre d’outils ou du menu « / » pour ajouter blocs, citations, séparateurs et médias. Le contenu est nettoyé automatiquement.",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "cancel": "Annuler",
+      "saveError": "Impossible d'enregistrer l'article.",
+      "errorNoEditor": "L'éditeur n'est pas encore prêt.",
+      "createdAtLabel": "Créé",
+      "validation": {
+        "title": "Veuillez saisir un titre.",
+        "author": "Informations auteur manquantes.",
+        "publishAt": "Veuillez indiquer une date de publication."
+      }
+    },
+    "detail": {
+      "back": "Retour au blog",
+      "error": "Impossible de charger cet article.",
+      "notFound": "Cet article n'existe plus.",
+      "statusDraftNotice": "Cet article est encore un brouillon. Seuls les admins voient cet aperçu.",
+      "statusScheduledNotice": "Cet article est planifié. Il deviendra public à la date de publication."
     }
   },
   "auth": {

@@ -1,3 +1,6 @@
+@import "./styles/_variables.scss";
+@import "./styles/_keyframe-animations.scss";
+
 @font-face {
   font-family: "Lavonte";
   src: url("./assets/fonts/Lavonte.ttf") format("truetype");
@@ -143,6 +146,49 @@
     @apply space-y-4 text-base leading-relaxed text-stone-700 dark:text-stone-200 text-left;
     font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   }
+
+.blog-article-content {
+  @apply text-stone-700 dark:text-stone-100;
+}
+.blog-article-content h1 {
+  @apply text-4xl font-bold mt-8 mb-4 text-stone-900 dark:text-stone-50;
+}
+.blog-article-content h2 {
+  @apply text-3xl font-semibold mt-6 mb-3 text-stone-900 dark:text-stone-50;
+}
+.blog-article-content h3 {
+  @apply text-2xl font-semibold mt-5 mb-2 text-stone-900 dark:text-stone-50;
+}
+.blog-article-content h4 {
+  @apply text-xl font-semibold mt-4 mb-2 text-stone-900 dark:text-stone-50;
+}
+.blog-article-content p {
+  @apply leading-relaxed my-4;
+}
+.blog-article-content ul {
+  @apply list-disc pl-6 my-4 space-y-2;
+}
+.blog-article-content ol {
+  @apply list-decimal pl-6 my-4 space-y-2;
+}
+.blog-article-content blockquote {
+  @apply border-l-4 border-emerald-300 dark:border-emerald-500 pl-4 italic text-stone-600 dark:text-stone-200 my-6;
+}
+.blog-article-content pre {
+  @apply bg-stone-900/90 text-stone-100 rounded-2xl p-4 overflow-x-auto text-sm my-6;
+}
+.blog-article-content code {
+  @apply bg-stone-100 dark:bg-stone-800 rounded px-1 py-0.5 text-sm;
+}
+.blog-article-content img {
+  @apply rounded-3xl my-6;
+}
+.blog-article-content hr {
+  @apply border-t border-stone-200 dark:border-stone-700 my-8;
+}
+.blog-article-content a {
+  @apply text-emerald-600 dark:text-emerald-300 underline underline-offset-4;
+}
 
   .legal-content [align] {
     text-align: left !important;
