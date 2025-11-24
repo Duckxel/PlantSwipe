@@ -310,11 +310,14 @@ export default function BlogComposerPage() {
       const doc = editorInstance.getDocument()
       latestHtmlRef.current = html
       const trimmedHtml = html.trim()
-      if (trimmedHtml && summarySourceRef.current !== trimmedHtml) {
+      summaryAbortRef.current?.abort()
+      let summaryText = autoSummary
+      if (trimmedHtml) {
         try {
-          await runSummary(trimmedHtml, { force: true })
+          summaryText = await runSummary(trimmedHtml, { force: true })
+          setAutoSummary(summaryText)
         } catch {
-          /* ignore */
+          summaryText = autoSummary
         }
       }
       const publishDateIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString()
@@ -324,7 +327,7 @@ export default function BlogComposerPage() {
         title: formTitle,
         bodyHtml: html,
         coverImageUrl: coverUrl || null,
-        excerpt: autoSummary?.trim() || undefined,
+        excerpt: summaryText?.trim() || undefined,
         isPublished: publishMode === "scheduled",
         publishedAt: publishDateIso,
         authorId,

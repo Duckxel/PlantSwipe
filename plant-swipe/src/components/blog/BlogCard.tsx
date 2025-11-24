@@ -31,6 +31,11 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
   const isScheduled = post.isPublished && publishTime > now
   const statusBadge = !post.isPublished ? 'draft' : isScheduled ? 'scheduled' : null
 
+  const articleTarget = post.slug || post.id
+  const summaryText =
+    post.excerpt ||
+    t("blogPage.card.excerptFallback", { defaultValue: "Pull up the full article to explore every detail." })
+
   return (
     <Card className="rounded-3xl overflow-hidden border border-stone-200 dark:border-[#3e3e42] flex flex-col bg-white/80 dark:bg-[#1f1f1f] shadow-sm hover:shadow-lg transition-shadow">
       <div className="relative h-48 bg-stone-100 dark:bg-[#2b2b2b]">
@@ -43,8 +48,13 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
             decoding="async"
           />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-[11px] uppercase tracking-[0.3em] text-stone-500 dark:text-stone-400 px-6 text-center">
-            {t('blogPage.card.imagePlaceholder', { defaultValue: 'Image placeholder' })}
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-sm text-stone-500 dark:text-stone-300 px-6 text-center">
+            <span className="text-3xl" aria-hidden="true">
+              🌱
+            </span>
+            <span className="font-semibold tracking-wide uppercase text-[10px]">
+              {t("blogPage.card.imagePlaceholder", { defaultValue: "Awaiting cover photo" })}
+            </span>
           </div>
         )}
       </div>
@@ -70,14 +80,10 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4">
-        <p className="text-sm text-stone-600 dark:text-stone-300 min-h-[3.5rem]">
-          {post.excerpt || t('blogPage.card.excerptFallback', { defaultValue: 'Pull up the full article to explore every detail.' })}
-        </p>
+        <p className="text-sm text-stone-600 dark:text-stone-300 min-h-[3.5rem]">{summaryText}</p>
         <div className="flex items-center justify-between gap-3 pt-2">
           <Button asChild variant="secondary" className="rounded-2xl px-4">
-            <Link to={`/blog/${post.slug}`}>
-              {t('blogPage.card.readMore', { defaultValue: 'Read article' })}
-            </Link>
+            <Link to={`/blog/${articleTarget}`}>{t("blogPage.card.readMore", { defaultValue: "Read article" })}</Link>
           </Button>
           {isAdmin && (
             <Button
