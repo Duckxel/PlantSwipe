@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe, Monitor, Sun, Moon, Bell } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe, Monitor, Sun, Moon, Bell, Clock } from "lucide-react"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 
@@ -38,6 +38,7 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = React.useState("")
   const [isPrivate, setIsPrivate] = React.useState(false)
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
+  const [timezone, setTimezone] = React.useState<string>("")
   const [emailExpanded, setEmailExpanded] = React.useState(false)
   const [passwordExpanded, setPasswordExpanded] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
@@ -47,6 +48,71 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = React.useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
+
+  // Get detected timezone from browser
+  const detectedTimezone = React.useMemo(() => {
+    if (typeof Intl !== 'undefined') {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/London'
+    }
+    return 'Europe/London'
+  }, [])
+
+  // Common timezones list with UTC offsets
+  const commonTimezones = React.useMemo(() => {
+    const now = new Date()
+    const getOffset = (tz: string): string => {
+      try {
+        const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }))
+        const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tz }))
+        const offsetMs = tzDate.getTime() - utcDate.getTime()
+        const offsetHours = offsetMs / (1000 * 60 * 60)
+        const sign = offsetHours >= 0 ? '+' : ''
+        const hours = Math.floor(Math.abs(offsetHours))
+        const minutes = Math.floor((Math.abs(offsetHours) - hours) * 60)
+        return minutes === 0 
+          ? `UTC${sign}${hours}` 
+          : `UTC${sign}${hours}:${String(minutes).padStart(2, '0')}`
+      } catch {
+        return ''
+      }
+    }
+
+    return [
+      { value: 'Europe/London', label: `London (GMT/BST) - ${getOffset('Europe/London')}` },
+      { value: 'Europe/Paris', label: `Paris (CET/CEST) - ${getOffset('Europe/Paris')}` },
+      { value: 'Europe/Berlin', label: `Berlin (CET/CEST) - ${getOffset('Europe/Berlin')}` },
+      { value: 'Europe/Rome', label: `Rome (CET/CEST) - ${getOffset('Europe/Rome')}` },
+      { value: 'Europe/Madrid', label: `Madrid (CET/CEST) - ${getOffset('Europe/Madrid')}` },
+      { value: 'Europe/Amsterdam', label: `Amsterdam (CET/CEST) - ${getOffset('Europe/Amsterdam')}` },
+      { value: 'Europe/Stockholm', label: `Stockholm (CET/CEST) - ${getOffset('Europe/Stockholm')}` },
+      { value: 'Europe/Zurich', label: `Zurich (CET/CEST) - ${getOffset('Europe/Zurich')}` },
+      { value: 'Europe/Vienna', label: `Vienna (CET/CEST) - ${getOffset('Europe/Vienna')}` },
+      { value: 'Europe/Brussels', label: `Brussels (CET/CEST) - ${getOffset('Europe/Brussels')}` },
+      { value: 'America/New_York', label: `New York (EST/EDT) - ${getOffset('America/New_York')}` },
+      { value: 'America/Chicago', label: `Chicago (CST/CDT) - ${getOffset('America/Chicago')}` },
+      { value: 'America/Denver', label: `Denver (MST/MDT) - ${getOffset('America/Denver')}` },
+      { value: 'America/Los_Angeles', label: `Los Angeles (PST/PDT) - ${getOffset('America/Los_Angeles')}` },
+      { value: 'America/Toronto', label: `Toronto (EST/EDT) - ${getOffset('America/Toronto')}` },
+      { value: 'America/Vancouver', label: `Vancouver (PST/PDT) - ${getOffset('America/Vancouver')}` },
+      { value: 'America/Mexico_City', label: `Mexico City (CST/CDT) - ${getOffset('America/Mexico_City')}` },
+      { value: 'America/Sao_Paulo', label: `São Paulo (BRT/BRST) - ${getOffset('America/Sao_Paulo')}` },
+      { value: 'America/Buenos_Aires', label: `Buenos Aires (ART) - ${getOffset('America/Buenos_Aires')}` },
+      { value: 'Asia/Tokyo', label: `Tokyo (JST) - ${getOffset('Asia/Tokyo')}` },
+      { value: 'Asia/Shanghai', label: `Shanghai (CST) - ${getOffset('Asia/Shanghai')}` },
+      { value: 'Asia/Hong_Kong', label: `Hong Kong (HKT) - ${getOffset('Asia/Hong_Kong')}` },
+      { value: 'Asia/Singapore', label: `Singapore (SGT) - ${getOffset('Asia/Singapore')}` },
+      { value: 'Asia/Dubai', label: `Dubai (GST) - ${getOffset('Asia/Dubai')}` },
+      { value: 'Asia/Kolkata', label: `Mumbai/Delhi (IST) - ${getOffset('Asia/Kolkata')}` },
+      { value: 'Asia/Seoul', label: `Seoul (KST) - ${getOffset('Asia/Seoul')}` },
+      { value: 'Australia/Sydney', label: `Sydney (AEDT/AEST) - ${getOffset('Australia/Sydney')}` },
+      { value: 'Australia/Melbourne', label: `Melbourne (AEDT/AEST) - ${getOffset('Australia/Melbourne')}` },
+      { value: 'Australia/Brisbane', label: `Brisbane (AEST) - ${getOffset('Australia/Brisbane')}` },
+      { value: 'Pacific/Auckland', label: `Auckland (NZDT/NZST) - ${getOffset('Pacific/Auckland')}` },
+      { value: 'Africa/Cairo', label: `Cairo (EET) - ${getOffset('Africa/Cairo')}` },
+      { value: 'Africa/Johannesburg', label: `Johannesburg (SAST) - ${getOffset('Africa/Johannesburg')}` },
+      { value: 'UTC', label: 'UTC (Coordinated Universal Time) - UTC+0' },
+    ]
+  }, [])
 
   const heroCardClass =
     "relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b1b1f] dark:via-[#121214] dark:to-[#050506] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)]"
@@ -84,20 +150,28 @@ export default function SettingsPage() {
           setEmail(authUser.email)
         }
 
-        // Load profile privacy setting
+        // Load profile privacy setting and timezone
         if (profile) {
           setIsPrivate(Boolean((profile as any).is_private || false))
           setDisableFriendRequests(Boolean((profile as any).disable_friend_requests || false))
+          // Use saved timezone if exists, otherwise use detected timezone
+          const savedTimezone = (profile as any).timezone
+          setTimezone(savedTimezone || detectedTimezone)
         } else {
           // Fetch profile if not loaded
           const { data } = await supabase
             .from('profiles')
-            .select('is_private, disable_friend_requests')
+            .select('is_private, disable_friend_requests, timezone')
             .eq('id', user.id)
             .maybeSingle()
           if (data) {
             setIsPrivate(Boolean(data.is_private || false))
             setDisableFriendRequests(Boolean(data.disable_friend_requests || false))
+            // Use saved timezone if exists, otherwise use detected timezone
+            setTimezone(data.timezone || detectedTimezone)
+          } else {
+            // No profile yet, use detected timezone
+            setTimezone(detectedTimezone)
           }
         }
       } catch (e: any) {
@@ -243,6 +317,30 @@ export default function SettingsPage() {
     } catch (e: any) {
       setError(e?.message || t('settings.friendRequests.failedToUpdate'))
       setDisableFriendRequests(!newValue) // Revert on error
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateTimezone = async () => {
+    if (!user?.id) return
+
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ timezone: timezone || detectedTimezone })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      setSuccess('Timezone updated successfully')
+      await refreshProfile()
+    } catch (e: any) {
+      setError(e?.message || 'Failed to update timezone')
     } finally {
       setSaving(false)
     }
@@ -552,6 +650,52 @@ export default function SettingsPage() {
               </select>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Timezone Settings */}
+      <Card className={`${glassCard} mb-4`}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Timezone
+          </CardTitle>
+          <CardDescription>
+            Set your timezone to receive scheduled notifications at the correct local time. 
+            {timezone !== detectedTimezone && (
+              <span className="block mt-1 text-xs opacity-70">
+                Detected: {commonTimezones.find(tz => tz.value === detectedTimezone)?.label || detectedTimezone}
+              </span>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2">
+            <Label htmlFor="timezone-select">Select Timezone</Label>
+            <select
+              id="timezone-select"
+              value={timezone || detectedTimezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              disabled={saving}
+              className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+            >
+              {commonTimezones.map((tz) => (
+                <option key={tz.value} value={tz.value}>
+                  {tz.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs opacity-70 mt-1">
+              Scheduled notifications will be sent at the same local time in your timezone.
+            </p>
+          </div>
+          <Button
+            onClick={handleUpdateTimezone}
+            disabled={saving || !timezone || timezone === ((profile as any)?.timezone || detectedTimezone)}
+            className="rounded-2xl"
+          >
+            {saving ? 'Saving...' : 'Save Timezone'}
+          </Button>
         </CardContent>
       </Card>
 

@@ -2,6 +2,9 @@ import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
 
+// Default timezone for users who haven't set one
+const DEFAULT_TIMEZONE = 'Europe/London'
+
 type AuthUser = {
   id: string
   email: string | null
@@ -52,6 +55,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .maybeSingle()
     if (!error) {
       setProfile(data as any)
+      
+      // Auto-update timezone if missing (detect from browser, fallback to London)
+      // Only auto-update if user hasn't manually set a timezone
+      if (data && !data.timezone) {
+        const detectedTimezone = typeof Intl !== 'undefined'
+          ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
+          : DEFAULT_TIMEZONE
+        
+        // Update in background (non-blocking)
+        // This ensures users get a timezone even if they haven't visited Settings yet
+        void (async () => {
+          try {
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ timezone: detectedTimezone })
+              .eq('id', currentId)
+            
+            // Update local state if update succeeded
+            if (!updateError) {
+              const updatedProfile = { ...data, timezone: detectedTimezone }
+              setProfile(updatedProfile as any)
+              try { localStorage.setItem('plantswipe.profile', JSON.stringify(updatedProfile)) } catch {}
+            }
+          } catch {
+            // Silently fail - timezone update is non-critical
+          }
+        })()
+      }
+      
       // Persist profile alongside session so reloads can hydrate faster
       try { localStorage.setItem('plantswipe.profile', JSON.stringify(data)) } catch {}
       // Apply accent if present
@@ -93,11 +125,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const uid = data.user?.id
     if (!uid) return { error: 'Signup failed' }
 
+    // Auto-detect timezone from browser, fallback to London
+    const detectedTimezone = typeof Intl !== 'undefined' 
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
+      : DEFAULT_TIMEZONE
+    
     // Create profile row
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
       display_name: displayName,
       liked_plant_ids: [],
+      timezone: detectedTimezone,
       accent_key: 'emerald',
     })
     if (perr) return { error: perr.message }

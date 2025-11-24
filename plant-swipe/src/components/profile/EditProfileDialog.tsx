@@ -12,7 +12,6 @@ export type EditProfileValues = {
   display_name: string
   country: string
   bio: string
-  timezone: string
   experience_years: string
   accent_key: AccentKey | null
 }
@@ -59,10 +58,6 @@ export const EditProfileDialog: React.FC<{
           <div className="grid gap-2">
             <Label htmlFor="ep-country">{t('profile.editProfile.country')}</Label>
             <Input id="ep-country" value={values.country} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('country', e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="ep-timezone">{t('profile.editProfile.timezone')}</Label>
-            <Input id="ep-timezone" value={values.timezone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('timezone', e.target.value)} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="ep-exp">{t('profile.editProfile.experienceYears')}</Label>
