@@ -63,7 +63,7 @@ export default function BlogPostPage() {
 
   const sanitizedHtml = React.useMemo(() => {
     if (!post?.bodyHtml) return ''
-    return DOMPurify.sanitize(post.bodyHtml, { ADD_ATTR: ['style'], ADD_TAGS: ['style'] })
+    return DOMPurify.sanitize(post.bodyHtml, { ADD_ATTR: ['style', 'class'], ADD_TAGS: ['style'] })
   }, [post?.bodyHtml])
 
   const seoTitle = post
@@ -152,7 +152,7 @@ export default function BlogPostPage() {
             )}
 
             <div
-              className="prose prose-stone dark:prose-invert max-w-none text-base leading-relaxed"
+              className="blog-article-content prose prose-stone dark:prose-invert max-w-none text-base leading-relaxed"
               dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
             />
           </article>
