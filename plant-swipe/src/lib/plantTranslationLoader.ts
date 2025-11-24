@@ -656,15 +656,9 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     }
 
     const plantIds = plants.map((p) => p.id)
-    const translationColumns = [
-      'plant_id', 'language', 
-      'name', 'scientific_name', 'meaning',
-      'identity', 'ecology', 'usage',
-    ].join(',')
-
     const { data: translationsData } = await supabase
       .from('plant_translations')
-      .select(translationColumns)
+      .select('*') // Select all columns to support flat schema
       .eq('language', language)
       .in('plant_id', plantIds)
 
@@ -685,6 +679,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       
       const parseIfNeeded = (val: any) => (typeof val === 'string' ? JSON.parse(val) : val)
       
+      // Try to get JSONB fields if they exist, otherwise fallback to empty
       const transIdentity = parseIfNeeded(translation.identity) || {}
       const transUsage = parseIfNeeded(translation.usage) || {}
       const transEcology = parseIfNeeded(translation.ecology) || {}
@@ -706,24 +701,26 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         || images.find((i) => i.use === 'discovery')?.link
         || images[0]?.link
 
+      // Merge flat columns into structured objects to match Plant interface
       const mergedIdentity = {
         ...transIdentity,
         scientificName: translation.scientific_name || basePlant.scientific_name || transIdentity.scientificName,
-        promotionMonth: monthSlugToNumber(transIdentity.promotion_month || basePlant.promotion_month) ?? undefined,
+        promotionMonth: monthSlugToNumber(translation.promotion_month || basePlant.promotion_month) ?? undefined,
         colors: colorObjects,
         season: seasons,
         scent: basePlant.scent ?? transIdentity.scent ?? false,
+        // Map other flat fields if needed for preview
       }
 
       const mergedUsage = {
         ...transUsage,
-        adviceMedicinal: transUsage.adviceMedicinal || basePlant.advice_medicinal,
+        adviceMedicinal: translation.advice_medicinal || transUsage.adviceMedicinal || basePlant.advice_medicinal,
         aromatherapy: basePlant.aromatherapy ?? transUsage.aromatherapy ?? false,
       }
       
       const mergedEcology = {
         ...transEcology,
-        nativeRange: transEcology.nativeRange || basePlant.origin || undefined,
+        nativeRange: translation.origin || transEcology.nativeRange || basePlant.origin || undefined,
       }
 
       const containerFriendly = basePlant.composition && Array.isArray(basePlant.composition) && basePlant.composition.includes('pot')

@@ -75,7 +75,9 @@
           to { transform: rotate(360deg); }
         }
       </style>
-      <link rel="preload" as="style" href="/src/index.css" />
+      <!-- Preload CSS as usual, but do not preload the font aggressively -->
+      <!-- <link rel="preload" as="style" href="/src/index.scss" /> -->
+      <!-- Font preload reduced priority or removed if causing FCP block -->
       <link
         rel="preload"
         as="font"
@@ -83,14 +85,12 @@
         type="font/ttf"
         crossorigin
       />
-      <link
-        rel="stylesheet"
-        href="/src/index.css"
-        media="print"
-        onload="this.media='all'"
-        data-hydrated-style
-      />
-      <noscript><link rel="stylesheet" href="/src/index.css" /></noscript>
+      <!-- Use script to load CSS to avoid render blocking if possible, or standard link -->
+      <!-- Vite handles CSS loading via main.tsx import in dev, but for prod we might need this. -->
+      <!-- However, since we renamed to scss, we should rely on Vite injecting it. -->
+      <!-- We'll leave a noscript fallback or rely on built assets. -->
+      <!-- For dev/preview where src is served: -->
+      <noscript><link rel="stylesheet" href="/src/index.scss" /></noscript>
       <title>Aphylia</title>
     </head>
     <body>
