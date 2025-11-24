@@ -285,6 +285,34 @@ const gardenCoverMulter = multer({
 })
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
 
+const blogUploadBucket = (() => {
+  const fromEnv = (process.env.BLOG_UPLOAD_BUCKET || '').trim()
+  if (fromEnv) return fromEnv
+  return adminUploadBucket
+})()
+const blogUploadPrefixRaw = (process.env.BLOG_UPLOAD_PREFIX || 'blog/posts').trim()
+const blogUploadPrefix = blogUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'blog/posts'
+const blogUploadMaxBytes = (() => {
+  const raw = Number(process.env.BLOG_UPLOAD_MAX_BYTES)
+  if (Number.isFinite(raw) && raw > 0) return Math.round(raw)
+  return adminUploadMaxBytes
+})()
+const blogUploadMaxDimension = (() => {
+  const raw = Number(process.env.BLOG_UPLOAD_MAX_DIMENSION)
+  if (Number.isFinite(raw) && raw >= 256 && raw <= 6000) return Math.round(raw)
+  return 2200
+})()
+const blogUploadWebpQuality = (() => {
+  const raw = Number(process.env.BLOG_UPLOAD_WEBP_QUALITY)
+  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
+  return adminUploadWebpQuality
+})()
+const blogUploadMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: blogUploadMaxBytes },
+})
+const singleBlogImageUpload = blogUploadMulter.single('file')
+
 function sanitizeUploadBaseName(name) {
   try {
     const parsed = path.parse(String(name || '')).name || 'upload'
@@ -335,6 +363,58 @@ function buildUploadObjectPath(baseName, typeSegment, prefix = adminUploadPrefix
     `${baseName}-${unique}.webp`,
   ].filter(Boolean)
   return segments.join('/').replace(/\/{2,}/g, '/')
+}
+
+function stripHtmlToPlainText(value, limit = 8000) {
+  if (!value) return ''
+  let working = String(value)
+  working = working
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|section)>/gi, '\n')
+    .replace(/<(p|div|li|h[1-6]|blockquote|section)(\s[^>]*)?>/gi, '\n')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/<[^>]+>/g, ' ')
+  const collapsed = working.replace(/\s+/g, ' ').trim()
+  if (limit > 0 && collapsed.length > limit) {
+    return collapsed.slice(0, limit)
+  }
+  return collapsed
+}
+
+async function summarizeBlogContent({ title, bodyHtml }) {
+  if (!openaiClient) {
+    throw new Error('OpenAI client not configured')
+  }
+  const safeTitle = (typeof title === 'string' && title.trim().length > 0) ? title.trim() : 'Untitled blog post'
+  const plainText = stripHtmlToPlainText(bodyHtml || '', 8000)
+  const promptSections = [
+    'You distill Aphylia blog posts into concise preview blurbs for cards. Keep summaries factual, inviting, and free of markdown.',
+    'Output must be 1-2 sentences, maximum 45 words total. Avoid promotional fluff, hashtags, or emojis.',
+    `Title: ${safeTitle}`,
+    `Body excerpt:\n${plainText || '(no body content provided)'}`,
+  ]
+  const instructions = promptSections.join('\n\n')
+  const response = await openaiClient.responses.create(
+    {
+      model: openaiModel,
+      reasoning: { effort: 'low' },
+      input: instructions,
+    },
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+  )
+  const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+  if (!summary) {
+    throw new Error('AI summary generation returned empty output')
+  }
+  return summary.replace(/\s+/g, ' ').trim()
 }
 
 function parseStoragePublicUrl(url) {
@@ -3522,6 +3602,239 @@ app.post('/api/admin/upload-image', async (req, res) => {
       }
     })
   })
+})
+
+app.options('/api/blog/upload-image', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/blog/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureAdmin(req, res)
+  if (!adminPrincipal) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch {}
+
+  let adminUser = null
+  try {
+    adminUser = await getUserFromRequest(req)
+  } catch {}
+  let adminDisplayName = null
+  if (adminUser?.id) {
+    adminDisplayName = await getAdminProfileName(adminUser.id)
+  }
+
+  singleBlogImageUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(blogUploadMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      try {
+        optimizedBuffer = await sharp(file.buffer)
+          .rotate()
+          .resize({
+            width: blogUploadMaxDimension,
+            height: blogUploadMaxDimension,
+            fit: 'inside',
+            withoutEnlargement: true,
+            fastShrinkOnLoad: true,
+          })
+          .webp({
+            quality: blogUploadWebpQuality,
+            effort: 5,
+            smartSubsample: true,
+          })
+          .toBuffer()
+      } catch (sharpErr) {
+        console.error('[blog-upload-image] failed to convert image to webp', sharpErr)
+        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+        return
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const finalTypeSegment = sanitizePathSegment('webp', 'webp')
+      const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, blogUploadPrefix)
+      const originalTypeSegment = deriveUploadTypeSegment(file.originalname, mime)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(blogUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: 'image/webp',
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[blog-upload-image] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(blogUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      const uploadedAt = new Date().toISOString()
+      const compressionPercent =
+        file.size > 0
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+      const payload = {
+        ok: true,
+        bucket: blogUploadBucket,
+        path: objectPath,
+        url: publicUrl,
+        mimeType: 'image/webp',
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        uploadedAt,
+        quality: blogUploadWebpQuality,
+        compressionPercent,
+      }
+
+      try {
+        await recordAdminMediaUpload({
+          adminId: adminUser?.id || null,
+          adminEmail: adminUser?.email || null,
+          adminName: adminDisplayName || null,
+          bucket: blogUploadBucket,
+          path: objectPath,
+          publicUrl,
+          mimeType: 'image/webp',
+          originalMimeType: mime,
+          sizeBytes: optimizedBuffer.length,
+          originalSizeBytes: file.size,
+          quality: blogUploadWebpQuality,
+          compressionPercent,
+          metadata: {
+            originalName: file.originalname,
+            typeSegment: finalTypeSegment,
+            originalTypeSegment,
+            context: 'blog_post',
+          },
+        })
+      } catch (logErr) {
+        console.error('[blog-upload-image] failed to record admin media upload', logErr)
+      }
+
+      try {
+        const actorId =
+          adminUser?.id ||
+          (typeof adminPrincipal === 'string' && adminPrincipal.length > 0
+            ? adminPrincipal
+            : null)
+        const detail = {
+          bucket: blogUploadBucket,
+          path: objectPath,
+          url: publicUrl,
+          originalMimeType: mime,
+          originalSize: file.size,
+          optimizedSize: optimizedBuffer.length,
+          quality: blogUploadWebpQuality,
+          context: 'blog_post',
+        }
+        if (sql) {
+          try {
+            await sql`
+              insert into public.admin_activity_logs (admin_id, action, target, detail)
+              values (${actorId}, 'upload_blog_image', ${objectPath}, ${sql.json(detail)})
+            `
+          } catch (logErr) {
+            console.error('[blog-upload-image] failed to log admin activity (db)', logErr)
+          }
+        } else {
+          try {
+            await insertAdminActivityViaRest(req, {
+              admin_id: actorId,
+              admin_name: null,
+              action: 'upload_blog_image',
+              target: objectPath,
+              detail,
+            })
+          } catch (restErr) {
+            console.error('[blog-upload-image] failed to log admin activity (rest)', restErr)
+          }
+        }
+      } catch (activityErr) {
+        console.error('[blog-upload-image] failed to record admin activity', activityErr)
+      }
+
+      res.json(payload)
+    })().catch((unhandled) => {
+      console.error('[blog-upload-image] unexpected failure', unhandled)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
+      }
+    })
+  })
+})
+
+app.options('/api/blog/generate-summary', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/blog/generate-summary', async (req, res) => {
+  const caller = await ensureAdmin(req, res)
+  if (!caller) return
+  if (!openaiClient) {
+    res.status(503).json({ error: 'AI summary generation is not configured' })
+    return
+  }
+  const body = req.body || {}
+  const title = typeof body.title === 'string' ? body.title : ''
+  const bodyHtml = typeof body.bodyHtml === 'string' ? body.bodyHtml : ''
+  if (!title && !bodyHtml) {
+    res.status(400).json({ error: 'Provide a title or body to summarize' })
+    return
+  }
+  try {
+    const summary = await summarizeBlogContent({ title, bodyHtml })
+    res.json({ ok: true, summary })
+  } catch (err) {
+    console.error('[blog-summary] failed to generate summary', err)
+    res.status(500).json({ error: err?.message || 'Failed to generate summary' })
+  }
 })
 
 app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
