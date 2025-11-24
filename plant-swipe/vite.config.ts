@@ -98,6 +98,7 @@ export default defineConfig({
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'recharts': ['recharts'],
+          'three': ['three'],
           'supabase': ['@supabase/supabase-js'],
           'ui-components': ['@radix-ui/react-dialog', '@radix-ui/react-label', '@radix-ui/react-slot'],
         },
