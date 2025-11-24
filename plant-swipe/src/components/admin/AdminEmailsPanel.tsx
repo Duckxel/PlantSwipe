@@ -7,17 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
-  Info,
   Mail,
   Plus,
   RefreshCw,
@@ -28,11 +19,10 @@ import {
   Square,
   Loader2,
 } from "lucide-react"
-import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
-import { VariableHighlighter } from "@/components/tiptap-extensions/variable-highlighter"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabaseClient"
+import { useNavigate } from "react-router-dom"
 
 type EmailTemplate = {
   id: string
@@ -72,10 +62,6 @@ type EmailCampaign = {
   createdAt: string
   updatedAt: string
 }
-
-const VARIABLE_CATALOG = [
-  { token: "{{user}}", description: "Replaced with the user's display name" },
-]
 
 async function buildAdminHeaders() {
   const session = (await supabase.auth.getSession()).data.session
@@ -142,32 +128,12 @@ const statusBadgeClass = (status: string) => {
 }
 
 export const AdminEmailsPanel: React.FC = () => {
+  const navigate = useNavigate()
   const [activeView, setActiveView] = React.useState<"campaigns" | "templates">("campaigns")
   const [templates, setTemplates] = React.useState<EmailTemplate[]>([])
   const [campaigns, setCampaigns] = React.useState<EmailCampaign[]>([])
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
   const [loadingCampaigns, setLoadingCampaigns] = React.useState(false)
-  const [templateDialogOpen, setTemplateDialogOpen] = React.useState(false)
-  const [variableInfoOpen, setVariableInfoOpen] = React.useState(false)
-  const [editingTemplate, setEditingTemplate] = React.useState<EmailTemplate | null>(null)
-  const [templateEditorKey, setTemplateEditorKey] = React.useState(() => `template-${Date.now()}`)
-  const templateEditorRef = React.useRef<BlogEditorHandle>(null)
-  const [templateForm, setTemplateForm] = React.useState<{
-    title: string
-    subject: string
-    previewText: string
-    description: string
-    bodyHtml: string
-    bodyDoc: JSONContent | null
-  }>({
-    title: "",
-    subject: "",
-    previewText: "",
-    description: "",
-    bodyHtml: "",
-    bodyDoc: null,
-  })
-  const [templateSaving, setTemplateSaving] = React.useState(false)
 
   const [campaignForm, setCampaignForm] = React.useState({
     title: "",
@@ -214,70 +180,6 @@ export const AdminEmailsPanel: React.FC = () => {
     loadTemplates().catch(() => {})
     loadCampaigns().catch(() => {})
   }, [loadTemplates, loadCampaigns])
-
-  const resetTemplateForm = React.useCallback(() => {
-    setTemplateForm({
-      title: editingTemplate?.title || "",
-      subject: editingTemplate?.subject || "",
-      previewText: editingTemplate?.previewText || "",
-      description: editingTemplate?.description || "",
-      bodyHtml: editingTemplate?.bodyHtml || "",
-      bodyDoc: editingTemplate?.bodyJson || null,
-    })
-    setTemplateEditorKey(`template-${editingTemplate?.id || "new"}-${Date.now()}`)
-  }, [editingTemplate])
-
-  const openTemplateDialog = React.useCallback(
-    (template?: EmailTemplate) => {
-      setEditingTemplate(template ?? null)
-      setTemplateDialogOpen(true)
-    },
-    [setEditingTemplate],
-  )
-
-  React.useEffect(() => {
-    if (templateDialogOpen) {
-      resetTemplateForm()
-    }
-  }, [templateDialogOpen, resetTemplateForm])
-
-  const handleTemplateSubmit = React.useCallback(async () => {
-    if (!templateForm.title.trim() || !templateForm.subject.trim() || !templateForm.bodyHtml.trim()) {
-      alert("Template title, subject, and body are required.")
-      return
-    }
-    setTemplateSaving(true)
-    try {
-      const headers = await buildAdminHeaders()
-      const payload = {
-        title: templateForm.title.trim(),
-        subject: templateForm.subject.trim(),
-        previewText: templateForm.previewText.trim(),
-        description: templateForm.description.trim(),
-        bodyHtml: templateForm.bodyHtml,
-        bodyJson: templateForm.bodyDoc,
-        isActive: true,
-      }
-      const endpoint = editingTemplate
-        ? `/api/admin/email-templates/${encodeURIComponent(editingTemplate.id)}`
-        : "/api/admin/email-templates"
-      const method = editingTemplate ? "PUT" : "POST"
-      const resp = await fetch(endpoint, {
-        method,
-        headers,
-        credentials: "same-origin",
-        body: JSON.stringify(payload),
-      })
-      const data = await resp.json().catch(() => ({}))
-      if (!resp.ok) throw new Error(data?.error || "Failed to save template")
-      setTemplateDialogOpen(false)
-      loadTemplates().catch(() => {})
-    } catch (err) {
-      alert((err as Error).message)
-    } finally {
-      setTemplateSaving(false)
-    }
-  }, [editingTemplate, templateForm, loadTemplates])
 
   const handleDeleteTemplate = React.useCallback(
     async (template: EmailTemplate) => {
@@ -370,6 +272,7 @@ export const AdminEmailsPanel: React.FC = () => {
           method: "POST",
           headers,
           credentials: "same-origin",
+          body: JSON.stringify({}),
         })
         const data = await resp.json().catch(() => ({}))
         if (!resp.ok) throw new Error(data?.error || "Failed to cancel campaign")
@@ -427,10 +330,7 @@ export const AdminEmailsPanel: React.FC = () => {
         ) : (
           <Button
             className="rounded-2xl"
-            onClick={() => {
-              setEditingTemplate(null)
-              setTemplateDialogOpen(true)
-            }}
+            onClick={() => navigate("/admin/emails/templates/create")}
           >
             <Plus className="mr-2 h-4 w-4" /> New Template
           </Button>
@@ -472,7 +372,7 @@ export const AdminEmailsPanel: React.FC = () => {
                         <p className="text-sm text-muted-foreground">{template.subject}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openTemplateDialog(template)}>
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/admin/emails/templates/${template.id}`)}>
                           Edit
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => handleDeleteTemplate(template)}>
@@ -591,117 +491,6 @@ export const AdminEmailsPanel: React.FC = () => {
           </CardContent>
         </Card>
       )}
-
-      <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{editingTemplate ? "Edit Template" : "New Template"}</DialogTitle>
-            <DialogDescription>Design the HTML that will be sent to every user.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="template-title">Title</Label>
-              <Input
-                id="template-title"
-                value={templateForm.title}
-                onChange={(event) =>
-                  setTemplateForm((prev) => ({ ...prev, title: event.target.value }))
-                }
-                placeholder="Monthly Newsletter"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="template-subject">Subject</Label>
-              <Input
-                id="template-subject"
-                value={templateForm.subject}
-                onChange={(event) =>
-                  setTemplateForm((prev) => ({ ...prev, subject: event.target.value }))
-                }
-                placeholder="What's new in your garden, {{user}}?"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="template-preview">Preview text (optional)</Label>
-              <Input
-                id="template-preview"
-                value={templateForm.previewText}
-                onChange={(event) =>
-                  setTemplateForm((prev) => ({ ...prev, previewText: event.target.value }))
-                }
-                placeholder="A short teaser shown next to the subject"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="template-description">Description</Label>
-              <Textarea
-                id="template-description"
-                value={templateForm.description}
-                onChange={(event) =>
-                  setTemplateForm((prev) => ({ ...prev, description: event.target.value }))
-                }
-                placeholder="Internal notes"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Body</Label>
-              <BlogEditor
-                key={templateEditorKey}
-                ref={templateEditorRef}
-                initialHtml={templateForm.bodyHtml}
-                initialDocument={templateForm.bodyDoc}
-                uploadFolder="email-templates"
-                extraExtensions={[VariableHighlighter]}
-                toolbarAppend={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full"
-                    onClick={() => setVariableInfoOpen(true)}
-                  >
-                    <Info className="h-4 w-4" />
-                  </Button>
-                }
-                onUpdate={({ html, doc }) =>
-                  setTemplateForm((prev) => ({ ...prev, bodyHtml: html, bodyDoc: doc }))
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>
-              Close
-            </Button>
-            <Button onClick={handleTemplateSubmit} disabled={templateSaving}>
-              {templateSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save Template
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={variableInfoOpen} onOpenChange={setVariableInfoOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Available variables</DialogTitle>
-            <DialogDescription>Use these tokens to personalize outgoing emails.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            {VARIABLE_CATALOG.map((variable) => (
-              <div key={variable.token} className="rounded-xl border p-3">
-                <Badge variant="secondary">{variable.token}</Badge>
-                <p className="mt-1 text-sm text-muted-foreground">{variable.description}</p>
-              </div>
-            ))}
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setVariableInfoOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="w-full max-w-xl">
