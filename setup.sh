@@ -1369,6 +1369,67 @@ WantedBy=multi-user.target
 EOF
 "
 
+SITEMAP_HELPER_SRC="$REPO_DIR/scripts/update-sitemap.sh"
+SITEMAP_HELPER_DST="/usr/local/bin/plantswipe-update-sitemap"
+SITEMAP_SERVICE_FILE="/etc/systemd/system/plantswipe-sitemap.service"
+SITEMAP_TIMER_FILE="/etc/systemd/system/plantswipe-sitemap.timer"
+SITEMAP_TIMER_SCHEDULE="${PLANTSWIPE_SITEMAP_SCHEDULE:-*-*-* 03:30:00}"
+SITEMAP_TIMER_DELAY="${PLANTSWIPE_SITEMAP_RANDOM_DELAY:-900}"
+SITEMAP_HELPER_INSTALLED=false
+SITEMAP_TIMER_AVAILABLE=false
+
+if [[ -f "$SITEMAP_HELPER_SRC" ]]; then
+  log "Installing sitemap helper to $SITEMAP_HELPER_DST…"
+  $SUDO install -D -m 0755 "$SITEMAP_HELPER_SRC" "$SITEMAP_HELPER_DST"
+  SITEMAP_HELPER_INSTALLED=true
+else
+  log "[WARN] Sitemap helper script not found at $SITEMAP_HELPER_SRC; skipping helper install."
+fi
+
+if [[ "$SITEMAP_HELPER_INSTALLED" == "true" ]]; then
+  log "Installing sitemap regeneration service + timer (schedule: $SITEMAP_TIMER_SCHEDULE)…"
+  $SUDO bash -c "cat > '$SITEMAP_SERVICE_FILE' <<EOF
+[Unit]
+Description=Regenerate PlantSwipe sitemap
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=$SERVICE_USER
+Group=$SERVICE_USER
+Environment="PLANTSWIPE_REPO_DIR=$REPO_DIR"
+Environment="PLANTSWIPE_NODE_DIR=$NODE_DIR"
+EnvironmentFile=$SERVICE_ENV_FILE
+WorkingDirectory=$REPO_DIR
+ExecStart=$SITEMAP_HELPER_DST
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+"
+
+  $SUDO bash -c "cat > '$SITEMAP_TIMER_FILE' <<EOF
+[Unit]
+Description=Daily PlantSwipe sitemap refresh
+
+[Timer]
+OnCalendar=$SITEMAP_TIMER_SCHEDULE
+RandomizedDelaySec=$SITEMAP_TIMER_DELAY
+Persistent=true
+Unit=plantswipe-sitemap.service
+
+[Install]
+WantedBy=timers.target
+EOF
+"
+
+  SITEMAP_TIMER_AVAILABLE=true
+else
+  log "[WARN] Skipping sitemap service/timer installation because the helper script was not installed."
+fi
+
 # Ensure ownership for admin dir (www-data runs the service)
 $SUDO chown -R www-data:www-data "$ADMIN_DIR" || true
 
@@ -1402,8 +1463,15 @@ fi
 # Enable and restart services to pick up updated unit files
 log "Enabling and restarting services…"
 $SUDO systemctl daemon-reload
-$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX"
+ENABLE_UNITS=("$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX")
+if [[ "$SITEMAP_TIMER_AVAILABLE" == "true" ]]; then
+  ENABLE_UNITS+=("plantswipe-sitemap.timer")
+fi
+$SUDO systemctl enable "${ENABLE_UNITS[@]}"
 $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
+if [[ "$SITEMAP_TIMER_AVAILABLE" == "true" ]]; then
+  $SUDO systemctl start plantswipe-sitemap.timer || log "[WARN] Failed to start plantswipe-sitemap.timer"
+fi
 
 # Final nginx reload to apply site links (only if nginx config is valid)
 log "Reloading nginx…"

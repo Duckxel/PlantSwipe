@@ -659,6 +659,7 @@ Ensure production environment variables are set:
 - **Supabase access**: provide `SUPABASE_URL` plus either `SUPABASE_SERVICE_ROLE_KEY` or `VITE_SUPABASE_ANON_KEY`. When credentials are missing the script logs a warning and falls back to static URLs only.
 - **Locales**: language variants are inferred from `public/locales/<lang>` and mirrored for every route, respecting `VITE_APP_BASE_PATH` for sub-path deployments.
 - Run `npm run generate:sitemap` manually any time you need to reissue the sitemap without rebuilding the rest of the bundle.
+- `scripts/update-sitemap.sh` performs that standalone regeneration on the server. `setup.sh` installs it to `/usr/local/bin/plantswipe-update-sitemap` and wires a `plantswipe-sitemap.timer` systemd timer (default schedule: daily at 03:30 UTC with a 15-minute randomized delay). Adjust the cadence before running `setup.sh` via `PLANTSWIPE_SITEMAP_SCHEDULE` / `PLANTSWIPE_SITEMAP_RANDOM_DELAY`, or trigger an on-demand refresh with `sudo systemctl start plantswipe-sitemap.service`.
 
 ### Local Deployments
 
