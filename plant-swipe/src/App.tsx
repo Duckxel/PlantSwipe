@@ -1,7 +1,7 @@
 import React from 'react'
 const PlantSwipe = React.lazy(() => import("@/PlantSwipe"))
 import ServiceWorkerToast from '@/components/pwa/ServiceWorkerToast'
-import { AuthProvider, useAuth } from '@/context/AuthContext'
+import { AuthProvider } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
