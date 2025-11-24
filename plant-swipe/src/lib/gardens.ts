@@ -1626,6 +1626,38 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
   }
 }
 
+export async function resyncMultipleGardensTasks(gardenIds: string[], startIso: string, endIso: string): Promise<void> {
+  if (gardenIds.length === 0) return
+
+  // Try RPC first (fast path)
+  const rpcName = 'ensure_gardens_tasks_occurrences'
+  if (!missingSupabaseRpcs.has(rpcName)) {
+    try {
+      const { error } = await supabase.rpc(rpcName, {
+        _garden_ids: gardenIds,
+        _start_iso: startIso,
+        _end_iso: endIso,
+      })
+      if (!error) return
+
+      if (error && !(isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName))) {
+        console.warn('[gardens] ensure_gardens_tasks_occurrences RPC failed, falling back to parallel JS:', error)
+      }
+    } catch (err: any) {
+      if (!(isMissingRpcFunction(err, rpcName) || isRpcDependencyUnavailable(err, rpcName))) {
+        console.warn('[gardens] ensure_gardens_tasks_occurrences RPC failed, falling back to parallel JS:', err)
+      }
+    }
+  }
+
+  // Fallback to parallel JS calls (batch in chunks of 5 to avoid connection limits)
+  const chunkSize = 5
+  for (let i = 0; i < gardenIds.length; i += chunkSize) {
+    const chunk = gardenIds.slice(i, i + chunkSize)
+    await Promise.all(chunk.map(gid => resyncTaskOccurrencesForGarden(gid, startIso, endIso)))
+  }
+}
+
 export async function createPatternTask(params: {
   gardenId: string
   gardenPlantId: string

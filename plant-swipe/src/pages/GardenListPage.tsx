@@ -22,6 +22,7 @@ import {
   listOccurrencesForTasks,
   listOccurrencesForMultipleGardens,
   resyncTaskOccurrencesForGarden,
+  resyncMultipleGardensTasks,
   progressTaskOccurrence,
   listCompletionsForOccurrences,
   logGardenActivity,
@@ -644,16 +645,16 @@ export const GardenListPage: React.FC = () => {
         // 2) Resync only if needed and not cached recently
         // IMPORTANT: When skipResync=false, always resync to ensure task occurrences exist
         if (!skipResync) {
-          const resyncPromises = gardensList.map(async (g) => {
+          // Use optimized server-side batch resync
+          const gardenIdsToSync = gardensList.map((g) => g.id);
+          await resyncMultipleGardensTasks(gardenIdsToSync, startIso, endIso);
+
+          // Update cache timestamps
+          const now = Date.now();
+          for (const g of gardensList) {
             const cacheKey = `${g.id}::${today}`;
-            const lastResync = resyncCacheRef.current[cacheKey] || 0;
-            const now = Date.now();
-            // Always resync if skipResync=false, even if cached recently
-            // This ensures new tasks get their occurrences created
-            await resyncTaskOccurrencesForGarden(g.id, startIso, endIso);
             resyncCacheRef.current[cacheKey] = now;
-          });
-          await Promise.all(resyncPromises);
+          }
         }
 
         // 3) Load occurrences for all gardens in a single batched query (reduces egress)

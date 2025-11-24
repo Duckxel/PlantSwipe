@@ -5285,3 +5285,138 @@ do $$ begin
     using (user_id = (select auth.uid()))
     with check (user_id = (select auth.uid()));
 end $$;
+
+-- Optimization: server-side task occurrence generation (fast path for dashboard)
+CREATE OR REPLACE FUNCTION public.ensure_gardens_tasks_occurrences(
+  _garden_ids uuid[],
+  _start_iso timestamptz,
+  _end_iso timestamptz
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _start_date date := date(_start_iso);
+  _end_date date := date(_end_iso);
+  _task record;
+  _curr date;
+  _curr_ts timestamptz;
+  _occurrence_due timestamptz;
+  _match boolean;
+  _ymd text;
+  _mm text;
+  _dd text;
+  _weekday int;
+  _week_index int;
+  _key text;
+  _interval interval;
+BEGIN
+  -- Loop through all relevant tasks in the given gardens
+  FOR _task IN
+    SELECT *
+    FROM garden_plant_tasks
+    WHERE garden_id = ANY(_garden_ids)
+      -- Only active tasks (if archived_at exists, otherwise ignore)
+      -- AND (archived_at IS NULL) 
+  LOOP
+    -- One time date
+    IF _task.schedule_kind = 'one_time_date' THEN
+      IF _task.due_at IS NOT NULL THEN
+         _occurrence_due := (_task.due_at::date || 'T12:00:00.000Z')::timestamptz;
+         IF _occurrence_due >= _start_iso AND _occurrence_due <= _end_iso THEN
+           INSERT INTO garden_plant_task_occurrences (task_id, garden_plant_id, due_at, required_count)
+           VALUES (_task.id, _task.garden_plant_id, _occurrence_due, GREATEST(1, _task.required_count))
+           ON CONFLICT (task_id, due_at) DO NOTHING;
+         END IF;
+      END IF;
+
+    -- One time duration
+    ELSIF _task.schedule_kind = 'one_time_duration' THEN
+       _occurrence_due := (_task.created_at + (_task.interval_amount || ' ' || _task.interval_unit)::interval);
+       _occurrence_due := (_occurrence_due::date || 'T12:00:00.000Z')::timestamptz;
+       IF _occurrence_due >= _start_iso AND _occurrence_due <= _end_iso THEN
+         INSERT INTO garden_plant_task_occurrences (task_id, garden_plant_id, due_at, required_count)
+         VALUES (_task.id, _task.garden_plant_id, _occurrence_due, GREATEST(1, _task.required_count))
+         ON CONFLICT (task_id, due_at) DO NOTHING;
+       END IF;
+
+    -- Repeat duration
+    ELSIF _task.schedule_kind = 'repeat_duration' THEN
+       IF _task.interval_amount > 0 THEN
+         _interval := (_task.interval_amount || ' ' || _task.interval_unit)::interval;
+         _curr_ts := _task.created_at;
+         
+         -- Optimization: if start date is far ahead, we could skip loops, but for now simple loop to ensure correctness
+         -- JS logic does the same loop
+         WHILE _curr_ts < _start_iso LOOP
+            _curr_ts := _curr_ts + _interval;
+         END LOOP;
+         
+         WHILE _curr_ts <= _end_iso LOOP
+            _occurrence_due := (_curr_ts::date || 'T12:00:00.000Z')::timestamptz;
+            -- Only insert if valid date (sanity check)
+            IF _occurrence_due IS NOT NULL THEN
+              INSERT INTO garden_plant_task_occurrences (task_id, garden_plant_id, due_at, required_count)
+              VALUES (_task.id, _task.garden_plant_id, _occurrence_due, GREATEST(1, _task.required_count))
+              ON CONFLICT (task_id, due_at) DO NOTHING;
+            END IF;
+            _curr_ts := _curr_ts + _interval;
+         END LOOP;
+       END IF;
+
+    -- Repeat pattern
+    ELSIF _task.schedule_kind = 'repeat_pattern' THEN
+       _curr := _start_date;
+       WHILE _curr <= _end_date LOOP
+          _match := false;
+          _weekday := extract(dow from _curr); -- 0-6 (Sun-Sat)
+          _dd := to_char(_curr, 'DD');
+          _mm := to_char(_curr, 'MM');
+          _ymd := to_char(_curr, 'MM-DD');
+
+          IF _task.period = 'week' THEN
+             IF _task.weekly_days IS NOT NULL AND _weekday = ANY(_task.weekly_days) THEN
+                _match := true;
+             END IF;
+          ELSIF _task.period = 'month' THEN
+             IF _task.monthly_days IS NOT NULL AND extract(day from _curr)::int = ANY(_task.monthly_days) THEN
+                _match := true;
+             END IF;
+             IF NOT _match AND _task.monthly_nth_weekdays IS NOT NULL THEN
+                _week_index := floor((extract(day from _curr) - 1) / 7) + 1;
+                _key := _week_index || '-' || _weekday;
+                IF _key = ANY(_task.monthly_nth_weekdays) THEN
+                   _match := true;
+                END IF;
+             END IF;
+          ELSIF _task.period = 'year' THEN
+             IF _task.yearly_days IS NOT NULL AND _ymd = ANY(_task.yearly_days) THEN
+                _match := true;
+             END IF;
+             IF NOT _match AND _task.yearly_days IS NOT NULL THEN
+                _week_index := floor((extract(day from _curr) - 1) / 7) + 1;
+                _key := _mm || '-' || _week_index || '-' || _weekday;
+                IF _key = ANY(_task.yearly_days) THEN
+                   _match := true;
+                END IF;
+             END IF;
+          END IF;
+
+          IF _match THEN
+             _occurrence_due := (_curr || 'T12:00:00.000Z')::timestamptz;
+             INSERT INTO garden_plant_task_occurrences (task_id, garden_plant_id, due_at, required_count)
+             VALUES (_task.id, _task.garden_plant_id, _occurrence_due, GREATEST(1, _task.required_count))
+             ON CONFLICT (task_id, due_at) DO NOTHING;
+          END IF;
+
+          _curr := _curr + 1;
+       END LOOP;
+
+    END IF;
+  END LOOP;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ensure_gardens_tasks_occurrences(uuid[], timestamptz, timestamptz) TO authenticated;
