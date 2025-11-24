@@ -88,7 +88,7 @@ export async function fetchBlogPosts(opts?: { includeDrafts?: boolean; limit?: n
   }
 
   if (!opts?.includeDrafts) {
-    query.eq('is_published', true)
+    query.eq('is_published', true).lte('published_at', new Date().toISOString())
   }
 
   const { data, error } = await query

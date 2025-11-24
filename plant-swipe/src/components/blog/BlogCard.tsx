@@ -26,6 +26,10 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
   const { t } = useTranslation('common')
   const publishedLabel = formatDateTime(post.publishedAt)
   const authorLabel = post.authorName || t('blogPage.card.unknownAuthor', { defaultValue: 'Team Aphylia' })
+  const now = Date.now()
+  const publishTime = Date.parse(post.publishedAt)
+  const isScheduled = post.isPublished && publishTime > now
+  const statusBadge = !post.isPublished ? 'draft' : isScheduled ? 'scheduled' : null
 
   return (
     <Card className="rounded-3xl overflow-hidden border border-stone-200 dark:border-[#3e3e42] flex flex-col bg-white/80 dark:bg-[#1f1f1f] shadow-sm hover:shadow-lg transition-shadow">
@@ -48,9 +52,14 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
         <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
           <CalendarClock className="h-4 w-4" aria-hidden="true" />
           <span>{publishedLabel}</span>
-          {isAdmin && !post.isPublished ? (
-            <Badge variant="secondary" className="ml-auto rounded-2xl uppercase tracking-wide text-[10px]">
-              {t('blogPage.card.draftBadge', { defaultValue: 'Draft' })}
+          {isAdmin && statusBadge ? (
+            <Badge
+              variant="secondary"
+              className={`ml-auto rounded-2xl uppercase tracking-wide text-[10px] ${statusBadge === 'scheduled' ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100' : ''}`}
+            >
+              {statusBadge === 'draft'
+                ? t('blogPage.card.draftBadge', { defaultValue: 'Draft' })
+                : t('blogPage.card.scheduledBadge', { defaultValue: 'Scheduled' })}
             </Badge>
           ) : null}
         </div>

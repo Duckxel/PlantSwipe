@@ -17,12 +17,25 @@ import { fetchBlogPosts, saveBlogPost } from '@/lib/blogs'
 
 const DEFAULT_EDITOR_HTML = `<h2>New Aphylia story</h2><p>Use the editor to share releases, field reports, or garden learnings.</p>`
 
+const formatDateTimeLocal = (value: string | Date) => {
+  const date = value instanceof Date ? value : new Date(value)
+  const pad = (num: number) => num.toString().padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 const sortPostsByDate = (list: BlogPost[]) =>
   [...list].sort((a, b) => {
     const aTime = Date.parse(a.publishedAt || a.createdAt)
     const bTime = Date.parse(b.publishedAt || b.createdAt)
     return bTime - aTime
   })
+
+const formatDisplayDate = (value?: string) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
 
 export default function BlogPage() {
   const { t } = useTranslation('common')
@@ -36,13 +49,20 @@ export default function BlogPage() {
   const [formTitle, setFormTitle] = React.useState('')
   const [coverUrl, setCoverUrl] = React.useState('')
   const [excerpt, setExcerpt] = React.useState('')
-  const [publishNow, setPublishNow] = React.useState(true)
+  const [publishMode, setPublishMode] = React.useState<'draft' | 'scheduled'>('scheduled')
+  const [publishAt, setPublishAt] = React.useState(formatDateTimeLocal(new Date()))
   const [formError, setFormError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [initialHtml, setInitialHtml] = React.useState<string | null>(null)
   const [initialDocument, setInitialDocument] = React.useState<JSONContent | null>(null)
   const editorRef = React.useRef<BlogEditorHandle | null>(null)
   const isAdmin = Boolean(profile?.is_admin)
+
+  React.useEffect(() => {
+    if (publishMode === 'scheduled' && !publishAt) {
+      setPublishAt(formatDateTimeLocal(new Date()))
+    }
+  }, [publishMode, publishAt])
 
   const seoTitle = t('seo.blog.listTitle', { defaultValue: 'Aphylia Blog' })
   const seoDescription = t('seo.blog.listDescription', {
@@ -78,7 +98,8 @@ export default function BlogPage() {
     setFormTitle('')
     setCoverUrl('')
     setExcerpt('')
-    setPublishNow(true)
+    setPublishMode('scheduled')
+    setPublishAt(formatDateTimeLocal(new Date()))
     setFormError(null)
     setInitialHtml(null)
     setInitialDocument(null)
@@ -92,7 +113,8 @@ export default function BlogPage() {
     setFormTitle('')
     setCoverUrl('')
     setExcerpt('')
-    setPublishNow(true)
+    setPublishMode('scheduled')
+    setPublishAt(formatDateTimeLocal(new Date()))
     setInitialHtml(DEFAULT_EDITOR_HTML)
     setInitialDocument(null)
     setFormError(null)
@@ -106,7 +128,8 @@ export default function BlogPage() {
     setFormTitle(post.title)
     setCoverUrl(post.coverImageUrl ?? '')
     setExcerpt(post.excerpt ?? '')
-    setPublishNow(post.isPublished)
+    setPublishMode(post.isPublished ? 'scheduled' : 'draft')
+    setPublishAt(formatDateTimeLocal(post.publishedAt))
     setInitialHtml(post.bodyHtml)
     setInitialDocument((post.editorData as JSONContent | null) ?? null)
     setFormError(null)
@@ -128,12 +151,17 @@ export default function BlogPage() {
       setFormError(t('blogPage.editor.validation.author', { defaultValue: 'Missing author information.' }))
       return
     }
+    if (publishMode === 'scheduled' && !publishAt) {
+      setFormError(t('blogPage.editor.validation.publishAt', { defaultValue: 'Please provide a publish date.' }))
+      return
+    }
 
     setSaving(true)
     setFormError(null)
     try {
       const html = editorInstance.getHtml()
       const doc = editorInstance.getDocument()
+      const publishDateIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString()
       const { data, error: saveError } = await saveBlogPost({
         id: editingPost?.id,
         slug: editingPost?.slug,
@@ -141,7 +169,8 @@ export default function BlogPage() {
         bodyHtml: html,
         coverImageUrl: coverUrl || null,
         excerpt: excerpt || undefined,
-        isPublished: publishNow,
+        isPublished: publishMode === 'scheduled',
+        publishedAt: publishDateIso,
         authorId,
         authorName: profile?.display_name || profile?.username || user?.email || 'Aphylia Team',
         editorData: doc ?? undefined,
@@ -204,7 +233,7 @@ export default function BlogPage() {
         {isAdmin && (
           <p className="text-xs text-stone-500 dark:text-stone-400 max-w-3xl">
             {t('blogPage.hero.helper', {
-              defaultValue: 'Admins can author new posts with the GrapesJS builder below. Drafts remain private until published.',
+              defaultValue: 'Admins can author new posts with the Notion-style builder below. Drafts remain private until published.',
             })}
           </p>
         )}
@@ -265,9 +294,14 @@ export default function BlogPage() {
             </DialogTitle>
             <DialogDescription>
               {t('blogPage.editor.description', {
-                defaultValue: 'Use the visual GrapesJS canvas to compose your article without writing code.',
+                defaultValue: 'Use the Notion-style TipTap canvas to compose rich articles without touching code.',
               })}
             </DialogDescription>
+            {editingPost && (
+              <p className="text-xs text-stone-500 dark:text-stone-400">
+                {t('blogPage.editor.createdAtLabel', { defaultValue: 'Created' })}: {formatDisplayDate(editingPost.createdAt)}
+              </p>
+            )}
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid gap-3">
@@ -308,18 +342,56 @@ export default function BlogPage() {
                 placeholder={t('blogPage.editor.excerptPlaceholder', { defaultValue: 'One or two sentences that appear on the card.' })}
               />
             </div>
-            <label className="flex items-center gap-3 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-                checked={publishNow}
-                onChange={(event) => setPublishNow(event.target.checked)}
-              />
-              {t('blogPage.editor.publishToggle', { defaultValue: 'Publish immediately' })}
-            </label>
+            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 space-y-3">
+              <p className="text-sm font-medium">
+                {t('blogPage.editor.visibilityLabel', { defaultValue: 'Visibility' })}
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="blog-publish-mode"
+                    value="draft"
+                    checked={publishMode === 'draft'}
+                    onChange={() => setPublishMode('draft')}
+                    className="h-4 w-4 border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  {t('blogPage.editor.publishModeDraft', { defaultValue: 'Draft (keep hidden)' })}
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="blog-publish-mode"
+                    value="scheduled"
+                    checked={publishMode === 'scheduled'}
+                    onChange={() => setPublishMode('scheduled')}
+                    className="h-4 w-4 border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  {t('blogPage.editor.publishModeScheduled', { defaultValue: 'Schedule / publish' })}
+                </label>
+              </div>
+              {publishMode === 'scheduled' && (
+                <div className="grid gap-2">
+                  <Label htmlFor="publish-at">
+                    {t('blogPage.editor.publishAtLabel', { defaultValue: 'Publish on' })}
+                  </Label>
+                  <Input
+                    id="publish-at"
+                    type="datetime-local"
+                    value={publishAt}
+                    onChange={(event) => setPublishAt(event.target.value)}
+                  />
+                  <p className="text-xs text-stone-500">
+                    {t('blogPage.editor.publishAtHelper', {
+                      defaultValue: 'This page becomes publicly visible once this local date/time is reached.',
+                    })}
+                  </p>
+                </div>
+              )}
+            </div>
             <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-3 text-xs text-stone-500 dark:text-stone-400">
               {t('blogPage.editor.canvasHelper', {
-                defaultValue: 'Drag blocks from the top-left panel, tweak text inline, and keep styles consistent. Your HTML is auto-sanitized.',
+                defaultValue: 'Use the toolbar or slash menu to add blocks, quotes, dividers, and embeds. Everything is auto-sanitized.',
               })}
             </div>
             <BlogEditor

@@ -9,6 +9,7 @@ import { Link } from '@/components/i18n/Link'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import type { BlogPost } from '@/types/blog'
 import { fetchBlogPost } from '@/lib/blogs'
+import { useAuth } from '@/context/AuthContext'
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return ''
@@ -20,6 +21,7 @@ const formatDateTime = (value?: string | null) => {
 export default function BlogPostPage() {
   const { slug } = useParams<{ slug: string }>()
   const { t } = useTranslation('common')
+  const { profile } = useAuth()
   const [post, setPost] = React.useState<BlogPost | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -47,6 +49,17 @@ export default function BlogPostPage() {
 
   const publishedLabel = formatDateTime(post?.publishedAt)
   const authorLabel = post?.authorName || t('blogPage.card.unknownAuthor', { defaultValue: 'Team Aphylia' })
+  const isAdmin = Boolean(profile?.is_admin)
+  const isDraft = post ? !post.isPublished : false
+  const isScheduled = post ? post.isPublished && Date.parse(post.publishedAt) > Date.now() : false
+
+  React.useEffect(() => {
+    if (!post) return
+    if ((isDraft || isScheduled) && !isAdmin) {
+      setError(t('blogPage.detail.notFound', { defaultValue: 'This post does not exist anymore.' }))
+      setPost(null)
+    }
+  }, [post, isDraft, isScheduled, isAdmin, t])
 
   const sanitizedHtml = React.useMemo(() => {
     if (!post?.bodyHtml) return ''
@@ -105,9 +118,14 @@ export default function BlogPostPage() {
                     {publishedLabel}
                   </span>
                 )}
-                {!post.isPublished && (
-                  <Badge variant="secondary" className="rounded-2xl uppercase tracking-wide text-[10px]">
-                    {t('blogPage.card.draftBadge', { defaultValue: 'Draft' })}
+                {(isDraft || isScheduled) && (
+                  <Badge
+                    variant="secondary"
+                    className={`rounded-2xl uppercase tracking-wide text-[10px] ${isScheduled ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50' : ''}`}
+                  >
+                    {isDraft
+                      ? t('blogPage.card.draftBadge', { defaultValue: 'Draft' })
+                      : t('blogPage.card.scheduledBadge', { defaultValue: 'Scheduled' })}
                   </Badge>
                 )}
               </div>
@@ -124,6 +142,14 @@ export default function BlogPostPage() {
                 />
               </div>
             ) : null}
+
+            {(isDraft || isScheduled) && (
+              <div className="rounded-2xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50/60 dark:bg-[#1b1b1b] p-4 text-sm text-stone-600 dark:text-stone-300">
+                {isDraft
+                  ? t('blogPage.detail.statusDraftNotice', { defaultValue: 'This story is still a draft. Only admins can see this preview.' })
+                  : t('blogPage.detail.statusScheduledNotice', { defaultValue: 'This story is scheduled. Readers will see it once the publish date is reached.' })}
+              </div>
+            )}
 
             <div
               className="space-y-4 leading-relaxed text-stone-700 dark:text-stone-200"

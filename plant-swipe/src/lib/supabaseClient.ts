@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { getEnvAny } from '@/lib/utils'
+import type { JSONContent } from '@tiptap/core'
 
 // Frontend should only consume public env vars. Accept common prefixes for portability.
 const supabaseUrl = getEnvAny([
@@ -68,7 +69,7 @@ export type BlogPostRow = {
   title: string
   slug: string
   body_html: string
-  editor_data: Record<string, unknown> | null
+  editor_data: JSONContent | null
   author_id: string
   author_name: string | null
   cover_image_url: string | null

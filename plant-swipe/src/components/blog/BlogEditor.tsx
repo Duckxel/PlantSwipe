@@ -1,9 +1,14 @@
 import { forwardRef, useImperativeHandle } from 'react'
-import { EditorContent, useEditor } from '@tiptap/react'
+import { EditorContent, useEditor, BubbleMenu, FloatingMenu } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import Underline from '@tiptap/extension-underline'
+import Placeholder from '@tiptap/extension-placeholder'
+import CharacterCount from '@tiptap/extension-character-count'
+import Typography from '@tiptap/extension-typography'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
 import type { JSONContent } from '@tiptap/core'
 import { Bold, Heading1, Heading2, Heading3, ImageIcon, Italic, LinkIcon, ListOrdered, List, Underline as UnderlineIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -20,10 +25,13 @@ type BlogEditorProps = {
   className?: string
 }
 
-const DEFAULT_CONTENT = `<h2>New Aphylia story</h2><p>Share product updates, garden learnings, or beta milestones. Select text to style it, add bullet lists, and drop in images with a URL.</p>`
+const DEFAULT_CONTENT = `<h2>New Aphylia story</h2><p>Use the slash menu to insert headings, quotes, dividers, galleries, or embeds.</p>`
 
 const toolbarButton =
   'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] text-stone-600 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#2a2a2a] transition disabled:opacity-40'
+
+const floatingButton =
+  'flex w-full items-center gap-3 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white/90 dark:bg-[#1a1a1a] px-3 py-2 text-sm text-stone-700 dark:text-stone-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
 
 export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(({ initialHtml, initialDocument, className }, ref) => {
   const editor = useEditor({
@@ -40,6 +48,21 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(({ initi
         HTMLAttributes: {
           class: 'rounded-2xl w-full h-auto',
         },
+      }),
+      TaskList.configure({
+        HTMLAttributes: {
+          class: 'notion-task-list space-y-2',
+        },
+      }),
+      TaskItem.configure({
+        nested: true,
+      }),
+      Placeholder.configure({
+        placeholder: 'Type "/" for commands or just start writing…',
+      }),
+      Typography,
+      CharacterCount.configure({
+        limit: 20000,
       }),
     ],
     content: initialDocument ?? initialHtml ?? DEFAULT_CONTENT,
@@ -78,6 +101,25 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(({ initi
       return
     }
     editor?.chain().focus().setLink({ href: url }).run()
+  }
+
+  const slashCommands = [
+    { label: 'Heading 1', description: 'Large section title', action: () => editor?.chain().focus().toggleHeading({ level: 1 }).run() },
+    { label: 'Heading 2', description: 'Medium section title', action: () => editor?.chain().focus().toggleHeading({ level: 2 }).run() },
+    { label: 'Heading 3', description: 'Small section title', action: () => editor?.chain().focus().toggleHeading({ level: 3 }).run() },
+    { label: 'Checklist', description: 'Actionable list with checkboxes', action: () => editor?.chain().focus().toggleTaskList().run() },
+    { label: 'Bullet list', description: 'Classic unordered list', action: () => editor?.chain().focus().toggleBulletList().run() },
+    { label: 'Quote', description: 'Highlight a quote', action: () => editor?.chain().focus().toggleBlockquote().run() },
+    { label: 'Divider', description: 'Visual section break', action: () => editor?.chain().focus().setHorizontalRule().run() },
+    { label: 'Code block', description: 'Snippet or terminal output', action: () => editor?.chain().focus().toggleCodeBlock().run() },
+  ]
+
+  const showFloatingMenu = () => {
+    if (!editor) return false
+    const { state } = editor
+    const { $from } = state.selection
+    const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '\uffff')
+    return textBefore === '/'
   }
 
   return (
@@ -130,7 +172,57 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(({ initi
         </button>
       </div>
       <div className="px-4 pb-4">
+        {editor ? (
+          <>
+            <BubbleMenu editor={editor} tippyOptions={{ duration: 150 }}>
+              <div className="flex gap-1 rounded-full border border-stone-200 bg-white/90 p-1 shadow-lg">
+                <button className={toolbarButton} onClick={() => editor.chain().focus().toggleBold().run()}>
+                  <Bold className="h-4 w-4" />
+                </button>
+                <button className={toolbarButton} onClick={() => editor.chain().focus().toggleItalic().run()}>
+                  <Italic className="h-4 w-4" />
+                </button>
+                <button className={toolbarButton} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+                  <UnderlineIcon className="h-4 w-4" />
+                </button>
+                <button className={toolbarButton} onClick={addLink}>
+                  <LinkIcon className="h-4 w-4" />
+                </button>
+              </div>
+            </BubbleMenu>
+
+            <FloatingMenu editor={editor} shouldShow={showFloatingMenu} tippyOptions={{ duration: 150 }}>
+              <div className="w-64 space-y-1 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white/95 dark:bg-[#0d0d0d] p-2 shadow-xl">
+                <p className="px-2 text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">Blocks</p>
+                {slashCommands.map(({ label, description, action }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className={floatingButton}
+                    onClick={() => {
+                      action()
+                      editor
+                        ?.chain()
+                        .focus()
+                        .deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from })
+                        .run()
+                    }}
+                  >
+                    <div className="text-left">
+                      <div className="text-sm font-medium">{label}</div>
+                      <div className="text-xs text-stone-500 dark:text-stone-400">{description}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </FloatingMenu>
+          </>
+        ) : null}
         <EditorContent editor={editor} className="prose prose-stone dark:prose-invert max-w-none min-h-[320px] focus:outline-none [&_*]:text-base" />
+      </div>
+      <div className="flex items-center justify-between border-t border-stone-200 dark:border-[#3e3e42] px-4 py-3 text-xs text-stone-500 dark:text-stone-400">
+        <span>Use "/" for quick block insertions • Drag images between blocks</span>
+        <span>{editor ? `${editor.storage.characterCount.words()} words` : '0 words'}</span>
       </div>
     </div>
   )

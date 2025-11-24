@@ -1,3 +1,5 @@
+import type { JSONContent } from '@tiptap/core'
+
 export type BlogPost = {
   id: string
   title: string
@@ -11,7 +13,7 @@ export type BlogPost = {
   authorId: string
   authorName: string | null
   isPublished: boolean
-  editorData: Record<string, unknown> | null
+  editorData: JSONContent | null
 }
 
 export type BlogPostInput = {
@@ -23,5 +25,5 @@ export type BlogPostInput = {
   excerpt?: string | null
   isPublished?: boolean
   publishedAt?: string | null
-  editorData?: Record<string, unknown> | null
+  editorData?: JSONContent | null
 }
