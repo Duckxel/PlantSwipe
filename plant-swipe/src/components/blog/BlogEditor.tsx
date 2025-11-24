@@ -1,11 +1,34 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { EditorContent, useEditor } from '@tiptap/react'
-import type { Editor, JSONContent, Range } from '@tiptap/core'
-import { Bold, Image as ImageIcon, Italic, Link2, List, ListOrdered, Quote, Wand2 } from 'lucide-react'
+import type { JSONContent } from '@tiptap/core'
+import { EditorContent, EditorContext, useEditor } from '@tiptap/react'
+import { StarterKit } from '@tiptap/starter-kit'
+import Placeholder from '@tiptap/extension-placeholder'
+import Link from '@tiptap/extension-link'
+import Image from '@tiptap/extension-image'
+import TextAlign from '@tiptap/extension-text-align'
+import Highlight from '@tiptap/extension-highlight'
+import Typography from '@tiptap/extension-typography'
+import CharacterCount from '@tiptap/extension-character-count'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import Superscript from '@tiptap/extension-superscript'
+import Subscript from '@tiptap/extension-subscript'
+import Underline from '@tiptap/extension-underline'
+
+import { Toolbar, ToolbarGroup, ToolbarSeparator } from '@/components/tiptap-ui-primitive/toolbar'
+import { MarkButton } from '@/components/tiptap-ui/mark-button'
+import { HeadingDropdownMenu } from '@/components/tiptap-ui/heading-dropdown-menu'
+import { ListDropdownMenu } from '@/components/tiptap-ui/list-dropdown-menu'
+import { BlockquoteButton } from '@/components/tiptap-ui/blockquote-button'
+import { CodeBlockButton } from '@/components/tiptap-ui/code-block-button'
+import { LinkPopover } from '@/components/tiptap-ui/link-popover'
+import { TextAlignButton } from '@/components/tiptap-ui/text-align-button'
+import { UndoRedoButton } from '@/components/tiptap-ui/undo-redo-button'
+import { Button } from '@/components/tiptap-ui-primitive/button'
+import { ImagePlusIcon } from '@/components/tiptap-icons/image-plus-icon'
 import { cn } from '@/lib/utils'
 
-import { createNotitapExtensions, CustomBubbleMenu, LinkBubbleMenu } from './notitap'
-import '@/components/blog/notitap/styles/editor.css'
+import '@/components/tiptap-templates/simple/simple-editor.scss'
 
 export type BlogEditorHandle = {
   getHtml: () => string
@@ -25,64 +48,43 @@ const DEFAULT_DOCUMENT: JSONContent = {
   type: 'doc',
   content: [
     {
-      type: 'dBlock',
-      content: [
-        {
-          type: 'paragraph',
-          content: [{ type: 'text', text: 'New Aphylia story' }],
-        },
-      ],
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Start your Aphylia update here…' }],
     },
   ],
 }
 
-const toolbarButton =
-  'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] text-stone-600 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#2a2a2a] transition disabled:opacity-40'
-
 export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
   ({ initialHtml, initialDocument, className, onContentChange, onUploadImage }, ref) => {
     const fileInputRef = useRef<HTMLInputElement | null>(null)
-    const pendingSlashRange = useRef<Range | null>(null)
-    const editorRef = useRef<Editor | null>(null)
-    const [inlineUploadError, setInlineUploadError] = useState<string | null>(null)
-    const [inlineUploading, setInlineUploading] = useState(false)
-
-    const handleLinkShortcut = useCallback(() => {
-      const instance = editorRef.current
-      if (!instance) return
-      const current = instance.getAttributes('link')?.href ?? 'https://'
-      const next = window.prompt('Link URL', current)
-      if (next === null) return
-      const trimmed = next.trim()
-      if (!trimmed) {
-        instance.chain().focus().unsetLink().run()
-        return
-      }
-      instance.chain().focus().setLink({ href: trimmed }).run()
-    }, [])
-
-    const triggerFileDialog = useCallback(() => {
-      setInlineUploadError(null)
-      fileInputRef.current?.click()
-    }, [])
-
-    const slashOptions = useMemo(() => {
-      if (typeof onUploadImage !== 'function') return undefined
-      return {
-        onImageInsert: ({ range }: { range: Range }) => {
-          pendingSlashRange.current = range
-          triggerFileDialog()
-        },
-      }
-    }, [onUploadImage, triggerFileDialog])
+    const [uploadError, setUploadError] = useState<string | null>(null)
+    const [uploading, setUploading] = useState(false)
 
     const extensions = useMemo(
-      () =>
-        createNotitapExtensions({
-          onLinkShortcut: handleLinkShortcut,
-          slashCommands: slashOptions,
+      () => [
+        StarterKit.configure({
+          heading: { levels: [1, 2, 3, 4] },
         }),
-      [handleLinkShortcut, slashOptions],
+        Placeholder.configure({
+          placeholder: 'Start writing your story…',
+        }),
+        Link.configure({
+          openOnClick: false,
+          autolink: true,
+          linkOnPaste: true,
+        }),
+        Image,
+        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        Highlight.configure({ multicolor: true }),
+        Underline,
+        Typography,
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        Superscript,
+        Subscript,
+        CharacterCount.configure(),
+      ],
+      [],
     )
 
     const editor = useEditor({
@@ -90,187 +92,160 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
       content: initialDocument ?? initialHtml ?? DEFAULT_DOCUMENT,
     })
 
-    useEffect(() => {
-      editorRef.current = editor ?? null
-      return () => {
-        if (!editor) {
-          editorRef.current = null
-        }
-      }
-    }, [editor])
-
-    const insertImage = useCallback(
-      async (file: File, range?: Range | null) => {
-        if (!onUploadImage) return
-        const instance = editorRef.current
-        if (!instance) return
-        try {
-          setInlineUploading(true)
-          const result = await onUploadImage(file)
-          const url = result?.url
-          if (!url) {
-            throw new Error('Upload completed without a public URL.')
-          }
-          const chain = instance.chain().focus()
-          if (range) {
-            chain.deleteRange(range)
-          }
-          chain.setImage({ src: url }).run()
-          setInlineUploadError(null)
-        } catch (error) {
-          setInlineUploadError(
-            error instanceof Error ? error.message : 'Failed to upload image. Please try again.',
-          )
-        } finally {
-          setInlineUploading(false)
-          pendingSlashRange.current = null
-        }
-      },
-      [onUploadImage],
-    )
-
     useImperativeHandle(
       ref,
       () => ({
-        getHtml: () => editorRef.current?.getHTML() ?? '',
-        getDocument: () => editorRef.current?.getJSON() ?? null,
+        getHtml: () => editor?.getHTML() ?? '',
+        getDocument: () => editor?.getJSON() ?? null,
         setContent: ({ html, doc }) => {
-          const instance = editorRef.current
-          if (!instance) return
+          if (!editor) return
           if (doc) {
-            instance.commands.setContent(doc)
+            editor.commands.setContent(doc)
           } else if (html) {
-            instance.commands.setContent(html)
+            editor.commands.setContent(html)
           }
         },
       }),
-      [],
+      [editor],
     )
 
     useEffect(() => {
       if (!editor || !onContentChange) return
-      const handler = () => {
+      const handleUpdate = () => {
         onContentChange({
           html: editor.getHTML(),
           doc: editor.getJSON(),
           plainText: editor.getText({ blockSeparator: '\n' }),
         })
       }
-      editor.on('update', handler)
-      handler()
+      editor.on('update', handleUpdate)
+      handleUpdate()
       return () => {
-        editor.off('update', handler)
+        editor.off('update', handleUpdate)
       }
     }, [editor, onContentChange])
 
+    const insertUploadedImage = useCallback(
+      async (file: File) => {
+        if (!onUploadImage || !editor) return
+        try {
+          setUploading(true)
+          const result = await onUploadImage(file)
+          const src = result?.url ?? result?.path
+          if (!src) {
+            throw new Error('Upload completed without a public URL.')
+          }
+          editor.chain().focus().setImage({ src }).run()
+          setUploadError(null)
+        } catch (error) {
+          setUploadError(
+            error instanceof Error ? error.message : 'Failed to upload image. Please try again.',
+          )
+        } finally {
+          setUploading(false)
+        }
+      },
+      [editor, onUploadImage],
+    )
+
     const handleToolbarImage = () => {
-      if (typeof onUploadImage === 'function') {
-        pendingSlashRange.current = null
-        triggerFileDialog()
+      if (onUploadImage) {
+        setUploadError(null)
+        fileInputRef.current?.click()
         return
       }
       const url = window.prompt('Image URL')
-      if (!url) return
-      editorRef.current?.chain().focus().setImage({ src: url.trim() }).run()
+      if (!url || !editor) return
+      editor.chain().focus().setImage({ src: url.trim() }).run()
     }
 
-    const handleFileInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
       event.target.value = ''
-      if (!file) return
-      await insertImage(file, pendingSlashRange.current)
+      if (file) {
+        void insertUploadedImage(file)
+      }
     }
 
-    const toolbarButtons = [
-      {
-        id: 'bold',
-        icon: Bold,
-        label: 'Bold',
-        action: () => editorRef.current?.chain().focus().toggleBold().run(),
-        isActive: () => editorRef.current?.isActive('bold'),
-      },
-      {
-        id: 'italic',
-        icon: Italic,
-        label: 'Italic',
-        action: () => editorRef.current?.chain().focus().toggleItalic().run(),
-        isActive: () => editorRef.current?.isActive('italic'),
-      },
-      {
-        id: 'bullet',
-        icon: List,
-        label: 'Bulleted list',
-        action: () => editorRef.current?.chain().focus().toggleBulletList().run(),
-        isActive: () => editorRef.current?.isActive('bulletList'),
-      },
-      {
-        id: 'ordered',
-        icon: ListOrdered,
-        label: 'Numbered list',
-        action: () => editorRef.current?.chain().focus().toggleOrderedList().run(),
-        isActive: () => editorRef.current?.isActive('orderedList'),
-      },
-      {
-        id: 'quote',
-        icon: Quote,
-        label: 'Quote',
-        action: () => editorRef.current?.chain().focus().toggleBlockquote().run(),
-        isActive: () => editorRef.current?.isActive('blockquote'),
-      },
-    ]
-
     return (
-      <div className={cn('space-y-3', className)}>
-        <div className="flex flex-wrap gap-2 rounded-2xl border border-stone-200 bg-white/80 p-3 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f0f]">
-          {toolbarButtons.map((button) => {
-            const Icon = button.icon
-            const active = button.isActive?.() ?? false
-            return (
-              <button
-                key={button.id}
+      <div className={cn('space-y-4', className)}>
+        <EditorContext.Provider value={{ editor }}>
+          <Toolbar className="flex-wrap gap-2 rounded-2xl border border-stone-200 bg-white/90 p-3 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f0f]">
+            <ToolbarGroup>
+              <UndoRedoButton action="undo" />
+              <UndoRedoButton action="redo" />
+            </ToolbarGroup>
+
+            <ToolbarSeparator />
+
+            <ToolbarGroup>
+              <HeadingDropdownMenu levels={[1, 2, 3, 4]} />
+              <ListDropdownMenu types={['bulletList', 'orderedList', 'taskList']} />
+              <BlockquoteButton />
+              <CodeBlockButton />
+            </ToolbarGroup>
+
+            <ToolbarSeparator />
+
+            <ToolbarGroup>
+              <MarkButton type="bold" />
+              <MarkButton type="italic" />
+              <MarkButton type="underline" />
+              <MarkButton type="strike" />
+            </ToolbarGroup>
+
+            <ToolbarSeparator />
+
+            <ToolbarGroup>
+              <MarkButton type="superscript" />
+              <MarkButton type="subscript" />
+            </ToolbarGroup>
+
+            <ToolbarSeparator />
+
+            <ToolbarGroup>
+              <LinkPopover />
+            </ToolbarGroup>
+
+            <ToolbarSeparator />
+
+            <ToolbarGroup>
+              <TextAlignButton align="left" />
+              <TextAlignButton align="center" />
+              <TextAlignButton align="right" />
+              <TextAlignButton align="justify" />
+            </ToolbarGroup>
+
+            <ToolbarSeparator />
+
+            <ToolbarGroup>
+              <Button
                 type="button"
-                title={button.label}
-                className={cn(
-                  toolbarButton,
-                  active && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-100',
-                )}
-                onClick={button.action}
+                data-style="ghost"
+                onClick={handleToolbarImage}
+                disabled={uploading}
               >
-                <Icon className="h-4 w-4" />
-              </button>
-            )
-          })}
-          <button type="button" className={toolbarButton} onClick={handleToolbarImage}>
-            <ImageIcon className="h-4 w-4" />
-          </button>
-          <button type="button" className={toolbarButton} onClick={handleLinkShortcut}>
-            <Link2 className="h-4 w-4" />
-          </button>
-        </div>
+                <ImagePlusIcon className="tiptap-button-icon" />
+                <span className="tiptap-button-text">Image</span>
+              </Button>
+            </ToolbarGroup>
+          </Toolbar>
 
-        {inlineUploadError && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-900/10 dark:text-red-200">
-            {inlineUploadError}
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <EditorContent editor={editor} />
-          {editor && (
-            <>
-              <CustomBubbleMenu editor={editor} />
-              <LinkBubbleMenu editor={editor} />
-            </>
+          {uploadError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-900/10 dark:text-red-200">
+              {uploadError}
+            </div>
           )}
-        </div>
 
-        <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
-          <span className="inline-flex items-center gap-2">
-            <Wand2 className="h-3.5 w-3.5" />
-            Use “/” to open the Notitap command palette. Drag the •• handle to reorder blocks.
-          </span>
-          <span>{editor ? `${editor.storage.characterCount.words()} words` : '—'}</span>
-        </div>
+          <div className="simple-editor-wrapper rounded-2xl border border-stone-200 bg-white/70 p-4 dark:border-[#3e3e42] dark:bg-[#101010]">
+            <EditorContent editor={editor} className="simple-editor-content" />
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-300">
+            <span>TipTap Simple Editor</span>
+            <span>{editor ? `${editor.storage.characterCount.words()} words` : '—'}</span>
+          </div>
+        </EditorContext.Provider>
 
         <input
           ref={fileInputRef}
@@ -278,7 +253,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           accept="image/*"
           className="hidden"
           onChange={handleFileInputChange}
-          disabled={inlineUploading}
+          disabled={uploading}
         />
       </div>
     )
