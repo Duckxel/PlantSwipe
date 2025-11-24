@@ -8,18 +8,14 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { BlogEditor, type BlogEditorHandle } from '@/components/blog/BlogEditor'
+import type { JSONContent } from '@tiptap/core'
 import { BlogCard } from '@/components/blog/BlogCard'
 import { useAuth } from '@/context/AuthContext'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import type { BlogPost } from '@/types/blog'
 import { fetchBlogPosts, saveBlogPost } from '@/lib/blogs'
 
-const DEFAULT_EDITOR_HTML = `<section class="section">
-  <div class="container">
-    <h1 data-gjs-type="text">New Aphylia story</h1>
-    <p data-gjs-type="text">Use the blocks panel (top-left) to add media, columns, and text.</p>
-  </div>
-</section>`
+const DEFAULT_EDITOR_HTML = `<h2>New Aphylia story</h2><p>Use the editor to share releases, field reports, or garden learnings.</p>`
 
 const sortPostsByDate = (list: BlogPost[]) =>
   [...list].sort((a, b) => {
@@ -44,7 +40,7 @@ export default function BlogPage() {
   const [formError, setFormError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [initialHtml, setInitialHtml] = React.useState<string | null>(null)
-  const [initialProject, setInitialProject] = React.useState<Record<string, unknown> | null>(null)
+  const [initialDocument, setInitialDocument] = React.useState<JSONContent | null>(null)
   const editorRef = React.useRef<BlogEditorHandle | null>(null)
   const isAdmin = Boolean(profile?.is_admin)
 
@@ -85,7 +81,7 @@ export default function BlogPage() {
     setPublishNow(true)
     setFormError(null)
     setInitialHtml(null)
-    setInitialProject(null)
+    setInitialDocument(null)
     setEditorKey((key) => key + 1)
   }, [])
 
@@ -98,7 +94,7 @@ export default function BlogPage() {
     setExcerpt('')
     setPublishNow(true)
     setInitialHtml(DEFAULT_EDITOR_HTML)
-    setInitialProject(null)
+    setInitialDocument(null)
     setFormError(null)
     setEditorOpen(true)
   }
@@ -112,13 +108,14 @@ export default function BlogPage() {
     setExcerpt(post.excerpt ?? '')
     setPublishNow(post.isPublished)
     setInitialHtml(post.bodyHtml)
-    setInitialProject((post.editorData as Record<string, unknown> | null) ?? null)
+    setInitialDocument((post.editorData as JSONContent | null) ?? null)
     setFormError(null)
     setEditorOpen(true)
   }
 
   const handleSavePost = async () => {
-    if (!editorRef.current) {
+    const editorInstance = editorRef.current
+    if (!editorInstance) {
       setFormError(t('blogPage.editor.errorNoEditor', { defaultValue: 'Editor not ready yet.' }))
       return
     }
@@ -135,21 +132,19 @@ export default function BlogPage() {
     setSaving(true)
     setFormError(null)
     try {
-      const html = editorRef.current.getHtml()
-      const css = editorRef.current.getCss()
-      const projectData = editorRef.current.getProjectData()
-      const bodyHtml = css?.trim() ? `<style>${css}</style>${html}` : html
+      const html = editorInstance.getHtml()
+      const doc = editorInstance.getDocument()
       const { data, error: saveError } = await saveBlogPost({
         id: editingPost?.id,
         slug: editingPost?.slug,
         title: formTitle,
-        bodyHtml,
+        bodyHtml: html,
         coverImageUrl: coverUrl || null,
         excerpt: excerpt || undefined,
         isPublished: publishNow,
         authorId,
         authorName: profile?.display_name || profile?.username || user?.email || 'Aphylia Team',
-        editorData: projectData ?? undefined,
+        editorData: doc ?? undefined,
       })
 
       if (saveError || !data) {
@@ -331,9 +326,7 @@ export default function BlogPage() {
               key={editorKey}
               ref={editorRef}
               initialHtml={initialHtml || undefined}
-              initialProject={initialProject || undefined}
-              className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden"
-              height="60vh"
+              initialDocument={initialDocument || undefined}
             />
             {formError && <p className="text-sm text-red-600">{formError}</p>}
             <div className="flex items-center justify-end gap-3">

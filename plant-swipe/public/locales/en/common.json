@@ -287,7 +287,7 @@
       "excerptLabel": "Short summary (optional)",
       "excerptPlaceholder": "One or two sentences that appear on the card.",
       "publishToggle": "Publish immediately",
-      "canvasHelper": "Drag blocks from the top-left panel, tweak text inline, and keep styles consistent. Your HTML is auto-sanitized.",
+      "canvasHelper": "Use the toolbar to apply headings, lists, links, and images. Everything is sanitized automatically.",
       "save": "Save post",
       "saving": "Saving…",
       "cancel": "Cancel",

@@ -287,7 +287,7 @@
       "excerptLabel": "Résumé court (optionnel)",
       "excerptPlaceholder": "Une ou deux phrases visibles sur la carte.",
       "publishToggle": "Publier immédiatement",
-      "canvasHelper": "Glissez les blocs depuis le panneau (en haut à gauche), modifiez le texte en direct et gardez un style cohérent. Le HTML est nettoyé automatiquement.",
+      "canvasHelper": "Servez-vous de la barre d’outils pour appliquer titres, listes, liens et images. Le contenu est nettoyé automatiquement.",
       "save": "Enregistrer",
       "saving": "Enregistrement…",
       "cancel": "Annuler",
