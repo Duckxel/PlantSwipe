@@ -9,7 +9,6 @@ import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/i18n'
 import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage, addLanguagePrefix } from '@/lib/i18nRouting'
 
 function AppShell() {
-  const { loading } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   
