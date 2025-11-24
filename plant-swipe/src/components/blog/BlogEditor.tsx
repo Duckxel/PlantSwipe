@@ -29,6 +29,13 @@ import { ImagePlusIcon } from '@/components/tiptap-icons/image-plus-icon'
 import { cn } from '@/lib/utils'
 
 import '@/components/tiptap-templates/simple/simple-editor.scss'
+import '@/components/tiptap-node/blockquote-node/blockquote-node.scss'
+import '@/components/tiptap-node/code-block-node/code-block-node.scss'
+import '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss'
+import '@/components/tiptap-node/list-node/list-node.scss'
+import '@/components/tiptap-node/image-node/image-node.scss'
+import '@/components/tiptap-node/heading-node/heading-node.scss'
+import '@/components/tiptap-node/paragraph-node/paragraph-node.scss'
 
 export type BlogEditorHandle = {
   getHtml: () => string
@@ -168,7 +175,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
     }
 
     return (
-      <div className={cn('space-y-4', className)}>
+      <div className={cn('blog-editor space-y-4', className)}>
         <EditorContext.Provider value={{ editor }}>
           <Toolbar className="flex-wrap gap-2 rounded-2xl border border-stone-200 bg-white/90 p-3 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f0f]">
             <ToolbarGroup>
