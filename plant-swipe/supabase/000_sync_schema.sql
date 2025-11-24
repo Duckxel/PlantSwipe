@@ -3443,6 +3443,69 @@ do $$ begin
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- Admin Email Templates
+create table if not exists public.admin_email_templates (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  subject text not null,
+  description text,
+  preview_text text,
+  body_html text not null,
+  body_json jsonb,
+  variables text[] default '{}',
+  is_active boolean default true,
+  version integer default 1,
+  last_used_at timestamptz,
+  campaign_count integer default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table public.admin_email_templates enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_email_templates' and policyname='aet_admin_all') then
+    drop policy aet_admin_all on public.admin_email_templates;
+  end if;
+  create policy aet_admin_all on public.admin_email_templates for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Admin Email Campaigns
+create table if not exists public.admin_email_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  status text not null default 'draft',
+  template_id uuid references public.admin_email_templates(id) on delete set null,
+  template_title text,
+  subject text not null,
+  preview_text text,
+  variables text[] default '{}',
+  timezone text default 'UTC',
+  scheduled_for timestamptz,
+  total_recipients integer default 0,
+  sent_count integer default 0,
+  failed_count integer default 0,
+  send_error text,
+  send_started_at timestamptz,
+  send_completed_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table public.admin_email_campaigns enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_email_campaigns' and policyname='aec_admin_all') then
+    drop policy aec_admin_all on public.admin_email_campaigns;
+  end if;
+  create policy aec_admin_all on public.admin_email_campaigns for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
 -- Captures per-garden human-readable activity events for the current day view
 create table if not exists public.garden_activity_logs (
   id uuid primary key default gen_random_uuid(),
