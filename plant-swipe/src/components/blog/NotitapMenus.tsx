@@ -18,11 +18,11 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type MenuButtonProps = {
+type MenuButtonProps = React.PropsWithChildren<{
   label: string
   active?: boolean
   onClick: () => void
-}
+}>
 
 const bubbleButtonClass =
   'inline-flex h-8 w-8 items-center justify-center rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1a] text-stone-600 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#2a2a2a]'
@@ -45,13 +45,31 @@ export const NotitapBubbleMenu: React.FC<{ editor: Editor | null }> = ({ editor 
   if (!editor) return null
   return (
     <BubbleMenu editor={editor} tippyOptions={{ duration: 120 }} className="rounded-2xl bg-white/95 dark:bg-[#151515] border border-stone-200 dark:border-[#3e3e42] shadow-xl p-2 flex items-center gap-2">
-      <BubbleButton label="Bold" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}>
+      <BubbleButton
+        label="Bold"
+        active={editor.isActive('bold')}
+        onClick={() => {
+          editor.chain().focus().toggleBold().run()
+        }}
+      >
         <Bold className="h-4 w-4" />
       </BubbleButton>
-      <BubbleButton label="Italic" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()}>
+      <BubbleButton
+        label="Italic"
+        active={editor.isActive('italic')}
+        onClick={() => {
+          editor.chain().focus().toggleItalic().run()
+        }}
+      >
         <Italic className="h-4 w-4" />
       </BubbleButton>
-      <BubbleButton label="Code" active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()}>
+      <BubbleButton
+        label="Code"
+        active={editor.isActive('code')}
+        onClick={() => {
+          editor.chain().focus().toggleCode().run()
+        }}
+      >
         <Code className="h-4 w-4" />
       </BubbleButton>
     </BubbleMenu>
@@ -63,61 +81,81 @@ const blockOptions = [
     label: 'Text',
     description: 'Start with plain text',
     icon: Text,
-    action: (editor: Editor) => editor.chain().focus().setParagraph().run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().setParagraph().run()
+    },
   },
   {
     label: 'Heading 1',
     description: 'Large section title',
     icon: Heading1,
-    action: (editor: Editor) => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().toggleHeading({ level: 1 }).run()
+    },
   },
   {
     label: 'Heading 2',
     description: 'Medium section title',
     icon: Heading2,
-    action: (editor: Editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().toggleHeading({ level: 2 }).run()
+    },
   },
   {
     label: 'Heading 3',
     description: 'Small section label',
     icon: Heading3,
-    action: (editor: Editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().toggleHeading({ level: 3 }).run()
+    },
   },
   {
     label: 'Bulleted list',
     description: 'Create a bullet list',
     icon: List,
-    action: (editor: Editor) => editor.chain().focus().toggleBulletList().run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().toggleBulletList().run()
+    },
   },
   {
     label: 'Numbered list',
     description: 'Ordered list with numbers',
     icon: ListOrdered,
-    action: (editor: Editor) => editor.chain().focus().toggleOrderedList().run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().toggleOrderedList().run()
+    },
   },
   {
     label: 'To-do list',
     description: 'Track tasks with checkboxes',
     icon: ListChecks,
-    action: (editor: Editor) => editor.chain().focus().toggleTaskList().run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().toggleTaskList().run()
+    },
   },
   {
     label: 'Quote',
     description: 'Insert a block quote',
     icon: Quote,
-    action: (editor: Editor) => editor.chain().focus().toggleBlockquote().run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().toggleBlockquote().run()
+    },
   },
   {
     label: 'Code block',
     description: 'Capture code snippets',
     icon: Code,
-    action: (editor: Editor) => editor.chain().focus().toggleCodeBlock().run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().toggleCodeBlock().run()
+    },
   },
   {
     label: 'Divider',
     description: 'Visual separator',
     icon: Minus,
-    action: (editor: Editor) => editor.chain().focus().setHorizontalRule().run(),
+    action: (editor: Editor) => {
+      editor.chain().focus().setHorizontalRule().run()
+    },
   },
 ]
 
@@ -127,8 +165,8 @@ export const NotitapBlockMenu: React.FC<{ editor: Editor | null }> = ({ editor }
     <FloatingMenu
       editor={editor}
       tippyOptions={{ duration: 120, placement: 'right' }}
-      shouldShow={({ editor: ed }) => {
-        const { $from } = ed.state.selection
+      shouldShow={({ editor }) => {
+        const { $from } = editor.state.selection
         if (!$from) return false
         const isParagraph = $from.parent.type.name === 'paragraph'
         const isEmpty = $from.parent.content.size === 0
