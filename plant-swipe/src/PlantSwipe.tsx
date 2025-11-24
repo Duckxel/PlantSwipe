@@ -21,7 +21,7 @@ import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
-import { loadPlantsWithTranslations, loadPlantPreviews } from "@/lib/plantTranslationLoader";
+import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
 import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { formatClassificationLabel } from "@/constants/classification";

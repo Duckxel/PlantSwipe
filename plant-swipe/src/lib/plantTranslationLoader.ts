@@ -632,7 +632,8 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
     ])
 
-    const { data: plants, error } = plantsResponse
+    const { data: plantsData, error } = plantsResponse
+    const plants = plantsData as any[]
     const { data: topLiked, error: topLikedError } = topLikedResponse
 
     if (error) throw error
@@ -661,11 +662,13 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       'identity', 'ecology', 'usage',
     ].join(',')
 
-    const { data: translations } = await supabase
+    const { data: translationsData } = await supabase
       .from('plant_translations')
       .select(translationColumns)
       .eq('language', language)
       .in('plant_id', plantIds)
+
+    const translations = translationsData as any[]
 
     const translationMap = new Map<string, any>()
     if (translations) {
