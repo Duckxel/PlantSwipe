@@ -39,9 +39,8 @@ const toolbarButton =
 const floatingButton =
   'flex w-full items-center gap-3 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white/90 dark:bg-[#1a1a1a] px-3 py-2 text-sm text-stone-700 dark:text-stone-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
 
-export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
-  ({ initialHtml, initialDocument, className, onContentChange, onUploadImage }, ref),
-) => {
+export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>((props, ref) => {
+  const { initialHtml, initialDocument, className, onContentChange, onUploadImage } = props
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -461,6 +460,6 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
       )}
     </>
   )
-})
+});
 
 BlogEditor.displayName = 'BlogEditor'
