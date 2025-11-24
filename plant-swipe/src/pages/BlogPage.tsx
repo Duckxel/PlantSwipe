@@ -1,12 +1,10 @@
 import React from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Sparkles, RefreshCcw, UploadCloud } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { BlogEditor, type BlogEditorHandle } from '@/components/blog/BlogEditor'
 import type { JSONContent } from '@tiptap/core'
 import { BlogCard } from '@/components/blog/BlogCard'
@@ -14,6 +12,8 @@ import { useAuth } from '@/context/AuthContext'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import type { BlogPost } from '@/types/blog'
 import { fetchBlogPosts, saveBlogPost } from '@/lib/blogs'
+import { uploadBlogImage } from '@/lib/blogMedia'
+import { buildAdminRequestHeaders } from '@/lib/adminAuth'
 
 const DEFAULT_EDITOR_HTML = `<h2>New Aphylia story</h2><p>Use the editor to share releases, field reports, or garden learnings.</p>`
 
@@ -37,25 +37,67 @@ const formatDisplayDate = (value?: string) => {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
+const slugifyFolder = (value: string) => {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/["']/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-')
+    .slice(0, 60)
+}
+
+const createDraftFolder = () => {
+  const randomId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10)
+  return `blog/draft-${randomId}`
+}
+
+const folderForPost = (post?: BlogPost | null, title?: string) => {
+  if (post?.slug) return `blog/${post.slug}`
+  const candidate = title ? slugifyFolder(title) : ''
+  if (candidate) return `blog/${candidate}`
+  return createDraftFolder()
+}
+
 export default function BlogPage() {
   const { t } = useTranslation('common')
   const { user, profile } = useAuth()
   const [posts, setPosts] = React.useState<BlogPost[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  const [editorOpen, setEditorOpen] = React.useState(false)
+  const [editorVisible, setEditorVisible] = React.useState(false)
   const [editorKey, setEditorKey] = React.useState(0)
   const [editingPost, setEditingPost] = React.useState<BlogPost | null>(null)
   const [formTitle, setFormTitle] = React.useState('')
   const [coverUrl, setCoverUrl] = React.useState('')
-  const [excerpt, setExcerpt] = React.useState('')
+  const [autoSummary, setAutoSummary] = React.useState('')
   const [publishMode, setPublishMode] = React.useState<'draft' | 'scheduled'>('scheduled')
   const [publishAt, setPublishAt] = React.useState(formatDateTimeLocal(new Date()))
   const [formError, setFormError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [initialHtml, setInitialHtml] = React.useState<string | null>(null)
   const [initialDocument, setInitialDocument] = React.useState<JSONContent | null>(null)
+  const [assetFolder, setAssetFolder] = React.useState(() => createDraftFolder())
+  const [editorContent, setEditorContent] = React.useState<{ html: string; doc: JSONContent | null; plainText: string }>({
+    html: '',
+    doc: null,
+    plainText: '',
+  })
+  const [summaryStatus, setSummaryStatus] = React.useState<'idle' | 'generating' | 'error'>('idle')
+  const [summaryError, setSummaryError] = React.useState<string | null>(null)
+  const [coverUploading, setCoverUploading] = React.useState(false)
+  const [coverUploadError, setCoverUploadError] = React.useState<string | null>(null)
   const editorRef = React.useRef<BlogEditorHandle | null>(null)
+  const coverInputRef = React.useRef<HTMLInputElement | null>(null)
+  const editorPanelRef = React.useRef<HTMLDivElement | null>(null)
+  const summarySourceRef = React.useRef<string>('')
+  const summaryTimeoutRef = React.useRef<number | null>(null)
+  const summaryAbortRef = React.useRef<AbortController | null>(null)
+  const latestHtmlRef = React.useRef<string>('')
   const isAdmin = Boolean(profile?.is_admin)
 
   React.useEffect(() => {
@@ -92,17 +134,36 @@ export default function BlogPage() {
     loadPosts().catch(() => {})
   }, [loadPosts])
 
+  const scrollEditorIntoView = React.useCallback(() => {
+    requestAnimationFrame(() => {
+      editorPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
+
   const resetEditorState = React.useCallback(() => {
-    setEditorOpen(false)
+    summaryAbortRef.current?.abort()
+    if (summaryTimeoutRef.current) {
+      window.clearTimeout(summaryTimeoutRef.current)
+      summaryTimeoutRef.current = null
+    }
+    summarySourceRef.current = ''
+    latestHtmlRef.current = ''
+    setEditorVisible(false)
     setEditingPost(null)
     setFormTitle('')
     setCoverUrl('')
-    setExcerpt('')
+    setAutoSummary('')
+    setSummaryStatus('idle')
+    setSummaryError(null)
     setPublishMode('scheduled')
     setPublishAt(formatDateTimeLocal(new Date()))
     setFormError(null)
     setInitialHtml(null)
     setInitialDocument(null)
+    setEditorContent({ html: '', doc: null, plainText: '' })
+    setAssetFolder(createDraftFolder())
+    setCoverUploadError(null)
+    setCoverUploading(false)
     setEditorKey((key) => key + 1)
   }, [])
 
@@ -112,13 +173,15 @@ export default function BlogPage() {
     setEditingPost(null)
     setFormTitle('')
     setCoverUrl('')
-    setExcerpt('')
+    setAutoSummary('')
     setPublishMode('scheduled')
     setPublishAt(formatDateTimeLocal(new Date()))
     setInitialHtml(DEFAULT_EDITOR_HTML)
     setInitialDocument(null)
     setFormError(null)
-    setEditorOpen(true)
+    setAssetFolder(createDraftFolder())
+    setEditorVisible(true)
+    scrollEditorIntoView()
   }
 
   const openEditDialog = (post: BlogPost) => {
@@ -127,14 +190,152 @@ export default function BlogPage() {
     setEditingPost(post)
     setFormTitle(post.title)
     setCoverUrl(post.coverImageUrl ?? '')
-    setExcerpt(post.excerpt ?? '')
+    setAutoSummary(post.excerpt ?? '')
     setPublishMode(post.isPublished ? 'scheduled' : 'draft')
     setPublishAt(formatDateTimeLocal(post.publishedAt))
     setInitialHtml(post.bodyHtml)
     setInitialDocument((post.editorData as JSONContent | null) ?? null)
     setFormError(null)
-    setEditorOpen(true)
+    setAssetFolder(folderForPost(post, post.title))
+    setEditorContent({ html: post.bodyHtml, doc: (post.editorData as JSONContent | null) ?? null, plainText: '' })
+    summarySourceRef.current = post.bodyHtml
+    latestHtmlRef.current = post.bodyHtml
+    setEditorVisible(true)
+    scrollEditorIntoView()
   }
+
+  const runSummary = React.useCallback(
+    async (html: string, options?: { force?: boolean }) => {
+      const source = html.trim()
+      if (!source) {
+        summarySourceRef.current = ''
+        setAutoSummary('')
+        setSummaryStatus('idle')
+        setSummaryError(null)
+        return ''
+      }
+      if (!options?.force && summarySourceRef.current === source) {
+        return autoSummary
+      }
+      summaryAbortRef.current?.abort()
+      const controller = new AbortController()
+      summaryAbortRef.current = controller
+      setSummaryStatus('generating')
+      setSummaryError(null)
+      try {
+        const headers = await buildAdminRequestHeaders({ 'Content-Type': 'application/json' })
+        const response = await fetch('/api/blog/summarize', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ html: source, title: formTitle || undefined }),
+          credentials: 'same-origin',
+          signal: controller.signal,
+        })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(payload?.error || t('blogPage.editor.summaryError', { defaultValue: 'Failed to generate summary.' }))
+        }
+        const summaryText = (payload?.summary as string) || ''
+        setAutoSummary(summaryText)
+        summarySourceRef.current = source
+        setSummaryStatus('idle')
+        return summaryText
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          return ''
+        }
+        const message =
+          err instanceof Error
+            ? err.message
+            : t('blogPage.editor.summaryError', { defaultValue: 'Failed to generate summary.' })
+        setSummaryError(message)
+        setSummaryStatus('error')
+        throw err
+      } finally {
+        if (summaryAbortRef.current === controller) {
+          summaryAbortRef.current = null
+        }
+      }
+    },
+    [autoSummary, formTitle, t],
+  )
+
+  React.useEffect(() => {
+    if (!editorVisible) return
+    if (!assetFolder.startsWith('blog/draft-')) return
+    const candidate = slugifyFolder(formTitle)
+    if (candidate && assetFolder !== `blog/${candidate}`) {
+      setAssetFolder(`blog/${candidate}`)
+    }
+  }, [assetFolder, editorVisible, formTitle])
+
+  React.useEffect(() => {
+    if (!editorVisible) return
+    const trimmed = editorContent.html.trim()
+    if (!trimmed) {
+      summarySourceRef.current = ''
+      if (autoSummary) setAutoSummary('')
+      return
+    }
+    if (summaryStatus === 'generating') return
+    if (summarySourceRef.current === trimmed) return
+    const timeout = window.setTimeout(() => {
+      runSummary(trimmed).catch(() => {})
+    }, 1200)
+    summaryTimeoutRef.current = timeout
+    return () => {
+      window.clearTimeout(timeout)
+      if (summaryTimeoutRef.current === timeout) {
+        summaryTimeoutRef.current = null
+      }
+    }
+  }, [autoSummary, editorContent.html, editorVisible, runSummary, summaryStatus])
+
+  const uploadCoverImage = React.useCallback(
+    async (file: File) => {
+      setCoverUploadError(null)
+      setCoverUploading(true)
+      try {
+        const result = await uploadBlogImage(file, { folder: assetFolder })
+        if (result?.url) {
+          setCoverUrl(result.url)
+        } else if (result?.path) {
+          setCoverUrl(result.path)
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : t('blogPage.editor.coverUploadError', { defaultValue: 'Failed to upload cover image.' })
+        setCoverUploadError(message)
+      } finally {
+        setCoverUploading(false)
+        if (coverInputRef.current) {
+          coverInputRef.current.value = ''
+        }
+      }
+    },
+    [assetFolder, t],
+  )
+
+  const handleCoverInputChange = React.useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      if (file) {
+        uploadCoverImage(file).catch(() => {})
+      }
+    },
+    [uploadCoverImage],
+  )
+
+  const triggerCoverUpload = React.useCallback(() => {
+    coverInputRef.current?.click()
+  }, [])
+
+  const handleEditorUpdate = React.useCallback((payload: { html: string; doc: JSONContent | null; plainText: string }) => {
+    setEditorContent(payload)
+    latestHtmlRef.current = payload.html
+  }, [])
 
   const handleSavePost = async () => {
     const editorInstance = editorRef.current
@@ -161,6 +362,15 @@ export default function BlogPage() {
     try {
       const html = editorInstance.getHtml()
       const doc = editorInstance.getDocument()
+      latestHtmlRef.current = html
+      const trimmedHtml = html.trim()
+      if (trimmedHtml && summarySourceRef.current !== trimmedHtml) {
+        try {
+          await runSummary(trimmedHtml, { force: true })
+        } catch {
+          // Ignore summary failures just before save; fallback will use server-side excerpt.
+        }
+      }
       const publishDateIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString()
       const { data, error: saveError } = await saveBlogPost({
         id: editingPost?.id,
@@ -168,7 +378,7 @@ export default function BlogPage() {
         title: formTitle,
         bodyHtml: html,
         coverImageUrl: coverUrl || null,
-        excerpt: excerpt || undefined,
+        excerpt: autoSummary?.trim() || undefined,
         isPublished: publishMode === 'scheduled',
         publishedAt: publishDateIso,
         authorId,
@@ -275,36 +485,43 @@ export default function BlogPage() {
         </div>
       )}
 
-      <Dialog
-        open={editorOpen}
-        onOpenChange={(open) => {
-          if (open) {
-            setEditorOpen(true)
-          } else {
-            resetEditorState()
-          }
-        }}
-      >
-        <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>
-              {editingPost
-                ? t('blogPage.editor.editTitle', { defaultValue: 'Edit blog post' })
-                : t('blogPage.editor.createTitle', { defaultValue: 'Create blog post' })}
-            </DialogTitle>
-            <DialogDescription>
-              {t('blogPage.editor.description', {
-                defaultValue: 'Use the Notion-style TipTap canvas to compose rich articles without touching code.',
-              })}
-            </DialogDescription>
-            {editingPost && (
-              <p className="text-xs text-stone-500 dark:text-stone-400">
-                {t('blogPage.editor.createdAtLabel', { defaultValue: 'Created' })}: {formatDisplayDate(editingPost.createdAt)}
+      {isAdmin && editorVisible && (
+        <section
+          ref={editorPanelRef}
+          className="rounded-3xl border border-stone-200 dark:border-[#3e3e42] bg-white/90 dark:bg-[#0f0f11] p-6 md:p-8 space-y-6 shadow-lg"
+        >
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
+                {editingPost
+                  ? t('blogPage.editor.editingTitle', { defaultValue: 'Editing existing post' })
+                  : t('blogPage.editor.createTitle', { defaultValue: 'Create blog post' })}
               </p>
-            )}
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid gap-3">
+              <h2 className="text-2xl font-semibold">
+                {editingPost
+                  ? t('blogPage.editor.editHeading', { defaultValue: 'Update your story' })
+                  : t('blogPage.editor.createHeading', { defaultValue: 'Start a new story' })}
+              </h2>
+              <p className="text-sm text-stone-500 dark:text-stone-400">
+                {t('blogPage.editor.description', {
+                  defaultValue: 'Use the TipTap simple editor to compose rich articles with instant visual feedback.',
+                })}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {editingPost && (
+                <Badge variant="outline" className="rounded-2xl px-3 py-1 text-xs uppercase tracking-wide">
+                  {t('blogPage.editor.createdAtLabel', { defaultValue: 'Created' })}: {formatDisplayDate(editingPost.createdAt)}
+                </Badge>
+              )}
+              <Button type="button" variant="ghost" className="rounded-2xl" onClick={resetEditorState}>
+                {t('blogPage.editor.closePanel', { defaultValue: 'Close editor' })}
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-2">
               <Label htmlFor="blog-title">
                 {t('blogPage.editor.titleLabel', { defaultValue: 'Title' })}
               </Label>
@@ -313,33 +530,6 @@ export default function BlogPage() {
                 value={formTitle}
                 onChange={(event) => setFormTitle(event.target.value)}
                 placeholder={t('blogPage.editor.titlePlaceholder', { defaultValue: 'A new field report' })}
-              />
-            </div>
-            <div className="grid gap-3">
-              <Label htmlFor="blog-cover">
-                {t('blogPage.editor.coverLabel', { defaultValue: 'Cover image URL' })}
-              </Label>
-              <Input
-                id="blog-cover"
-                type="url"
-                value={coverUrl}
-                onChange={(event) => setCoverUrl(event.target.value)}
-                placeholder="https://..."
-              />
-              <p className="text-xs text-stone-500">
-                {t('blogPage.editor.coverHelper', { defaultValue: 'Paste a public image URL or leave blank for a placeholder.' })}
-              </p>
-            </div>
-            <div className="grid gap-3">
-              <Label htmlFor="blog-excerpt">
-                {t('blogPage.editor.excerptLabel', { defaultValue: 'Short summary (optional)' })}
-              </Label>
-              <Textarea
-                id="blog-excerpt"
-                value={excerpt}
-                onChange={(event) => setExcerpt(event.target.value)}
-                rows={3}
-                placeholder={t('blogPage.editor.excerptPlaceholder', { defaultValue: 'One or two sentences that appear on the card.' })}
               />
             </div>
             <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 space-y-3">
@@ -381,7 +571,7 @@ export default function BlogPage() {
                     value={publishAt}
                     onChange={(event) => setPublishAt(event.target.value)}
                   />
-                  <p className="text-xs text-stone-500">
+                  <p className="text-xs text-stone-500 dark:text-stone-400">
                     {t('blogPage.editor.publishAtHelper', {
                       defaultValue: 'This page becomes publicly visible once this local date/time is reached.',
                     })}
@@ -389,31 +579,118 @@ export default function BlogPage() {
                 </div>
               )}
             </div>
-            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-3 text-xs text-stone-500 dark:text-stone-400">
-              {t('blogPage.editor.canvasHelper', {
-                defaultValue: 'Use the toolbar or slash menu to add blocks, quotes, dividers, and embeds. Everything is auto-sanitized.',
-              })}
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="blog-cover">
+                {t('blogPage.editor.coverLabel', { defaultValue: 'Cover image URL' })}
+              </Label>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <Input
+                  id="blog-cover"
+                  type="url"
+                  value={coverUrl}
+                  onChange={(event) => setCoverUrl(event.target.value)}
+                  placeholder="https://..."
+                  className="flex-1"
+                />
+                <div className="flex items-center gap-2">
+                  <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverInputChange} />
+                  <Button type="button" variant="outline" className="rounded-2xl" onClick={triggerCoverUpload} disabled={coverUploading}>
+                    {coverUploading ? (
+                      <>
+                        <RefreshCcw className="mr-2 h-4 w-4 animate-spin" />
+                        {t('blogPage.editor.coverUploading', { defaultValue: 'Uploading…' })}
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="mr-2 h-4 w-4" />
+                        {t('blogPage.editor.coverUploadButton', { defaultValue: 'Upload' })}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              {coverUploadError && <p className="text-xs text-red-500">{coverUploadError}</p>}
+              <p className="text-xs text-stone-500">
+                {t('blogPage.editor.coverHelper', { defaultValue: 'Paste a public image URL or upload to the shared blog folder.' })}
+              </p>
+              <p className="text-[11px] text-stone-400">
+                {t('blogPage.editor.assetFolderHelper', { defaultValue: 'Uploads stored in' })} <code className="font-mono">{assetFolder}</code>
+              </p>
             </div>
-            <BlogEditor
-              key={editorKey}
-              ref={editorRef}
-              initialHtml={initialHtml || undefined}
-              initialDocument={initialDocument || undefined}
-            />
-            {formError && <p className="text-sm text-red-600">{formError}</p>}
-            <div className="flex items-center justify-end gap-3">
-              <Button type="button" variant="outline" disabled={saving} className="rounded-2xl" onClick={resetEditorState}>
-                {t('blogPage.editor.cancel', { defaultValue: 'Cancel' })}
-              </Button>
-              <Button type="button" className="rounded-2xl" onClick={handleSavePost} disabled={saving}>
-                {saving
-                  ? t('blogPage.editor.saving', { defaultValue: 'Saving…' })
-                  : t('blogPage.editor.save', { defaultValue: 'Save post' })}
-              </Button>
+
+            <div className="space-y-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    {t('blogPage.editor.summaryLabel', { defaultValue: 'Short description' })}
+                  </p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400">
+                    {t('blogPage.editor.summaryHelper', { defaultValue: 'Generated automatically from the article body.' })}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="rounded-2xl"
+                  onClick={() => runSummary(latestHtmlRef.current || editorContent.html, { force: true }).catch(() => {})}
+                  disabled={summaryStatus === 'generating'}
+                >
+                  {summaryStatus === 'generating' ? (
+                    <>
+                      <RefreshCcw className="mr-2 h-4 w-4 animate-spin" />
+                      {t('blogPage.editor.summaryGenerating', { defaultValue: 'Generating…' })}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      {t('blogPage.editor.summaryRegenerate', { defaultValue: 'Regenerate' })}
+                    </>
+                  )}
+                </Button>
+              </div>
+              <div className="rounded-xl bg-stone-50 dark:bg-[#1a1a1a] p-4 min-h-[96px] text-sm text-stone-700 dark:text-stone-100">
+                {summaryStatus === 'generating'
+                  ? t('blogPage.editor.summaryPending', { defaultValue: 'Summarizing this article…' })
+                  : autoSummary || t('blogPage.editor.summaryPlaceholder', { defaultValue: 'Start writing to generate a short description.' })}
+              </div>
+              {summaryError && <p className="text-xs text-red-500">{summaryError}</p>}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+
+          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-3 text-xs text-stone-500 dark:text-stone-400">
+            {t('blogPage.editor.canvasHelper', {
+              defaultValue: 'Use the toolbar or slash menu to add blocks, quotes, dividers, and embeds. Everything is auto-sanitized.',
+            })}
+          </div>
+
+          <BlogEditor
+            key={editorKey}
+            ref={editorRef}
+            initialHtml={initialHtml || undefined}
+            initialDocument={initialDocument || undefined}
+            uploadFolder={assetFolder}
+            onUpdate={handleEditorUpdate}
+          />
+
+          {formError && <p className="text-sm text-red-600">{formError}</p>}
+
+          <div className="flex items-center justify-end gap-3">
+            <Button type="button" variant="outline" disabled={saving} className="rounded-2xl" onClick={resetEditorState}>
+              {t('blogPage.editor.cancel', { defaultValue: 'Cancel' })}
+            </Button>
+            <Button type="button" className="rounded-2xl" onClick={handleSavePost} disabled={saving}>
+              {saving
+                ? t('blogPage.editor.saving', { defaultValue: 'Saving…' })
+                : editingPost
+                  ? t('blogPage.editor.updatePost', { defaultValue: 'Update post' })
+                  : t('blogPage.editor.save', { defaultValue: 'Publish post' })}
+            </Button>
+          </div>
+        </section>
+      )}
     </div>
   )
 }
