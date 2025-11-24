@@ -5420,3 +5420,19 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.ensure_gardens_tasks_occurrences(uuid[], timestamptz, timestamptz) TO authenticated;
+
+-- Optimization: Batch fetch member counts for gardens
+CREATE OR REPLACE FUNCTION public.get_garden_member_counts(_garden_ids uuid[])
+RETURNS TABLE (garden_id uuid, count integer)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT garden_id, count(*)::integer
+  FROM garden_members
+  WHERE garden_id = ANY(_garden_ids)
+  GROUP BY garden_id;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_garden_member_counts(uuid[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_garden_member_counts(uuid[]) TO anon;
