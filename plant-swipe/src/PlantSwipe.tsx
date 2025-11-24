@@ -21,17 +21,20 @@ import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
-import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
+import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
 import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
 
+import { SwipePage } from "@/pages/SwipePage"
+
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })))
 const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })))
 const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })))
-const SwipePageLazy = lazy(() => import("@/pages/SwipePage").then(module => ({ default: module.SwipePage })))
+// SwipePage is main view, loaded eagerly inside PlantSwipe chunk
+// const SwipePageLazy = lazy(() => import("@/pages/SwipePage").then(module => ({ default: module.SwipePage })))
 const SearchPageLazy = lazy(() => import("@/pages/SearchPage").then(module => ({ default: module.SearchPage })))
 const CreatePlantPageLazy = lazy(() => import("@/pages/CreatePlantPage").then(module => ({ default: module.CreatePlantPage })))
 const PlantInfoPageLazy = lazy(() => import("@/pages/PlantInfoPage"))
@@ -138,8 +141,28 @@ export default function PlantSwipe() {
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
 
-  const [plants, setPlants] = useState<Plant[]>([])
-  const [loading, setLoading] = useState(true)
+  const [plants, setPlants] = useState<Plant[]>(() => {
+    if (typeof localStorage === 'undefined') return []
+    try {
+      const cached = localStorage.getItem(`plantswipe.plants.${currentLang}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed
+        }
+      }
+    } catch {}
+    return []
+  })
+  const [loading, setLoading] = useState(() => {
+    if (typeof localStorage === 'undefined') return true
+    try {
+      const cached = localStorage.getItem(`plantswipe.plants.${currentLang}`)
+      return !cached
+    } catch {
+      return true
+    }
+  })
   const [loadError, setLoadError] = useState<string | null>(null)
   const [colorOptions, setColorOptions] = useState<ColorOption[]>([])
 
@@ -186,15 +209,27 @@ export default function PlantSwipe() {
   }, [profile?.liked_plant_ids])
 
   const loadPlants = React.useCallback(async () => {
-    setLoading(true)
+    // Only show loading if we don't have plants
+    if (plants.length === 0) {
+      setLoading(true)
+    }
     setLoadError(null)
     let ok = false
     try {
       // Always use Supabase with translations to ensure plants created in one language
       // display correctly when viewed in another language
       // This ensures translations are properly loaded for all languages, including English
-      const plantsWithTranslations = await loadPlantsWithTranslations(currentLang)
+      // Using optimized preview loader for faster initial render
+      const plantsWithTranslations = await loadPlantPreviews(currentLang)
       setPlants(plantsWithTranslations)
+      
+      // Cache results
+      try {
+        if (plantsWithTranslations.length > 0) {
+          localStorage.setItem(`plantswipe.plants.${currentLang}`, JSON.stringify(plantsWithTranslations))
+        }
+      } catch {}
+      
       ok = true
     } catch (e: unknown) {
       const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
@@ -204,6 +239,7 @@ export default function PlantSwipe() {
     }
     return ok
   }, [currentLang])
+
 
   React.useEffect(() => {
     loadPlants()
@@ -1320,7 +1356,7 @@ export default function PlantSwipe() {
               path="/"
               element={plants.length > 0 ? (
                 <Suspense fallback={routeLoadingFallback}>
-                  <SwipePageLazy
+                  <SwipePage
                     current={current}
                     index={index}
                     setIndex={setIndex}

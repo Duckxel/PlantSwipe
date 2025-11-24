@@ -33,7 +33,6 @@ import {
   RefreshCw,
   Utensils,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
 import type { TooltipProps } from 'recharts'
 import {
   ResponsiveContainer,
@@ -93,12 +92,6 @@ const MAP_PIN_POSITIONS = [
   { top: '68%', left: '55%' },
   { top: '26%', left: '72%' },
 ] as const
-
-const SECTION_ANIMATION = {
-  initial: { opacity: 0, y: 20 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, amount: 0.1 },
-}
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
@@ -348,7 +341,9 @@ const PlantInfoPage: React.FC = () => {
     navigate(`/plants/${plant.id}/edit`)
   }
 
-  if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('common.loading')}</div>
+  if (loading) {
+    return <PlantInfoSkeleton label={t('common.loading', { defaultValue: 'Loading plant data' })} />
+  }
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
@@ -378,6 +373,168 @@ const PlantInfoPage: React.FC = () => {
       </div>
       <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
       <MoreInformationSection plant={plant} />
+    </div>
+  )
+}
+
+const SkeletonBlock: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <div className={`animate-pulse rounded-md bg-stone-200/80 dark:bg-stone-800/70 ${className}`} />
+)
+
+const InfoCardSkeleton: React.FC<{ lines?: number }> = ({ lines = 4 }) => (
+  <Card className="rounded-2xl sm:rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
+    <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
+      <SkeletonBlock className="h-4 w-1/3 rounded-full" />
+    </CardHeader>
+    <CardContent className="space-y-2.5 sm:space-y-3 p-4 sm:p-6 pt-0">
+      {Array.from({ length: lines }).map((_, idx) => (
+        <div key={`info-line-${idx}`} className="flex items-start gap-3">
+          <SkeletonBlock className="h-9 w-9 rounded-xl" />
+          <div className="flex-1 space-y-1.5">
+            <SkeletonBlock className="h-3 w-1/3 rounded-full" />
+            <SkeletonBlock className="h-4 w-5/6" />
+          </div>
+        </div>
+      ))}
+    </CardContent>
+  </Card>
+)
+
+const PlantInfoSkeleton: React.FC<{ label?: string }> = ({ label = 'Loading...' }) => {
+  const infoCardSkeletons = [4, 4, 3, 4, 3, 2]
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-5 sm:space-y-6"
+    >
+      <span className="sr-only">{label}</span>
+
+      <div className="flex flex-wrap items-center gap-3 justify-between">
+        <SkeletonBlock className="h-10 w-32 rounded-2xl" />
+        <SkeletonBlock className="h-10 w-24 rounded-2xl" />
+      </div>
+
+      <div className="rounded-3xl border border-stone-200/70 dark:border-[#1d1d1f] bg-white/80 dark:bg-[#0c111b] shadow-md p-4 sm:p-6 space-y-5">
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+          <div className="flex-1 space-y-3 sm:space-y-4">
+            <SkeletonBlock className="h-5 w-24 rounded-full" />
+            <SkeletonBlock className="h-9 w-3/4 rounded-xl" />
+            <SkeletonBlock className="h-5 w-2/5 rounded-md" />
+            <div className="space-y-2">
+              <SkeletonBlock className="h-4 w-full" />
+              <SkeletonBlock className="h-4 w-5/6" />
+              <SkeletonBlock className="h-4 w-2/3" />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <SkeletonBlock key={`plant-badge-${idx}`} className="h-6 w-24 rounded-full" />
+              ))}
+            </div>
+          </div>
+          <div className="w-full lg:w-96">
+            <SkeletonBlock className="aspect-[4/3] w-full rounded-2xl" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <SkeletonBlock key={`stat-pill-${idx}`} className="h-28 rounded-[20px]" />
+          ))}
+        </div>
+      </div>
+
+      <section className="space-y-4 sm:space-y-6">
+        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)]">
+          <div className="rounded-2xl border border-emerald-200/70 dark:border-emerald-500/30 bg-white/80 dark:bg-[#0f1f1f] p-4 sm:p-5 space-y-3">
+            <SkeletonBlock className="h-4 w-32" />
+            <SkeletonBlock className="h-5 w-24" />
+            <div className="grid md:grid-cols-2 gap-3">
+              <SkeletonBlock className="min-h-[240px] rounded-2xl" />
+              <div className="flex flex-col gap-2">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div
+                    key={`dimension-chip-${idx}`}
+                    className="space-y-2 rounded-2xl border border-emerald-100/70 dark:border-emerald-500/30 p-3"
+                  >
+                    <SkeletonBlock className="h-3 w-1/3 rounded-full" />
+                    <SkeletonBlock className="h-5 w-1/2 rounded-md" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 max-w-[280px]">
+            <SkeletonBlock className="h-4 w-24 mb-3" />
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <div key={`palette-line-${idx}`} className="space-y-1.5">
+                  <SkeletonBlock className="h-14 rounded-xl" />
+                  <SkeletonBlock className="h-3 w-3/4 rounded-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6 space-y-4">
+            <SkeletonBlock className="h-4 w-32" />
+            <SkeletonBlock className="h-5 w-20" />
+            <div className="space-y-2">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <SkeletonBlock key={`timeline-bar-${idx}`} className="h-6 w-full rounded-full" />
+              ))}
+            </div>
+            <div className="flex gap-3 flex-wrap text-stone-400 text-xs">
+              {Array.from({ length: 3 }).map((_, idx) => (
+                <SkeletonBlock key={`timeline-label-${idx}`} className="h-3 w-20 rounded-full" />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/70 via-white/70 to-emerald-100/70 dark:from-[#03191b] dark:via-[#05263a] dark:to-[#081121] p-4 sm:p-6 space-y-4">
+          <SkeletonBlock className="h-4 w-36" />
+          <SkeletonBlock className="h-52 w-full rounded-2xl" />
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <SkeletonBlock key={`map-badge-${idx}`} className="h-6 w-24 rounded-full" />
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-500/40 bg-gradient-to-br from-emerald-50/80 via-orange-50/50 to-amber-50/70 dark:from-emerald-500/20 dark:via-orange-500/10 dark:to-amber-500/10 p-4 sm:p-6 space-y-4">
+          <SkeletonBlock className="h-5 w-48" />
+          <div className="flex flex-wrap gap-3">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <SkeletonBlock key={`recipe-pill-${idx}`} className="h-10 w-32 rounded-2xl" />
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3 sm:space-y-4">
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+            {infoCardSkeletons.map((lines, idx) => (
+              <InfoCardSkeleton key={`info-card-${idx}`} lines={lines} />
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6 space-y-3">
+            <SkeletonBlock className="h-4 w-32" />
+            <div className="flex gap-3 overflow-hidden">
+              {Array.from({ length: 3 }).map((_, idx) => (
+                <SkeletonBlock key={`gallery-card-${idx}`} className="h-48 flex-1 rounded-2xl" />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-stone-200/70 bg-white/90 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f] p-4 sm:p-5 space-y-3">
+            <SkeletonBlock className="h-4 w-44" />
+            <SkeletonBlock className="h-4 w-36" />
+            <SkeletonBlock className="h-4 w-2/3" />
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
@@ -671,9 +828,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       ].filter((section) => section.items.length > 0)
 
   return (
-    <motion.section
-      {...SECTION_ANIMATION}
-      transition={{ duration: 0.4 }}
+    <section
       className="space-y-4 sm:space-y-6"
     >
         <div className="flex flex-col gap-1.5 sm:gap-2">
@@ -687,9 +842,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         {/* Dynamic Grid Layout */}
         <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)] items-stretch">
           {(height !== null || wingspan !== null || spacing !== null) && (
-            <motion.section
-              {...SECTION_ANIMATION}
-              transition={{ duration: 0.4, delay: 0.02 }}
+            <section
               className={`${dimensionColClass} rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent`}
             >
               <div className="mb-3 space-y-2">
@@ -724,13 +877,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   ))}
                 </div>
               </div>
-            </motion.section>
+            </section>
           )}
 
             {showPalette && (
-            <motion.section
-              {...SECTION_ANIMATION}
-              transition={{ duration: 0.4, delay: 0.08 }}
+            <section
               className={`${paletteColClass} justify-self-start w-full sm:w-auto relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4 max-w-[260px] lg:max-w-[240px]`}
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
@@ -746,12 +897,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   })}
                 </div>
               </div>
-            </motion.section>
+            </section>
           )}
 
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.1 }}
+          <section
             className={`${timelineColClass} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
           >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
@@ -789,14 +938,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 ))}
               </div>
             </div>
-          </motion.section>
+          </section>
         </div>
 
         {/* Habitat Map */}
         {habitats.length > 0 && (
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.13 }}
+          <section
             className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90"
           >
             <div className="space-y-3 sm:space-y-4">
@@ -836,14 +983,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 )}
               </div>
             </div>
-          </motion.section>
+          </section>
         )}
 
       {/* Recipes Ideas Section - Prominent display */}
         {recipesIdeasList.length > 0 && (
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.12 }}
+          <section
             className="rounded-2xl sm:rounded-3xl border-2 border-emerald-400/50 bg-gradient-to-br from-emerald-50/90 via-orange-50/60 to-amber-50/80 p-5 sm:p-6 dark:border-emerald-500/60 dark:from-emerald-500/15 dark:via-orange-500/10 dark:to-amber-500/10 shadow-lg"
           >
             <div className="space-y-4 sm:space-y-5">
@@ -868,7 +1013,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 ))}
               </div>
             </div>
-          </motion.section>
+          </section>
         )}
 
       {/* Info Cards Section - Full width for better mobile experience */}
@@ -891,9 +1036,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           
           {/* Image Gallery */}
           {plant.images && plant.images.length > 0 && (
-            <motion.section
-              {...SECTION_ANIMATION}
-              transition={{ duration: 0.4, delay: 0.15 }}
+            <section
               className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
             >
               <div className="space-y-3 sm:space-y-4">
@@ -905,7 +1048,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
                 </div>
               </div>
-            </motion.section>
+            </section>
           )}
           
           {(createdTimestamp || updatedTimestamp || createdByLabel || updatedByLabel || sourcesValue) && (
@@ -934,7 +1077,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </div>
           )}
         </div>
-    </motion.section>
+    </section>
   )
 }
 

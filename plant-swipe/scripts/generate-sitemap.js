@@ -42,6 +42,7 @@ const defaultLanguage = (process.env.SITEMAP_DEFAULT_LANGUAGE || 'en').trim() ||
 
 const STATIC_ROUTES = [
   { path: '/', changefreq: 'daily', priority: 1.0 },
+  { path: '/blog', changefreq: 'daily', priority: 0.9 },
   { path: '/search', changefreq: 'daily', priority: 0.9 },
   { path: '/gardens', changefreq: 'weekly', priority: 0.8 },
   { path: '/download', changefreq: 'monthly', priority: 0.7 },
@@ -61,7 +62,12 @@ async function main() {
     return []
   })
 
-  const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes])
+  const blogRoutes = await loadBlogRoutes().catch((error) => {
+    console.warn(`[sitemap] Failed to load dynamic blog routes: ${error.message || error}`)
+    return []
+  })
+
+  const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes, ...blogRoutes])
 
   const nowIso = new Date().toISOString()
   const urlEntries = []
@@ -126,7 +132,7 @@ async function main() {
   await fs.writeFile(sitemapPath, xml, 'utf8')
 
   const relPath = path.relative(appRoot, sitemapPath)
-  console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicRoutes.length} dynamic) in ${Date.now() - startedAt}ms → ${relPath}`)
+  console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicRoutes.length + blogRoutes.length} dynamic) in ${Date.now() - startedAt}ms → ${relPath}`)
 }
 
 main().catch((error) => {
@@ -159,31 +165,11 @@ async function detectLanguages(localesDir, fallback) {
 }
 
 async function loadPlantRoutes() {
-  const supabaseUrl =
-    process.env.SUPABASE_URL ||
-    process.env.VITE_SUPABASE_URL ||
-    process.env.REACT_APP_SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL
-
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE ||
-    process.env.SUPABASE_SERVICE_ROLE_TOKEN ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    process.env.REACT_APP_SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    ''
-
-  if (!supabaseUrl || !supabaseKey) {
+  const client = getSupabaseClient()
+  if (!client) {
     console.warn('[sitemap] Supabase credentials missing — static routes only.')
     return []
   }
-
-  const client = createSupabaseClient(supabaseUrl, supabaseKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
 
   const maxPlants = positiveInteger(process.env.SITEMAP_MAX_PLANT_URLS, 5000)
   const batchSize = positiveInteger(process.env.SITEMAP_PLANT_BATCH_SIZE, 500)
@@ -229,10 +215,20 @@ async function loadPlantRoutes() {
 }
 
 function pickLastmod(row) {
-  const updated = row?.updated_time || row?.updatedTime
-  const created = row?.created_time || row?.createdTime
+  const updated = row?.updated_time || row?.updatedTime || row?.updated_at || row?.updatedAt
+  const created = row?.created_time || row?.createdTime || row?.created_at || row?.createdAt
+  const published = row?.published_at || row?.publishedAt
+  
+  // Prefer published date for blog posts if available and updated is not significantly later? 
+  // Standard sitemap practice is usually last modification time.
+  // If published_at is available, it might be the initial date.
+  
   const updatedIso = toIsoString(updated)
   if (updatedIso) return updatedIso
+  
+  const publishedIso = toIsoString(published)
+  if (publishedIso) return publishedIso
+
   const createdIso = toIsoString(created)
   if (createdIso) return createdIso
   return null
@@ -354,6 +350,63 @@ function escapeXml(value) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/'/g, '&apos;')
+}
+
+async function loadBlogRoutes() {
+  const client = getSupabaseClient()
+  if (!client) {
+    console.warn('[sitemap] Supabase credentials missing — skipping blog routes.')
+    return []
+  }
+
+  const { data, error } = await client
+    .from('blog_posts')
+    .select('slug, updated_at, created_at, published_at')
+    .eq('is_published', true)
+    .order('published_at', { ascending: false })
+
+  if (error) {
+    throw new Error(error.message || 'Supabase query failed for blog posts')
+  }
+
+  if (!data || !data.length) return []
+
+  return data.map((post) => {
+    if (!post.slug) return null
+    return {
+      path: `/blog/${post.slug}`,
+      changefreq: 'weekly',
+      priority: 0.8,
+      lastmod: pickLastmod(post),
+    }
+  }).filter(Boolean)
+}
+
+function getSupabaseClient() {
+  const supabaseUrl =
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.REACT_APP_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL
+
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.SUPABASE_SERVICE_ROLE_TOKEN ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.REACT_APP_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    ''
+
+  if (!supabaseUrl || !supabaseKey) {
+    return null
+  }
+
+  return createSupabaseClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
 }
 
 function loadEnvFiles(rootDir) {

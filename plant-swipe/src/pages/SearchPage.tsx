@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { Plant, PlantSeason } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Flame, PartyPopper, Sparkles } from "lucide-react";
+import { Flame, PartyPopper, Sparkles, Loader2 } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 
@@ -18,20 +19,69 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   plants,
   openInfo,
   likedIds = [],
-  }) => {
-    const { t } = useTranslation("common");
-    const seoTitle = t("seo.search.title", { defaultValue: "Advanced plant search" });
-    const seoDescription = t("seo.search.description", {
-      defaultValue: "Filter by color, season, rarity, and uses to pinpoint the right species for your next planting plan.",
-    });
-    usePageMetadata({ title: seoTitle, description: seoDescription });
-    const cardSurface =
-      "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
+}) => {
+  const { t } = useTranslation("common");
+  const seoTitle = t("seo.search.title", { defaultValue: "Advanced plant search" });
+  const seoDescription = t("seo.search.description", {
+    defaultValue: "Filter by color, season, rarity, and uses to pinpoint the right species for your next planting plan.",
+  });
+  usePageMetadata({ title: seoTitle, description: seoDescription });
+
+  const [visibleCount, setVisibleCount] = useState(20);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Reset visible count when filters change (plants array changes)
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [plants]);
+
+  const showMore = useCallback(() => {
+    setVisibleCount((prev) => Math.min(prev + 20, plants.length));
+  }, [plants.length]);
+
+  useEffect(() => {
+    const element = loadMoreRef.current;
+    if (!element) return;
+
+    // Disconnect previous observer if exists
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting) {
+          showMore();
+        }
+      },
+      {
+        root: null, // viewport
+        rootMargin: "100px", // load before it's fully visible
+        threshold: 0.1,
+      }
+    );
+
+    observerRef.current.observe(element);
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [showMore, visibleCount, plants.length]); // Re-attach when dependencies change
+
+  const cardSurface =
+    "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
+
+  const visiblePlants = plants.slice(0, visibleCount);
+  const hasMore = visibleCount < plants.length;
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-        {plants.map((p) => {
+        {visiblePlants.map((p) => {
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
           if (isPlantOfTheMonth(p)) {
             highlightBadges.push({
@@ -58,9 +108,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             })
           }
           return (
-              <Card
-                key={p.id}
-                className={`${cardSurface} h-full min-h-[200px]`}
+            <Card
+              key={p.id}
+              className={`${cardSurface} h-full min-h-[200px]`}
               onClick={() => openInfo(p)}
               role="button"
               tabIndex={0}
@@ -68,7 +118,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 if (e.key === "Enter") openInfo(p);
               }}
             >
-                <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] items-stretch h-full">
+              <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] items-stretch h-full">
                 <div className="relative w-full h-52 sm:w-40 sm:h-full flex-shrink-0 rounded-t-[28px] sm:rounded-l-[28px] sm:rounded-tr-none overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                   {p.image ? (
                     <img
@@ -91,7 +141,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                     </div>
                   )}
                 </div>
-                  <div className="p-4 space-y-2 flex flex-col h-full">
+                <div className="p-4 space-y-2 flex flex-col h-full">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-xl`}>{p.rarity}</Badge>
                     {(p.seasons ?? []).map((s: PlantSeason) => {
@@ -111,8 +161,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                     <div className="font-semibold truncate text-lg">{p.name}</div>
                     <div className="text-xs italic opacity-60 truncate">{p.scientificName}</div>
                   </div>
-                    <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1">{p.description}</p>
-                    <div className="flex flex-wrap gap-1 mt-auto max-h-[48px] overflow-hidden">
+                  <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1">{p.description}</p>
+                  <div className="flex flex-wrap gap-1 mt-auto max-h-[48px] overflow-hidden">
                     {(p.colors ?? []).map((c) => (
                       <Badge key={c} variant="secondary" className="rounded-xl text-[11px]">
                         {c}
@@ -125,6 +175,23 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           )
         })}
       </div>
+
+      {hasMore && (
+        <div 
+          ref={loadMoreRef}
+          className="py-8 flex justify-center w-full"
+        >
+          <Button 
+            variant="secondary" 
+            onClick={showMore}
+            className="w-full max-w-md rounded-2xl h-12 shadow-sm bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] border border-stone-200 dark:border-[#3e3e42] transition-all"
+          >
+            {t("common.loadMore", { defaultValue: "Load more" })}
+            <Loader2 className="ml-2 h-4 w-4 animate-spin opacity-0 group-active:opacity-100" />
+          </Button>
+        </div>
+      )}
+
       {plants.length === 0 && (
         <div className="text-center py-12 rounded-[28px] border border-dashed border-stone-200 dark:border-[#3e3e42] text-sm text-stone-500 dark:text-stone-300">
           {t("plant.noResults")}

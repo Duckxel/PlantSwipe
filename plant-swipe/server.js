@@ -9382,6 +9382,10 @@ app.delete('/api/push/subscribe', async (req, res) => {
 })
 
 const notificationWorkerIntervalMs = Math.max(15000, Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS || 60000))
+const notificationDeliveryBatchSize = Math.min(
+  Math.max(Number(process.env.NOTIFICATION_DELIVERY_BATCH_SIZE || 200), 25),
+  500,
+)
 let notificationWorkerTimer = null
 let notificationWorkerBusy = false
 
@@ -10078,6 +10082,68 @@ async function deliverPushNotifications(notifications, campaign) {
   return { sent: deliveredIds.length, failed: failedIds.length }
 }
 
+async function processDueUserNotifications() {
+  if (!sql) return
+  await ensureNotificationTables()
+  while (true) {
+    const pending = await sql`
+      select
+        un.id::text as id,
+        un.user_id::text as user_id,
+        un.title,
+        un.message,
+        un.payload,
+        un.cta_url,
+        un.campaign_id::text as campaign_id
+      from public.user_notifications un
+      where un.delivery_status = 'pending'
+        and un.cancelled_at is null
+        and un.scheduled_for <= now()
+      order by un.scheduled_for asc
+      limit ${notificationDeliveryBatchSize}
+    `
+    if (!pending || !pending.length) break
+
+    const campaignIds = Array.from(
+      new Set(pending.map((row) => row.campaign_id).filter((value) => value && value.length)),
+    )
+    const campaignMap = new Map()
+    if (campaignIds.length) {
+      const campaignRows = await sql`
+        select *
+        from public.notification_campaigns
+        where id = any(${sql.array(campaignIds)}::uuid[])
+      `
+      for (const row of campaignRows || []) {
+        const normalized = normalizeNotificationCampaign(row)
+        if (normalized?.id) {
+          campaignMap.set(normalized.id, normalized)
+        }
+      }
+    }
+
+    const grouped = new Map()
+    for (const row of pending) {
+      const key = row.campaign_id || '__adhoc__'
+      const list = grouped.get(key) || []
+      list.push(row)
+      grouped.set(key, list)
+    }
+
+    for (const [campaignId, notifications] of grouped.entries()) {
+      const fallbackCampaign =
+        campaignMap.get(campaignId) || {
+          id: campaignId === '__adhoc__' ? null : campaignId,
+          title: notifications[0]?.title || 'Aphylia',
+          ctaUrl: notifications[0]?.cta_url || null,
+        }
+      await deliverPushNotifications(notifications, fallbackCampaign)
+    }
+
+    if (pending.length < notificationDeliveryBatchSize) break
+  }
+}
+
 async function runNotificationCampaign(row) {
   if (!sql) return
   const claimed = await sql`
@@ -10095,12 +10161,10 @@ async function runNotificationCampaign(row) {
   const recipients = await resolveNotificationAudience(campaign)
   const scheduledFor = new Date().toISOString()
   const inserted = await insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor)
-  const deliveryStats = await deliverPushNotifications(inserted, campaign)
   const summary = {
     recipients: recipients.length,
-    sent: deliveryStats.sent,
-    failed: deliveryStats.failed,
-    completedAt: new Date().toISOString(),
+    queued: inserted.length,
+    queuedAt: new Date().toISOString(),
   }
   let nextState = 'completed'
   let nextRunAt = null
@@ -10147,6 +10211,7 @@ async function runNotificationWorkerTick() {
   notificationWorkerBusy = true
   try {
     await processDueNotificationCampaigns()
+    await processDueUserNotifications()
   } catch (err) {
     console.error('[notifications] worker tick error', err)
   } finally {

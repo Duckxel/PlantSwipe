@@ -284,6 +284,93 @@ function isMissingTableOrView(error: any, tableName: string): boolean {
   return false
 }
 
+export async function getGardenMemberCountsBatch(gardenIds: string[]): Promise<Record<string, number>> {
+  const { valid: safeIds } = normalizeGardenIdList(gardenIds)
+  if (safeIds.length === 0) return {}
+
+  // Try RPC first
+  const rpcName = 'get_garden_member_counts'
+  if (!missingSupabaseRpcs.has(rpcName)) {
+    try {
+      const { data, error } = await supabase.rpc(rpcName, { _garden_ids: safeIds })
+      if (!error && data && Array.isArray(data)) {
+        const result: Record<string, number> = {}
+        for (const row of data) {
+          result[String(row.garden_id)] = Number(row.count ?? 0)
+        }
+        return result
+      }
+      if (error) {
+        if (!(isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName))) {
+          console.warn('[gardens] get_garden_member_counts RPC failed, falling back to client query:', error)
+        }
+      }
+    } catch (err: any) {
+      if (!(isMissingRpcFunction(err, rpcName) || isRpcDependencyUnavailable(err, rpcName))) {
+        console.warn('[gardens] get_garden_member_counts RPC failed, falling back to client query:', err)
+      }
+    }
+  }
+
+  // Fallback: client query
+  // Note: This fetches ALL member rows, which is inefficient for large gardens,
+  // but we have to do it if RPC is unavailable.
+  const { data: memberRows } = await supabase
+    .from('garden_members')
+    .select('garden_id')
+    .in('garden_id', safeIds)
+  
+  const counts: Record<string, number> = {}
+  if (memberRows) {
+    for (const row of memberRows) {
+      const gid = String(row.garden_id)
+      counts[gid] = (counts[gid] || 0) + 1
+    }
+  }
+  return counts
+}
+
+export async function listTasksForMultipleGardensMinimal(gardenIds: string[], _limitPerGarden: number = 500): Promise<Record<string, Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>>> {
+  const { valid: safeIds } = normalizeGardenIdList(gardenIds)
+  if (safeIds.length === 0) return {}
+
+  const base = supabase.from('garden_plant_tasks')
+  const selectMinimal = 'id, garden_id, type, emoji, garden_plant_id'
+  const selectMinimalNoEmoji = 'id, garden_id, type, garden_plant_id'
+  
+  let { data, error } = await base
+    .select(selectMinimal)
+    .in('garden_id', safeIds)
+    .order('created_at', { ascending: true })
+    // .limit(...) // Can't limit per garden easily in one query without RPC, so fetch all (should be okay for minimal fields)
+  
+  if (error) {
+    const msg = String(error.message || '')
+    if (/column .*emoji.* does not exist/i.test(msg)) {
+      const res = await base
+        .select(selectMinimalNoEmoji)
+        .in('garden_id', safeIds)
+        .order('created_at', { ascending: true })
+      data = res.data as any
+      error = res.error as any
+    }
+  }
+  if (error) throw new Error(error.message)
+
+  const result: Record<string, Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>> = {}
+  for (const r of (data || []) as any[]) {
+    const gid = String(r.garden_id)
+    if (!result[gid]) result[gid] = []
+    result[gid].push({
+      id: String(r.id),
+      type: r.type,
+      emoji: (r as any).emoji || null,
+      gardenPlantId: String(r.garden_plant_id),
+    })
+  }
+  return result
+}
+
 export async function getUserGardens(userId: string): Promise<Garden[]> {
   // Fetch garden ids where user is a member, then fetch gardens
   const { data: memberRows, error: memberErr } = await supabase
@@ -1623,6 +1710,38 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
       .from('garden_plant_task_occurrences')
       .update({ required_count: upd.requiredCount })
       .eq('id', upd.id)
+  }
+}
+
+export async function resyncMultipleGardensTasks(gardenIds: string[], startIso: string, endIso: string): Promise<void> {
+  if (gardenIds.length === 0) return
+
+  // Try RPC first (fast path)
+  const rpcName = 'ensure_gardens_tasks_occurrences'
+  if (!missingSupabaseRpcs.has(rpcName)) {
+    try {
+      const { error } = await supabase.rpc(rpcName, {
+        _garden_ids: gardenIds,
+        _start_iso: startIso,
+        _end_iso: endIso,
+      })
+      if (!error) return
+
+      if (error && !(isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName))) {
+        console.warn('[gardens] ensure_gardens_tasks_occurrences RPC failed, falling back to parallel JS:', error)
+      }
+    } catch (err: any) {
+      if (!(isMissingRpcFunction(err, rpcName) || isRpcDependencyUnavailable(err, rpcName))) {
+        console.warn('[gardens] ensure_gardens_tasks_occurrences RPC failed, falling back to parallel JS:', err)
+      }
+    }
+  }
+
+  // Fallback to parallel JS calls (batch in chunks of 5 to avoid connection limits)
+  const chunkSize = 5
+  for (let i = 0; i < gardenIds.length; i += chunkSize) {
+    const chunk = gardenIds.slice(i, i + chunkSize)
+    await Promise.all(chunk.map(gid => resyncTaskOccurrencesForGarden(gid, startIso, endIso)))
   }
 }
 

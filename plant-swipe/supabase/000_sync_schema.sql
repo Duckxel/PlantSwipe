@@ -5288,123 +5288,153 @@ do $$ begin
     with check (user_id = (select auth.uid()));
 end $$;
 
--- ========== Admin email templates & campaigns ==========
-create table if not exists public.admin_email_templates (
-  id uuid primary key default gen_random_uuid(),
-  title text not null check (length(trim(both from title)) between 3 and 120),
-  subject text not null check (length(trim(both from subject)) between 3 and 240),
-  description text,
-  preview_text text,
-  body_html text not null check (length(body_html) > 0),
-  body_json jsonb,
-  variables jsonb not null default '[]'::jsonb,
-  is_active boolean not null default true,
-  version integer not null default 1,
-  last_used_at timestamptz,
-  created_by uuid references public.profiles(id) on delete set null,
-  updated_by uuid references public.profiles(id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create index if not exists admin_email_templates_updated_idx on public.admin_email_templates (updated_at desc);
-create index if not exists admin_email_templates_title_idx on public.admin_email_templates (lower(title));
-grant select, insert, update, delete on public.admin_email_templates to authenticated;
-alter table public.admin_email_templates enable row level security;
+-- Optimization: server-side task occurrence generation (fast path for dashboard)
+CREATE OR REPLACE FUNCTION public.ensure_gardens_tasks_occurrences(
+  _garden_ids uuid[],
+  _start_iso timestamptz,
+  _end_iso timestamptz
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _start_date date := date(_start_iso);
+  _end_date date := date(_end_iso);
+  _task record;
+  _curr date;
+  _curr_ts timestamptz;
+  _occurrence_due timestamptz;
+  _match boolean;
+  _ymd text;
+  _mm text;
+  _dd text;
+  _weekday int;
+  _week_index int;
+  _key text;
+  _interval interval;
+BEGIN
+  -- Loop through all relevant tasks in the given gardens
+  FOR _task IN
+    SELECT *
+    FROM garden_plant_tasks
+    WHERE garden_id = ANY(_garden_ids)
+      -- Only active tasks (if archived_at exists, otherwise ignore)
+      -- AND (archived_at IS NULL) 
+  LOOP
+    -- One time date
+    IF _task.schedule_kind = 'one_time_date' THEN
+      IF _task.due_at IS NOT NULL THEN
+         _occurrence_due := (_task.due_at::date || 'T12:00:00.000Z')::timestamptz;
+         IF _occurrence_due >= _start_iso AND _occurrence_due <= _end_iso THEN
+           INSERT INTO garden_plant_task_occurrences (task_id, garden_plant_id, due_at, required_count)
+           VALUES (_task.id, _task.garden_plant_id, _occurrence_due, GREATEST(1, _task.required_count))
+           ON CONFLICT (task_id, due_at) DO NOTHING;
+         END IF;
+      END IF;
 
-create or replace function public.update_admin_email_templates_meta()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  if tg_op = 'UPDATE' then
-    new.version = coalesce(old.version, 1) + 1;
-  elsif new.version is null then
-    new.version = 1;
-  end if;
-  return new;
-end;
+    -- One time duration
+    ELSIF _task.schedule_kind = 'one_time_duration' THEN
+       _occurrence_due := (_task.created_at + (_task.interval_amount || ' ' || _task.interval_unit)::interval);
+       _occurrence_due := (_occurrence_due::date || 'T12:00:00.000Z')::timestamptz;
+       IF _occurrence_due >= _start_iso AND _occurrence_due <= _end_iso THEN
+         INSERT INTO garden_plant_task_occurrences (task_id, garden_plant_id, due_at, required_count)
+         VALUES (_task.id, _task.garden_plant_id, _occurrence_due, GREATEST(1, _task.required_count))
+         ON CONFLICT (task_id, due_at) DO NOTHING;
+       END IF;
+
+    -- Repeat duration
+    ELSIF _task.schedule_kind = 'repeat_duration' THEN
+       IF _task.interval_amount > 0 THEN
+         _interval := (_task.interval_amount || ' ' || _task.interval_unit)::interval;
+         _curr_ts := _task.created_at;
+         
+         -- Optimization: if start date is far ahead, we could skip loops, but for now simple loop to ensure correctness
+         -- JS logic does the same loop
+         WHILE _curr_ts < _start_iso LOOP
+            _curr_ts := _curr_ts + _interval;
+         END LOOP;
+         
+         WHILE _curr_ts <= _end_iso LOOP
+            _occurrence_due := (_curr_ts::date || 'T12:00:00.000Z')::timestamptz;
+            -- Only insert if valid date (sanity check)
+            IF _occurrence_due IS NOT NULL THEN
+              INSERT INTO garden_plant_task_occurrences (task_id, garden_plant_id, due_at, required_count)
+              VALUES (_task.id, _task.garden_plant_id, _occurrence_due, GREATEST(1, _task.required_count))
+              ON CONFLICT (task_id, due_at) DO NOTHING;
+            END IF;
+            _curr_ts := _curr_ts + _interval;
+         END LOOP;
+       END IF;
+
+    -- Repeat pattern
+    ELSIF _task.schedule_kind = 'repeat_pattern' THEN
+       _curr := _start_date;
+       WHILE _curr <= _end_date LOOP
+          _match := false;
+          _weekday := extract(dow from _curr); -- 0-6 (Sun-Sat)
+          _dd := to_char(_curr, 'DD');
+          _mm := to_char(_curr, 'MM');
+          _ymd := to_char(_curr, 'MM-DD');
+
+          IF _task.period = 'week' THEN
+             IF _task.weekly_days IS NOT NULL AND _weekday = ANY(_task.weekly_days) THEN
+                _match := true;
+             END IF;
+          ELSIF _task.period = 'month' THEN
+             IF _task.monthly_days IS NOT NULL AND extract(day from _curr)::int = ANY(_task.monthly_days) THEN
+                _match := true;
+             END IF;
+             IF NOT _match AND _task.monthly_nth_weekdays IS NOT NULL THEN
+                _week_index := floor((extract(day from _curr) - 1) / 7) + 1;
+                _key := _week_index || '-' || _weekday;
+                IF _key = ANY(_task.monthly_nth_weekdays) THEN
+                   _match := true;
+                END IF;
+             END IF;
+          ELSIF _task.period = 'year' THEN
+             IF _task.yearly_days IS NOT NULL AND _ymd = ANY(_task.yearly_days) THEN
+                _match := true;
+             END IF;
+             IF NOT _match AND _task.yearly_days IS NOT NULL THEN
+                _week_index := floor((extract(day from _curr) - 1) / 7) + 1;
+                _key := _mm || '-' || _week_index || '-' || _weekday;
+                IF _key = ANY(_task.yearly_days) THEN
+                   _match := true;
+                END IF;
+             END IF;
+          END IF;
+
+          IF _match THEN
+             _occurrence_due := (_curr || 'T12:00:00.000Z')::timestamptz;
+             INSERT INTO garden_plant_task_occurrences (task_id, garden_plant_id, due_at, required_count)
+             VALUES (_task.id, _task.garden_plant_id, _occurrence_due, GREATEST(1, _task.required_count))
+             ON CONFLICT (task_id, due_at) DO NOTHING;
+          END IF;
+
+          _curr := _curr + 1;
+       END LOOP;
+
+    END IF;
+  END LOOP;
+END;
 $$;
 
-drop trigger if exists admin_email_templates_set_meta on public.admin_email_templates;
-create trigger admin_email_templates_set_meta
-  before update on public.admin_email_templates
-  for each row
-  execute function public.update_admin_email_templates_meta();
+GRANT EXECUTE ON FUNCTION public.ensure_gardens_tasks_occurrences(uuid[], timestamptz, timestamptz) TO authenticated;
 
-do $$ begin
-  if exists (
-    select 1 from pg_policies
-    where schemaname='public' and tablename='admin_email_templates' and policyname='admin_email_templates_admins'
-  ) then
-    drop policy admin_email_templates_admins on public.admin_email_templates;
-  end if;
-  create policy admin_email_templates_admins on public.admin_email_templates
-    for all to authenticated
-    using (public.is_admin_user((select auth.uid())))
-    with check (public.is_admin_user((select auth.uid())));
-end $$;
-
-create table if not exists public.admin_email_campaigns (
-  id uuid primary key default gen_random_uuid(),
-  template_id uuid references public.admin_email_templates(id) on delete restrict,
-  template_version integer not null default 1,
-  title text not null check (length(trim(both from title)) between 3 and 160),
-  description text,
-  subject text not null check (length(trim(both from subject)) between 3 and 240),
-  preview_text text,
-  body_html text not null check (length(body_html) > 0),
-  body_json jsonb,
-  variables jsonb not null default '[]'::jsonb,
-  timezone text not null default 'UTC',
-  scheduled_for timestamptz,
-  status text not null default 'draft'
-    check (status in ('draft','scheduled','running','sent','failed','cancelled','partial')),
-  total_recipients integer not null default 0,
-  sent_count integer not null default 0,
-  failed_count integer not null default 0,
-  send_summary jsonb,
-  send_error text,
-  send_started_at timestamptz,
-  send_completed_at timestamptz,
-  created_by uuid references public.profiles(id) on delete set null,
-  updated_by uuid references public.profiles(id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create index if not exists admin_email_campaigns_schedule_idx
-  on public.admin_email_campaigns (scheduled_for)
-  where status = 'scheduled';
-create index if not exists admin_email_campaigns_status_idx
-  on public.admin_email_campaigns (status, updated_at desc);
-grant select, insert, update, delete on public.admin_email_campaigns to authenticated;
-alter table public.admin_email_campaigns enable row level security;
-
-create or replace function public.update_admin_email_campaigns_meta()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
+-- Optimization: Batch fetch member counts for gardens
+CREATE OR REPLACE FUNCTION public.get_garden_member_counts(_garden_ids uuid[])
+RETURNS TABLE (garden_id uuid, count integer)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT garden_id, count(*)::integer
+  FROM garden_members
+  WHERE garden_id = ANY(_garden_ids)
+  GROUP BY garden_id;
 $$;
 
-drop trigger if exists admin_email_campaigns_set_meta on public.admin_email_campaigns;
-create trigger admin_email_campaigns_set_meta
-  before update on public.admin_email_campaigns
-  for each row
-  execute function public.update_admin_email_campaigns_meta();
-
-do $$ begin
-  if exists (
-    select 1 from pg_policies
-    where schemaname='public' and tablename='admin_email_campaigns' and policyname='admin_email_campaigns_admins'
-  ) then
-    drop policy admin_email_campaigns_admins on public.admin_email_campaigns;
-  end if;
-  create policy admin_email_campaigns_admins on public.admin_email_campaigns
-    for all to authenticated
-    using (public.is_admin_user((select auth.uid())))
-    with check (public.is_admin_user((select auth.uid())));
-end $$;
+GRANT EXECUTE ON FUNCTION public.get_garden_member_counts(uuid[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_garden_member_counts(uuid[]) TO anon;
