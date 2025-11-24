@@ -1356,7 +1356,7 @@ export default function PlantSwipe() {
               path="/"
               element={plants.length > 0 ? (
                 <Suspense fallback={routeLoadingFallback}>
-                  <SwipePageLazy
+                  <SwipePage
                     current={current}
                     index={index}
                     setIndex={setIndex}
