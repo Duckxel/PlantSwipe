@@ -64,6 +64,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
   const isNew = !id || id === "new"
 
   const [loading, setLoading] = React.useState(!isNew)
+  
+  // Separate state for initial content to prevent editor re-renders loop
+  const [initialBody, setInitialBody] = React.useState<{ html: string; doc: JSONContent | null }>({ html: "", doc: null })
+  
   const [templateForm, setTemplateForm] = React.useState<{
     title: string
     subject: string
@@ -112,6 +116,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
              description: foundTemplate.description || "",
              bodyHtml: foundTemplate.bodyHtml,
              bodyDoc: foundTemplate.bodyJson,
+          })
+          setInitialBody({
+            html: foundTemplate.bodyHtml,
+            doc: foundTemplate.bodyJson,
           })
           setTemplateEditorKey(`loaded-${foundTemplate.id}`)
         } else {
@@ -299,8 +307,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
           <BlogEditor
             key={templateEditorKey}
             ref={templateEditorRef}
-            initialHtml={templateForm.bodyHtml}
-            initialDocument={templateForm.bodyDoc}
+            initialHtml={initialBody.html}
+            initialDocument={initialBody.doc}
             uploadFolder="email-templates"
             extraExtensions={[VariableHighlighter]}
             className="min-h-[500px]"
