@@ -1,5 +1,5 @@
-import { forwardRef, useImperativeHandle } from 'react'
-import { EditorContent, useEditor, BubbleMenu, FloatingMenu } from '@tiptap/react'
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
+import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
@@ -69,6 +69,12 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(({ initi
     editable: true,
   })
 
+  const [slashMenu, setSlashMenu] = useState<{ visible: boolean; top: number; left: number }>({
+    visible: false,
+    top: 0,
+    left: 0,
+  })
+
   useImperativeHandle(
     ref,
     () => ({
@@ -105,21 +111,60 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(({ initi
 
   const slashCommands = [
     { label: 'Heading 1', description: 'Large section title', action: () => editor?.chain().focus().toggleHeading({ level: 1 }).run() },
-    { label: 'Heading 2', description: 'Medium section title', action: () => editor?.chain().focus().toggleHeading({ level: 2 }).run() },
-    { label: 'Heading 3', description: 'Small section title', action: () => editor?.chain().focus().toggleHeading({ level: 3 }).run() },
-    { label: 'Checklist', description: 'Actionable list with checkboxes', action: () => editor?.chain().focus().toggleTaskList().run() },
-    { label: 'Bullet list', description: 'Classic unordered list', action: () => editor?.chain().focus().toggleBulletList().run() },
-    { label: 'Quote', description: 'Highlight a quote', action: () => editor?.chain().focus().toggleBlockquote().run() },
+    { label: 'Heading 2', description: 'Medium section heading', action: () => editor?.chain().focus().toggleHeading({ level: 2 }).run() },
+    { label: 'Heading 3', description: 'Small section heading', action: () => editor?.chain().focus().toggleHeading({ level: 3 }).run() },
+    { label: 'Checklist', description: 'Track todos with checkboxes', action: () => editor?.chain().focus().toggleTaskList().run() },
+    { label: 'Bullet list', description: 'Classic unordered bullets', action: () => editor?.chain().focus().toggleBulletList().run() },
+    { label: 'Quote', description: 'Emphasize cited text', action: () => editor?.chain().focus().toggleBlockquote().run() },
     { label: 'Divider', description: 'Visual section break', action: () => editor?.chain().focus().setHorizontalRule().run() },
-    { label: 'Code block', description: 'Snippet or terminal output', action: () => editor?.chain().focus().toggleCodeBlock().run() },
+    { label: 'Code block', description: 'Snippets or terminal output', action: () => editor?.chain().focus().toggleCodeBlock().run() },
   ]
 
-  const showFloatingMenu = () => {
-    if (!editor) return false
-    const { state } = editor
-    const { $from } = state.selection
-    const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '\uffff')
-    return textBefore === '/'
+  const hideSlashMenu = () => {
+    setSlashMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+  }
+
+  useEffect(() => {
+    if (!editor) return
+    const updateMenu = () => {
+      const { state } = editor
+      const { $from } = state.selection
+      const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '\uffff')
+      if (textBefore === '/') {
+        const coords = editor.view.coordsAtPos($from.pos)
+        setSlashMenu({
+          visible: true,
+          top: coords.bottom + window.scrollY + 6,
+          left: coords.left + window.scrollX,
+        })
+      } else {
+        hideSlashMenu()
+      }
+    }
+    editor.on('selectionUpdate', updateMenu)
+    editor.on('transaction', updateMenu)
+    return () => {
+      editor.off('selectionUpdate', updateMenu)
+      editor.off('transaction', updateMenu)
+    }
+  }, [editor])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        hideSlashMenu()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  const handleSlashCommand = (run?: () => void) => {
+    if (!editor) return
+    const from = editor.state.selection.from
+    editor.chain().focus().deleteRange({ from: Math.max(0, from - 1), to: from }).run()
+    run?.()
+    hideSlashMenu()
   }
 
   return (
@@ -171,53 +216,23 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(({ initi
           <LinkIcon className="h-4 w-4" />
         </button>
       </div>
-      <div className="px-4 pb-4">
-        {editor ? (
-          <>
-            <BubbleMenu editor={editor} tippyOptions={{ duration: 150 }}>
-              <div className="flex gap-1 rounded-full border border-stone-200 bg-white/90 p-1 shadow-lg">
-                <button className={toolbarButton} onClick={() => editor.chain().focus().toggleBold().run()}>
-                  <Bold className="h-4 w-4" />
-                </button>
-                <button className={toolbarButton} onClick={() => editor.chain().focus().toggleItalic().run()}>
-                  <Italic className="h-4 w-4" />
-                </button>
-                <button className={toolbarButton} onClick={() => editor.chain().focus().toggleUnderline().run()}>
-                  <UnderlineIcon className="h-4 w-4" />
-                </button>
-                <button className={toolbarButton} onClick={addLink}>
-                  <LinkIcon className="h-4 w-4" />
-                </button>
-              </div>
-            </BubbleMenu>
-
-            <FloatingMenu editor={editor} shouldShow={showFloatingMenu} tippyOptions={{ duration: 150 }}>
-              <div className="w-64 space-y-1 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white/95 dark:bg-[#0d0d0d] p-2 shadow-xl">
-                <p className="px-2 text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">Blocks</p>
-                {slashCommands.map(({ label, description, action }) => (
-                  <button
-                    key={label}
-                    type="button"
-                    className={floatingButton}
-                    onClick={() => {
-                      action()
-                      editor
-                        ?.chain()
-                        .focus()
-                        .deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from })
-                        .run()
-                    }}
-                  >
-                    <div className="text-left">
-                      <div className="text-sm font-medium">{label}</div>
-                      <div className="text-xs text-stone-500 dark:text-stone-400">{description}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </FloatingMenu>
-          </>
-        ) : null}
+      <div className="px-4 pb-4 relative">
+        {slashMenu.visible && (
+          <div
+            className="fixed z-50 w-64 space-y-1 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white/95 dark:bg-[#0d0d0d] p-2 shadow-xl"
+            style={{ top: slashMenu.top, left: slashMenu.left }}
+          >
+            <p className="px-2 text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">Blocks</p>
+            {slashCommands.map(({ label, description, action }) => (
+              <button key={label} type="button" className={floatingButton} onClick={() => handleSlashCommand(action)}>
+                <div className="text-left">
+                  <div className="text-sm font-medium">{label}</div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400">{description}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
         <EditorContent editor={editor} className="prose prose-stone dark:prose-invert max-w-none min-h-[320px] focus:outline-none [&_*]:text-base" />
       </div>
       <div className="flex items-center justify-between border-t border-stone-200 dark:border-[#3e3e42] px-4 py-3 text-xs text-stone-500 dark:text-stone-400">
