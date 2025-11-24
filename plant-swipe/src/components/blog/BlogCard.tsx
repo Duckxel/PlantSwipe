@@ -31,7 +31,7 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
   const isScheduled = post.isPublished && publishTime > now
   const statusBadge = !post.isPublished ? 'draft' : isScheduled ? 'scheduled' : null
 
-  const articleTarget = post.slug || post.id
+  const articleTarget = post.id
   const summaryText =
     post.excerpt ||
     t("blogPage.card.excerptFallback", { defaultValue: "Pull up the full article to explore every detail." })
@@ -48,13 +48,8 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
             decoding="async"
           />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-sm text-stone-500 dark:text-stone-300 px-6 text-center">
-            <span className="text-3xl" aria-hidden="true">
-              🌱
-            </span>
-            <span className="font-semibold tracking-wide uppercase text-[10px]">
-              {t("blogPage.card.imagePlaceholder", { defaultValue: "Awaiting cover photo" })}
-            </span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-3xl" aria-hidden="true">
+            🌱
           </div>
         )}
       </div>
