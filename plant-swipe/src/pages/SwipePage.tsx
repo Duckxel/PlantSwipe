@@ -28,7 +28,7 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { Link } from "@/components/i18n/Link"
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
-import { getVerticalPhotoUrl } from "@/lib/photos"
+import { getDiscoveryPageImageUrl } from "@/lib/photos"
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils"
 import { resolveColorValue, DEFAULT_PLANT_COLOR } from "@/lib/colors"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
@@ -115,11 +115,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
   const seasons = (current?.seasons ?? []) as PlantSeason[]
-  const displayImage = React.useMemo(() => {
-    if (!current) return ""
-    const vertical = getVerticalPhotoUrl(current.photos ?? [])
-    return vertical || current.image || ""
-  }, [current])
+  const displayImage = React.useMemo(() => getDiscoveryPageImageUrl(current), [current])
   const shouldPrioritizeImage = Boolean(boostImagePriority && displayImage)
   const highlightBadges = React.useMemo(() => {
     if (!current) return []

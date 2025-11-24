@@ -1,4 +1,4 @@
-import type { PlantPhoto } from "@/types/plant"
+import type { PlantImage, PlantPhoto } from "@/types/plant"
 
 export const MAX_PLANT_PHOTOS = 5
 
@@ -88,6 +88,38 @@ export function getVerticalPhotoUrl(photos: PlantPhoto[]): string {
   const vertical = photos.find((photo) => photo.isVertical && safeTrim(photo.url))
   if (vertical) return safeTrim(vertical.url)
   return ""
+}
+
+const extractImageLink = (image?: PlantImage | null): string => {
+  if (!image) return ""
+  return safeTrim(image.link) || safeTrim(image.url)
+}
+
+const getImageLinkByUse = (images: PlantImage[] | undefined, use: PlantImage["use"]): string => {
+  if (!Array.isArray(images) || !use) return ""
+  const candidate = images.find((image) => image?.use === use && extractImageLink(image))
+  return extractImageLink(candidate)
+}
+
+export function getDiscoveryPageImageUrl(
+  plant?: { images?: PlantImage[]; photos?: PlantPhoto[]; image?: string },
+): string {
+  if (!plant) return ""
+  const discovery = getImageLinkByUse(plant.images, "discovery")
+  if (discovery) return discovery
+
+  const primary = getImageLinkByUse(plant.images, "primary")
+  if (primary) return primary
+
+  if (plant.photos) {
+    const vertical = getVerticalPhotoUrl(plant.photos)
+    if (vertical) return vertical
+
+    const primaryPhoto = getPrimaryPhotoUrl(plant.photos)
+    if (primaryPhoto) return primaryPhoto
+  }
+
+  return safeTrim(plant.image)
 }
 
 export function upsertPrimaryPhoto(current: PlantPhoto[], url: string): PlantPhoto[] {
