@@ -17,8 +17,7 @@ import {
   Info,
   Loader2,
   ArrowLeft,
-  Save,
-  Sparkles
+  Save
 } from "lucide-react"
 import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
 import { VariableHighlighter } from "@/components/tiptap-extensions/variable-highlighter"
