@@ -40,6 +40,7 @@ do $$ declare
     'banned_accounts',
     'banned_ips',
     'broadcast_messages',
+    'blog_posts',
     'profile_admin_notes',
     'admin_activity_logs',
     'garden_activity_logs',
@@ -3285,6 +3286,67 @@ do $$ begin
   create policy broadcast_admin_write on public.broadcast_messages for all to authenticated
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- ========== Blog posts ==========
+create table if not exists public.blog_posts (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (length(trim(both from title)) between 4 and 200),
+  slug text not null,
+  body_html text not null,
+  editor_data jsonb,
+  author_id uuid not null references public.profiles(id) on delete restrict,
+  author_name text,
+  cover_image_url text,
+  excerpt text,
+  is_published boolean not null default true,
+  published_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(slug)
+);
+create index if not exists blog_posts_published_idx on public.blog_posts (is_published desc, published_at desc nulls last, created_at desc);
+create index if not exists blog_posts_author_idx on public.blog_posts (author_id, created_at desc);
+
+create or replace function public.update_blog_posts_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  if new.published_at is null then
+    new.published_at = old.published_at;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists blog_posts_set_updated_at on public.blog_posts;
+create trigger blog_posts_set_updated_at
+  before update on public.blog_posts
+  for each row
+  execute function public.update_blog_posts_updated_at();
+
+alter table public.blog_posts enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='blog_posts' and policyname='blog_posts_public_select') then
+    drop policy blog_posts_public_select on public.blog_posts;
+  end if;
+  create policy blog_posts_public_select on public.blog_posts for select to authenticated, anon
+    using (
+      is_published = true
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='blog_posts' and policyname='blog_posts_admin_write') then
+    drop policy blog_posts_admin_write on public.blog_posts;
+  end if;
+  create policy blog_posts_admin_write on public.blog_posts for all to authenticated
+    using (public.is_admin_user((select auth.uid())))
+    with check (public.is_admin_user((select auth.uid())));
 end $$;
 
 -- ========== Admin notes on profiles ==========

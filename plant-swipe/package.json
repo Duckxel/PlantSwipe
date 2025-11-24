@@ -24,6 +24,8 @@
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "framer-motion": "^12.23.12",
+    "grapesjs": "^0.22.14",
+    "grapesjs-preset-webpage": "^1.0.3",
     "i18next": "^25.6.0",
     "i18next-browser-languagedetector": "^8.2.0",
     "i18next-http-backend": "^3.0.2",
@@ -39,10 +41,10 @@
     "sharp": "^0.34.5",
     "tailwind-merge": "^3.3.1",
     "three": "^0.181.1",
+    "web-push": "^3.6.6",
     "workbox-recipes": "^7.3.0",
     "workbox-window": "^7.3.0",
-    "zod": "^4.1.12",
-    "web-push": "^3.6.6"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",

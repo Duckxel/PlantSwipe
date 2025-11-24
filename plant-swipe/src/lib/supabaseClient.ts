@@ -63,6 +63,22 @@ export type ProfileRow = {
   disable_friend_requests?: boolean | null
 }
 
+export type BlogPostRow = {
+  id: string
+  title: string
+  slug: string
+  body_html: string
+  editor_data: Record<string, unknown> | null
+  author_id: string
+  author_name: string | null
+  cover_image_url: string | null
+  excerpt: string | null
+  is_published: boolean
+  published_at: string
+  created_at: string
+  updated_at: string
+}
+
 // Garden-related table row types matching Supabase schema expectations
 export type GardenRow = {
   id: string
