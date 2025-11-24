@@ -10,13 +10,6 @@ import { usePageMetadata } from "@/hooks/usePageMetadata"
 import type { BlogPost } from "@/types/blog"
 import { fetchBlogPosts } from "@/lib/blogs"
 
-const sortPostsByDate = (list: BlogPost[]) =>
-  [...list].sort((a, b) => {
-    const aTime = Date.parse(a.publishedAt || a.createdAt)
-    const bTime = Date.parse(b.publishedAt || b.createdAt)
-    return bTime - aTime
-  })
-
 export default function BlogPage() {
   const { t } = useTranslation("common")
   const navigate = useNavigate()
@@ -38,7 +31,7 @@ export default function BlogPage() {
     try {
       const includeDrafts = Boolean(profile?.is_admin)
       const data = await fetchBlogPosts({ includeDrafts })
-      setPosts(sortPostsByDate(data))
+      setPosts([...data].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)))
     } catch (err) {
       const message =
         err instanceof Error
