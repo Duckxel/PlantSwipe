@@ -33,7 +33,6 @@ import {
   RefreshCw,
   Utensils,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
 import type { TooltipProps } from 'recharts'
 import {
   ResponsiveContainer,
@@ -93,12 +92,6 @@ const MAP_PIN_POSITIONS = [
   { top: '68%', left: '55%' },
   { top: '26%', left: '72%' },
 ] as const
-
-const SECTION_ANIMATION = {
-  initial: { opacity: 0, y: 20 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, amount: 0.1 },
-}
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
@@ -835,9 +828,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       ].filter((section) => section.items.length > 0)
 
   return (
-    <motion.section
-      {...SECTION_ANIMATION}
-      transition={{ duration: 0.4 }}
+    <section
       className="space-y-4 sm:space-y-6"
     >
         <div className="flex flex-col gap-1.5 sm:gap-2">
@@ -851,9 +842,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         {/* Dynamic Grid Layout */}
         <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)] items-stretch">
           {(height !== null || wingspan !== null || spacing !== null) && (
-            <motion.section
-              {...SECTION_ANIMATION}
-              transition={{ duration: 0.4, delay: 0.02 }}
+            <section
               className={`${dimensionColClass} rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent`}
             >
               <div className="mb-3 space-y-2">
@@ -888,13 +877,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   ))}
                 </div>
               </div>
-            </motion.section>
+            </section>
           )}
 
             {showPalette && (
-            <motion.section
-              {...SECTION_ANIMATION}
-              transition={{ duration: 0.4, delay: 0.08 }}
+            <section
               className={`${paletteColClass} justify-self-start w-full sm:w-auto relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4 max-w-[260px] lg:max-w-[240px]`}
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
@@ -910,12 +897,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   })}
                 </div>
               </div>
-            </motion.section>
+            </section>
           )}
 
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.1 }}
+          <section
             className={`${timelineColClass} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
           >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
@@ -953,14 +938,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 ))}
               </div>
             </div>
-          </motion.section>
+          </section>
         </div>
 
         {/* Habitat Map */}
         {habitats.length > 0 && (
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.13 }}
+          <section
             className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90"
           >
             <div className="space-y-3 sm:space-y-4">
@@ -1000,14 +983,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 )}
               </div>
             </div>
-          </motion.section>
+          </section>
         )}
 
       {/* Recipes Ideas Section - Prominent display */}
         {recipesIdeasList.length > 0 && (
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.12 }}
+          <section
             className="rounded-2xl sm:rounded-3xl border-2 border-emerald-400/50 bg-gradient-to-br from-emerald-50/90 via-orange-50/60 to-amber-50/80 p-5 sm:p-6 dark:border-emerald-500/60 dark:from-emerald-500/15 dark:via-orange-500/10 dark:to-amber-500/10 shadow-lg"
           >
             <div className="space-y-4 sm:space-y-5">
@@ -1032,7 +1013,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 ))}
               </div>
             </div>
-          </motion.section>
+          </section>
         )}
 
       {/* Info Cards Section - Full width for better mobile experience */}
@@ -1055,9 +1036,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           
           {/* Image Gallery */}
           {plant.images && plant.images.length > 0 && (
-            <motion.section
-              {...SECTION_ANIMATION}
-              transition={{ duration: 0.4, delay: 0.15 }}
+            <section
               className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
             >
               <div className="space-y-3 sm:space-y-4">
@@ -1069,7 +1048,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
                 </div>
               </div>
-            </motion.section>
+            </section>
           )}
           
           {(createdTimestamp || updatedTimestamp || createdByLabel || updatedByLabel || sourcesValue) && (
@@ -1098,7 +1077,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </div>
           )}
         </div>
-    </motion.section>
+    </section>
   )
 }
 
