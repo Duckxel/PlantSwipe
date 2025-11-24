@@ -244,7 +244,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
         return
       }
       if (initialHtml) {
-        editor.commands.setContent(initialHtml, false, { preserveWhitespace: true })
+        editor.commands.setContent(initialHtml, { emitUpdate: false })
       }
     }, [editor, initialDocument, initialHtml])
 
@@ -269,7 +269,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           if (doc) {
             editor.commands.setContent(doc)
           } else if (html) {
-            editor.commands.setContent(html, false, { preserveWhitespace: true })
+            editor.commands.setContent(html, { emitUpdate: false })
           }
         },
       }),
