@@ -73,7 +73,6 @@ export default function BlogPage() {
   const editorInitializedRef = React.useRef(false)
   const summaryAbortRef = React.useRef<AbortController | null>(null)
   const summaryRequestIdRef = React.useRef(0)
-  const summaryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const runtimeEnv = (globalThis as typeof globalThis & RuntimeEnvBridge).__ENV__
   const adminStaticTokenRef = React.useRef(
     import.meta.env?.VITE_ADMIN_STATIC_TOKEN ?? runtimeEnv?.VITE_ADMIN_STATIC_TOKEN,
@@ -136,10 +135,6 @@ export default function BlogPage() {
     editorInitializedRef.current = false
     summaryAbortRef.current?.abort()
     summaryAbortRef.current = null
-    if (summaryTimerRef.current) {
-      clearTimeout(summaryTimerRef.current)
-      summaryTimerRef.current = null
-    }
   }, [])
 
   const openCreateDialog = () => {
@@ -220,7 +215,16 @@ export default function BlogPage() {
       const html = editorInstance.getHtml()
       const doc = editorInstance.getDocument()
       const publishDateIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString()
-      const summaryPayload = summary.trim()
+      let summaryPayload = summary.trim()
+      if (
+        editorHtmlSnapshot.trim() &&
+        (summaryStatus === 'stale' || summaryStatus === 'error' || !summaryPayload)
+      ) {
+        const regenerated = await generateSummary()
+        if (regenerated) {
+          summaryPayload = regenerated.trim()
+        }
+      }
       const { data, error: saveError } = await saveBlogPost({
         id: editingPost?.id,
         slug: editingPost?.slug,
@@ -353,20 +357,22 @@ export default function BlogPage() {
     [editingPost],
   )
 
-  const runSummaryGeneration = React.useCallback(async () => {
-    const textOnly = editorHtmlSnapshot.replace(/<[^>]+>/g, '').trim()
-    if (!textOnly) {
+  const generateSummary = React.useCallback(async () => {
+    const plain = editorHtmlSnapshot.replace(/<[^>]+>/g, '').trim()
+    if (!plain) {
       setSummary('')
       setSummaryStatus('idle')
       setSummaryError(null)
-      return
+      return ''
     }
+
     summaryAbortRef.current?.abort()
     const controller = new AbortController()
     summaryAbortRef.current = controller
     const requestId = ++summaryRequestIdRef.current
     setSummaryStatus('generating')
     setSummaryError(null)
+
     try {
       const headers = await getAuthHeaders()
       headers['Content-Type'] = 'application/json'
@@ -383,48 +389,29 @@ export default function BlogPage() {
             t('blogPage.editor.summaryError', { defaultValue: 'Failed to generate summary.' }),
         )
       }
-      if (summaryRequestIdRef.current !== requestId) return
-      setSummary(typeof data?.summary === 'string' ? data.summary : '')
+      if (summaryRequestIdRef.current !== requestId) {
+        return data?.summary ?? ''
+      }
+      const resolved = typeof data?.summary === 'string' ? data.summary : ''
+      setSummary(resolved)
       setSummaryStatus('ready')
+      return resolved
     } catch (err) {
-      if (controller.signal.aborted) return
-      if (summaryRequestIdRef.current !== requestId) return
+      if (controller.signal.aborted) return ''
+      if (summaryRequestIdRef.current !== requestId) return ''
       setSummaryStatus('error')
       setSummaryError(
         err instanceof Error
           ? err.message
           : t('blogPage.editor.summaryError', { defaultValue: 'Failed to generate summary.' }),
       )
+      return ''
     }
   }, [editorHtmlSnapshot, formTitle, getAuthHeaders, t])
 
   React.useEffect(() => {
-    if (!composerOpen) return
-    if (summaryStatus !== 'stale') return
-    if (!editorHtmlSnapshot) return
-    if (summaryTimerRef.current) {
-      clearTimeout(summaryTimerRef.current)
-      summaryTimerRef.current = null
-    }
-    const timer = setTimeout(() => {
-      runSummaryGeneration().catch(() => {})
-    }, 1200)
-    summaryTimerRef.current = timer
-    return () => {
-      clearTimeout(timer)
-      if (summaryTimerRef.current === timer) {
-        summaryTimerRef.current = null
-      }
-    }
-  }, [composerOpen, summaryStatus, editorHtmlSnapshot, runSummaryGeneration])
-
-  React.useEffect(() => {
     return () => {
       summaryAbortRef.current?.abort()
-      if (summaryTimerRef.current) {
-        clearTimeout(summaryTimerRef.current)
-        summaryTimerRef.current = null
-      }
     }
   }, [])
 
@@ -617,11 +604,7 @@ export default function BlogPage() {
                   className="rounded-2xl"
                   onClick={() => {
                     summaryAbortRef.current?.abort()
-                    if (summaryTimerRef.current) {
-                      clearTimeout(summaryTimerRef.current)
-                      summaryTimerRef.current = null
-                    }
-                    runSummaryGeneration().catch(() => {})
+                    generateSummary().catch(() => {})
                   }}
                   disabled={summaryStatus === 'generating' || !editorHtmlSnapshot}
                 >
