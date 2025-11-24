@@ -22,6 +22,9 @@ import {
   listOccurrencesForTasks,
   listOccurrencesForMultipleGardens,
   resyncTaskOccurrencesForGarden,
+  resyncMultipleGardensTasks,
+  listTasksForMultipleGardensMinimal,
+  getGardenMemberCountsBatch,
   progressTaskOccurrence,
   listCompletionsForOccurrences,
   logGardenActivity,
@@ -347,22 +350,12 @@ export const GardenListPage: React.FC = () => {
             .catch(() => {});
         }
 
-        // Fetch member counts for cached gardens
+        // Fetch member counts for cached gardens - use batch fetch
         if (data.length > 0) {
           const gardenIds = data.map((g) => g.id);
-          supabase
-            .from("garden_members")
-            .select("garden_id")
-            .in("garden_id", gardenIds)
-            .then(({ data: memberRows }) => {
-              if (memberRows) {
-                const counts: Record<string, number> = {};
-                for (const row of memberRows) {
-                  const gid = String(row.garden_id);
-                  counts[gid] = (counts[gid] || 0) + 1;
-                }
-                setMemberCountsByGarden(counts);
-              }
+          getGardenMemberCountsBatch(gardenIds)
+            .then((counts) => {
+              setMemberCountsByGarden(counts);
             })
             .catch(() => {});
         }
@@ -401,21 +394,14 @@ export const GardenListPage: React.FC = () => {
         24 * 60 * 60 * 1000,
       ); // 24 hours
 
-      // Fetch member counts for all gardens
+      // Fetch member counts for all gardens - use batch fetch
       if (data.length > 0) {
         const gardenIds = data.map((g) => g.id);
-        const { data: memberRows } = await supabase
-          .from("garden_members")
-          .select("garden_id")
-          .in("garden_id", gardenIds);
-        if (memberRows) {
-          const counts: Record<string, number> = {};
-          for (const row of memberRows) {
-            const gid = String(row.garden_id);
-            counts[gid] = (counts[gid] || 0) + 1;
-          }
-          setMemberCountsByGarden(counts);
-        }
+        getGardenMemberCountsBatch(gardenIds)
+          .then((counts) => {
+            setMemberCountsByGarden(counts);
+          })
+          .catch(() => {});
       }
 
       // Set loading to false immediately so gardens render
@@ -621,19 +607,19 @@ export const GardenListPage: React.FC = () => {
       try {
         const startIso = `${today}T00:00:00.000Z`;
         const endIso = `${today}T23:59:59.999Z`;
-        // 1) Fetch tasks per garden in parallel - use minimal version to reduce egress
-        const tasksPerGarden = await Promise.all(
-          gardensList.map((g) => listGardenTasksMinimal(g.id)),
-        );
+        // Optimization: Fetch tasks for ALL relevant gardens in one batch
+        const gardenIdsToLoad = gardensList.map(g => g.id);
+        const tasksByGardenId = await listTasksForMultipleGardensMinimal(gardenIdsToLoad);
+
         const taskTypeById: Record<
           string,
           "water" | "fertilize" | "harvest" | "cut" | "custom"
         > = {};
         const taskEmojiById: Record<string, string | null> = {};
         const taskIdsByGarden: Record<string, string[]> = {};
-        for (let i = 0; i < gardensList.length; i++) {
-          const g = gardensList[i];
-          const tasks = tasksPerGarden[i] || [];
+
+        for (const g of gardensList) {
+          const tasks = tasksByGardenId[g.id] || [];
           taskIdsByGarden[g.id] = tasks.map((t) => t.id);
           for (const t of tasks) {
             taskTypeById[t.id] = t.type;
@@ -644,16 +630,16 @@ export const GardenListPage: React.FC = () => {
         // 2) Resync only if needed and not cached recently
         // IMPORTANT: When skipResync=false, always resync to ensure task occurrences exist
         if (!skipResync) {
-          const resyncPromises = gardensList.map(async (g) => {
+          // Use optimized server-side batch resync
+          const gardenIdsToSync = gardensList.map((g) => g.id);
+          await resyncMultipleGardensTasks(gardenIdsToSync, startIso, endIso);
+
+          // Update cache timestamps
+          const now = Date.now();
+          for (const g of gardensList) {
             const cacheKey = `${g.id}::${today}`;
-            const lastResync = resyncCacheRef.current[cacheKey] || 0;
-            const now = Date.now();
-            // Always resync if skipResync=false, even if cached recently
-            // This ensures new tasks get their occurrences created
-            await resyncTaskOccurrencesForGarden(g.id, startIso, endIso);
             resyncCacheRef.current[cacheKey] = now;
-          });
-          await Promise.all(resyncPromises);
+          }
         }
 
         // 3) Load occurrences for all gardens in a single batched query (reduces egress)
