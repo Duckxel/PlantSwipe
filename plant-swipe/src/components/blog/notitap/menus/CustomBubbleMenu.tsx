@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { BubbleMenu, Editor } from '@tiptap/react'
+import type { Editor } from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
 import Tippy from '@tippyjs/react'
 import { Bold, Italic, Check, ChevronDown, Heading1, Heading2, Heading3, List, ListOrdered } from 'lucide-react'
 

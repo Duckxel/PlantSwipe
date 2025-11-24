@@ -1,13 +1,16 @@
 import { Plus, GripVertical } from 'lucide-react'
-import { NodeViewWrapper, NodeViewProps, NodeViewContent } from '@tiptap/react'
+import { NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react'
 import { cn } from '@/lib/utils'
 
 export const DBlockNodeView = ({ node, getPos, editor }: NodeViewProps) => {
-  const isTable =
-    (node.content as any)?.content?.[0]?.type?.name === 'table'
+  const fragment = (node as any)?.content
+  const firstChild = Array.isArray(fragment?.content) ? fragment.content[0] : null
+  const isTable = firstChild?.type?.name === 'table'
 
   const insertBlockAfter = () => {
-    const pos = getPos() + node.nodeSize
+    const resolvedPos = getPos?.()
+    if (typeof resolvedPos !== 'number') return
+    const pos = resolvedPos + node.nodeSize
     editor
       .chain()
       .insertContentAt(pos, {

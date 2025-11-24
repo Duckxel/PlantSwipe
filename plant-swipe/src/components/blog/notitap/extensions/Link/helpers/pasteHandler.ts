@@ -12,7 +12,7 @@ export function pasteHandler(options: PasteHandlerOptions): Plugin {
   return new Plugin({
     key: new PluginKey('handlePasteLink'),
     props: {
-      handlePaste: (_view, event, slice) => {
+      handlePaste: (_view, _event, slice) => {
         const { state } = options.editor
         if (state.selection.empty) {
           return false

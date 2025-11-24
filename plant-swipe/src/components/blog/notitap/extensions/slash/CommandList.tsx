@@ -1,4 +1,4 @@
-import React, { useEffect, useImperativeHandle, useState } from 'react'
+import React, { useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { stopPrevent } from '../../utils/dom'
 import type { SlashCommandItem } from './types'
 
@@ -7,37 +7,51 @@ type CommandListProps = {
   command: (item: SlashCommandItem) => void
 }
 
-export const CommandList = React.forwardRef<HTMLDivElement, CommandListProps>(
+export type CommandListHandle = {
+  onKeyDown: ({ event }: { event: KeyboardEvent }) => boolean
+}
+
+export const CommandList = React.forwardRef<CommandListHandle, CommandListProps>(
   ({ items, command }, ref) => {
+    const containerRef = useRef<HTMLDivElement>(null)
     const [selectedIndex, setSelectedIndex] = useState(0)
 
     useEffect(() => {
       setSelectedIndex(0)
     }, [items])
 
-    useImperativeHandle(ref, () => ({
-      onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-        if (event.key === 'ArrowUp') {
-          stopPrevent(event)
-          setSelectedIndex((index) => (index + items.length - 1) % items.length)
-          return true
+    useImperativeHandle(
+      ref,
+      () => {
+        const dom = containerRef.current as CommandListHandle | null
+        if (!dom) {
+          return null as unknown as CommandListHandle
         }
+        dom.onKeyDown = ({ event }: { event: KeyboardEvent }) => {
+          if (event.key === 'ArrowUp') {
+            stopPrevent(event)
+            setSelectedIndex((index) => (index + items.length - 1) % items.length)
+            return true
+          }
 
-        if (event.key === 'ArrowDown') {
-          stopPrevent(event)
-          setSelectedIndex((index) => (index + 1) % items.length)
-          return true
+          if (event.key === 'ArrowDown') {
+            stopPrevent(event)
+            setSelectedIndex((index) => (index + 1) % items.length)
+            return true
+          }
+
+          if (event.key === 'Enter') {
+            stopPrevent(event)
+            selectItem(selectedIndex)
+            return true
+          }
+
+          return false
         }
-
-        if (event.key === 'Enter') {
-          stopPrevent(event)
-          selectItem(selectedIndex)
-          return true
-        }
-
-        return false
+        return dom
       },
-    }))
+      [items, selectedIndex],
+    )
 
     const selectItem = (index: number) => {
       const item = items[index]
@@ -53,7 +67,7 @@ export const CommandList = React.forwardRef<HTMLDivElement, CommandListProps>(
     }
 
     return (
-      <div className="max-h-80 w-80 overflow-y-auto p-1">
+      <div ref={containerRef} className="max-h-80 w-80 overflow-y-auto p-1">
         {items.map((item, index) => {
           const Icon = item.icon
           const isSelected = index === selectedIndex

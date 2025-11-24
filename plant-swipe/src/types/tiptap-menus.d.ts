@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/core'
 import type { FC, ReactNode } from 'react'
 
-declare module '@tiptap/react' {
+declare module '@tiptap/react/menus' {
   type MenuProps = {
     editor: Editor | null
     className?: string

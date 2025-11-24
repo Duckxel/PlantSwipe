@@ -5,6 +5,14 @@ import type { Node as ProseMirrorNode, NodeType } from 'prosemirror-model'
 
 import { DBlockNodeView } from './DBlockNodeView'
 
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    dBlock: {
+      setDBlock: (position?: number) => ReturnType
+    }
+  }
+}
+
 const hasNonDBlockChild = (doc: ProseMirrorNode, dBlockType?: NodeType) => {
   if (!dBlockType) return false
   let needsWrap = false
@@ -79,7 +87,7 @@ export const DBlock = Node.create({
             }
           },
         },
-        appendTransaction(transactions, oldState, newState) {
+        appendTransaction(transactions, _oldState, newState) {
           const pluginState = key.getState(newState)
           const docChanged = transactions.some((transaction) => transaction.docChanged)
           if (!docChanged && !pluginState?.shouldWrap) {

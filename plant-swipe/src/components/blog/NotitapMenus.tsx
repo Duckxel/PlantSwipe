@@ -1,6 +1,6 @@
 import React from 'react'
 import type { Editor } from '@tiptap/react'
-import { BubbleMenu, FloatingMenu } from '@tiptap/react'
+import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus'
 import {
   Bold,
   Code,
@@ -165,7 +165,7 @@ export const NotitapBlockMenu: React.FC<{ editor: Editor | null }> = ({ editor }
     <FloatingMenu
       editor={editor}
       tippyOptions={{ duration: 120, placement: 'right' }}
-      shouldShow={({ editor }) => {
+      shouldShow={() => {
         const { $from } = editor.state.selection
         if (!$from) return false
         const isParagraph = $from.parent.type.name === 'paragraph'

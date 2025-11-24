@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { BubbleMenu, Editor } from '@tiptap/react'
+import type { Editor } from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
 import { test } from 'linkifyjs'
 import classNames from 'classnames'
 
@@ -39,7 +40,7 @@ export const LinkBubbleMenu = ({ editor }: LinkBubbleMenuProps) => {
   return (
     <BubbleMenu
       editor={editor}
-      shouldShow={({ editor: e }) => e.isActive('link')}
+      shouldShow={() => editor.isActive('link')}
       className="rounded-2xl border border-stone-200 bg-white p-3 shadow-lg dark:border-stone-700 dark:bg-stone-900"
       tippyOptions={{
         duration: 150,

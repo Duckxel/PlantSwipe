@@ -33,7 +33,7 @@ export const NotitapLink = Mark.create<NotitapLinkOptions>({
   keepOnSplit: false,
 
   onCreate() {
-    this.options.protocols.forEach(registerCustomProtocol)
+    this.options.protocols.forEach((scheme) => registerCustomProtocol(scheme))
   },
 
   addOptions() {

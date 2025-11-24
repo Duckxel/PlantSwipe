@@ -137,11 +137,9 @@ export const createSlashSuggestion = (
     render: () => {
       let component: ReactRenderer | null = null
       let popupInstances: any[] | null = null
-      let localProps: Record<string, any> | undefined
 
       return {
         onStart: (props: Record<string, any>) => {
-          localProps = props
           component = new ReactRenderer(CommandList, {
             props,
             editor: props.editor,
@@ -160,7 +158,6 @@ export const createSlashSuggestion = (
           })
         },
         onUpdate(props: Record<string, any>) {
-          localProps = props
           component?.updateProps(props)
           popupInstances?.[0]?.setProps({
             getReferenceClientRect: props.clientRect,

@@ -1,4 +1,4 @@
-import type { Extension } from '@tiptap/core'
+import type { AnyExtension } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Paragraph from '@tiptap/extension-paragraph'
 import Text from '@tiptap/extension-text'
@@ -14,7 +14,8 @@ import { DBlock } from './dblock'
 import { TrailingNode } from './TrailingNode'
 import { NotitapLink } from './Link'
 import { SlashCommands } from './slash/extension'
-import { createSlashCommandItems, createSlashSuggestion, SlashSuggestionOptions } from './slash/suggestions'
+import { createSlashCommandItems, createSlashSuggestion } from './slash/suggestions'
+import type { SlashSuggestionOptions } from './slash/suggestions'
 
 export type NotitapExtensionOptions = {
   placeholder?: string
@@ -24,7 +25,7 @@ export type NotitapExtensionOptions = {
 
 export const createNotitapExtensions = (
   options: NotitapExtensionOptions = {},
-): Extension[] => {
+): AnyExtension[] => {
   const slashItems = createSlashCommandItems(options.slashCommands)
 
   return [
