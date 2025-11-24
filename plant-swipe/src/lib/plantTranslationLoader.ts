@@ -611,13 +611,13 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     const TOP_LIKED_LIMIT = 5
     
     const plantColumns = [
-      'id', 'name', 'scientific_name', 'meaning', 'plant_type', 
+      'id', 'name', 'scientific_name', 'plant_type', 
       'utility', 'comestible_part', 'fruit_type',
-      'colors', 'season', 'rarity', 'seeds_available',
+      'season', 
       'level_sun', 
-      'water_freq_unit', 'water_freq_value', 'water_freq_period', 'water_freq_amount',
-      'ecology', 'identity', 'usage', 'plant_month',
-      'created_at', 'created_time', 'updated_at', 'updated_time',
+      'promotion_month',
+      'created_time', 'updated_time',
+      'scent', 'aromatherapy', 'advice_medicinal', 'origin', 'composition',
       'plant_images (link,use)',
       'plant_colors (colors (id,name,hex_code))',
       'plant_watering_schedules (season,quantity,time_period)',
@@ -685,11 +685,8 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       
       const parseIfNeeded = (val: any) => (typeof val === 'string' ? JSON.parse(val) : val)
       
-      const identity = parseIfNeeded(basePlant.identity) || {}
       const transIdentity = parseIfNeeded(translation.identity) || {}
-      const usage = parseIfNeeded(basePlant.usage) || {}
       const transUsage = parseIfNeeded(translation.usage) || {}
-      const ecology = parseIfNeeded(basePlant.ecology) || {}
       const transEcology = parseIfNeeded(translation.ecology) || {}
       
       const colorObjects = ((basePlant.plant_colors as any[]) || []).map((pc) => ({
@@ -710,33 +707,32 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         || images[0]?.link
 
       const mergedIdentity = {
-        ...identity,
         ...transIdentity,
-        scientificName: translation.scientific_name || basePlant.scientific_name || identity.scientificName,
-        promotionMonth: monthSlugToNumber(transIdentity.promotion_month || identity.promotionMonth || basePlant.promotion_month) ?? undefined,
+        scientificName: translation.scientific_name || basePlant.scientific_name || transIdentity.scientificName,
+        promotionMonth: monthSlugToNumber(transIdentity.promotion_month || basePlant.promotion_month) ?? undefined,
         colors: colorObjects,
         season: seasons,
-        scent: basePlant.scent ?? identity.scent ?? false,
+        scent: basePlant.scent ?? transIdentity.scent ?? false,
       }
 
       const mergedUsage = {
-        ...usage,
         ...transUsage,
-        adviceMedicinal: transUsage.adviceMedicinal || usage.adviceMedicinal || basePlant.advice_medicinal,
-        aromatherapy: basePlant.aromatherapy ?? usage.aromatherapy ?? false,
+        adviceMedicinal: transUsage.adviceMedicinal || basePlant.advice_medicinal,
+        aromatherapy: basePlant.aromatherapy ?? transUsage.aromatherapy ?? false,
       }
       
       const mergedEcology = {
-        ...ecology,
         ...transEcology,
-        nativeRange: transEcology.nativeRange || ecology.nativeRange || undefined,
+        nativeRange: transEcology.nativeRange || basePlant.origin || undefined,
       }
+
+      const containerFriendly = basePlant.composition && Array.isArray(basePlant.composition) && basePlant.composition.includes('pot')
 
       const plant: Plant = {
         id: String(basePlant.id),
         name: translation.name || basePlant.name || '',
         scientificName: translation.scientific_name || basePlant.scientific_name || '',
-        meaning: translation.meaning || basePlant.meaning || '',
+        meaning: translation.meaning || '',
         plantType: (plantTypeEnum.toUi(basePlant.plant_type) as Plant["plantType"]) || undefined,
         utility: utilityEnum.toUiArray(basePlant.utility) as Plant["utility"],
         comestiblePart: comestiblePartEnum.toUiArray(basePlant.comestible_part) as Plant["comestiblePart"],
@@ -748,6 +744,10 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         identity: mergedIdentity,
         usage: mergedUsage,
         ecology: mergedEcology,
+
+        dimensions: {
+            containerFriendly
+        },
         
         plantCare: {
           levelSun: (levelSunEnum.toUi(basePlant.level_sun) as PlantCareData["levelSun"]) || undefined,
@@ -762,25 +762,23 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         
         colors: colorObjects.map((c) => c.name as string),
         seasons,
-        rarity: (basePlant.rarity || 'Common') as Plant['rarity'],
-        seedsAvailable: Boolean(basePlant.seeds_available ?? false),
+        rarity: 'Common',
+        seedsAvailable: false,
         
-        waterFreqUnit: basePlant.water_freq_unit,
-        waterFreqValue: basePlant.water_freq_value,
-        waterFreqPeriod: basePlant.water_freq_period,
-        waterFreqAmount: basePlant.water_freq_amount,
+        waterFreqUnit: undefined,
+        waterFreqValue: undefined,
+        waterFreqPeriod: undefined,
+        waterFreqAmount: undefined,
         
         popularity: popularityMap.get(String(basePlant.id)),
         meta: {
-            createdAt: basePlant.created_at || basePlant.created_time,
-            updatedAt: basePlant.updated_at || basePlant.updated_time,
+            createdAt: basePlant.created_time,
+            updatedAt: basePlant.updated_time,
         },
         
         planting: {
             calendar: {
-                promotionMonth: Array.isArray(basePlant.plant_month) && basePlant.plant_month.length > 0
-                    ? basePlant.plant_month[0]
-                    : undefined
+                promotionMonth: basePlant.promotion_month
             }
         },
         
