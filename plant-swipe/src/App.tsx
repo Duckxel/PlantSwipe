@@ -43,11 +43,9 @@ function AppShell() {
     }
   }, [location.pathname, navigate])
   
-  if (loading) {
-    return (
-      <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 md:p-8" aria-busy="true" aria-live="polite" />
-    )
-  }
+  // Non-blocking rendering: PlantSwipe handles user=null (guest mode)
+  // if (loading) { ... } removed to allow immediate LCP
+  
   return (
     <React.Suspense fallback={<div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 md:p-8" />}>
       <PlantSwipe />
