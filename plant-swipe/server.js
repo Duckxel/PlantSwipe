@@ -3632,10 +3632,10 @@ app.post('/api/blog/summarize', async (req, res) => {
     const response = await openaiClient.responses.create(
       {
         model: openaiModel,
+        reasoning: { effort: 'low' },
         instructions,
         input: promptSections.join('\n\n'),
         max_output_tokens: 150,
-        temperature: 0.4,
       },
       { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
     )

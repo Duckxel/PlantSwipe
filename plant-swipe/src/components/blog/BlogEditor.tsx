@@ -38,8 +38,6 @@ import { MarkButton } from "@/components/tiptap-ui/mark-button"
 import { TextAlignButton } from "@/components/tiptap-ui/text-align-button"
 import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button"
 import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button"
-import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle"
-
 import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
 import { LinkIcon } from "@/components/tiptap-icons/link-icon"
@@ -134,13 +132,6 @@ const MainToolbarContent: React.FC<{
       <ImageUploadButton text="Image" />
     </ToolbarGroup>
 
-    <Spacer />
-
-    {isMobile && <ToolbarSeparator />}
-
-    <ToolbarGroup>
-      <ThemeToggle />
-    </ToolbarGroup>
   </>
 )
 
