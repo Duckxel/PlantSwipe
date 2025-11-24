@@ -43,6 +43,8 @@ do $$ declare
     'blog_posts',
     'profile_admin_notes',
     'admin_activity_logs',
+    'admin_email_templates',
+    'admin_email_campaigns',
     'garden_activity_logs',
     'friend_requests',
     'friends',
@@ -5284,4 +5286,125 @@ do $$ begin
     for all to authenticated
     using (user_id = (select auth.uid()))
     with check (user_id = (select auth.uid()));
+end $$;
+
+-- ========== Admin email templates & campaigns ==========
+create table if not exists public.admin_email_templates (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (length(trim(both from title)) between 3 and 120),
+  subject text not null check (length(trim(both from subject)) between 3 and 240),
+  description text,
+  preview_text text,
+  body_html text not null check (length(body_html) > 0),
+  body_json jsonb,
+  variables jsonb not null default '[]'::jsonb,
+  is_active boolean not null default true,
+  version integer not null default 1,
+  last_used_at timestamptz,
+  created_by uuid references public.profiles(id) on delete set null,
+  updated_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists admin_email_templates_updated_idx on public.admin_email_templates (updated_at desc);
+create index if not exists admin_email_templates_title_idx on public.admin_email_templates (lower(title));
+grant select, insert, update, delete on public.admin_email_templates to authenticated;
+alter table public.admin_email_templates enable row level security;
+
+create or replace function public.update_admin_email_templates_meta()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  if tg_op = 'UPDATE' then
+    new.version = coalesce(old.version, 1) + 1;
+  elsif new.version is null then
+    new.version = 1;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists admin_email_templates_set_meta on public.admin_email_templates;
+create trigger admin_email_templates_set_meta
+  before update on public.admin_email_templates
+  for each row
+  execute function public.update_admin_email_templates_meta();
+
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='admin_email_templates' and policyname='admin_email_templates_admins'
+  ) then
+    drop policy admin_email_templates_admins on public.admin_email_templates;
+  end if;
+  create policy admin_email_templates_admins on public.admin_email_templates
+    for all to authenticated
+    using (public.is_admin_user((select auth.uid())))
+    with check (public.is_admin_user((select auth.uid())));
+end $$;
+
+create table if not exists public.admin_email_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid references public.admin_email_templates(id) on delete restrict,
+  template_version integer not null default 1,
+  title text not null check (length(trim(both from title)) between 3 and 160),
+  description text,
+  subject text not null check (length(trim(both from subject)) between 3 and 240),
+  preview_text text,
+  body_html text not null check (length(body_html) > 0),
+  body_json jsonb,
+  variables jsonb not null default '[]'::jsonb,
+  timezone text not null default 'UTC',
+  scheduled_for timestamptz,
+  status text not null default 'draft'
+    check (status in ('draft','scheduled','running','sent','failed','cancelled','partial')),
+  total_recipients integer not null default 0,
+  sent_count integer not null default 0,
+  failed_count integer not null default 0,
+  send_summary jsonb,
+  send_error text,
+  send_started_at timestamptz,
+  send_completed_at timestamptz,
+  created_by uuid references public.profiles(id) on delete set null,
+  updated_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists admin_email_campaigns_schedule_idx
+  on public.admin_email_campaigns (scheduled_for)
+  where status = 'scheduled';
+create index if not exists admin_email_campaigns_status_idx
+  on public.admin_email_campaigns (status, updated_at desc);
+grant select, insert, update, delete on public.admin_email_campaigns to authenticated;
+alter table public.admin_email_campaigns enable row level security;
+
+create or replace function public.update_admin_email_campaigns_meta()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists admin_email_campaigns_set_meta on public.admin_email_campaigns;
+create trigger admin_email_campaigns_set_meta
+  before update on public.admin_email_campaigns
+  for each row
+  execute function public.update_admin_email_campaigns_meta();
+
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='admin_email_campaigns' and policyname='admin_email_campaigns_admins'
+  ) then
+    drop policy admin_email_campaigns_admins on public.admin_email_campaigns;
+  end if;
+  create policy admin_email_campaigns_admins on public.admin_email_campaigns
+    for all to authenticated
+    using (public.is_admin_user((select auth.uid())))
+    with check (public.is_admin_user((select auth.uid())));
 end $$;

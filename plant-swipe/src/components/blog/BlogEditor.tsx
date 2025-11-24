@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from "react"
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Placeholder from "@tiptap/extension-placeholder"
@@ -14,7 +14,7 @@ import Superscript from "@tiptap/extension-superscript"
 import Subscript from "@tiptap/extension-subscript"
 import { Selection } from "@tiptap/extensions"
 import Image from "@tiptap/extension-image"
-import type { JSONContent } from "@tiptap/core"
+import type { Extension, JSONContent } from "@tiptap/core"
 
 import { cn } from "@/lib/utils"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
@@ -67,6 +67,8 @@ type BlogEditorProps = {
   className?: string
   uploadFolder: string
   onUpdate?: (payload: { html: string; doc: JSONContent | null; plainText: string }) => void
+  extraExtensions?: Extension[]
+  toolbarAppend?: ReactNode
 }
 
 const DEFAULT_CONTENT =
@@ -158,7 +160,7 @@ const MobileToolbarContent: React.FC<{
 )
 
 export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
-  ({ initialHtml, initialDocument, className, uploadFolder, onUpdate }, ref) => {
+  ({ initialHtml, initialDocument, className, uploadFolder, onUpdate, extraExtensions, toolbarAppend }, ref) => {
     const isMobile = useIsBreakpoint()
     const { height } = useWindowSize()
     const toolbarRef = useRef<HTMLDivElement>(null)
@@ -216,6 +218,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           onError: (error) => console.error("[BlogEditor] upload failed", error),
           HTMLAttributes: { class: "rounded-3xl overflow-hidden" },
         }),
+        ...(extraExtensions || []),
       ],
       content: initialDocument ?? initialHtml ?? DEFAULT_CONTENT,
       onUpdate: ({ editor: editorInstance }) => {
@@ -302,6 +305,9 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
                 onBack={() => setMobileView("main")}
               />
             )}
+            {toolbarAppend ? (
+              <div className="ml-auto flex items-center gap-2">{toolbarAppend}</div>
+            ) : null}
           </Toolbar>
 
           <EditorContent editor={editor} role="presentation" className="simple-editor-content" />
