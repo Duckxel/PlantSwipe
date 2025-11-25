@@ -129,7 +129,9 @@ async function processEmailCampaigns() {
     for (let i = 0; i < recipients.length; i += batchSize) {
       const batch = recipients.slice(i, i + batchSize)
       const payload = batch.map(r => {
-         const context = { user: r.display_name || 'User' }
+         const userRaw = r.display_name || 'User'
+         const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+         const context = { user: userCap }
          const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] || `{{${k}}}`)
          const html = replaceVars(campaign.body_html)
          const subject = replaceVars(campaign.subject)

@@ -391,7 +391,9 @@ async function sendBatch(
   }
 
   const payload = recipients.map((recipient) => {
-    const context = { user: recipient.displayName }
+    const userRaw = recipient.displayName
+    const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+    const context = { user: userCap }
     const html = renderTemplate(campaign.body_html, context)
     const subject = renderTemplate(campaign.subject, context)
     const text = stripHtml(html || campaign.body_html)
