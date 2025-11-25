@@ -21,6 +21,10 @@ import { cn } from "@/lib/utils"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension"
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
+import { EmailButtonNode } from "@/components/tiptap-node/email-button-node/email-button-node-extension"
+import { StyledDividerNode } from "@/components/tiptap-node/styled-divider-node/styled-divider-node-extension"
+import { ImageGridNode } from "@/components/tiptap-node/image-grid-node/image-grid-node-extension"
+import { ResizableImageNode } from "@/components/tiptap-node/resizable-image-node/resizable-image-node-extension"
 
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "@/components/tiptap-ui-primitive/toolbar"
 import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
@@ -39,6 +43,9 @@ import { MarkButton } from "@/components/tiptap-ui/mark-button"
 import { TextAlignButton } from "@/components/tiptap-ui/text-align-button"
 import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button"
 import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button"
+import { EmailButtonButton } from "@/components/tiptap-ui/email-button-button"
+import { DividerDropdownMenu } from "@/components/tiptap-ui/divider-dropdown-menu"
+import { ImageGridButton } from "@/components/tiptap-ui/image-grid-button"
 import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
 import { LinkIcon } from "@/components/tiptap-icons/link-icon"
@@ -133,6 +140,14 @@ const MainToolbarContent: React.FC<{
 
     <ToolbarGroup>
       <ImageUploadButton text="Image" />
+      <ImageGridButton />
+    </ToolbarGroup>
+
+    <ToolbarSeparator />
+
+    <ToolbarGroup>
+      <EmailButtonButton />
+      <DividerDropdownMenu portal={isMobile} />
     </ToolbarGroup>
 
   </>
@@ -220,6 +235,10 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           onError: (error) => console.error("[BlogEditor] upload failed", error),
           HTMLAttributes: { class: "rounded-3xl overflow-hidden" },
         }),
+        EmailButtonNode,
+        StyledDividerNode,
+        ImageGridNode,
+        ResizableImageNode,
         ...(extraExtensions || []),
       ],
       content: initialDocument ?? initialHtml ?? DEFAULT_CONTENT,
