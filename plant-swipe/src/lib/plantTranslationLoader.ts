@@ -547,7 +547,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         },
         meta: {
           status: basePlant.status || undefined,
-          adminCommentary: translation.admin_commentary || basePlant.admin_commentary || undefined,
+          adminCommentary: basePlant.admin_commentary || undefined,
           createdBy: basePlant.created_by || undefined,
           createdAt: basePlant.created_time || basePlant.created_at || undefined,
           updatedBy: basePlant.updated_by || undefined,
