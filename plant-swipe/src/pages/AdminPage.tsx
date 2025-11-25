@@ -126,20 +126,20 @@ const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
 };
 
 const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = {
-  "in progres": "#ea580c",
-  review: "#f59e0b",
-  rework: "#dc2626",
-  approved: "#059669",
+  "in progres": "#f59e0b",
+  review: "#0ea5e9",
+  rework: "#ef4444",
+  approved: "#10b981",
   other: "#475569",
 };
 
 const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = {
   "in progres":
-    "bg-orange-100 text-orange-800 dark:bg-orange-500/30 dark:text-orange-100",
-  review:
     "bg-amber-100 text-amber-800 dark:bg-amber-500/30 dark:text-amber-100",
+  review:
+    "bg-sky-100 text-sky-800 dark:bg-sky-500/30 dark:text-sky-100",
   rework:
-    "bg-rose-100 text-rose-800 dark:bg-rose-500/30 dark:text-rose-100",
+    "bg-red-100 text-red-800 dark:bg-red-500/30 dark:text-red-100",
   approved:
     "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/30 dark:text-emerald-100",
   other:
