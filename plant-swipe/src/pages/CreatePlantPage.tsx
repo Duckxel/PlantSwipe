@@ -510,7 +510,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     },
     meta: {
       status: formatStatusForUi(data.status),
-      adminCommentary: translation?.admin_commentary || data.admin_commentary || undefined,
+      adminCommentary: data.admin_commentary || undefined,
       createdBy: data.created_by || undefined,
       createdAt: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,
@@ -866,7 +866,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             recipes_ideas: plantToSave.usage?.recipesIdeas || [],
             advice_infusion: plantToSave.usage?.adviceInfusion || null,
             ground_effect: plantToSave.ecology?.groundEffect || null,
-            admin_commentary: plantToSave.meta?.adminCommentary || null,
             source_name: primarySource?.name || null,
             source_url: primarySource?.url || null,
             tags: plantToSave.miscellaneous?.tags || [],
@@ -912,7 +911,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             recipes_ideas: plantToSave.usage?.recipesIdeas || [],
             advice_infusion: plantToSave.usage?.adviceInfusion || null,
             ground_effect: plantToSave.ecology?.groundEffect || null,
-            admin_commentary: plantToSave.meta?.adminCommentary || null,
             source_name: primarySource?.name || null,
             source_url: primarySource?.url || null,
             tags: plantToSave.miscellaneous?.tags || [],
@@ -1244,9 +1242,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ground_effect: plant.ecology?.groundEffect
               ? await translateText(plant.ecology.groundEffect, target, sourceLang)
               : plant.ecology?.groundEffect || null,
-            admin_commentary: plant.meta?.adminCommentary
-            ? await translateText(plant.meta.adminCommentary, target, sourceLang)
-            : plant.meta?.adminCommentary || null,
           source_name: translatedSource.name || null,
           source_url: translatedSource.url || null,
           tags: await translateArraySafe(plant.miscellaneous?.tags),

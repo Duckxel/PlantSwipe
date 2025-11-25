@@ -241,7 +241,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     },
     meta: {
       status: data.status || undefined,
-      adminCommentary: translation?.admin_commentary || data.admin_commentary || undefined,
+      adminCommentary: data.admin_commentary || undefined,
       createdBy: data.created_by || undefined,
       createdTime: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,

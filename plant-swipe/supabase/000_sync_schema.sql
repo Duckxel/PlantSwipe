@@ -754,7 +754,6 @@ create table if not exists public.plant_translations (
   advice_medicinal text,
   advice_infusion text,
   ground_effect text,
-  admin_commentary text,
   source_name text,
   source_url text,
   created_at timestamptz not null default now(),
@@ -802,8 +801,39 @@ alter table if exists public.plant_translations add column if not exists advice_
 alter table if exists public.plant_translations add column if not exists advice_medicinal text;
 alter table if exists public.plant_translations add column if not exists advice_infusion text;
 alter table if exists public.plant_translations add column if not exists ground_effect text;
-alter table if exists public.plant_translations add column if not exists admin_commentary text;
+-- admin_commentary migrated to main table
 alter table if exists public.plant_translations add column if not exists source_name text;
+
+-- Migrate admin_commentary from translations to plants and drop column from translations
+do $$
+begin
+  -- Update plants with admin_commentary from english translation if plant has none
+  update public.plants p
+  set admin_commentary = pt.admin_commentary
+  from public.plant_translations pt
+  where p.id = pt.plant_id
+    and pt.language = 'en'
+    and pt.admin_commentary is not null
+    and (p.admin_commentary is null or trim(p.admin_commentary) = '');
+    
+  -- Update plants with admin_commentary from ANY translation if plant still has none
+  update public.plants p
+  set admin_commentary = pt.admin_commentary
+  from public.plant_translations pt
+  where p.id = pt.plant_id
+    and pt.admin_commentary is not null
+    and (p.admin_commentary is null or trim(p.admin_commentary) = '');
+
+  -- Drop the column from translations if it exists
+  if exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'plant_translations' 
+    and column_name = 'admin_commentary'
+  ) then
+    alter table public.plant_translations drop column admin_commentary;
+  end if;
+end $$;
 alter table if exists public.plant_translations add column if not exists source_url text;
 alter table if exists public.plant_translations add column if not exists tags text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists nutritional_intake text[] not null default '{}';
