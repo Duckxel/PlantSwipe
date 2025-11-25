@@ -27,7 +27,6 @@ import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
 import { VariableHighlighter } from "@/components/tiptap-extensions/variable-highlighter"
 import type { JSONContent } from "@tiptap/core"
 import { supabase } from "@/lib/supabaseClient"
-import { wrapEmailHtml } from "@/lib/emailWrapper"
 
 type EmailTemplate = {
   id: string

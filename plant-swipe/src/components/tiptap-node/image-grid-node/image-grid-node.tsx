@@ -1,6 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback, useRef } from "react"
-import { Plus, Trash2, GripVertical, Image as ImageIcon } from "lucide-react"
+import { Plus, Trash2, Image as ImageIcon } from "lucide-react"
 import type { GridColumns, GridGap, ImageGridImage } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
@@ -19,7 +19,6 @@ export function ImageGridNode({ node, updateAttributes, selected }: NodeViewProp
     rounded: boolean
   }
 
-  const [isEditing, setIsEditing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 

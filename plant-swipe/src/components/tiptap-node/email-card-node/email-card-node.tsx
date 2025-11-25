@@ -37,8 +37,6 @@ export function EmailCardNode({ node, updateAttributes, selected }: NodeViewProp
     [updateAttributes]
   )
 
-  const styleConfig = CARD_STYLES.find((s) => s.value === style) || CARD_STYLES[0]
-
   const getStyleClasses = () => {
     switch (style) {
       case "highlight":

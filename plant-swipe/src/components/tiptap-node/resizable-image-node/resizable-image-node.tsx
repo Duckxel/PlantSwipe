@@ -1,6 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
-import { useState, useCallback, useRef, useEffect } from "react"
-import { AlignLeft, AlignCenter, AlignRight, Maximize2, Minimize2 } from "lucide-react"
+import { useState, useCallback, useRef } from "react"
+import { AlignLeft, AlignCenter, AlignRight } from "lucide-react"
 import type { ImageAlign } from "./resizable-image-node-extension"
 
 const SIZE_PRESETS = [
