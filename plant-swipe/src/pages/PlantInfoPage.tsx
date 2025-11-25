@@ -7,6 +7,7 @@ import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource 
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
 import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
+import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { getUserBookmarks } from '@/lib/bookmarks'
 import { useTranslation } from 'react-i18next'
@@ -35,6 +36,7 @@ import {
   ZoomOut,
   RefreshCw,
   Utensils,
+  Plus,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -271,6 +273,7 @@ const PlantInfoPage: React.FC = () => {
   const [likedIds, setLikedIds] = React.useState<string[]>([])
   const [bookmarkOpen, setBookmarkOpen] = React.useState(false)
   const [isBookmarked, setIsBookmarked] = React.useState(false)
+  const [gardenOpen, setGardenOpen] = React.useState(false)
 
   const checkIfBookmarked = React.useCallback(async () => {
     if (!user?.id || !plant?.id) {
@@ -376,6 +379,19 @@ const PlantInfoPage: React.FC = () => {
     setBookmarkOpen(true)
   }
 
+  const handleAddToGarden = () => {
+    if (!user) {
+      openLogin()
+      return
+    }
+    setGardenOpen(true)
+  }
+
+  const handleGardenAdded = (_gardenId: string) => {
+    // Optionally navigate to the garden or show a success message
+    // For now, just close the dialog
+  }
+
   if (loading) {
     return <PlantInfoSkeleton label={t('common.loading', { defaultValue: 'Loading plant data' })} />
   }
@@ -394,17 +410,28 @@ const PlantInfoPage: React.FC = () => {
           <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           {t('common.back', { defaultValue: 'Back' })}
         </Button>
-        {profile?.is_admin && plant && (
+        <div className="flex items-center gap-2">
           <Button
             type="button"
-            variant="outline"
-            className="flex items-center gap-2 rounded-2xl border-emerald-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
-            onClick={handleEdit}
+            variant="default"
+            className="flex items-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:bg-emerald-600 dark:hover:bg-emerald-700"
+            onClick={handleAddToGarden}
           >
-            <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            {t('common.edit', { defaultValue: 'Edit' })}
+            <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            {t('garden.add', { defaultValue: 'Add' })}
           </Button>
-        )}
+          {profile?.is_admin && plant && (
+            <Button
+              type="button"
+              variant="outline"
+              className="flex items-center gap-2 rounded-2xl border-emerald-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
+              onClick={handleEdit}
+            >
+              <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              {t('common.edit', { defaultValue: 'Edit' })}
+            </Button>
+          )}
+        </div>
       </div>
       <PlantDetails 
         plant={plant} 
@@ -422,6 +449,17 @@ const PlantInfoPage: React.FC = () => {
           plantId={plant.id} 
           userId={user.id}
           onAdded={checkIfBookmarked}
+        />
+      )}
+
+      {user?.id && plant && (
+        <AddToGardenDialog
+          open={gardenOpen}
+          onOpenChange={setGardenOpen}
+          plantId={plant.id}
+          plantName={plant.name}
+          userId={user.id}
+          onAdded={handleGardenAdded}
         />
       )}
     </div>
