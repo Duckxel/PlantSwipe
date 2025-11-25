@@ -215,81 +215,77 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
       {/* Form Content */}
       <div className="space-y-6">
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Left Column: Main Info */}
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="template-title">Internal Title</Label>
-              <Input
-                id="template-title"
-                value={templateForm.title}
-                onChange={(event) =>
-                  setTemplateForm((prev) => ({ ...prev, title: event.target.value }))
-                }
-                placeholder="e.g. Monthly Newsletter"
-                className="rounded-2xl"
-              />
-              <p className="text-xs text-stone-500">Only visible to admins.</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="template-subject">Email Subject</Label>
-              <Input
-                id="template-subject"
-                value={templateForm.subject}
-                onChange={(event) =>
-                  setTemplateForm((prev) => ({ ...prev, subject: event.target.value }))
-                }
-                placeholder="What's new in your garden, {{user}}?"
-                className="rounded-2xl"
-              />
-              <p className="text-xs text-stone-500">Visible to recipients.</p>
-            </div>
+        {/* Left Column: Main Info (Vertical Stack) */}
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="template-title">Internal Title</Label>
+            <Input
+              id="template-title"
+              value={templateForm.title}
+              onChange={(event) =>
+                setTemplateForm((prev) => ({ ...prev, title: event.target.value }))
+              }
+              placeholder="e.g. Monthly Newsletter"
+              className="rounded-2xl"
+            />
+            <p className="text-xs text-stone-500">Only visible to admins.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="template-subject">Email Subject</Label>
+            <Input
+              id="template-subject"
+              value={templateForm.subject}
+              onChange={(event) =>
+                setTemplateForm((prev) => ({ ...prev, subject: event.target.value }))
+              }
+              placeholder="What's new in your garden, {{user}}?"
+              className="rounded-2xl"
+            />
+            <p className="text-xs text-stone-500">Visible to recipients.</p>
+          </div>
+          
+          {/* Description & Variables vertically stacked */}
+          <div className="space-y-2">
+            <Label htmlFor="template-description">Description (Internal)</Label>
+            <Textarea
+              id="template-description"
+              value={templateForm.description}
+              onChange={(event) =>
+                setTemplateForm((prev) => ({ ...prev, description: event.target.value }))
+              }
+              placeholder="Internal notes about this template..."
+              className="min-h-[80px] rounded-2xl resize-y"
+            />
           </div>
 
-          {/* Right Column: Meta & Variables */}
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">Variables</p>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">
-                    Personalize your emails with dynamic content.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-2xl h-8 px-2"
-                  onClick={() => setVariableInfoOpen(true)}
-                >
-                  <Info className="mr-2 h-3 w-3" />
-                  View List
-                </Button>
+          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Variables</p>
+                <p className="text-xs text-stone-500 dark:text-stone-400">
+                  Personalize your emails with dynamic content.
+                </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {VARIABLE_CATALOG.slice(0, 3).map(v => (
-                  <Badge key={v.token} variant="secondary" className="font-mono text-xs rounded-md">
-                    {v.token}
-                  </Badge>
-                ))}
-                {VARIABLE_CATALOG.length > 3 && (
-                  <span className="text-xs text-muted-foreground self-center">+{VARIABLE_CATALOG.length - 3} more</span>
-                )}
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-2xl h-8 px-2"
+                onClick={() => setVariableInfoOpen(true)}
+              >
+                <Info className="mr-2 h-3 w-3" />
+                View List
+              </Button>
             </div>
-
-             <div className="space-y-2">
-              <Label htmlFor="template-description">Description (Internal)</Label>
-              <Textarea
-                id="template-description"
-                value={templateForm.description}
-                onChange={(event) =>
-                  setTemplateForm((prev) => ({ ...prev, description: event.target.value }))
-                }
-                placeholder="Internal notes about this template..."
-                className="min-h-[80px] rounded-2xl resize-y"
-              />
+            <div className="flex flex-wrap gap-2">
+              {VARIABLE_CATALOG.slice(0, 3).map(v => (
+                <Badge key={v.token} variant="secondary" className="font-mono text-xs rounded-md">
+                  {v.token}
+                </Badge>
+              ))}
+              {VARIABLE_CATALOG.length > 3 && (
+                <span className="text-xs text-muted-foreground self-center">+{VARIABLE_CATALOG.length - 3} more</span>
+              )}
             </div>
           </div>
         </div>
