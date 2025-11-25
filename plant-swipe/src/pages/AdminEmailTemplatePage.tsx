@@ -17,12 +17,17 @@ import {
   Info,
   Loader2,
   ArrowLeft,
-  Save
+  Save,
+  Eye,
+  Monitor,
+  Smartphone,
+  X,
 } from "lucide-react"
 import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
 import { VariableHighlighter } from "@/components/tiptap-extensions/variable-highlighter"
 import type { JSONContent } from "@tiptap/core"
 import { supabase } from "@/lib/supabaseClient"
+import { wrapEmailHtml } from "@/lib/emailWrapper"
 
 type EmailTemplate = {
   id: string
@@ -85,6 +90,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
   const templateEditorRef = React.useRef<BlogEditorHandle>(null)
   const [templateEditorKey, setTemplateEditorKey] = React.useState("initial")
   const [existingTemplate, setExistingTemplate] = React.useState<EmailTemplate | null>(null)
+  const [previewOpen, setPreviewOpen] = React.useState(false)
+  const [previewMode, setPreviewMode] = React.useState<"desktop" | "mobile">("desktop")
 
   React.useEffect(() => {
     if (isNew) return
@@ -323,6 +330,15 @@ export const AdminEmailTemplatePage: React.FC = () => {
           >
             Cancel
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setPreviewOpen(true)}
+            className="rounded-2xl"
+            disabled={!templateForm.bodyHtml.trim()}
+          >
+            <Eye className="mr-2 h-4 w-4" />
+            Preview
+          </Button>
           <Button 
             onClick={handleSave} 
             disabled={templateSaving}
@@ -363,6 +379,112 @@ export const AdminEmailTemplatePage: React.FC = () => {
               Close
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-6xl w-[95vw] h-[90vh] rounded-2xl p-0 overflow-hidden">
+          {/* Preview Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 dark:border-[#3e3e42] bg-gradient-to-r from-emerald-50 to-white dark:from-[#1a1a1d] dark:to-[#1e1e1e]">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-semibold text-stone-800 dark:text-stone-100">Email Preview</span>
+                <Badge variant="outline" className="rounded-full text-xs">
+                  {previewMode === "desktop" ? "Desktop" : "Mobile"}
+                </Badge>
+              </div>
+              
+              {/* Device Toggle */}
+              <div className="flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 p-1">
+                <button
+                  type="button"
+                  onClick={() => setPreviewMode("desktop")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                    previewMode === "desktop"
+                      ? "bg-emerald-600 text-white shadow"
+                      : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
+                  }`}
+                >
+                  <Monitor className="h-4 w-4" />
+                  Desktop
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewMode("mobile")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                    previewMode === "mobile"
+                      ? "bg-emerald-600 text-white shadow"
+                      : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
+                  }`}
+                >
+                  <Smartphone className="h-4 w-4" />
+                  Mobile
+                </button>
+              </div>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(false)}
+              className="rounded-full p-2 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          
+          {/* Subject Line Preview */}
+          <div className="px-6 py-3 bg-stone-50 dark:bg-[#252526] border-b border-stone-200 dark:border-[#3e3e42]">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wide">Subject:</span>
+              <span className="text-sm font-medium text-stone-800 dark:text-stone-100">
+                {templateForm.subject.replace(/\{\{user\}\}/gi, "John") || "(No subject)"}
+              </span>
+            </div>
+          </div>
+          
+          {/* Preview Frame */}
+          <div className="flex-1 overflow-hidden bg-gradient-to-br from-stone-100 via-stone-50 to-emerald-50/30 dark:from-[#1a1a1d] dark:via-[#1e1e1e] dark:to-[#0b1220] p-6 flex items-start justify-center overflow-y-auto">
+            <div 
+              className={`transition-all duration-300 ${
+                previewMode === "mobile" 
+                  ? "w-[375px] rounded-[40px] border-[14px] border-stone-800 dark:border-stone-600 shadow-2xl" 
+                  : "w-full max-w-[700px] rounded-xl border border-stone-200 dark:border-[#3e3e42] shadow-xl"
+              }`}
+              style={{ 
+                backgroundColor: previewMode === "mobile" ? "#fff" : "transparent",
+                minHeight: previewMode === "mobile" ? "667px" : "auto"
+              }}
+            >
+              <iframe
+                title="Email Preview"
+                srcDoc={wrapEmailHtml(
+                  templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "John") || "<p>Start writing your email content...</p>",
+                  { subject: templateForm.subject.replace(/\{\{user\}\}/gi, "John") }
+                )}
+                className="w-full h-full border-0"
+                style={{ 
+                  minHeight: previewMode === "mobile" ? "639px" : "600px",
+                  borderRadius: previewMode === "mobile" ? "26px" : "0.75rem"
+                }}
+                sandbox="allow-same-origin"
+              />
+            </div>
+          </div>
+          
+          {/* Preview Footer */}
+          <div className="px-6 py-3 border-t border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] flex items-center justify-between">
+            <p className="text-xs text-stone-500 dark:text-stone-400">
+              Preview shows how the email will appear to recipients. Variables like <code className="px-1.5 py-0.5 bg-stone-100 dark:bg-stone-800 rounded text-emerald-600 dark:text-emerald-400">{"{{user}}"}</code> are replaced with sample data.
+            </p>
+            <Button 
+              variant="ghost" 
+              onClick={() => setPreviewOpen(false)}
+              className="rounded-2xl"
+            >
+              Close Preview
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
