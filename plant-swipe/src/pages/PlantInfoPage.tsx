@@ -400,35 +400,38 @@ const PlantInfoPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
+      <div className="flex items-center gap-2 justify-between">
         <Button
           type="button"
           variant="ghost"
-          className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
+          size="icon"
+          className="rounded-full border border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
           onClick={handleGoBack}
+          aria-label={t('common.back', { defaultValue: 'Back' })}
         >
-          <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          {t('common.back', { defaultValue: 'Back' })}
+          <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex items-center gap-2">
           <Button
             type="button"
             variant="default"
-            className="flex items-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:bg-emerald-600 dark:hover:bg-emerald-700"
+            size="icon"
+            className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 w-10 shadow-sm dark:bg-emerald-600 dark:hover:bg-emerald-700"
             onClick={handleAddToGarden}
+            aria-label={t('garden.add', { defaultValue: 'Add to garden' })}
           >
-            <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            {t('garden.add', { defaultValue: 'Add' })}
+            <Plus className="h-5 w-5" />
           </Button>
           {profile?.is_admin && plant && (
             <Button
               type="button"
               variant="outline"
-              className="flex items-center gap-2 rounded-2xl border-emerald-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
+              size="icon"
+              className="rounded-full border-emerald-200 bg-white h-10 w-10 shadow-sm dark:border-emerald-500/60 dark:bg-transparent"
               onClick={handleEdit}
+              aria-label={t('common.edit', { defaultValue: 'Edit' })}
             >
-              <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              {t('common.edit', { defaultValue: 'Edit' })}
+              <Pencil className="h-5 w-5" />
             </Button>
           )}
         </div>
