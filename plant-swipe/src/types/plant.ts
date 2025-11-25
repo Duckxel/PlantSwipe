@@ -1,5 +1,5 @@
-export type PlantType = "plant" | "flower" | "bamboo" | "shrub" | "tree"
-export type PlantTypeValue = "plant" | "bambu" | "shrub" | "tree" | "other"
+export type PlantType = "plant" | "flower" | "bamboo" | "shrub" | "tree" | "cactus" | "succulent"
+export type PlantTypeValue = "plant" | "bambu" | "shrub" | "tree" | "cactus" | "succulent" | "other"
 export type PlantSubclassValue = "flower" | "vegetable" | "cereal" | "spice"
 export type PlantSubSubclassValue = "fruit" | "seed" | "root" | "leaf" | "flower"
 export type PlantActivityValue = "ornemental" | "comestible" | "aromatic" | "medicinal"

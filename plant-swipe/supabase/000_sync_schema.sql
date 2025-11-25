@@ -278,7 +278,7 @@ create table if not exists public.plants (
   id text primary key,
   -- Plant primary name (unique)
   name text not null,
-  plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree')),
+  plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')),
   utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']),
   comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']),
   fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']),
@@ -377,7 +377,7 @@ alter table if exists public.plants alter column status set default 'in progres'
 update public.plants set status = 'in progres' where status is null;
 
 -- Backfill all plant attribute columns on existing deployments
-alter table if exists public.plants add column if not exists plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree'));
+alter table if exists public.plants add column if not exists plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent'));
 alter table if exists public.plants add column if not exists utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']);
 alter table if exists public.plants add column if not exists comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']);
 alter table if exists public.plants add column if not exists fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']);

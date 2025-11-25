@@ -463,6 +463,8 @@
         "bambu": "Bamboo",
         "shrub": "Shrub",
         "tree": "Tree",
+        "cactus": "Cactus",
+        "succulent": "Succulent",
         "other": "Other"
       },
       "utility": {
@@ -1169,7 +1171,9 @@
           "flower": "Flower",
           "bamboo": "Bamboo",
           "shrub": "Shrub",
-          "tree": "Tree"
+          "tree": "Tree",
+          "cactus": "Cactus",
+          "succulent": "Succulent"
         },
         "utility": {
           "comestible": "Edible",
