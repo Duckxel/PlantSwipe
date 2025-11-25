@@ -10401,6 +10401,34 @@ function scheduleNotificationWorker() {
   notificationWorkerTimer = setTimeout(tick, 2000)
 }
 
+// Serve sitemap.xml with correct Content-Type
+const publicDir = path.resolve(__dirname, 'public')
+app.get('/sitemap.xml', async (req, res) => {
+  // Try dist first (production), then public (development)
+  const distDir = path.resolve(__dirname, 'dist')
+  const distPath = path.join(distDir, 'sitemap.xml')
+  const publicPath = path.join(publicDir, 'sitemap.xml')
+  
+  let sitemapPath = null
+  try {
+    await fs.access(distPath)
+    sitemapPath = distPath
+  } catch {
+    try {
+      await fs.access(publicPath)
+      sitemapPath = publicPath
+    } catch {
+      // If sitemap doesn't exist, return 404
+      res.status(404).send('Sitemap not found')
+      return
+    }
+  }
+  
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  res.sendFile(sitemapPath)
+})
+
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365

@@ -67,7 +67,17 @@ async function main() {
     return []
   })
 
-  const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes, ...blogRoutes])
+  const profileRoutes = await loadPublicProfileRoutes().catch((error) => {
+    console.warn(`[sitemap] Failed to load dynamic profile routes: ${error.message || error}`)
+    return []
+  })
+
+  const gardenRoutes = await loadGardenRoutes().catch((error) => {
+    console.warn(`[sitemap] Failed to load dynamic garden routes: ${error.message || error}`)
+    return []
+  })
+
+  const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes, ...blogRoutes, ...profileRoutes, ...gardenRoutes])
 
   const nowIso = new Date().toISOString()
   const urlEntries = []
@@ -132,7 +142,8 @@ async function main() {
   await fs.writeFile(sitemapPath, xml, 'utf8')
 
   const relPath = path.relative(appRoot, sitemapPath)
-  console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicRoutes.length + blogRoutes.length} dynamic) in ${Date.now() - startedAt}ms → ${relPath}`)
+  const dynamicCount = dynamicRoutes.length + blogRoutes.length + profileRoutes.length + gardenRoutes.length
+  console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicCount} dynamic: ${dynamicRoutes.length} plants, ${blogRoutes.length} blogs, ${profileRoutes.length} profiles, ${gardenRoutes.length} gardens) in ${Date.now() - startedAt}ms → ${relPath}`)
 }
 
 main().catch((error) => {
@@ -380,6 +391,108 @@ async function loadBlogRoutes() {
       lastmod: pickLastmod(post),
     }
   }).filter(Boolean)
+}
+
+async function loadPublicProfileRoutes() {
+  const client = getSupabaseClient()
+  if (!client) {
+    console.warn('[sitemap] Supabase credentials missing — skipping profile routes.')
+    return []
+  }
+
+  const maxProfiles = positiveInteger(process.env.SITEMAP_MAX_PROFILE_URLS, 2000)
+  const batchSize = positiveInteger(process.env.SITEMAP_PROFILE_BATCH_SIZE, 500)
+
+  const results = []
+  let offset = 0
+
+  while (results.length < maxProfiles) {
+    const limit = Math.min(batchSize, maxProfiles - results.length)
+    const to = offset + limit - 1
+    const { data, error } = await client
+      .from('profiles')
+      .select('display_name, is_private')
+      .eq('is_private', false)
+      .not('display_name', 'is', null)
+      .order('display_name', { ascending: true })
+      .range(offset, to)
+
+    if (error) {
+      throw new Error(error.message || 'Supabase query failed for profiles')
+    }
+
+    if (!data || data.length === 0) {
+      break
+    }
+
+    for (const row of data) {
+      if (!row?.display_name) continue
+      const normalizedName = encodeURIComponent(String(row.display_name).trim())
+      if (!normalizedName) continue
+      const route = {
+        path: `/u/${normalizedName}`,
+        changefreq: 'weekly',
+        priority: 0.5,
+      }
+      results.push(route)
+      if (results.length >= maxProfiles) break
+    }
+
+    if (data.length < limit) break
+    offset += limit
+  }
+
+  return results
+}
+
+async function loadGardenRoutes() {
+  const client = getSupabaseClient()
+  if (!client) {
+    console.warn('[sitemap] Supabase credentials missing — skipping garden routes.')
+    return []
+  }
+
+  const maxGardens = positiveInteger(process.env.SITEMAP_MAX_GARDEN_URLS, 1000)
+  const batchSize = positiveInteger(process.env.SITEMAP_GARDEN_BATCH_SIZE, 500)
+
+  const results = []
+  let offset = 0
+
+  while (results.length < maxGardens) {
+    const limit = Math.min(batchSize, maxGardens - results.length)
+    const to = offset + limit - 1
+    const { data, error } = await client
+      .from('gardens')
+      .select('id, created_at')
+      .order('created_at', { ascending: false })
+      .range(offset, to)
+
+    if (error) {
+      throw new Error(error.message || 'Supabase query failed for gardens')
+    }
+
+    if (!data || data.length === 0) {
+      break
+    }
+
+    for (const row of data) {
+      if (!row?.id) continue
+      const normalizedId = encodeURIComponent(String(row.id))
+      const route = {
+        path: `/garden/${normalizedId}`,
+        changefreq: 'weekly',
+        priority: 0.6,
+        lastmod: toIsoString(row.created_at),
+      }
+      results.push(route)
+      if (results.length >= maxGardens) break
+    }
+
+    if (data.length < limit) break
+    offset += limit
+  }
+
+  return results
 }
 
 function getSupabaseClient() {
