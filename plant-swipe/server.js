@@ -124,7 +124,7 @@ async function processEmailCampaigns() {
     let sentCount = 0
     let failedCount = 0
     const summaryBatches = []
-    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Plant Swipe <support@aphylia.app>'
+    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Plant Swipe <info@aphylia.app>'
 
     for (let i = 0; i < recipients.length; i += batchSize) {
       const batch = recipients.slice(i, i + batchSize)
