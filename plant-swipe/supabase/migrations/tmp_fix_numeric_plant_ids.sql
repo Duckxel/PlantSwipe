@@ -72,6 +72,24 @@ BEGIN
 END $$;
 
 -- ============================================================================
+-- Step 1.5: Rename original plants to avoid unique constraint violation
+-- ============================================================================
+-- The plants table has a unique index on lower(name), so we must rename the
+-- old plants before creating new ones with the same name.
+DO $$
+DECLARE
+    affected integer;
+BEGIN
+    UPDATE public.plants p
+    SET name = p.name || ' [OLD-' || p.id || ']'
+    FROM plant_id_migration m
+    WHERE p.id = m.old_id;
+    
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    RAISE NOTICE 'Step 1.5: Renamed % original plant(s) to avoid name conflicts', affected;
+END $$;
+
+-- ============================================================================
 -- Step 2: Create duplicate plants with new UUIDs (ALL columns)
 -- ============================================================================
 INSERT INTO public.plants (
@@ -165,7 +183,7 @@ INSERT INTO public.plants (
 )
 SELECT
     m.new_id,
-    p.name,
+    m.plant_name,  -- Use original name from migration table (before rename)
     p.plant_type,
     p.utility,
     p.comestible_part,
