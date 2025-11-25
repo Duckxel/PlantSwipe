@@ -41,12 +41,15 @@ DROP TABLE IF EXISTS plant_id_migration;
 CREATE TEMP TABLE plant_id_migration (
     old_id text PRIMARY KEY,
     new_id text NOT NULL,
-    plant_name text -- For reference/logging
+    -- Store ALL potentially unique fields before renaming
+    plant_name text,
+    scientific_name text
 );
 
 -- Insert mappings for numeric IDs (0, 1, 2) that exist
-INSERT INTO plant_id_migration (old_id, new_id, plant_name)
-SELECT id, gen_random_uuid()::text, name
+-- Store original values for all potentially unique fields
+INSERT INTO plant_id_migration (old_id, new_id, plant_name, scientific_name)
+SELECT id, gen_random_uuid()::text, name, scientific_name
 FROM public.plants
 WHERE id IN ('0', '1', '2');
 
@@ -72,21 +75,29 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- Step 1.5: Rename original plants to avoid unique constraint violation
+-- Step 1.5: Rename original plants to avoid unique constraint violations
 -- ============================================================================
--- The plants table has a unique index on lower(name), so we must rename the
--- old plants before creating new ones with the same name.
+-- The plants table has unique indexes on:
+--   - lower(name)
+--   - lower(scientific_name)  [may exist in DB]
+-- We must rename/nullify these fields before creating new plants.
 DO $$
 DECLARE
     affected integer;
 BEGIN
     UPDATE public.plants p
-    SET name = p.name || ' [OLD-' || p.id || ']'
+    SET 
+        name = p.name || ' [OLD-' || p.id || ']',
+        scientific_name = CASE 
+            WHEN p.scientific_name IS NOT NULL 
+            THEN p.scientific_name || ' [OLD-' || p.id || ']'
+            ELSE NULL 
+        END
     FROM plant_id_migration m
     WHERE p.id = m.old_id;
     
     GET DIAGNOSTICS affected = ROW_COUNT;
-    RAISE NOTICE 'Step 1.5: Renamed % original plant(s) to avoid name conflicts', affected;
+    RAISE NOTICE 'Step 1.5: Renamed % original plant(s) to avoid unique constraint conflicts', affected;
 END $$;
 
 -- ============================================================================
@@ -189,7 +200,7 @@ SELECT
     p.comestible_part,
     p.fruit_type,
     p.given_names,
-    p.scientific_name,
+    m.scientific_name,  -- Use original from migration table (before rename)
     p.family,
     p.overview,
     p.promotion_month,
