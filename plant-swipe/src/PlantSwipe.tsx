@@ -32,7 +32,6 @@ import { SwipePage } from "@/pages/SwipePage"
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })))
 const AdminEmailTemplatePageLazy = lazy(() => import("@/pages/AdminEmailTemplatePage").then(module => ({ default: module.AdminEmailTemplatePage })))
-const AdminEmailTemplatesListPageLazy = lazy(() => import("@/pages/AdminEmailTemplatesListPage").then(module => ({ default: module.AdminEmailTemplatesListPage })))
 const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })))
 const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })))
 // SwipePage is main view, loaded eagerly inside PlantSwipe chunk
@@ -1298,16 +1297,6 @@ export default function PlantSwipe() {
                 <RequireAdmin>
                   <Suspense fallback={routeLoadingFallback}>
                     <AdminEmailTemplatePageLazy />
-                  </Suspense>
-                </RequireAdmin>
-              }
-            />
-            <Route
-              path="/admin/emails/templates"
-              element={
-                <RequireAdmin>
-                  <Suspense fallback={routeLoadingFallback}>
-                    <AdminEmailTemplatesListPageLazy />
                   </Suspense>
                 </RequireAdmin>
               }
