@@ -32,10 +32,18 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
 
   // For each bookmark, we might want to fetch a few plant images for the collage
   // To avoid N+1 queries, we can collect all unique plant IDs first
+  // Filter out invalid IDs (must be valid UUIDs)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   const allPlantIds = new Set<string>()
   data?.forEach((b: any) => {
     b.items?.forEach((i: any) => {
-      if (i.plant_id) allPlantIds.add(String(i.plant_id))
+      if (i.plant_id) {
+        const plantId = String(i.plant_id).trim()
+        // Only add valid UUIDs
+        if (plantId && uuidRegex.test(plantId)) {
+          allPlantIds.add(plantId)
+        }
+      }
     })
   })
 
@@ -45,16 +53,24 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
     const plantIdsArray = Array.from(allPlantIds)
     
     // Fetch plants with images
-    const { data: plants } = await supabase
+    const { data: plants, error: plantsError } = await supabase
       .from('plants')
       .select('id, image_url')
       .in('id', plantIdsArray)
     
+    if (plantsError) {
+      console.error('Error fetching plants for bookmarks:', plantsError)
+    }
+    
     // Fetch plant_images separately for better reliability
-    const { data: plantImages } = await supabase
+    const { data: plantImages, error: imagesError } = await supabase
       .from('plant_images')
       .select('plant_id, link, use')
       .in('plant_id', plantIdsArray)
+    
+    if (imagesError) {
+      console.error('Error fetching plant images for bookmarks:', imagesError)
+    }
 
     // Build a map of plant_id -> images
     const imagesByPlantId: Record<string, Array<{ link: string; use: string }>> = {}
@@ -90,12 +106,14 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
   }
 
   return (data || []).map((b: any) => {
-    const items = (b.items || []).map((i: any) => ({
-      id: i.id,
-      bookmark_id: b.id,
-      plant_id: String(i.plant_id), // Ensure string
-      created_at: i.created_at
-    }))
+    const items = (b.items || [])
+      .filter((i: any) => i.plant_id && uuidRegex.test(String(i.plant_id).trim()))
+      .map((i: any) => ({
+        id: i.id,
+        bookmark_id: b.id,
+        plant_id: String(i.plant_id).trim(), // Ensure string and valid UUID
+        created_at: i.created_at
+      }))
     
     // Collect up to 3 images for collage (first 3 plants, already ordered by created_at)
     const preview_images: string[] = []
