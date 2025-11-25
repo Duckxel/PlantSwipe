@@ -48,14 +48,43 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
              </div>
            ) : (
              <div className="grid grid-cols-2 grid-rows-2 h-full w-full gap-[1px]">
-               {displayImages.map((img: string, idx: number) => (
-                 <img 
-                    key={idx} 
-                    src={img} 
-                    alt="" 
-                    className={`object-cover w-full h-full ${displayImages.length === 1 ? 'col-span-2 row-span-2' : ''} ${displayImages.length === 2 && idx === 0 ? 'col-span-2' : ''} ${displayImages.length === 3 && idx === 0 ? 'col-span-2' : ''}`} 
-                 />
-               ))}
+               {displayImages.map((img: string, idx: number) => {
+                 let gridClasses = 'w-full h-full'
+                 
+                 if (displayImages.length === 1) {
+                   gridClasses += ' col-span-2 row-span-2'
+                 } else if (displayImages.length === 2) {
+                   if (idx === 0) {
+                     gridClasses += ' col-span-2'
+                   }
+                   // idx === 1 goes to bottom left naturally
+                 } else if (displayImages.length === 3) {
+                   if (idx === 0) {
+                     gridClasses += ' col-span-2 row-start-1'
+                   } else if (idx === 1) {
+                     // Bottom left
+                     gridClasses += ' col-start-1 row-start-2'
+                   } else if (idx === 2) {
+                     // Bottom right
+                     gridClasses += ' col-start-2 row-start-2'
+                   }
+                 }
+                 
+                 return (
+                   <div key={idx} className={`${gridClasses} bg-stone-200 dark:bg-[#2d2d30] overflow-hidden`}>
+                     <img 
+                       src={img} 
+                       alt="" 
+                       className="object-cover w-full h-full"
+                       loading="lazy"
+                       onError={(e) => {
+                         // Hide broken images
+                         e.currentTarget.style.display = 'none'
+                       }}
+                     />
+                   </div>
+                 )
+               })}
              </div>
            )}
            
