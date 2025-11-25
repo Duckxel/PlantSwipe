@@ -132,7 +132,7 @@ BEGIN
     
     -- Check for duplicate scientific_names WITHIN plants being migrated
     FOR rec IN
-        SELECT scientific_name, count(*) as cnt
+        SELECT lower(scientific_name) as scientific_name_lower, min(scientific_name) as scientific_name, count(*) as cnt
         FROM plant_id_migration
         WHERE scientific_name IS NOT NULL
         GROUP BY lower(scientific_name)
@@ -144,11 +144,11 @@ BEGIN
         UPDATE plant_id_migration m1
         SET scientific_name = NULL
         WHERE m1.scientific_name IS NOT NULL
-        AND lower(m1.scientific_name) = lower(rec.scientific_name)
+        AND lower(m1.scientific_name) = rec.scientific_name_lower
         AND m1.old_id != (
             SELECT min(m2.old_id) 
             FROM plant_id_migration m2 
-            WHERE lower(m2.scientific_name) = lower(rec.scientific_name)
+            WHERE lower(m2.scientific_name) = rec.scientific_name_lower
         );
     END LOOP;
     
@@ -171,7 +171,7 @@ BEGIN
     
     -- Check for duplicate names WITHIN plants being migrated  
     FOR rec IN
-        SELECT plant_name, count(*) as cnt
+        SELECT lower(plant_name) as plant_name_lower, min(plant_name) as plant_name, count(*) as cnt
         FROM plant_id_migration
         WHERE plant_name IS NOT NULL
         GROUP BY lower(plant_name)
@@ -183,11 +183,11 @@ BEGIN
         UPDATE plant_id_migration m1
         SET plant_name = plant_name || ' [' || substring(new_id, 1, 8) || ']'
         WHERE m1.plant_name IS NOT NULL
-        AND lower(m1.plant_name) = lower(rec.plant_name)
+        AND lower(m1.plant_name) = rec.plant_name_lower
         AND m1.old_id != (
             SELECT min(m2.old_id) 
             FROM plant_id_migration m2 
-            WHERE lower(m2.plant_name) = lower(rec.plant_name)
+            WHERE lower(m2.plant_name) = rec.plant_name_lower
         );
     END LOOP;
     
