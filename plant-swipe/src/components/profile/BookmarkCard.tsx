@@ -71,12 +71,19 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
                  }
                  
                  return (
-                   <div key={idx} className={`${gridClasses} bg-stone-200 dark:bg-[#2d2d30] overflow-hidden`}>
+                   <div key={idx} className={`${gridClasses} bg-stone-200 dark:bg-[#2d2d30] overflow-hidden relative`} style={{ minHeight: 0, minWidth: 0 }}>
                      <img 
                        src={img} 
                        alt="" 
-                       className="object-cover w-full h-full"
+                       className="absolute inset-0 w-full h-full object-cover object-center"
+                       style={{ 
+                         objectFit: 'cover',
+                         objectPosition: 'center',
+                         width: '100%',
+                         height: '100%'
+                       }}
                        loading="lazy"
+                       draggable="false"
                        onError={(e) => {
                          // Hide broken images
                          e.currentTarget.style.display = 'none'
