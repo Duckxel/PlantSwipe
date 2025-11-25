@@ -15,12 +15,15 @@ type CampaignRow = {
   body_html: string
   body_json: Record<string, unknown> | null
   variables: unknown
+  scheduled_for: string | null
+  timezone: string | null
 }
 
 type Recipient = {
   userId: string
   email: string
   displayName: string
+  timezone: string | null
 }
 
 type CampaignSummary = {
@@ -35,6 +38,11 @@ type CampaignSummary = {
   failedCount: number
   batches: Array<{ index: number; size: number; status: "sent" | "failed"; error?: string }>
   durationMs: number
+  pendingCount: number
+  alreadySent: number
+  dueThisRun: number
+  sentThisRun: number
+  nextScheduledFor: string | null
 }
 
 const payloadSchema = z
@@ -82,6 +90,22 @@ const replyToEmail = Deno.env.get("EMAIL_CAMPAIGN_REPLY_TO") ?? Deno.env.get("RE
 const DEFAULT_BATCH_SIZE = clamp(Number(Deno.env.get("EMAIL_CAMPAIGN_BATCH_SIZE") ?? "40") || 40, 1, 100)
 const MAX_RECIPIENT_LIMIT = 5000
 
+const DEFAULT_CAMPAIGN_TIMEZONE = "UTC"
+const MAX_TIMEZONE_LEAD_HOURS = clamp(
+  Number(Deno.env.get("EMAIL_CAMPAIGN_MAX_TZ_LEAD_HOURS") ?? "26") || 26,
+  1,
+  36,
+)
+const SEND_WINDOW_GRACE_MS = clamp(
+  Number(Deno.env.get("EMAIL_CAMPAIGN_SEND_GRACE_MS") ?? "60000") || 60000,
+  1000,
+  300000,
+)
+const RESCHEDULE_BACKOFF_MS = clamp(
+  Number(Deno.env.get("EMAIL_CAMPAIGN_RECHECK_DELAY_MS") ?? "60000") || 60000,
+  1000,
+  300000,
+)
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
@@ -156,12 +180,13 @@ async function loadCampaigns(
     return data ? [data as CampaignRow] : []
   }
 
-  const nowIso = new Date().toISOString()
+  const now = new Date()
+  const horizon = new Date(now.getTime() + MAX_TIMEZONE_LEAD_HOURS * 60 * 60 * 1000).toISOString()
   const { data, error } = await client
     .from("admin_email_campaigns")
     .select("*")
     .eq("status", "scheduled")
-    .lte("scheduled_for", nowIso)
+    .lte("scheduled_for", horizon)
     .order("scheduled_for", { ascending: true, nullsFirst: false })
     .limit(options.campaignLimit)
 
@@ -220,6 +245,11 @@ async function processCampaign(
     failedCount: 0,
     batches: [],
     durationMs: 0,
+    pendingCount: 0,
+    alreadySent: 0,
+    dueThisRun: 0,
+    sentThisRun: 0,
+    nextScheduledFor: null,
   }
 
   try {
@@ -229,6 +259,7 @@ async function processCampaign(
     if (!recipients.length) {
       summary.status = "failed"
       summary.reason = "No recipients with confirmed email"
+      summary.durationMs = Date.now() - startedAt.getTime()
       await finalizeCampaign(client, campaign.id, {
         status: "failed",
         send_completed_at: new Date().toISOString(),
@@ -241,13 +272,69 @@ async function processCampaign(
       return summary
     }
 
-    const batches = chunkRecipients(recipients, options.batchSize)
+    const alreadySentSet = await fetchSentUserIds(client, campaign.id)
+    summary.alreadySent = alreadySentSet.size
+    summary.sentCount = alreadySentSet.size
+
+    const unsentRecipients = recipients.filter((recipient) => !alreadySentSet.has(recipient.userId))
+
+    if (!unsentRecipients.length) {
+      summary.status = "sent"
+      summary.reason = "All recipients already delivered previously"
+      summary.durationMs = Date.now() - startedAt.getTime()
+      await finalizeCampaign(client, campaign.id, {
+        status: "sent",
+        send_completed_at: new Date().toISOString(),
+        send_error: null,
+        total_recipients: summary.totalRecipients,
+        sent_count: summary.sentCount,
+        failed_count: 0,
+        send_summary: summary,
+      })
+      return summary
+    }
+
+    const plans = buildRecipientPlans(claimed, unsentRecipients)
+    const now = new Date()
+    const { due, future } = partitionRecipientPlans(plans, now)
+    summary.dueThisRun = due.length
+    summary.pendingCount = future.length
+    summary.nextScheduledFor = future.length ? future[0].sendAt : null
+
+    let remainingBudget =
+      typeof options.recipientLimit === "number"
+        ? Math.max(options.recipientLimit - summary.sentCount, 0)
+        : Number.POSITIVE_INFINITY
+
+    const dueToSend =
+      remainingBudget === Number.POSITIVE_INFINITY ? due : due.slice(0, remainingBudget)
+    const leftoverDue = due.slice(dueToSend.length)
+    summary.pendingCount += leftoverDue.length
+    summary.nextScheduledFor = determineNextScheduledFor(leftoverDue, future, now)
+
+    if (!dueToSend.length) {
+      summary.status = "scheduled"
+      summary.reason =
+        leftoverDue.length > 0 ? "recipient_limit_reached" : "waiting_for_user_timezones"
+      summary.durationMs = Date.now() - startedAt.getTime()
+      const nextRun =
+        summary.nextScheduledFor ?? new Date(now.getTime() + RESCHEDULE_BACKOFF_MS).toISOString()
+      await updateCampaignSchedule(client, campaign.id, summary, nextRun)
+      return summary
+    }
+
+    const recipientsToSend = dueToSend.map((plan) => plan.recipient)
+    const batches = chunkRecipients(recipientsToSend, options.batchSize)
+    const successfulRecipients: Recipient[] = []
     let aborted = false
+
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i]
       const batchResult = await sendBatch(claimed, batch, i)
       summary.batches.push(batchResult)
       if (batchResult.status === "sent") {
+        successfulRecipients.push(...batch)
+        summary.sentThisRun += batchResult.size
         summary.sentCount += batchResult.size
       } else {
         summary.reason = batchResult.error
@@ -256,26 +343,51 @@ async function processCampaign(
       }
     }
 
-    summary.failedCount = aborted ? Math.max(0, summary.totalRecipients - summary.sentCount) : 0
-    summary.status =
-      summary.failedCount === 0
-        ? "sent"
-        : summary.sentCount > 0
-          ? "partial"
-          : "failed"
+    if (successfulRecipients.length) {
+      await recordCampaignSends(client, campaign.id, successfulRecipients)
+    }
+
     summary.durationMs = Date.now() - startedAt.getTime()
 
-    await finalizeCampaign(client, campaign.id, {
-      status: summary.status,
-      send_completed_at: new Date().toISOString(),
-      send_error: summary.reason,
-      total_recipients: summary.totalRecipients,
-      sent_count: summary.sentCount,
-      failed_count: summary.failedCount,
-      send_summary: summary,
-    })
+    if (aborted) {
+      summary.status = summary.sentThisRun > 0 ? "partial" : "failed"
+      summary.failedCount = Math.max(summary.failedCount, summary.totalRecipients - summary.sentCount)
+      await finalizeCampaign(client, campaign.id, {
+        status: summary.status,
+        send_completed_at: new Date().toISOString(),
+        send_error: summary.reason,
+        total_recipients: summary.totalRecipients,
+        sent_count: summary.sentCount,
+        failed_count: summary.failedCount,
+        send_summary: summary,
+      })
+      return summary
+    }
 
-    if (campaign.template_id && summary.sentCount > 0) {
+    const remainingCount = future.length + leftoverDue.length
+    summary.pendingCount = remainingCount
+    summary.nextScheduledFor =
+      determineNextScheduledFor(leftoverDue, future, now) ??
+      new Date(now.getTime() + RESCHEDULE_BACKOFF_MS).toISOString()
+
+    if (remainingCount === 0) {
+      summary.status = "sent"
+      summary.nextScheduledFor = null
+      await finalizeCampaign(client, campaign.id, {
+        status: "sent",
+        send_completed_at: new Date().toISOString(),
+        send_error: null,
+        total_recipients: summary.totalRecipients,
+        sent_count: summary.sentCount,
+        failed_count: 0,
+        send_summary: summary,
+      })
+    } else {
+      summary.status = "scheduled"
+      await updateCampaignSchedule(client, campaign.id, summary, summary.nextScheduledFor)
+    }
+
+    if (campaign.template_id && summary.sentCount > 0 && remainingCount === 0) {
       await client
         .from("admin_email_templates")
         .update({ last_used_at: new Date().toISOString() })
@@ -287,6 +399,11 @@ async function processCampaign(
     summary.status = "failed"
     summary.reason = error instanceof Error ? error.message : String(error)
     summary.durationMs = Date.now() - startedAt.getTime()
+    const failureCount =
+      summary.totalRecipients > 0
+        ? Math.max(summary.totalRecipients - summary.sentCount, summary.failedCount)
+        : summary.failedCount
+    summary.failedCount = failureCount
 
     await finalizeCampaign(client, campaign.id, {
       status: "failed",
@@ -294,7 +411,7 @@ async function processCampaign(
       send_error: summary.reason,
       total_recipients: summary.totalRecipients,
       sent_count: summary.sentCount,
-      failed_count: summary.failedCount || summary.totalRecipients,
+      failed_count: failureCount,
       send_summary: summary,
     })
 
@@ -321,25 +438,31 @@ async function collectRecipients(
     if (!users.length) break
 
     const ids = users.map((user) => user.id)
-    const profileNames = await fetchDisplayNames(client, ids)
+    const profileMeta = await fetchProfileMeta(client, ids)
 
     for (const user of users) {
       if (!user.email) continue
       const confirmed = Boolean(user.email_confirmed_at || user.confirmed_at)
       if (!confirmed) continue
 
+      const profile = profileMeta.get(user.id)
       const displayName =
-        profileNames.get(user.id) ||
+        profile?.displayName ||
         (typeof user.user_metadata?.full_name === "string"
           ? user.user_metadata.full_name
           : null) ||
         user.email.split("@")[0] ||
         `Friend ${user.id.slice(0, 8)}`
+      const timezone =
+        profile?.timezone ||
+        (typeof user.user_metadata?.timezone === "string" ? user.user_metadata.timezone : null) ||
+        null
 
       recipients.push({
         userId: user.id,
         email: user.email,
         displayName,
+        timezone,
       })
 
       if (limit && recipients.length >= limit) {
@@ -354,20 +477,28 @@ async function collectRecipients(
   return recipients
 }
 
-async function fetchDisplayNames(client: SupabaseClient, ids: string[]): Promise<Map<string, string>> {
-  const map = new Map<string, string>()
+type ProfileMeta = {
+  displayName: string | null
+  timezone: string | null
+}
+
+async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<Map<string, ProfileMeta>> {
+  const map = new Map<string, ProfileMeta>()
   if (!ids.length) return map
   const { data, error } = await client
     .from("profiles")
-    .select("id, display_name")
+    .select("id, display_name, timezone")
     .in("id", ids)
   if (error) {
-    console.warn("[email-campaign-runner] failed to load profile names", error)
+    console.warn("[email-campaign-runner] failed to load profile metadata", error)
     return map
   }
   for (const row of data ?? []) {
-    if (row?.id && typeof row.display_name === "string") {
-      map.set(row.id, row.display_name)
+    if (row?.id) {
+      map.set(row.id, {
+        displayName: typeof row.display_name === "string" ? row.display_name : null,
+        timezone: typeof row.timezone === "string" && row.timezone.trim().length ? row.timezone : null,
+      })
     }
   }
   return map
@@ -379,6 +510,208 @@ function chunkRecipients(list: Recipient[], size: number): Recipient[][] {
     batches.push(list.slice(i, i + size))
   }
   return batches
+}
+
+type RecipientPlan = {
+  recipient: Recipient
+  sendAt: string
+}
+
+function buildRecipientPlans(campaign: CampaignRow, recipients: Recipient[]): RecipientPlan[] {
+  const plans = recipients.map((recipient) => ({
+    recipient,
+    sendAt: computeUserSendTime(campaign, recipient.timezone),
+  }))
+  plans.sort((a, b) => {
+    const aTime = new Date(a.sendAt).getTime()
+    const bTime = new Date(b.sendAt).getTime()
+    if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+      return Number.isNaN(aTime) ? 1 : -1
+    }
+    return aTime - bTime
+  })
+  return plans
+}
+
+function partitionRecipientPlans(plans: RecipientPlan[], now: Date) {
+  const due: RecipientPlan[] = []
+  const future: RecipientPlan[] = []
+  for (const plan of plans) {
+    const sendAtDate = new Date(plan.sendAt)
+    if (Number.isNaN(sendAtDate.getTime())) {
+      due.push({ recipient: plan.recipient, sendAt: now.toISOString() })
+      continue
+    }
+    if (sendAtDate.getTime() <= now.getTime() + SEND_WINDOW_GRACE_MS) {
+      due.push(plan)
+    } else {
+      future.push(plan)
+    }
+  }
+  return { due, future }
+}
+
+function determineNextScheduledFor(leftoverDue: RecipientPlan[], futurePlans: RecipientPlan[], now: Date): string | null {
+  if (leftoverDue.length) {
+    return new Date(now.getTime() + RESCHEDULE_BACKOFF_MS).toISOString()
+  }
+  if (futurePlans.length) {
+    return futurePlans[0].sendAt
+  }
+  return null
+}
+
+function computeUserSendTime(campaign: CampaignRow, userTimezone: string | null): string {
+  const scheduled = campaign.scheduled_for
+  if (!scheduled) return new Date().toISOString()
+  const campaignTimezone =
+    campaign.timezone && campaign.timezone.trim().length ? campaign.timezone : DEFAULT_CAMPAIGN_TIMEZONE
+  const targetTimezone = userTimezone && userTimezone.trim().length ? userTimezone : campaignTimezone
+  return convertCampaignTimeToUserUtc(scheduled, campaignTimezone, targetTimezone)
+}
+
+function convertCampaignTimeToUserUtc(scheduledUtc: string, campaignTimezone: string, userTimezone: string): string {
+  try {
+    const scheduledDate = new Date(scheduledUtc)
+    if (Number.isNaN(scheduledDate.getTime())) {
+      return scheduledUtc
+    }
+    if (campaignTimezone === userTimezone) {
+      return scheduledDate.toISOString()
+    }
+
+    const campaignFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: campaignTimezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+    const campaignParts = campaignFormatter.formatToParts(scheduledDate)
+    const getPart = (type: string) => parseInt(campaignParts.find((p) => p.type === type)?.value ?? "0", 10)
+
+    const year = getPart("year")
+    const month = getPart("month") - 1
+    const day = getPart("day")
+    const hour = getPart("hour")
+    const minute = getPart("minute")
+    const second = getPart("second")
+
+    const isoBase =
+      `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T` +
+      `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`
+    let candidateUtc = new Date(`${isoBase}Z`)
+
+    for (let iteration = 0; iteration < 10; iteration++) {
+      const userFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: userTimezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      })
+      const userParts = userFormatter.formatToParts(candidateUtc)
+      const getUserPart = (type: string) => parseInt(userParts.find((p) => p.type === type)?.value ?? "0", 10)
+
+      const userYear = getUserPart("year")
+      const userMonth = getUserPart("month") - 1
+      const userDay = getUserPart("day")
+      const userHour = getUserPart("hour")
+      const userMinute = getUserPart("minute")
+      const userSecond = getUserPart("second")
+
+      if (
+        userYear === year &&
+        userMonth === month &&
+        userDay === day &&
+        userHour === hour &&
+        userMinute === minute &&
+        Math.abs(userSecond - second) <= 1
+      ) {
+        return candidateUtc.toISOString()
+      }
+
+      const desiredLocal = new Date(year, month, day, hour, minute, second)
+      const actualLocal = new Date(userYear, userMonth, userDay, userHour, userMinute, userSecond)
+      const diffMs = desiredLocal.getTime() - actualLocal.getTime()
+
+      if (Math.abs(diffMs) < 1000) {
+        return candidateUtc.toISOString()
+      }
+
+      candidateUtc = new Date(candidateUtc.getTime() + diffMs)
+    }
+
+    return candidateUtc.toISOString()
+  } catch (error) {
+    console.error("[email-campaign-runner] timezone conversion failed", error)
+    return scheduledUtc
+  }
+}
+
+async function fetchSentUserIds(client: SupabaseClient, campaignId: string): Promise<Set<string>> {
+  const sent = new Set<string>()
+  const { data, error } = await client
+    .from("admin_campaign_sends")
+    .select("user_id")
+    .eq("campaign_id", campaignId)
+  if (error) {
+    console.warn("[email-campaign-runner] failed to load prior campaign sends", error)
+    return sent
+  }
+  for (const row of data ?? []) {
+    if (row?.user_id) {
+      sent.add(row.user_id)
+    }
+  }
+  return sent
+}
+
+async function recordCampaignSends(client: SupabaseClient, campaignId: string, recipients: Recipient[]) {
+  if (!recipients.length) return
+  const chunkSize = 500
+  for (let i = 0; i < recipients.length; i += chunkSize) {
+    const slice = recipients.slice(i, i + chunkSize)
+    const timestamp = new Date().toISOString()
+    const payload = slice.map((recipient) => ({
+      campaign_id: campaignId,
+      user_id: recipient.userId,
+      sent_at: timestamp,
+      status: "sent",
+    }))
+    const { error } = await client.from("admin_campaign_sends").insert(payload)
+    if (error) throw error
+  }
+}
+
+async function updateCampaignSchedule(
+  client: SupabaseClient,
+  campaignId: string,
+  summary: CampaignSummary,
+  nextScheduledFor: string,
+) {
+  const { error } = await client
+    .from("admin_email_campaigns")
+    .update({
+      status: "scheduled",
+      scheduled_for: nextScheduledFor,
+      total_recipients: summary.totalRecipients,
+      sent_count: summary.sentCount,
+      failed_count: summary.failedCount,
+      send_summary: summary,
+      send_error: null,
+      send_completed_at: null,
+    })
+    .eq("id", campaignId)
+  if (error) {
+    throw error
+  }
 }
 
 async function sendBatch(
