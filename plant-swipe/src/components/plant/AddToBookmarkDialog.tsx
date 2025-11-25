@@ -1,8 +1,8 @@
 import React from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Plus, Lock, Globe } from 'lucide-react'
+import { Plus, Lock, Globe, Check, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getUserBookmarks, addPlantToBookmark } from '@/lib/bookmarks'
+import { getUserBookmarks, addPlantToBookmark, removePlantFromBookmark } from '@/lib/bookmarks'
 import type { Bookmark } from '@/types/bookmark'
 import { CreateBookmarkDialog } from '@/components/profile/CreateBookmarkDialog'
 import { Loader2 } from 'lucide-react'
@@ -43,19 +43,24 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
   const handleAddToBookmark = async (bookmark: Bookmark) => {
     if (addingToId) return
     setAddingToId(bookmark.id)
+    
+    const hasPlant = bookmark.items?.some(i => String(i.plant_id) === String(plantId))
+    
     try {
-      await addPlantToBookmark(bookmark.id, plantId)
+      if (hasPlant) {
+        // Remove from bookmark if already saved
+        await removePlantFromBookmark(bookmark.id, plantId)
+      } else {
+        // Add to bookmark if not saved
+        await addPlantToBookmark(bookmark.id, plantId)
+      }
       onAdded?.()
-      onOpenChange(false)
+      // Refresh bookmarks to update the "Saved" status
+      await fetchBookmarks()
+      // Don't close dialog - let user add/remove more
     } catch (e: any) {
-       if (e.message?.includes('unique constraint') || e.message?.includes('duplicate')) {
-         // Already in bookmark, just refresh state and close
-         onAdded?.()
-         onOpenChange(false)
-       } else {
-         console.error(e)
-         alert(t('common.error'))
-       }
+      console.error(e)
+      alert(t('common.error'))
     } finally {
       setAddingToId(null)
     }
@@ -87,14 +92,18 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
               {bookmarks.map(b => {
                  const preview = b.preview_images?.[0]
                  const isAdding = addingToId === b.id
-                 const hasPlant = b.items?.some(i => i.plant_id === plantId)
+                 const hasPlant = b.items?.some(i => String(i.plant_id) === String(plantId))
                  
                  return (
                   <button
                     key={b.id}
                     onClick={() => handleAddToBookmark(b)}
                     disabled={isAdding}
-                    className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-stone-50 dark:hover:bg-[#2d2d30] transition-colors text-left group"
+                    className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors text-left group ${
+                      hasPlant 
+                        ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30' 
+                        : 'hover:bg-stone-50 dark:hover:bg-[#2d2d30]'
+                    }`}
                   >
                     <div className="flex items-center gap-3 overflow-hidden">
                        <div className="h-12 w-12 rounded-lg bg-stone-200 dark:bg-[#3e3e42] overflow-hidden flex-shrink-0">
@@ -117,8 +126,9 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
                     {isAdding ? (
                       <Loader2 className="h-5 w-5 animate-spin text-stone-400" />
                     ) : hasPlant ? (
-                       <div className="text-emerald-600 dark:text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-full text-xs font-medium">
-                         {t('bookmarks.saved', { defaultValue: 'Saved' })}
+                       <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40 px-2 py-1 rounded-full text-xs font-medium">
+                         <Check className="h-3 w-3" />
+                         <span>{t('bookmarks.saved', { defaultValue: 'Saved' })}</span>
                        </div>
                     ) : null}
                   </button>
