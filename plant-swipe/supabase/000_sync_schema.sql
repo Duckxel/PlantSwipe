@@ -3457,6 +3457,8 @@ create table if not exists public.admin_email_templates (
   version integer default 1,
   last_used_at timestamptz,
   campaign_count integer default 0,
+  created_by uuid references public.profiles(id) on delete set null,
+  updated_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -3491,6 +3493,8 @@ create table if not exists public.admin_email_campaigns (
   send_error text,
   send_started_at timestamptz,
   send_completed_at timestamptz,
+  created_by uuid references public.profiles(id) on delete set null,
+  updated_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
