@@ -3302,6 +3302,10 @@ async function ensureBroadcastTable() {
 }
 
 let notificationTablesEnsured = false
+
+// Default timezone for notifications and users - MUST be defined before notification API routes
+const DEFAULT_TIMEZONE = 'Europe/London'
+
 async function ensureNotificationTables() {
   if (!sql) return
   if (notificationTablesEnsured) return
@@ -9588,9 +9592,6 @@ function toStringArray(value) {
 function toUuidArray(value) {
   return toStringArray(value)
 }
-
-// Default timezone for users and campaigns
-const DEFAULT_TIMEZONE = 'Europe/London'
 
 function normalizeNotificationCampaign(row) {
   if (!row) return null
