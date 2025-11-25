@@ -5632,28 +5632,34 @@ alter table public.bookmarks enable row level security;
 alter table public.bookmark_items enable row level security;
 
 -- Policies for bookmarks
+drop policy if exists "Bookmarks are viewable by everyone if public" on public.bookmarks;
 create policy "Bookmarks are viewable by everyone if public"
   on public.bookmarks for select
   using ( visibility = 'public' );
 
+drop policy if exists "Users can view their own bookmarks" on public.bookmarks;
 create policy "Users can view their own bookmarks"
   on public.bookmarks for select
   using ( auth.uid() = user_id );
 
+drop policy if exists "Users can insert their own bookmarks" on public.bookmarks;
 create policy "Users can insert their own bookmarks"
   on public.bookmarks for insert
   with check ( auth.uid() = user_id );
 
+drop policy if exists "Users can update their own bookmarks" on public.bookmarks;
 create policy "Users can update their own bookmarks"
   on public.bookmarks for update
   using ( auth.uid() = user_id );
 
+drop policy if exists "Users can delete their own bookmarks" on public.bookmarks;
 create policy "Users can delete their own bookmarks"
   on public.bookmarks for delete
   using ( auth.uid() = user_id );
 
 -- Policies for bookmark_items
 -- Users can view items if they can view the bookmark
+drop policy if exists "Bookmark items are viewable if bookmark is viewable" on public.bookmark_items;
 create policy "Bookmark items are viewable if bookmark is viewable"
   on public.bookmark_items for select
   using (
@@ -5665,6 +5671,7 @@ create policy "Bookmark items are viewable if bookmark is viewable"
   );
 
 -- Users can insert items if they own the bookmark
+drop policy if exists "Users can insert items into their own bookmarks" on public.bookmark_items;
 create policy "Users can insert items into their own bookmarks"
   on public.bookmark_items for insert
   with check (
@@ -5676,6 +5683,7 @@ create policy "Users can insert items into their own bookmarks"
   );
 
 -- Users can delete items from their own bookmarks
+drop policy if exists "Users can delete items from their own bookmarks" on public.bookmark_items;
 create policy "Users can delete items from their own bookmarks"
   on public.bookmark_items for delete
   using (
