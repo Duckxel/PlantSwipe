@@ -11,6 +11,7 @@ import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory }
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 import { Sparkles, ChevronDown, ChevronUp } from "lucide-react"
+import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 
 export type PlantProfileFormProps = {
   value: Plant
@@ -561,14 +562,9 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
 
   const body = (() => {
     if (field.key === "meta.status") {
-      const statusColors: Record<string, string> = {
-        "In Progres": "#f59e0b",
-        Rework: "#ef4444",
-        Review: "#0ea5e9",
-        Approved: "#10b981",
-      }
-        const statusOptions = (field.options || []).map((opt) => (typeof opt === "string" ? opt : String(opt.value)))
-        return (
+      const statusColors: Record<string, string> = FORM_STATUS_COLORS
+      const statusOptions = (field.options || []).map((opt) => (typeof opt === "string" ? opt : String(opt.value)))
+      return (
           <div className="grid gap-2">
             <Label>{label}</Label>
             <select

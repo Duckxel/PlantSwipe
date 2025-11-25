@@ -125,26 +125,14 @@ const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
   other: "Other",
 };
 
-const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = {
-  "in progres": "#f59e0b",
-  review: "#0ea5e9",
-  rework: "#ef4444",
-  approved: "#10b981",
-  other: "#475569",
-};
+import {
+  ADMIN_STATUS_COLORS,
+  ADMIN_STATUS_BADGE_CLASSES,
+} from "@/constants/plantStatus";
 
-const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = {
-  "in progres":
-    "bg-amber-100 text-amber-800 dark:bg-amber-500/30 dark:text-amber-100",
-  review:
-    "bg-sky-100 text-sky-800 dark:bg-sky-500/30 dark:text-sky-100",
-  rework:
-    "bg-red-100 text-red-800 dark:bg-red-500/30 dark:text-red-100",
-  approved:
-    "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/30 dark:text-emerald-100",
-  other:
-    "bg-slate-200 text-slate-800 dark:bg-slate-600/40 dark:text-slate-100",
-};
+const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_COLORS;
+
+const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_BADGE_CLASSES;
 
 const PLANT_STATUS_KEYS: NormalizedPlantStatus[] = [
   "in progres",
