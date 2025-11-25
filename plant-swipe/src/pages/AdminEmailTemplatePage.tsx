@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -183,175 +182,222 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-stone-50 to-stone-100 dark:from-[#0f0f11] dark:to-[#1a1a1d]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <p className="text-sm text-stone-500 dark:text-stone-400">Loading template...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
-      {/* Header Section */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-2">
+    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-emerald-50/30 dark:from-[#0f0f11] dark:via-[#1a1a1d] dark:to-[#0f0f11]">
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="mb-8">
           <button
             type="button"
             onClick={() => navigate("/admin/emails/templates")}
-            className="inline-flex items-center gap-2 text-sm text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+            className="inline-flex items-center gap-2 text-sm text-stone-500 hover:text-emerald-600 dark:text-stone-400 dark:hover:text-emerald-400 transition-colors mb-4"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to templates
           </button>
-          <h1 className="text-3xl font-semibold">
-            {isNew ? "Create Email Template" : "Edit Email Template"}
-          </h1>
-          <p className="text-sm text-stone-600 dark:text-stone-400">
-            Design the HTML layout for your emails using the rich text editor.
-          </p>
-        </div>
-        {existingTemplate && (
-          <Badge variant="outline" className="rounded-2xl px-3 py-1 text-xs uppercase tracking-wide">
-            Updated: {new Date(existingTemplate.updatedAt).toLocaleDateString()}
-          </Badge>
-        )}
-      </div>
-
-      {/* Form Content */}
-      <div className="space-y-6">
-        {/* Left Column: Main Info (Vertical Stack) */}
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="template-title">Internal Title</Label>
-            <Input
-              id="template-title"
-              value={templateForm.title}
-              onChange={(event) =>
-                setTemplateForm((prev) => ({ ...prev, title: event.target.value }))
-              }
-              placeholder="e.g. Monthly Newsletter"
-              className="rounded-2xl"
-            />
-            <p className="text-xs text-stone-500">Only visible to admins.</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="template-subject">Email Subject</Label>
-            <Input
-              id="template-subject"
-              value={templateForm.subject}
-              onChange={(event) =>
-                setTemplateForm((prev) => ({ ...prev, subject: event.target.value }))
-              }
-              placeholder="What's new in your garden, {{user}}?"
-              className="rounded-2xl"
-            />
-            <p className="text-xs text-stone-500">Visible to recipients.</p>
-          </div>
           
-          {/* Description & Variables vertically stacked */}
-          <div className="space-y-2">
-            <Label htmlFor="template-description">Description (Internal)</Label>
-            <Textarea
-              id="template-description"
-              value={templateForm.description}
-              onChange={(event) =>
-                setTemplateForm((prev) => ({ ...prev, description: event.target.value }))
-              }
-              placeholder="Internal notes about this template..."
-              className="min-h-[80px] rounded-2xl resize-y"
-            />
-          </div>
-
-          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Variables</p>
-                <p className="text-xs text-stone-500 dark:text-stone-400">
-                  Personalize your emails with dynamic content.
-                </p>
-              </div>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-stone-900 dark:text-white">
+                {isNew ? "Create Template" : "Edit Template"}
+              </h1>
+              <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+                Design beautiful emails with the rich text editor
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-3">
               <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="rounded-2xl h-8 px-2"
-                onClick={() => setVariableInfoOpen(true)}
+                variant="outline"
+                onClick={() => setPreviewOpen(true)}
+                disabled={!templateForm.bodyHtml.trim()}
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-800"
               >
-                <Info className="mr-2 h-3 w-3" />
-                View List
+                <Eye className="mr-2 h-4 w-4" />
+                Preview
+              </Button>
+              <Button 
+                onClick={handleSave} 
+                disabled={templateSaving}
+                className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+              >
+                {templateSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    {isNew ? "Create Template" : "Save Changes"}
+                  </>
+                )}
               </Button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {VARIABLE_CATALOG.slice(0, 3).map(v => (
-                <Badge key={v.token} variant="secondary" className="font-mono text-xs rounded-md">
-                  {v.token}
-                </Badge>
-              ))}
-              {VARIABLE_CATALOG.length > 3 && (
-                <span className="text-xs text-muted-foreground self-center">+{VARIABLE_CATALOG.length - 3} more</span>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="grid lg:grid-cols-[340px,1fr] gap-6">
+          {/* Sidebar - Template Settings */}
+          <div className="space-y-5">
+            {/* Template Info Card */}
+            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
+              <h2 className="text-sm font-semibold text-stone-900 dark:text-white mb-4 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                  <Save className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                Template Details
+              </h2>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="template-title" className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                    Template Name
+                  </Label>
+                  <Input
+                    id="template-title"
+                    value={templateForm.title}
+                    onChange={(event) =>
+                      setTemplateForm((prev) => ({ ...prev, title: event.target.value }))
+                    }
+                    placeholder="e.g., Monthly Newsletter"
+                    className="rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20]"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="template-subject" className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                    Email Subject Line
+                  </Label>
+                  <Input
+                    id="template-subject"
+                    value={templateForm.subject}
+                    onChange={(event) =>
+                      setTemplateForm((prev) => ({ ...prev, subject: event.target.value }))
+                    }
+                    placeholder="What's new, {{user}}?"
+                    className="rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20]"
+                  />
+                  <p className="text-[11px] text-stone-400">This is what recipients see in their inbox</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="template-description" className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                    Internal Notes
+                  </Label>
+                  <Textarea
+                    id="template-description"
+                    value={templateForm.description}
+                    onChange={(event) =>
+                      setTemplateForm((prev) => ({ ...prev, description: event.target.value }))
+                    }
+                    placeholder="Notes about this template..."
+                    className="min-h-[70px] rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20] resize-none text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Variables Card */}
+            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                    <Info className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  Variables
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setVariableInfoOpen(true)}
+                  className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
+                >
+                  View all
+                </button>
+              </div>
+              
+              <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">
+                Use these to personalize emails
+              </p>
+              
+              <div className="flex flex-wrap gap-2">
+                {VARIABLE_CATALOG.map(v => (
+                  <span 
+                    key={v.token} 
+                    className="px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-[#2a2a2d] text-xs font-mono text-stone-700 dark:text-stone-300 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(v.token)
+                    }}
+                    title="Click to copy"
+                  >
+                    {v.token}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Stats Card (only for existing templates) */}
+            {existingTemplate && (
+              <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-stone-900 dark:text-white mb-4 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <Eye className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  Stats
+                </h2>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-stone-50 dark:bg-[#2a2a2d] p-3 text-center">
+                    <div className="text-lg font-bold text-stone-900 dark:text-white">v{existingTemplate.version}</div>
+                    <div className="text-[11px] text-stone-500">Version</div>
+                  </div>
+                  <div className="rounded-xl bg-stone-50 dark:bg-[#2a2a2d] p-3 text-center">
+                    <div className="text-lg font-bold text-stone-900 dark:text-white">{existingTemplate.campaignCount}</div>
+                    <div className="text-[11px] text-stone-500">Campaigns</div>
+                  </div>
+                </div>
+                
+                <div className="mt-3 pt-3 border-t border-stone-100 dark:border-[#2a2a2d] text-xs text-stone-500">
+                  Last updated: {new Date(existingTemplate.updatedAt).toLocaleDateString()}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Editor Section */}
+          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-stone-100 dark:border-[#2a2a2d] flex items-center justify-between">
+              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Email Content</span>
+              {templateForm.bodyHtml.length > 0 && (
+                <span className="text-xs text-stone-400">{templateForm.bodyHtml.length} characters</span>
               )}
             </div>
+            
+            <BlogEditor
+              key={templateEditorKey}
+              ref={templateEditorRef}
+              initialHtml={initialBody.html}
+              initialDocument={initialBody.doc}
+              uploadFolder="email-templates"
+              extraExtensions={[VariableHighlighter]}
+              className="min-h-[600px]"
+              onUpdate={({ html, doc }) =>
+                setTemplateForm((prev) => ({ ...prev, bodyHtml: html, bodyDoc: doc }))
+              }
+            />
           </div>
-        </div>
-
-        {/* Editor Section */}
-        <div className="space-y-3">
-          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-3 text-xs text-stone-500 dark:text-stone-400 flex items-center justify-between">
-            <span>Use the toolbar to format text, add images, or insert variables.</span>
-            {templateForm.bodyHtml.length > 0 && (
-               <span className="opacity-60">{templateForm.bodyHtml.length} chars</span>
-            )}
-          </div>
-          
-          <BlogEditor
-            key={templateEditorKey}
-            ref={templateEditorRef}
-            initialHtml={initialBody.html}
-            initialDocument={initialBody.doc}
-            uploadFolder="email-templates"
-            extraExtensions={[VariableHighlighter]}
-            className="min-h-[500px]"
-            onUpdate={({ html, doc }) =>
-              setTemplateForm((prev) => ({ ...prev, bodyHtml: html, bodyDoc: doc }))
-            }
-          />
-        </div>
-
-        {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-3 pt-4">
-          <Button 
-            variant="outline" 
-            onClick={() => navigate("/admin/emails/templates")}
-            className="rounded-2xl"
-            disabled={templateSaving}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setPreviewOpen(true)}
-            className="rounded-2xl"
-            disabled={!templateForm.bodyHtml.trim()}
-          >
-            <Eye className="mr-2 h-4 w-4" />
-            Preview
-          </Button>
-          <Button 
-            onClick={handleSave} 
-            disabled={templateSaving}
-            className="rounded-2xl"
-          >
-            {templateSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Save Template
-              </>
-            )}
-          </Button>
         </div>
       </div>
 
@@ -359,19 +405,27 @@ export const AdminEmailTemplatePage: React.FC = () => {
       <Dialog open={variableInfoOpen} onOpenChange={setVariableInfoOpen}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Available variables</DialogTitle>
-            <DialogDescription>Use these tokens to personalize outgoing emails.</DialogDescription>
+            <DialogTitle>Available Variables</DialogTitle>
+            <DialogDescription>Click a variable to copy it to your clipboard</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {VARIABLE_CATALOG.map((variable) => (
-              <div key={variable.token} className="rounded-xl border p-3">
-                <Badge variant="secondary" className="font-mono">{variable.token}</Badge>
-                <p className="mt-1 text-sm text-muted-foreground">{variable.description}</p>
+              <div 
+                key={variable.token} 
+                className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-4 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-800 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-all"
+                onClick={() => {
+                  navigator.clipboard?.writeText(variable.token)
+                }}
+              >
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-sm font-mono text-emerald-700 dark:text-emerald-400">
+                  {variable.token}
+                </span>
+                <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">{variable.description}</p>
               </div>
             ))}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setVariableInfoOpen(false)} className="rounded-2xl">
+            <Button variant="ghost" onClick={() => setVariableInfoOpen(false)} className="rounded-xl">
               Close
             </Button>
           </DialogFooter>
@@ -514,19 +568,38 @@ export const AdminEmailTemplatePage: React.FC = () => {
             }
             /* Email Card Styles */
             .email-preview-body [data-type="email-card"] {
-              margin: 24px 0 !important;
+              margin: 28px 0 !important;
+              padding: 0 !important;
+              border-radius: 20px !important;
+              background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(255, 255, 255, 1) 50%, rgba(16, 185, 129, 0.06) 100%) !important;
+              border: 2px solid rgba(16, 185, 129, 0.25) !important;
+              box-shadow: 0 8px 32px rgba(16, 185, 129, 0.15), 0 2px 8px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+              overflow: hidden !important;
+            }
+            .email-preview-body [data-type="email-card"] table {
+              margin: 0 !important;
+              border: none !important;
+            }
+            .email-preview-body [data-type="email-card"] td {
               padding: 24px !important;
-              border-radius: 16px !important;
-              background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(255, 255, 255, 0.95) 100%) !important;
-              border: 1px solid rgba(16, 185, 129, 0.2) !important;
-              box-shadow: 0 4px 16px rgba(16, 185, 129, 0.1) !important;
+              border: none !important;
+            }
+            .email-preview-body [data-type="email-card"] td:first-child {
+              padding-right: 8px !important;
+              font-size: 32px !important;
             }
             .email-preview-body [data-type="email-card"] strong {
               display: block !important;
-              font-size: 18px !important;
+              font-size: 17px !important;
               font-weight: 700 !important;
-              color: #111827 !important;
-              margin-bottom: 8px !important;
+              color: #065f46 !important;
+              margin-bottom: 6px !important;
+              letter-spacing: -0.3px !important;
+            }
+            .email-preview-body [data-type="email-card"] > table > tbody > tr > td:last-child > div > div {
+              font-size: 15px !important;
+              color: #374151 !important;
+              line-height: 1.6 !important;
             }
             /* Email Button Styles */
             .email-preview-body [data-type="email-button"] a,
