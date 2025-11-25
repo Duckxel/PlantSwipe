@@ -5159,6 +5159,9 @@ app.post('/api/admin/email-campaigns/:id/run', async (req, res) => {
     if (invocation.error) {
       throw new Error(invocation.error.message || 'Edge function failed')
     }
+    if (invocation.data) {
+      console.log('[email-campaigns] runner completed:', JSON.stringify(invocation.data))
+    }
     const refreshed = await sql`
       select c.*, t.title as template_title
       from public.admin_email_campaigns c

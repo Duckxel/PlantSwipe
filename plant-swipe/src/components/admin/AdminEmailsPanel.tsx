@@ -269,7 +269,12 @@ export const AdminEmailsPanel: React.FC = () => {
 
   const handleDeleteCampaign = React.useCallback(
     async (campaign: EmailCampaign) => {
-      if (!window.confirm(`Delete campaign "${campaign.title}"? This cannot be undone.`)) return
+      const isSent = campaign.status === "sent" || campaign.status === "partial"
+      const confirmMsg = isSent 
+        ? `WARNING: This campaign "${campaign.title}" has already been sent to ${campaign.sentCount} users.\n\nDeleting it will remove the record of these emails being sent.\n\nAre you sure you want to delete it?`
+        : `Delete campaign "${campaign.title}"? This cannot be undone.`
+      
+      if (!window.confirm(confirmMsg)) return
       try {
         const headers = await buildAdminHeaders()
         const resp = await fetch(`/api/admin/email-campaigns/${encodeURIComponent(campaign.id)}`, {
@@ -406,8 +411,8 @@ export const AdminEmailsPanel: React.FC = () => {
                           <Clock className="mr-1 inline h-3 w-3" />
                           {campaign.scheduledFor ? formatDateTime(campaign.scheduledFor) : "No schedule"}
                         </span>
-                        <span>
-                          Sent {campaign.sentCount}/{campaign.totalRecipients}
+                        <span className="font-medium text-foreground">
+                          Sent: {campaign.sentCount} / {campaign.totalRecipients}
                           {campaign.failedCount > 0 ? ` · Failed ${campaign.failedCount}` : ""}
                         </span>
                         {campaign.variables?.length ? (
