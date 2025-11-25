@@ -864,30 +864,31 @@ alter table if exists public.plant_translations add column if not exists source_
 -- Migrate admin_commentary from translations to plants and drop column from translations
 do $$
 begin
-  -- Update plants with admin_commentary from english translation if plant has none
-  update public.plants p
-  set admin_commentary = pt.admin_commentary
-  from public.plant_translations pt
-  where p.id = pt.plant_id
-    and pt.language = 'en'
-    and pt.admin_commentary is not null
-    and (p.admin_commentary is null or trim(p.admin_commentary) = '');
-    
-  -- Update plants with admin_commentary from ANY translation if plant still has none
-  update public.plants p
-  set admin_commentary = pt.admin_commentary
-  from public.plant_translations pt
-  where p.id = pt.plant_id
-    and pt.admin_commentary is not null
-    and (p.admin_commentary is null or trim(p.admin_commentary) = '');
-
-  -- Drop the column from translations if it exists
+  -- Only migrate if the column exists in plant_translations
   if exists (
     select 1 from information_schema.columns 
     where table_schema = 'public' 
     and table_name = 'plant_translations' 
     and column_name = 'admin_commentary'
   ) then
+    -- Update plants with admin_commentary from english translation if plant has none
+    update public.plants p
+    set admin_commentary = pt.admin_commentary
+    from public.plant_translations pt
+    where p.id = pt.plant_id
+      and pt.language = 'en'
+      and pt.admin_commentary is not null
+      and (p.admin_commentary is null or trim(p.admin_commentary) = '');
+      
+    -- Update plants with admin_commentary from ANY translation if plant still has none
+    update public.plants p
+    set admin_commentary = pt.admin_commentary
+    from public.plant_translations pt
+    where p.id = pt.plant_id
+      and pt.admin_commentary is not null
+      and (p.admin_commentary is null or trim(p.admin_commentary) = '');
+
+    -- Drop the column from translations
     alter table public.plant_translations drop column admin_commentary;
   end if;
 end $$;
