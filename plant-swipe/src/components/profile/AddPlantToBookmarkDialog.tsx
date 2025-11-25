@@ -27,25 +27,40 @@ export const AddPlantToBookmarkDialog: React.FC<AddPlantToBookmarkDialogProps> =
   const { t } = useTranslation('common')
   const currentLang = useLanguage()
   const [query, setQuery] = useState('')
-  const [plants, setPlants] = useState<Plant[]>([])
+  const [allPlants, setAllPlants] = useState<Plant[]>([])
   const [loading, setLoading] = useState(false)
   const [addingId, setAddingId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (open && plants.length === 0) {
-      setLoading(true)
-      loadPlantPreviews(currentLang)
-        .then(setPlants)
-        .catch(console.error)
-        .finally(() => setLoading(false))
+    if (open) {
+      if (allPlants.length === 0) {
+        setLoading(true)
+        loadPlantPreviews(currentLang)
+          .then(setAllPlants)
+          .catch(console.error)
+          .finally(() => setLoading(false))
+      }
+    } else {
+      // Reset search when dialog closes
+      setQuery('')
     }
-  }, [open, currentLang, plants.length])
+  }, [open, currentLang, allPlants.length])
 
   const filtered = useMemo(() => {
-    if (!query) return plants.slice(0, 20)
-    const lower = query.toLowerCase()
-    return plants.filter(p => p.name.toLowerCase().includes(lower) || p.scientificName?.toLowerCase().includes(lower)).slice(0, 20)
-  }, [plants, query])
+    if (!query.trim()) {
+      // If no search, return 10 random plants
+      const shuffled = [...allPlants].sort(() => 0.5 - Math.random())
+      return shuffled.slice(0, 10)
+    }
+    // If searching, filter and limit to 10
+    const lower = query.toLowerCase().trim()
+    return allPlants
+      .filter(p => 
+        p.name.toLowerCase().includes(lower) || 
+        p.scientificName?.toLowerCase().includes(lower)
+      )
+      .slice(0, 10)
+  }, [allPlants, query])
 
   const handleAdd = async (plant: Plant) => {
     setAddingId(plant.id)

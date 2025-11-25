@@ -89,7 +89,7 @@ export const BookmarkPage = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-2">
           <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="-ml-2 text-stone-500">
-            <ChevronLeft className="h-4 w-4 mr-1" /> {t('common.back')}
+            <ChevronLeft className="h-4 w-4 mr-1" /> {t('common.back', { defaultValue: 'Back' })}
           </Button>
           <h1 className="text-3xl font-bold flex items-center gap-3">
             {bookmark.name}

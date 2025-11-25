@@ -23,44 +23,80 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
   // To avoid N+1 queries, we can collect all unique plant IDs first
   const allPlantIds = new Set<string>()
   data?.forEach((b: any) => {
-    b.items?.forEach((i: any) => allPlantIds.add(i.plant_id))
+    b.items?.forEach((i: any) => {
+      if (i.plant_id) allPlantIds.add(String(i.plant_id))
+    })
   })
 
   // If there are plants, fetch their images
   const plantImagesMap: Record<string, string | null> = {}
   if (allPlantIds.size > 0) {
+    const plantIdsArray = Array.from(allPlantIds)
+    
+    // Fetch plants with images
     const { data: plants } = await supabase
       .from('plants')
-      .select('id, image_url, plant_images(link, use)')
-      .in('id', Array.from(allPlantIds))
+      .select('id, image_url')
+      .in('id', plantIdsArray)
+    
+    // Fetch plant_images separately for better reliability
+    const { data: plantImages } = await supabase
+      .from('plant_images')
+      .select('plant_id, link, use')
+      .in('plant_id', plantIdsArray)
 
-    plants?.forEach((p: any) => {
-      // Use helper or logic to get best image
-      const images = Array.isArray(p.plant_images) ? p.plant_images : []
-      const photos = images.map((img: any) => ({
+    // Build a map of plant_id -> images
+    const imagesByPlantId: Record<string, Array<{ link: string; use: string }>> = {}
+    if (plantImages) {
+      plantImages.forEach((img: any) => {
+        if (!img.plant_id || !img.link) return
+        const pid = String(img.plant_id)
+        if (!imagesByPlantId[pid]) imagesByPlantId[pid] = []
+        imagesByPlantId[pid].push({ link: img.link, use: img.use || 'other' })
+      })
+    }
+
+    if (plants) {
+      plants.forEach((p: any) => {
+        if (!p || !p.id) return
+        const plantId = String(p.id)
+        const images = imagesByPlantId[plantId] || []
+        
+        const photos = images.map((img) => ({
           url: img.link || '',
           isPrimary: img.use === 'primary',
           isVertical: false
         }))
-      const url = getPrimaryPhotoUrl(photos) || p.image_url || images[0]?.link || null
-      plantImagesMap[p.id] = url
-    })
+        
+        // Get primary photo URL or fallback to image_url or first image
+        let url = getPrimaryPhotoUrl(photos)
+        if (!url && p.image_url) url = p.image_url
+        if (!url && images.length > 0 && images[0]?.link) url = images[0].link
+        
+        plantImagesMap[plantId] = url || null
+      })
+    }
   }
 
   return (data || []).map((b: any) => {
     const items = (b.items || []).map((i: any) => ({
       id: i.id,
       bookmark_id: b.id,
-      plant_id: i.plant_id,
+      plant_id: String(i.plant_id), // Ensure string
       created_at: i.created_at
     }))
     
     // Collect up to 4 images for collage (randomly shuffled)
     const shuffledItems = [...items].sort(() => 0.5 - Math.random())
-    const preview_images = shuffledItems
-      .map((i: BookmarkItem) => plantImagesMap[i.plant_id])
-      .filter((url: string | null) => !!url)
-      .slice(0, 4) as string[]
+    const preview_images: string[] = []
+    
+    for (const item of shuffledItems) {
+      const imageUrl = plantImagesMap[item.plant_id]
+      if (imageUrl) {
+        preview_images.push(imageUrl)
+        if (preview_images.length >= 4) break
+      }
+    }
 
     return {
       id: b.id,

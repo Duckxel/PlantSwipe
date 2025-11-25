@@ -17,7 +17,8 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
   
   // Collage of up to 4 images
   const images = bookmark.preview_images || []
-  const displayImages = images.slice(0, 4)
+  const displayImages = images.filter((img): img is string => !!img && typeof img === 'string').slice(0, 4)
+  const hasItems = (bookmark.plant_count || 0) > 0
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -37,9 +38,13 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
     <Link to={`/bookmarks/${bookmark.id}`} className="block group relative">
       <Card className="overflow-hidden transition-all hover:shadow-md border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e]">
         <div className="aspect-square relative bg-stone-100 dark:bg-[#2d2d30]">
-           {displayImages.length === 0 ? (
+           {!hasItems ? (
              <div className="absolute inset-0 flex items-center justify-center text-stone-400 text-xs">
                {t('bookmarks.empty', { defaultValue: 'No plants' })}
+             </div>
+           ) : displayImages.length === 0 ? (
+             <div className="absolute inset-0 flex items-center justify-center text-stone-400 text-xs">
+               {bookmark.plant_count || 0} {t('bookmarks.plants', { defaultValue: 'plants' })}
              </div>
            ) : (
              <div className="grid grid-cols-2 grid-rows-2 h-full w-full gap-[1px]">
