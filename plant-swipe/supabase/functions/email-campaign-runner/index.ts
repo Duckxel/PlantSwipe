@@ -879,6 +879,7 @@ function wrapEmailHtml(bodyHtml: string, subject: string): string {
   <meta name="color-scheme" content="light dark">
   <meta name="supported-color-schemes" content="light dark">
   <title>${subject || 'Aphylia'}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
   <!--[if mso]>
   <noscript>
     <xml>
@@ -892,14 +893,47 @@ function wrapEmailHtml(bodyHtml: string, subject: string): string {
   </style>
   <![endif]-->
   <style>
+    /* Reset */
     body, table, td, p, a, li, blockquote { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; max-width: 100%; }
+    
+    /* Base */
     body { margin: 0 !important; padding: 0 !important; width: 100% !important; background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%); min-height: 100vh; }
-    a { color: #059669; text-decoration: none; }
+    
+    /* Typography */
+    h1 { font-size: 32px; font-weight: 700; color: #111827; margin: 0 0 20px 0; line-height: 1.2; letter-spacing: -0.5px; }
+    h2 { font-size: 26px; font-weight: 700; color: #1f2937; margin: 32px 0 16px 0; line-height: 1.3; }
+    h3 { font-size: 22px; font-weight: 600; color: #374151; margin: 28px 0 12px 0; line-height: 1.4; }
+    h4 { font-size: 18px; font-weight: 600; color: #4b5563; margin: 24px 0 10px 0; }
+    p { margin: 0 0 16px 0; line-height: 1.75; color: #374151; }
+    
+    /* Links */
+    a { color: #059669; text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
     a:hover { color: #047857; }
-    h1, h2, h3, h4 { color: #111827; margin: 0 0 16px 0; font-weight: 700; line-height: 1.3; }
-    p { margin: 0 0 16px 0; line-height: 1.7; }
+    
+    /* Code */
+    code { background: #f3f4f6; color: #dc2626; padding: 3px 8px; border-radius: 6px; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em; }
+    pre { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: #e5e7eb; padding: 20px 24px; border-radius: 16px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; line-height: 1.6; margin: 20px 0; }
+    pre code { background: transparent; color: #e5e7eb; padding: 0; border-radius: 0; }
+    
+    /* Highlight */
+    mark { background: linear-gradient(135deg, #fef08a 0%, #fde047 100%); color: #713f12; padding: 2px 6px; border-radius: 4px; }
+    
+    /* Blockquote */
+    blockquote { border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.08); margin: 20px 0; padding: 16px 24px; border-radius: 0 12px 12px 0; font-style: italic; color: #374151; }
+    
+    /* Lists */
+    ul, ol { margin: 16px 0; padding-left: 28px; }
+    li { margin: 8px 0; color: #374151; }
+    
+    /* Horizontal Rule */
+    hr { border: none; height: 2px; background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%); margin: 32px 0; }
+    
+    /* Strong/Bold */
+    strong, b { font-weight: 600; color: #111827; }
+    
+    /* Dark mode */
     @media (prefers-color-scheme: dark) {
       body { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
       .email-wrapper { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
@@ -907,15 +941,22 @@ function wrapEmailHtml(bodyHtml: string, subject: string): string {
       .email-body { color: #f4f4f5 !important; }
       .email-body p, .email-body li, .email-body span, .email-body td { color: #e4e4e7 !important; }
       .email-body h1, .email-body h2, .email-body h3, .email-body h4 { color: #ffffff !important; }
+      .email-body a { color: #34d399 !important; }
+      .email-body code { background: #374151 !important; color: #fca5a5 !important; }
+      .email-body mark { background: #854d0e !important; color: #fef08a !important; }
       .signature-section { background: rgba(16, 185, 129, 0.08) !important; border-color: rgba(16, 185, 129, 0.15) !important; }
       .footer-section { border-color: rgba(63, 63, 70, 0.3) !important; }
       .footer-section p { color: #71717a !important; }
     }
+    
+    /* Responsive */
     @media screen and (max-width: 640px) {
       .email-container { width: 100% !important; margin: 0 !important; border-radius: 0 !important; border-left: none !important; border-right: none !important; }
       .email-body { padding: 32px 24px !important; }
       .signature-section { margin: 24px !important; padding: 24px !important; }
       .footer-section { padding: 24px !important; }
+      h1 { font-size: 26px !important; }
+      h2 { font-size: 22px !important; }
     }
   </style>
 </head>
