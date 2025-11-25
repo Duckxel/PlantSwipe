@@ -6,6 +6,63 @@
 create extension if not exists pgcrypto;
 -- Optional: scheduling support
 create extension if not exists pg_cron;
+-- Optional: network requests (for edge functions)
+create extension if not exists pg_net;
+
+-- ========== Secrets Management (for DB-initiated edge functions) ==========
+create table if not exists public.admin_secrets (
+  key text primary key,
+  value text not null,
+  description text,
+  updated_at timestamptz default now()
+);
+alter table public.admin_secrets enable row level security;
+-- Only allows service_role to access
+drop policy if exists "Service role only" on public.admin_secrets;
+create policy "Service role only" on public.admin_secrets for all using (false);
+
+-- ========== Helper: Invoke Edge Function ==========
+create or replace function public.invoke_edge_function(
+  function_name text,
+  payload jsonb default '{}'::jsonb
+) returns uuid as $$
+declare
+  project_url text;
+  service_key text;
+  request_id uuid;
+begin
+  select value into project_url from public.admin_secrets where key = 'SUPABASE_URL';
+  select value into service_key from public.admin_secrets where key = 'SUPABASE_SERVICE_ROLE_KEY';
+
+  if project_url is null or service_key is null then
+    return null;
+  end if;
+
+  -- Ensure URL ends with /functions/v1/
+  if not project_url like '%/functions/v1%' then
+     project_url := trim(both '/' from project_url) || '/functions/v1';
+  end if;
+  
+  select net.http_post(
+    url := project_url || '/' || function_name,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || service_key
+    ),
+    body := payload
+  ) into request_id;
+
+  return request_id;
+end;
+$$ language plpgsql security definer;
+
+-- ========== Scheduled Tasks ==========
+-- Email Campaign Runner (every minute)
+select cron.schedule(
+  'invoke-email-campaign-runner',
+  '* * * * *',
+  $$select public.invoke_edge_function('email-campaign-runner')$$
+);
 
 -- ========== Public schema hard cleanup (drops rogue tables) ==========
 do $$ declare
