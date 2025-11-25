@@ -52,17 +52,7 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
   if (allPlantIds.size > 0) {
     const plantIdsArray = Array.from(allPlantIds)
     
-    // Fetch plants with images
-    const { data: plants, error: plantsError } = await supabase
-      .from('plants')
-      .select('id, image_url')
-      .in('id', plantIdsArray)
-    
-    if (plantsError) {
-      console.error('Error fetching plants for bookmarks:', plantsError)
-    }
-    
-    // Fetch plant_images separately for better reliability
+    // Fetch plant_images for all plants
     const { data: plantImages, error: imagesError } = await supabase
       .from('plant_images')
       .select('plant_id, link, use')
@@ -77,36 +67,38 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
     if (plantImages) {
       plantImages.forEach((img: any) => {
         if (!img.plant_id || !img.link) return
-        const pid = String(img.plant_id)
+        const pid = String(img.plant_id).trim()
         if (!imagesByPlantId[pid]) imagesByPlantId[pid] = []
         imagesByPlantId[pid].push({ link: img.link, use: img.use || 'other' })
       })
     }
 
-    if (plants) {
-      plants.forEach((p: any) => {
-        if (!p || !p.id) return
-        const plantId = String(p.id)
-        const images = imagesByPlantId[plantId] || []
-        
+    // Build the image URL map for each plant
+    allPlantIds.forEach((plantId) => {
+      const images = imagesByPlantId[plantId] || []
+      
+      if (images.length > 0) {
         const photos = images.map((img) => ({
           url: img.link || '',
           isPrimary: img.use === 'primary',
           isVertical: false
         }))
         
-        // Get primary photo URL or fallback to image_url or first image
+        // Get primary photo URL or fallback to first image
         let url = getPrimaryPhotoUrl(photos)
-        if (!url && p.image_url) url = p.image_url
         if (!url && images.length > 0 && images[0]?.link) url = images[0].link
         
         plantImagesMap[plantId] = url || null
-      })
-    }
+      }
+    })
   }
 
   return (data || []).map((b: any) => {
-    const items = (b.items || [])
+    // Store original count before filtering
+    const originalCount = (b.items || []).length
+    
+    // Filter items to only include valid UUIDs for image fetching
+    const validItems = (b.items || [])
       .filter((i: any) => i.plant_id && uuidRegex.test(String(i.plant_id).trim()))
       .map((i: any) => ({
         id: i.id,
@@ -118,13 +110,21 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
     // Collect up to 3 images for collage (first 3 plants, already ordered by created_at)
     const preview_images: string[] = []
     
-    for (const item of items) {
+    for (const item of validItems) {
       const imageUrl = plantImagesMap[item.plant_id]
       if (imageUrl) {
         preview_images.push(imageUrl)
         if (preview_images.length >= 3) break
       }
     }
+
+    // Map all items (including invalid ones) for the items array, but use original count
+    const allItems = (b.items || []).map((i: any) => ({
+      id: i.id,
+      bookmark_id: b.id,
+      plant_id: String(i.plant_id || ''), // Keep all items, even if invalid
+      created_at: i.created_at
+    }))
 
     return {
       id: b.id,
@@ -133,8 +133,8 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
       visibility: b.visibility,
       created_at: b.created_at,
       updated_at: b.updated_at,
-      items,
-      plant_count: items.length,
+      items: allItems, // Return all items
+      plant_count: originalCount, // Use original count
       preview_images
     }
   })
