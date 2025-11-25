@@ -382,111 +382,155 @@ export const AdminEmailTemplatePage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Email Preview Dialog */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-6xl w-[95vw] h-[90vh] rounded-2xl p-0 overflow-hidden">
-          {/* Preview Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 dark:border-[#3e3e42] bg-gradient-to-r from-emerald-50 to-white dark:from-[#1a1a1d] dark:to-[#1e1e1e]">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-semibold text-stone-800 dark:text-stone-100">Email Preview</span>
-                <Badge variant="outline" className="rounded-full text-xs">
-                  {previewMode === "desktop" ? "Desktop" : "Mobile"}
-                </Badge>
-              </div>
-              
-              {/* Device Toggle */}
-              <div className="flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 p-1">
-                <button
-                  type="button"
-                  onClick={() => setPreviewMode("desktop")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
-                    previewMode === "desktop"
-                      ? "bg-emerald-600 text-white shadow"
-                      : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
-                  }`}
-                >
-                  <Monitor className="h-4 w-4" />
-                  Desktop
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewMode("mobile")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
-                    previewMode === "mobile"
-                      ? "bg-emerald-600 text-white shadow"
-                      : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
-                  }`}
-                >
-                  <Smartphone className="h-4 w-4" />
-                  Mobile
-                </button>
-              </div>
+      {/* Email Preview - Full Screen Overlay */}
+      {previewOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%)' }}>
+          {/* Floating Controls */}
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl border border-stone-200/50 bg-white/95 backdrop-blur-xl px-4 py-2 shadow-2xl dark:border-[#3e3e42]/50 dark:bg-[#1a1a1d]/95">
+            {/* Device Toggle */}
+            <div className="flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#252526] p-1">
+              <button
+                type="button"
+                onClick={() => setPreviewMode("desktop")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-all ${
+                  previewMode === "desktop"
+                    ? "bg-emerald-600 text-white shadow-lg"
+                    : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
+                }`}
+              >
+                <Monitor className="h-4 w-4" />
+                Desktop
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewMode("mobile")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-all ${
+                  previewMode === "mobile"
+                    ? "bg-emerald-600 text-white shadow-lg"
+                    : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
+                }`}
+              >
+                <Smartphone className="h-4 w-4" />
+                Mobile
+              </button>
             </div>
+
+            <div className="h-6 w-px bg-stone-200 dark:bg-[#3e3e42]" />
+
+            {/* Subject */}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-stone-400 dark:text-stone-500">Subject:</span>
+              <span className="font-medium text-stone-700 dark:text-stone-200 max-w-[200px] truncate">
+                {templateForm.subject.replace(/\{\{user\}\}/gi, "John") || "(No subject)"}
+              </span>
+            </div>
+
+            <div className="h-6 w-px bg-stone-200 dark:bg-[#3e3e42]" />
             
             <button
               type="button"
               onClick={() => setPreviewOpen(false)}
-              className="rounded-full p-2 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+              className="flex items-center gap-2 rounded-full bg-stone-100 dark:bg-[#2d2d30] px-4 py-1.5 text-sm font-medium text-stone-700 dark:text-stone-200 transition-colors hover:bg-stone-200 dark:hover:bg-[#3e3e42]"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4" />
+              Close
             </button>
           </div>
-          
-          {/* Subject Line Preview */}
-          <div className="px-6 py-3 bg-stone-50 dark:bg-[#252526] border-b border-stone-200 dark:border-[#3e3e42]">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wide">Subject:</span>
-              <span className="text-sm font-medium text-stone-800 dark:text-stone-100">
-                {templateForm.subject.replace(/\{\{user\}\}/gi, "John") || "(No subject)"}
-              </span>
-            </div>
-          </div>
-          
-          {/* Preview Frame */}
-          <div className="flex-1 overflow-hidden bg-gradient-to-br from-stone-100 via-stone-50 to-emerald-50/30 dark:from-[#1a1a1d] dark:via-[#1e1e1e] dark:to-[#0b1220] p-6 flex items-start justify-center overflow-y-auto">
-            <div 
-              className={`transition-all duration-300 ${
-                previewMode === "mobile" 
-                  ? "w-[375px] rounded-[40px] border-[14px] border-stone-800 dark:border-stone-600 shadow-2xl" 
-                  : "w-full max-w-[700px] rounded-xl border border-stone-200 dark:border-[#3e3e42] shadow-xl"
-              }`}
-              style={{ 
-                backgroundColor: previewMode === "mobile" ? "#fff" : "transparent",
-                minHeight: previewMode === "mobile" ? "667px" : "auto"
-              }}
-            >
-              <iframe
-                title="Email Preview"
-                srcDoc={wrapEmailHtml(
-                  templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "John") || "<p>Start writing your email content...</p>",
-                  { subject: templateForm.subject.replace(/\{\{user\}\}/gi, "John") }
-                )}
-                className="w-full h-full border-0"
-                style={{ 
-                  minHeight: previewMode === "mobile" ? "639px" : "600px",
-                  borderRadius: previewMode === "mobile" ? "26px" : "0.75rem"
+
+          {/* Email Content - Full Window */}
+          <div className="flex-1 overflow-y-auto pt-20 pb-8">
+            <div className={`mx-auto transition-all duration-300 ${previewMode === "mobile" ? "max-w-[400px] px-3" : "max-w-[680px] px-6"}`}>
+              {/* Email Container */}
+              <div 
+                className={`rounded-[32px] border shadow-2xl overflow-hidden transition-all duration-300 ${
+                  previewMode === "mobile"
+                    ? "border-stone-800 dark:border-stone-600"
+                    : "border-emerald-200/50 dark:border-emerald-800/30"
+                }`}
+                style={{
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%)',
+                  boxShadow: '0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset',
                 }}
-                sandbox="allow-same-origin"
-              />
+              >
+                {/* Email Body */}
+                <div 
+                  className="p-8 md:p-12 text-stone-700 dark:text-stone-200 text-base leading-relaxed"
+                  style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "John") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
+                  }}
+                />
+
+                {/* Signature Section */}
+                <div className="mx-8 md:mx-12 mb-8 md:mb-12">
+                  <div 
+                    className="rounded-[20px] p-6 md:p-7"
+                    style={{ 
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%)',
+                      border: '1px solid rgba(16, 185, 129, 0.1)',
+                    }}
+                  >
+                    <div className="flex items-center gap-5">
+                      {/* Logo */}
+                      <div 
+                        className="flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center"
+                        style={{
+                          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                          boxShadow: '0 8px 24px -8px rgba(16, 185, 129, 0.5)',
+                        }}
+                      >
+                        <img src="/icons/plant-swipe-icon.svg" alt="Aphylia" className="w-8 h-8 brightness-0 invert" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-lg text-stone-800 dark:text-stone-100 mb-0.5">
+                          The Aphylia Team
+                        </p>
+                        <p className="text-sm text-stone-500 dark:text-stone-400">
+                          Helping you grow your plant knowledge 🌱
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div 
+                  className="px-8 md:px-12 py-8 text-center"
+                  style={{ borderTop: '1px solid rgba(16, 185, 129, 0.08)' }}
+                >
+                  <a 
+                    href="#"
+                    className="inline-block mb-6 px-7 py-3 text-sm font-semibold text-white rounded-full"
+                    style={{
+                      background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                      boxShadow: '0 8px 24px -6px rgba(16, 185, 129, 0.4)',
+                    }}
+                  >
+                    Explore Aphylia →
+                  </a>
+                  <p className="text-sm text-stone-400 dark:text-stone-500 mb-2">
+                    <a href="#" className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline">aphylia.app</a>
+                    <span className="mx-2">•</span>
+                    <a href="#" className="text-stone-400 hover:underline">About</a>
+                    <span className="mx-2">•</span>
+                    <a href="#" className="text-stone-400 hover:underline">Contact</a>
+                  </p>
+                  <p className="text-xs text-stone-300 dark:text-stone-600">
+                    © {new Date().getFullYear()} Aphylia. Made with 💚 for plant enthusiasts everywhere.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
-          
-          {/* Preview Footer */}
-          <div className="px-6 py-3 border-t border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] flex items-center justify-between">
-            <p className="text-xs text-stone-500 dark:text-stone-400">
-              Preview shows how the email will appear to recipients. Variables like <code className="px-1.5 py-0.5 bg-stone-100 dark:bg-stone-800 rounded text-emerald-600 dark:text-emerald-400">{"{{user}}"}</code> are replaced with sample data.
+
+          {/* Bottom hint */}
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+            <p className="text-xs text-stone-400 dark:text-stone-500 bg-white/80 dark:bg-[#1a1a1d]/80 backdrop-blur px-4 py-2 rounded-full border border-stone-200/50 dark:border-[#3e3e42]/50">
+              Variables like <code className="px-1.5 py-0.5 bg-stone-100 dark:bg-stone-800 rounded text-emerald-600 dark:text-emerald-400 text-[10px]">{"{{user}}"}</code> are replaced with sample data
             </p>
-            <Button 
-              variant="ghost" 
-              onClick={() => setPreviewOpen(false)}
-              className="rounded-2xl"
-            >
-              Close Preview
-            </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </div>
   )
 }
