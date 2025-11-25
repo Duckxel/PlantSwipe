@@ -17,15 +17,17 @@ import {
     RefreshCw,
     Droplet,
     Wrench,
+    Bookmark,
   } from "lucide-react"
 
 interface PlantDetailsProps {
   plant: Plant
   liked?: boolean
   onToggleLike?: () => void
+  onBookmark?: () => void
 }
 
-export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onToggleLike }) => {
+export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onToggleLike, onBookmark }) => {
   const images = (plant.images || []).filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const activeImage = images[activeImageIndex] || null
@@ -297,7 +299,18 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
             </Button>
             {shareFeedback && <span className="text-[10px] sm:text-xs font-medium text-white drop-shadow">{shareFeedback}</span>}
           </div>
-
+          {onBookmark && (
+            <Button
+              type="button"
+              size="lg"
+              variant="secondary"
+              className="rounded-full px-4 py-2 sm:px-5 sm:py-3 text-sm sm:text-base shadow-lg"
+              onClick={onBookmark}
+            >
+              <Bookmark className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline">Save</span>
+            </Button>
+          )}
         </div>
         <div className="relative flex flex-col gap-3 sm:gap-4 p-3 pt-14 sm:p-4 sm:pt-16 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
           <div className="flex-1 space-y-3 sm:space-y-4">

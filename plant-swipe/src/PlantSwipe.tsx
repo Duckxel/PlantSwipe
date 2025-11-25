@@ -50,6 +50,7 @@ const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ d
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
 const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
+const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -1363,6 +1364,14 @@ export default function PlantSwipe() {
                     />
                   </Suspense>
                 </RequireAdmin>
+              }
+            />
+            <Route
+              path="/bookmarks/:id"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <BookmarkPageLazy />
+                </Suspense>
               }
             />
             <Route

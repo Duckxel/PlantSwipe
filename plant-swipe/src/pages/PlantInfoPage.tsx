@@ -5,6 +5,8 @@ import { DimensionCube } from '@/components/plant/DimensionCube'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
+import { useAuthActions } from '@/context/AuthActionsContext'
+import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
@@ -259,12 +261,14 @@ const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useLanguageNavigate()
   const { user, profile, refreshProfile } = useAuth()
+  const { openLogin } = useAuthActions()
   const { t } = useTranslation('common')
   const currentLang = useLanguage()
   const [plant, setPlant] = React.useState<Plant | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [likedIds, setLikedIds] = React.useState<string[]>([])
+  const [bookmarkOpen, setBookmarkOpen] = React.useState(false)
 
   const fallbackTitle = t('seo.plant.fallbackTitle', { defaultValue: 'Plant encyclopedia entry' })
   const fallbackDescription = t('seo.plant.fallbackDescription', {
@@ -341,6 +345,14 @@ const PlantInfoPage: React.FC = () => {
     navigate(`/plants/${plant.id}/edit`)
   }
 
+  const handleBookmark = () => {
+    if (!user) {
+      openLogin()
+      return
+    }
+    setBookmarkOpen(true)
+  }
+
   if (loading) {
     return <PlantInfoSkeleton label={t('common.loading', { defaultValue: 'Loading plant data' })} />
   }
@@ -371,8 +383,22 @@ const PlantInfoPage: React.FC = () => {
           </Button>
         )}
       </div>
-      <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
+      <PlantDetails 
+        plant={plant} 
+        liked={likedIds.includes(plant.id)} 
+        onToggleLike={toggleLiked} 
+        onBookmark={handleBookmark}
+      />
       <MoreInformationSection plant={plant} />
+      
+      {user?.id && plant && (
+        <AddToBookmarkDialog 
+          open={bookmarkOpen} 
+          onOpenChange={setBookmarkOpen} 
+          plantId={plant.id} 
+          userId={user.id} 
+        />
+      )}
     </div>
   )
 }
