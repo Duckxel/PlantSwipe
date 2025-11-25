@@ -5631,6 +5631,12 @@ create table if not exists public.bookmark_items (
 alter table public.bookmarks enable row level security;
 alter table public.bookmark_items enable row level security;
 
+-- Grant access
+grant select, insert, update, delete on public.bookmarks to authenticated;
+grant select on public.bookmarks to anon;
+grant select, insert, update, delete on public.bookmark_items to authenticated;
+grant select on public.bookmark_items to anon;
+
 -- Policies for bookmarks
 drop policy if exists "Bookmarks are viewable by everyone if public" on public.bookmarks;
 create policy "Bookmarks are viewable by everyone if public"
