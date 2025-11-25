@@ -18,6 +18,17 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
     .order('created_at', { ascending: true })
 
   if (error) throw new Error(error.message)
+  
+  // Order items by created_at for each bookmark
+  if (data) {
+    data.forEach((b: any) => {
+      if (b.items) {
+        b.items.sort((a: any, b: any) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        )
+      }
+    })
+  }
 
   // For each bookmark, we might want to fetch a few plant images for the collage
   // To avoid N+1 queries, we can collect all unique plant IDs first
@@ -86,15 +97,14 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
       created_at: i.created_at
     }))
     
-    // Collect up to 4 images for collage (randomly shuffled)
-    const shuffledItems = [...items].sort(() => 0.5 - Math.random())
+    // Collect up to 3 images for collage (first 3 plants, already ordered by created_at)
     const preview_images: string[] = []
     
-    for (const item of shuffledItems) {
+    for (const item of items) {
       const imageUrl = plantImagesMap[item.plant_id]
       if (imageUrl) {
         preview_images.push(imageUrl)
-        if (preview_images.length >= 4) break
+        if (preview_images.length >= 3) break
       }
     }
 
