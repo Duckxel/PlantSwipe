@@ -19,6 +19,8 @@ import {
   Users,
   ChevronRight,
   Sparkles,
+  Search,
+  X,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -158,6 +160,17 @@ export const AdminEmailsPanel: React.FC = () => {
   const location = useLocation()
   const activeView = location.pathname.includes("/templates") ? "templates" : "campaigns"
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
+  const [templateSearch, setTemplateSearch] = React.useState("")
+
+  // Filter templates based on search query
+  const filteredTemplates = React.useMemo(() => {
+    if (!templateSearch.trim()) return templates
+    const query = templateSearch.toLowerCase()
+    return templates.filter(t => 
+      t.title.toLowerCase().includes(query) || 
+      t.subject.toLowerCase().includes(query)
+    )
+  }, [templates, templateSearch])
 
   const loadTemplates = React.useCallback(async () => {
     setLoadingTemplates(true)
@@ -536,6 +549,29 @@ export const AdminEmailsPanel: React.FC = () => {
       {/* Templates View */}
       {activeView === "templates" && (
         <div className="space-y-4">
+          {/* Search Bar */}
+          {templates.length > 0 && (
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <Input
+                type="text"
+                placeholder="Search templates by name or subject..."
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                className="pl-11 pr-10 h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+              />
+              {templateSearch && (
+                <button
+                  type="button"
+                  onClick={() => setTemplateSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
+
           {loadingTemplates ? (
             <div className="flex items-center justify-center py-16">
               <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
@@ -557,9 +593,22 @@ export const AdminEmailsPanel: React.FC = () => {
                 Create Template
               </Button>
             </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-12 text-center">
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-stone-100 dark:bg-[#2a2a2d] flex items-center justify-center mb-4">
+                <Search className="h-6 w-6 text-stone-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">No results found</h3>
+              <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">
+                No templates match "<span className="font-medium">{templateSearch}</span>"
+              </p>
+              <Button variant="outline" onClick={() => setTemplateSearch("")} className="rounded-xl">
+                Clear search
+              </Button>
+            </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {templates.map((template) => (
+              {filteredTemplates.map((template) => (
                 <div
                   key={template.id}
                   onClick={() => navigate(`/admin/emails/templates/${template.id}`)}
