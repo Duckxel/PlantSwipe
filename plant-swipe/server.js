@@ -78,129 +78,173 @@ async function processEmailCampaigns() {
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
   if (!apiKey) return
 
-  // 1. Lock and fetch a campaign
+  // 0. Auto-migrate tracking table if missing
+  try {
+     await sql`
+       create table if not exists public.admin_campaign_sends (
+         id uuid primary key default gen_random_uuid(),
+         campaign_id uuid references public.admin_email_campaigns(id) on delete cascade,
+         user_id uuid references auth.users(id) on delete cascade,
+         sent_at timestamptz default now(),
+         status text default 'sent',
+         error text
+       );
+       create index if not exists idx_admin_campaign_sends_campaign_user 
+         on public.admin_campaign_sends(campaign_id, user_id);
+     `
+  } catch (e) { /* ignore */ }
+
+  // 1. Fetch active campaigns (scheduled OR running)
+  // We don't lock a single row anymore; we process all valid campaigns in parallel (or sequentially)
+  // We check for campaigns that are scheduled in the past OR running within last 48h
   const campaigns = await sql`
     update public.admin_email_campaigns
-    set status = 'running', send_started_at = now(), send_error = null
-    where id = (
+    set status = 'running', send_started_at = coalesce(send_started_at, now()), send_error = null
+    where id in (
       select id from public.admin_email_campaigns
-      where status = 'scheduled'
-      and scheduled_for <= now()
-      order by scheduled_for asc
-      limit 1
-      for update skip locked
+      where (status = 'scheduled' and scheduled_for <= now())
+         or (status = 'running' and created_at > now() - interval '3 days')
     )
     returning *
   `
 
   if (!campaigns || campaigns.length === 0) return
-  const campaign = campaigns[0]
-  console.log('[campaign-runner] Starting campaign:', campaign.title)
 
-  try {
-    // 2. Fetch recipients (direct DB access)
-    const recipients = await sql`
-      select
-        au.id,
-        au.email,
-        coalesce(p.display_name, au.raw_user_meta_data->>'full_name', split_part(au.email, '@', 1)) as display_name
-      from auth.users au
-      left join public.profiles p on p.id = au.id
-      where (au.email_confirmed_at is not null or au.confirmed_at is not null)
-      limit 5000
-    `
+  for (const campaign of campaigns) {
+    // console.log('[campaign-runner] Processing:', campaign.title, campaign.id)
+    try {
+      // 2. Fetch recipients who have NOT received this campaign yet
+      // We also fetch their timezone to check eligibility
+      const recipients = await sql`
+        select
+          au.id,
+          au.email,
+          coalesce(p.display_name, au.raw_user_meta_data->>'full_name', split_part(au.email, '@', 1)) as display_name,
+          coalesce(p.timezone, 'UTC') as user_timezone
+        from auth.users au
+        left join public.profiles p on p.id = au.id
+        where (au.email_confirmed_at is not null or au.confirmed_at is not null)
+        and not exists (
+          select 1 from public.admin_campaign_sends s 
+          where s.campaign_id = ${campaign.id} and s.user_id = au.id
+        )
+        limit 2000
+      `
 
-    if (!recipients || recipients.length === 0) {
-       await sql`
-         update public.admin_email_campaigns
-         set status = 'failed', send_completed_at = now(), send_error = 'No recipients found'
-         where id = ${campaign.id}
-       `
-       return
-    }
-
-    // 3. Send batches
-    const batchSize = 40
-    let sentCount = 0
-    let failedCount = 0
-    const summaryBatches = []
-    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Plant Swipe <info@aphylia.app>'
-
-    for (let i = 0; i < recipients.length; i += batchSize) {
-      const batch = recipients.slice(i, i + batchSize)
-      const payload = batch.map(r => {
-         const userRaw = r.display_name || 'User'
-         const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
-         const context = { user: userCap }
-         const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] || `{{${k}}}`)
-         const html = replaceVars(campaign.body_html)
-         const subject = replaceVars(campaign.subject)
-         // Simple strip tags for text version
-         const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-
-         return {
-           from: fromEmail,
-           to: r.email,
-           subject: subject,
-           html: html,
-           text: text,
-           headers: { 'X-Campaign-Id': campaign.id },
-           tags: [{ name: 'campaign_id', value: campaign.id }]
+      if (!recipients || recipients.length === 0) {
+         // No pending recipients for this campaign. 
+         // If it's old enough (e.g. > 30h past schedule), mark as sent? 
+         // For now, just leave it running to catch stragglers or manual stop.
+         // Optionally verify if we are effectively "done"
+         const totalUsers = await sql`select count(*) as count from auth.users where email_confirmed_at is not null`
+         const sentCount = await sql`select count(*) as count from public.admin_campaign_sends where campaign_id = ${campaign.id}`
+         if (Number(totalUsers[0].count) <= Number(sentCount[0].count)) {
+            await sql`update public.admin_email_campaigns set status = 'sent', send_completed_at = now() where id = ${campaign.id}`
          }
-      })
-
-      // Use global fetch (Node 18+)
-      const res = await fetch('https://api.resend.com/emails/batch', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      })
-
-      if (res.ok) {
-        sentCount += batch.length
-        summaryBatches.push({ index: i, size: batch.length, status: 'sent' })
-      } else {
-        failedCount += batch.length
-        const txt = await res.text()
-        summaryBatches.push({ index: i, size: batch.length, status: 'failed', error: txt })
-        console.error('[campaign-runner] Batch failed:', txt)
+         continue
       }
+
+      // 3. Filter by Timezone
+      const campaignTz = campaign.timezone || 'UTC'
+      const scheduledFor = new Date(campaign.scheduled_for) // This is UTC
+      
+      const dueRecipients = recipients.filter(r => {
+        // Calculate when the campaign is due for THIS user
+        // Formula: Target_Time = Scheduled_UTC - (User_Offset - Camp_Offset)
+        // But since we don't have easy offset lookups in JS without a library like date-fns-tz or similar,
+        // we rely on Postgres or an approximation. 
+        // Alternatively, we can check if the *current local hour* matches.
+        
+        // Approximation using Intl (available in Node 18+)
+        try {
+          // Get "Wall Clock" time of the scheduled event in Campaign TZ
+          const schedInCampTzStr = scheduledFor.toLocaleString('en-US', { timeZone: campaignTz })
+          const schedInCampTz = new Date(schedInCampTzStr)
+          
+          // Get "Wall Clock" time of NOW in User TZ
+          const nowInUserTzStr = new Date().toLocaleString('en-US', { timeZone: r.user_timezone })
+          const nowInUserTz = new Date(nowInUserTzStr)
+
+          // Compare: Has User's Wall Clock passed the Scheduled Wall Clock?
+          // We normalize both to a generic date object to compare times/dates relative to "local"
+          // Actually, to handle dates correctly:
+          // If Sched is "Oct 25 9:00 AM" (Camp TZ), we want to know if "Oct 25 9:00 AM" has passed in User TZ.
+          // So we just compare the ISO strings or millis of these "floating" times?
+          // No, `new Date(string)` creates a date in local system time.
+          
+          // Let's compare the *absolute* epoch time if we treat them as same TZ.
+          // This works because if 9AM passed in JST, it's "later" in absolute terms than 8AM JST.
+          return nowInUserTz >= schedInCampTz
+        } catch (e) {
+          // Fallback: if invalid TZ, assume due
+          return true
+        }
+      })
+
+      if (dueRecipients.length === 0) continue
+
+      // 4. Send Batches
+      const batchSize = 40
+      const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Plant Swipe <info@aphylia.app>'
+      let batchSentCount = 0
+
+      for (let i = 0; i < dueRecipients.length; i += batchSize) {
+        const batch = dueRecipients.slice(i, i + batchSize)
+        const payload = batch.map(r => {
+           const userRaw = r.display_name || 'User'
+           const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+           const context = { user: userCap }
+           const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] || `{{${k}}}`)
+           const html = replaceVars(campaign.body_html)
+           const subject = replaceVars(campaign.subject)
+           const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+
+           return {
+             from: fromEmail,
+             to: r.email,
+             subject: subject,
+             html: html,
+             text: text,
+             headers: { 'X-Campaign-Id': campaign.id },
+             tags: [{ name: 'campaign_id', value: campaign.id }]
+           }
+        })
+
+        // Send via Resend
+        const res = await fetch('https://api.resend.com/emails/batch', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        })
+
+        if (res.ok) {
+          batchSentCount += batch.length
+          // Record success in tracking table
+          const values = batch.map(u => ({
+             campaign_id: campaign.id,
+             user_id: u.id,
+             status: 'sent'
+          }))
+          await sql`insert into public.admin_campaign_sends ${sql(values, 'campaign_id', 'user_id', 'status')}`
+        } else {
+          console.error('[campaign-runner] Batch failed:', await res.text())
+        }
+      }
+      
+      // Update total stats
+      await sql`
+        update public.admin_email_campaigns
+        set sent_count = (select count(*) from public.admin_campaign_sends where campaign_id = ${campaign.id}),
+            total_recipients = (select count(*) from auth.users where email_confirmed_at is not null)
+        where id = ${campaign.id}
+      `
+
+    } catch (err) {
+      console.error('[campaign-runner] Exception for campaign ' + campaign.id, err)
     }
-
-    // 4. Finalize
-    const finalStatus = failedCount === 0 ? 'sent' : (sentCount > 0 ? 'partial' : 'failed')
-    const summary = {
-      totalRecipients: recipients.length,
-      sentCount,
-      failedCount,
-      batches: summaryBatches
-    }
-
-    await sql`
-      update public.admin_email_campaigns
-      set status = ${finalStatus},
-          send_completed_at = now(),
-          sent_count = ${sentCount},
-          failed_count = ${failedCount},
-          send_summary = ${sql.json(summary)}
-      where id = ${campaign.id}
-    `
-
-    if (campaign.template_id && sentCount > 0) {
-      await sql`update public.admin_email_templates set last_used_at = now() where id = ${campaign.template_id}`
-    }
-    console.log('[campaign-runner] Completed:', finalStatus)
-
-  } catch (err) {
-    console.error('[campaign-runner] Exception:', err)
-    await sql`
-      update public.admin_email_campaigns
-      set status = 'failed', send_completed_at = now(), send_error = ${String(err)}
-      where id = ${campaign.id}
-    `
   }
 }
 
