@@ -5345,9 +5345,15 @@ export const AdminPage: React.FC = () => {
                                                 startAngle={90}
                                                 endAngle={-270}
                                                 paddingAngle={3}
+                                                isAnimationActive={false}
                                               >
                                                 {plantStatusDonutData.map((slice) => (
-                                                  <Cell key={slice.key} fill={slice.color} />
+                                                  <Cell
+                                                    key={slice.key}
+                                                    fill={slice.color}
+                                                    stroke={isDark ? slice.color : slice.color}
+                                                    strokeWidth={isDark ? 0 : 2}
+                                                  />
                                                 ))}
                                               </Pie>
                                               <Tooltip
