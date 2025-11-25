@@ -1,9 +1,8 @@
 import React from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Plus, Check, Lock, Globe } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Plus, Lock, Globe } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getUserBookmarks, addPlantToBookmark, createBookmark } from '@/lib/bookmarks'
+import { getUserBookmarks, addPlantToBookmark } from '@/lib/bookmarks'
 import type { Bookmark } from '@/types/bookmark'
 import { CreateBookmarkDialog } from '@/components/profile/CreateBookmarkDialog'
 import { Loader2 } from 'lucide-react'
@@ -44,13 +43,10 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
     if (addingToId) return
     setAddingToId(bookmark.id)
     try {
-      // Check if already exists? The DB constraint handles uniqueness, but we might want to catch error gracefully
       await addPlantToBookmark(bookmark.id, plantId)
-      // Success feedback or close
       onOpenChange(false)
     } catch (e: any) {
        if (e.message?.includes('unique constraint') || e.message?.includes('duplicate')) {
-         // Already in bookmark, just close or notify
          onOpenChange(false)
        } else {
          console.error(e)
@@ -87,7 +83,7 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
               {bookmarks.map(b => {
                  const preview = b.preview_images?.[0]
                  const isAdding = addingToId === b.id
-                 const hasPlant = b.items?.some(i => i.plant_id === plantId) // Check if already in bookmark from fetched data (if items populated)
+                 const hasPlant = b.items?.some(i => i.plant_id === plantId)
                  
                  return (
                   <button

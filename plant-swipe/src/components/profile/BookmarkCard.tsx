@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Lock, Globe, Trash2, Edit2 } from 'lucide-react'
 import type { Bookmark } from '@/types/bookmark'
 import { useTranslation } from 'react-i18next'
@@ -43,7 +43,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
              </div>
            ) : (
              <div className="grid grid-cols-2 grid-rows-2 h-full w-full gap-[1px]">
-               {displayImages.map((img, idx) => (
+               {displayImages.map((img: string, idx: number) => (
                  <img 
                     key={idx} 
                     src={img} 

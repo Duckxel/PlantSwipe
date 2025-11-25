@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useTranslation } from 'react-i18next'
 import { createBookmark, updateBookmark } from '@/lib/bookmarks'
 import type { Bookmark, BookmarkVisibility } from '@/types/bookmark'
@@ -85,16 +84,30 @@ export const CreateBookmarkDialog: React.FC<CreateBookmarkDialogProps> = ({
           
           <div className="space-y-3">
             <Label>{t('bookmarks.visibility', { defaultValue: 'Visibility' })}</Label>
-            <RadioGroup value={visibility} onValueChange={(v) => setVisibility(v as BookmarkVisibility)} className="flex gap-4">
+            <div className="flex gap-4">
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="public" id="vis-public" />
+                <input 
+                  type="radio" 
+                  value="public" 
+                  id="vis-public" 
+                  checked={visibility === 'public'}
+                  onChange={(e) => setVisibility(e.target.value as BookmarkVisibility)}
+                  className="accent-black dark:accent-white"
+                />
                 <Label htmlFor="vis-public" className="cursor-pointer">{t('bookmarks.public', { defaultValue: 'Public' })}</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="private" id="vis-private" />
+                <input 
+                  type="radio" 
+                  value="private" 
+                  id="vis-private" 
+                  checked={visibility === 'private'}
+                  onChange={(e) => setVisibility(e.target.value as BookmarkVisibility)}
+                  className="accent-black dark:accent-white"
+                />
                 <Label htmlFor="vis-private" className="cursor-pointer">{t('bookmarks.private', { defaultValue: 'Private' })}</Label>
               </div>
-            </RadioGroup>
+            </div>
             <p className="text-xs text-stone-500">
               {visibility === 'public' 
                 ? t('bookmarks.publicDesc', { defaultValue: 'Anyone can see this folder on your profile.' })

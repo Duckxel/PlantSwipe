@@ -305,7 +305,7 @@ export default function PublicProfilePage() {
     return () => { cancelled = true }
   }, [displayParam, user?.id])
 
-  const isOwner = user?.id && pp?.id && user.id === pp.id
+  const isOwner = Boolean(user?.id && pp?.id && user.id === pp.id)
 
   React.useEffect(() => {
     setSearchTerm('')

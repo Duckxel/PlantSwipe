@@ -1,4 +1,4 @@
-import { Plant } from './plant'
+import type { Plant } from './plant'
 
 export type BookmarkVisibility = 'public' | 'private'
 
@@ -12,6 +12,7 @@ export interface Bookmark {
   // Populated fields
   items?: BookmarkItem[]
   plant_count?: number
+  preview_images?: string[]
 }
 
 export interface BookmarkItem {

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { ChevronLeft, Share2, Lock, Globe, Plus, Trash2, Edit2, Loader2, X } from 'lucide-react'
 import { CreateBookmarkDialog } from '@/components/profile/CreateBookmarkDialog'
 import { AddPlantToBookmarkDialog } from '@/components/profile/AddPlantToBookmarkDialog'
-import { rarityTone, seasonBadge } from '@/constants/badges'
+import { rarityTone } from '@/constants/badges'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 
 export const BookmarkPage = () => {
@@ -109,7 +109,7 @@ export const BookmarkPage = () => {
               <Button variant="outline" onClick={() => setEditOpen(true)} className="rounded-xl">
                 <Edit2 className="h-4 w-4 mr-2" /> {t('common.edit')}
               </Button>
-              <Button variant="destructive" variant="ghost" onClick={handleDelete} className="rounded-xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20">
+              <Button variant="ghost" onClick={handleDelete} className="rounded-xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20">
                 <Trash2 className="h-4 w-4" />
               </Button>
             </>
@@ -177,7 +177,7 @@ export const BookmarkPage = () => {
         })}
       </div>
 
-      {isOwner && (
+      {isOwner && user && (
         <>
           <CreateBookmarkDialog 
             open={editOpen} 
