@@ -127,7 +127,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
       } catch (err) {
         console.error(err)
         alert("Failed to load template")
-        navigate("/admin")
+        navigate("/admin/emails/templates")
       } finally {
         setLoading(false)
       }
@@ -170,7 +170,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
       if (!resp.ok) throw new Error(data?.error || "Failed to save template")
       
       // alert("Template saved successfully")
-      navigate("/admin") 
+      navigate("/admin/emails/templates") 
     } catch (err) {
       alert((err as Error).message)
     } finally {
@@ -193,11 +193,11 @@ export const AdminEmailTemplatePage: React.FC = () => {
         <div className="space-y-2">
           <button
             type="button"
-            onClick={() => navigate("/admin")}
+            onClick={() => navigate("/admin/emails/templates")}
             className="inline-flex items-center gap-2 text-sm text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to admin
+            Back to templates
           </button>
           <h1 className="text-3xl font-semibold">
             {isNew ? "Create Email Template" : "Edit Email Template"}
@@ -321,7 +321,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
         <div className="flex items-center justify-end gap-3 pt-4">
           <Button 
             variant="outline" 
-            onClick={() => navigate("/admin")}
+            onClick={() => navigate("/admin/emails/templates")}
             className="rounded-2xl"
             disabled={templateSaving}
           >

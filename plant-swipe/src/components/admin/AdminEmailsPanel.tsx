@@ -9,7 +9,6 @@ import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
-  Mail,
   Plus,
   RefreshCw,
   Send,
@@ -18,6 +17,7 @@ import {
   Play,
   Square,
   Loader2,
+  LayoutTemplate,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -129,10 +129,8 @@ const statusBadgeClass = (status: string) => {
 
 export const AdminEmailsPanel: React.FC = () => {
   const navigate = useNavigate()
-  const [activeView, setActiveView] = React.useState<"campaigns" | "templates">("campaigns")
   const [templates, setTemplates] = React.useState<EmailTemplate[]>([])
   const [campaigns, setCampaigns] = React.useState<EmailCampaign[]>([])
-  const [loadingTemplates, setLoadingTemplates] = React.useState(false)
   const [loadingCampaigns, setLoadingCampaigns] = React.useState(false)
 
   const [campaignForm, setCampaignForm] = React.useState({
@@ -147,7 +145,6 @@ export const AdminEmailsPanel: React.FC = () => {
   const [sheetOpen, setSheetOpen] = React.useState(false)
 
   const loadTemplates = React.useCallback(async () => {
-    setLoadingTemplates(true)
     try {
       const headers = await buildAdminHeaders()
       const resp = await fetch("/api/admin/email-templates", { headers, credentials: "same-origin" })
@@ -156,8 +153,6 @@ export const AdminEmailsPanel: React.FC = () => {
       setTemplates(Array.isArray(data?.templates) ? data.templates : [])
     } catch (err) {
       console.error(err)
-    } finally {
-      setLoadingTemplates(false)
     }
   }, [])
 
@@ -180,26 +175,6 @@ export const AdminEmailsPanel: React.FC = () => {
     loadTemplates().catch(() => {})
     loadCampaigns().catch(() => {})
   }, [loadTemplates, loadCampaigns])
-
-  const handleDeleteTemplate = React.useCallback(
-    async (template: EmailTemplate) => {
-      if (!window.confirm(`Delete template "${template.title}"?`)) return
-      try {
-        const headers = await buildAdminHeaders()
-        const resp = await fetch(`/api/admin/email-templates/${encodeURIComponent(template.id)}`, {
-          method: "DELETE",
-          headers,
-          credentials: "same-origin",
-        })
-        const data = await resp.json().catch(() => ({}))
-        if (!resp.ok) throw new Error(data?.error || "Failed to delete template")
-        loadTemplates().catch(() => {})
-      } catch (err) {
-        alert((err as Error).message)
-      }
-    },
-    [loadTemplates],
-  )
 
   const handleCreateCampaign = React.useCallback(async () => {
     if (!campaignForm.title.trim() || !campaignForm.templateId || !campaignForm.scheduledFor) {
@@ -293,6 +268,7 @@ export const AdminEmailsPanel: React.FC = () => {
           method: "DELETE",
           headers,
           credentials: "same-origin",
+          body: JSON.stringify({}),
         })
         const data = await resp.json().catch(() => ({}))
         if (!resp.ok) throw new Error(data?.error || "Failed to delete campaign")
@@ -309,188 +285,104 @@ export const AdminEmailsPanel: React.FC = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button
-            variant={activeView === "campaigns" ? "default" : "outline"}
+            variant="outline"
             className="rounded-2xl"
-            onClick={() => setActiveView("campaigns")}
+            onClick={() => navigate("/admin/emails/templates")}
           >
-            <Mail className="mr-2 h-4 w-4" /> Campaigns
-          </Button>
-          <Button
-            variant={activeView === "templates" ? "default" : "outline"}
-            className="rounded-2xl"
-            onClick={() => setActiveView("templates")}
-          >
-            <Plus className="mr-2 h-4 w-4" /> Templates
+            <LayoutTemplate className="mr-2 h-4 w-4" /> Manage Templates
           </Button>
         </div>
-        {activeView === "campaigns" ? (
-          <Button className="rounded-2xl" onClick={() => setSheetOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" /> New Campaign
-          </Button>
-        ) : (
-          <Button
-            className="rounded-2xl"
-            onClick={() => navigate("/admin/emails/templates/create")}
-          >
-            <Plus className="mr-2 h-4 w-4" /> New Template
-          </Button>
-        )}
+        <Button className="rounded-2xl" onClick={() => setSheetOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" /> New Campaign
+        </Button>
       </div>
 
-      {activeView === "templates" ? (
-        <Card className="rounded-2xl">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Email Templates</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Create and edit reusable email layouts. Use variables to personalize content.
-              </p>
+      <Card className="rounded-2xl">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Email Campaigns</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Schedule broadcasts that send a selected template to every user.
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => loadCampaigns().catch(() => {})}>
+            {loadingCampaigns ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loadingCampaigns ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading campaigns...
             </div>
-            <Button variant="ghost" size="icon" onClick={() => loadTemplates().catch(() => {})}>
-              {loadingTemplates ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loadingTemplates ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading templates...
-              </div>
-            ) : templates.length === 0 ? (
-              <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No templates yet. Create one to get started.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {templates.map((template) => (
-                  <div
-                    key={template.id}
-                    className="rounded-2xl border border-stone-200 p-4 dark:border-stone-700"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <h3 className="text-base font-semibold">{template.title}</h3>
-                        <p className="text-sm text-muted-foreground">{template.subject}</p>
-                      </div>
+          ) : campaigns.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+              No campaigns have been scheduled yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {campaigns.map((campaign) => (
+                <div
+                  key={campaign.id}
+                  className="rounded-2xl border border-stone-200 p-4 dark:border-stone-700"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => navigate(`/admin/emails/templates/${template.id}`)}>
-                          Edit
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteTemplate(template)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <h3 className="text-base font-semibold">{campaign.title}</h3>
+                        <Badge className={cn("text-xs", statusBadgeClass(campaign.status))}>
+                          {formatStatus(campaign.status)}
+                        </Badge>
                       </div>
+                      <p className="text-sm text-muted-foreground">
+                        {campaign.templateTitle || "Template removed"} · {campaign.subject}
+                      </p>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      <span>
-                        Versions: v{template.version} · Used {template.campaignCount}{" "}
-                        {template.campaignCount === 1 ? "time" : "times"}
-                      </span>
-                      <span>Last used: {template.lastUsedAt ? formatDateTime(template.lastUsedAt) : "Never"}</span>
-                      {template.variables?.length ? (
-                        <span className="flex items-center gap-1">
-                          Variables:
-                          {template.variables.map((variable) => (
-                            <Badge key={variable} variant="secondary">
-                              {variable}
-                            </Badge>
-                          ))}
-                        </span>
-                      ) : null}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRunCampaign(campaign)}
+                        disabled={campaign.status === "running"}
+                      >
+                        <Play className="mr-2 h-4 w-4" /> Send now
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleCancelCampaign(campaign)}>
+                        <Square className="mr-2 h-4 w-4" /> Cancel
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteCampaign(campaign)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="rounded-2xl">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Email Campaigns</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Schedule broadcasts that send a selected template to every user.
-              </p>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => loadCampaigns().catch(() => {})}>
-              {loadingCampaigns ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loadingCampaigns ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading campaigns...
-              </div>
-            ) : campaigns.length === 0 ? (
-              <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No campaigns have been scheduled yet.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {campaigns.map((campaign) => (
-                  <div
-                    key={campaign.id}
-                    className="rounded-2xl border border-stone-200 p-4 dark:border-stone-700"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-base font-semibold">{campaign.title}</h3>
-                          <Badge className={cn("text-xs", statusBadgeClass(campaign.status))}>
-                            {formatStatus(campaign.status)}
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <span>
+                      <Clock className="mr-1 inline h-3 w-3" />
+                      {campaign.scheduledFor ? formatDateTime(campaign.scheduledFor) : "No schedule"}
+                    </span>
+                    <span>
+                      Sent {campaign.sentCount}/{campaign.totalRecipients}
+                      {campaign.failedCount > 0 ? ` · Failed ${campaign.failedCount}` : ""}
+                    </span>
+                    {campaign.variables?.length ? (
+                      <span className="flex items-center gap-1">
+                        Variables:
+                        {campaign.variables.map((variable) => (
+                          <Badge key={`${campaign.id}-${variable}`} variant="secondary">
+                            {variable}
                           </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {campaign.templateTitle || "Template removed"} · {campaign.subject}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRunCampaign(campaign)}
-                          disabled={campaign.status === "running"}
-                        >
-                          <Play className="mr-2 h-4 w-4" /> Send now
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleCancelCampaign(campaign)}>
-                          <Square className="mr-2 h-4 w-4" /> Cancel
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteCampaign(campaign)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      <span>
-                        <Clock className="mr-1 inline h-3 w-3" />
-                        {campaign.scheduledFor ? formatDateTime(campaign.scheduledFor) : "No schedule"}
+                        ))}
                       </span>
-                      <span>
-                        Sent {campaign.sentCount}/{campaign.totalRecipients}
-                        {campaign.failedCount > 0 ? ` · Failed ${campaign.failedCount}` : ""}
-                      </span>
-                      {campaign.variables?.length ? (
-                        <span className="flex items-center gap-1">
-                          Variables:
-                          {campaign.variables.map((variable) => (
-                            <Badge key={`${campaign.id}-${variable}`} variant="secondary">
-                              {variable}
-                            </Badge>
-                          ))}
-                        </span>
-                      ) : null}
-                      {campaign.sendError ? (
-                        <span className="text-rose-500">Error: {campaign.sendError}</span>
-                      ) : null}
-                    </div>
+                    ) : null}
+                    {campaign.sendError ? (
+                      <span className="text-rose-500">Error: {campaign.sendError}</span>
+                    ) : null}
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="w-full max-w-xl">
