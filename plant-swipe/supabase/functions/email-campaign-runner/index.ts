@@ -727,9 +727,11 @@ async function sendBatch(
     const userRaw = recipient.displayName
     const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
     const context = { user: userCap }
-    const html = renderTemplate(campaign.body_html, context)
+    const bodyHtml = renderTemplate(campaign.body_html, context)
     const subject = renderTemplate(campaign.subject, context)
-    const text = stripHtml(html || campaign.body_html)
+    // Wrap the body HTML with our beautiful styled email template
+    const html = wrapEmailHtml(bodyHtml, subject)
+    const text = stripHtml(bodyHtml || campaign.body_html)
 
     const base: Record<string, unknown> = {
       from: fromEmail,
@@ -853,4 +855,203 @@ function formatFromAddress(raw: string, defaultName = "Plant Swipe"): string {
   if (!raw) return DEFAULT_FROM_EMAIL
   if (raw.includes("<")) return raw
   return `${defaultName} <${raw}>`
+}
+
+/**
+ * Wraps email body content with a beautiful styled template
+ * Matches the Aphylia website aesthetic with gradients and rounded corners
+ */
+function wrapEmailHtml(bodyHtml: string, subject: string): string {
+  const currentYear = new Date().getFullYear()
+  const websiteUrl = Deno.env.get("WEBSITE_URL") ?? "https://aphylia.app"
+
+  // Simplified Aphylia logo as inline SVG for emails
+  const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32"><path fill="#ffffff" d="M50 5c-2.5 8-8 15-15 20 5 3 8 10 8 18 0 12-8 22-18 25 3 5 10 12 20 17 10-5 17-12 20-17-10-3-18-13-18-25 0-8 3-15 8-18-7-5-12.5-12-15-20z"/><circle cx="35" cy="58" r="5" fill="#ffffff"/><circle cx="65" cy="58" r="5" fill="#ffffff"/></svg>`
+
+  return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>${subject || 'Aphylia'}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <style>
+    table, td, div, p, a { font-family: Arial, sans-serif; }
+  </style>
+  <![endif]-->
+  <style>
+    /* Reset */
+    body, table, td, p, a, li, blockquote { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; max-width: 100%; }
+    
+    /* Base */
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%); min-height: 100vh; }
+    
+    /* Typography */
+    h1 { font-size: 32px; font-weight: 700; color: #111827; margin: 0 0 20px 0; line-height: 1.2; letter-spacing: -0.5px; }
+    h2 { font-size: 26px; font-weight: 700; color: #1f2937; margin: 32px 0 16px 0; line-height: 1.3; }
+    h3 { font-size: 22px; font-weight: 600; color: #374151; margin: 28px 0 12px 0; line-height: 1.4; }
+    h4 { font-size: 18px; font-weight: 600; color: #4b5563; margin: 24px 0 10px 0; }
+    p { margin: 0 0 16px 0; line-height: 1.75; color: #374151; }
+    
+    /* Links */
+    a { color: #059669; text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
+    a:hover { color: #047857; }
+    
+    /* Code */
+    code { background: #f3f4f6; color: #dc2626; padding: 3px 8px; border-radius: 6px; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em; }
+    pre { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: #e5e7eb; padding: 20px 24px; border-radius: 16px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; line-height: 1.6; margin: 20px 0; }
+    pre code { background: transparent; color: #e5e7eb; padding: 0; border-radius: 0; }
+    
+    /* Highlight */
+    mark { background: linear-gradient(135deg, #fef08a 0%, #fde047 100%); color: #713f12; padding: 2px 6px; border-radius: 4px; }
+    
+    /* Blockquote */
+    blockquote { border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.08); margin: 20px 0; padding: 16px 24px; border-radius: 0 12px 12px 0; font-style: italic; color: #374151; }
+    
+    /* Lists */
+    ul, ol { margin: 16px 0; padding-left: 28px; }
+    li { margin: 8px 0; color: #374151; }
+    
+    /* Horizontal Rule */
+    hr { border: none; height: 2px; background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%); margin: 32px 0; }
+    
+    /* Strong/Bold */
+    strong, b { font-weight: 600; color: #111827; }
+    
+    /* Dark mode */
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
+      .email-wrapper { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
+      .email-container { background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(24, 24, 27, 0.98) 50%, rgba(251, 191, 36, 0.03) 100%) !important; border-color: rgba(63, 63, 70, 0.5) !important; }
+      .email-body { color: #f4f4f5 !important; }
+      .email-body p, .email-body li, .email-body span, .email-body td { color: #e4e4e7 !important; }
+      .email-body h1, .email-body h2, .email-body h3, .email-body h4 { color: #ffffff !important; }
+      .email-body a { color: #34d399 !important; }
+      .email-body code { background: #374151 !important; color: #fca5a5 !important; }
+      .email-body mark { background: #854d0e !important; color: #fef08a !important; }
+      .signature-section { background: rgba(16, 185, 129, 0.08) !important; border-color: rgba(16, 185, 129, 0.15) !important; }
+      .footer-section { border-color: rgba(63, 63, 70, 0.3) !important; }
+      .footer-section p { color: #71717a !important; }
+    }
+    
+    /* Responsive */
+    @media screen and (max-width: 640px) {
+      .email-container { width: 100% !important; margin: 0 !important; border-radius: 0 !important; border-left: none !important; border-right: none !important; }
+      .email-body { padding: 32px 24px !important; }
+      .signature-section { margin: 24px !important; padding: 24px !important; }
+      .footer-section { padding: 24px !important; }
+      h1 { font-size: 26px !important; }
+      h2 { font-size: 22px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+  <table role="presentation" class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%);margin:0;padding:0;min-height:100vh;">
+    <tr>
+      <td align="center" style="padding:48px 20px;">
+        <table role="presentation" class="email-container" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%);border-radius:32px;border:1px solid rgba(16, 185, 129, 0.12);box-shadow:0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;overflow:hidden;">
+          <tr>
+            <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:32px 48px;text-align:center;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="vertical-align:middle;padding-right:12px;">
+                            ${logoSvg}
+                          </td>
+                          <td style="vertical-align:middle;">
+                            <span style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;font-family:'Quicksand',-apple-system,BlinkMacSystemFont,sans-serif;">Aphylia</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-body" style="padding:48px 48px 32px 48px;color:#374151;font-size:16px;line-height:1.75;">
+              ${bodyHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 48px 48px 48px;">
+              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
+                <tr>
+                  <td style="padding:28px 32px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="64" style="vertical-align:top;padding-right:20px;">
+                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;text-align:center;line-height:56px;">
+                            ${logoSvg}
+                          </div>
+                        </td>
+                        <td style="vertical-align:middle;">
+                          <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">
+                            The Aphylia Team
+                          </p>
+                          <p style="margin:0;font-size:14px;color:#6b7280;">
+                            Helping you grow your plant knowledge 🌱
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="footer-section" style="padding:32px 48px;text-align:center;border-top:1px solid rgba(16, 185, 129, 0.08);">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
+                      <tr>
+                        <td>
+                          <a href="${websiteUrl}" style="display:inline-block;background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:50px;text-decoration:none;box-shadow:0 8px 24px -6px rgba(16, 185, 129, 0.4);">
+                            Explore Aphylia →
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;">
+                      <a href="${websiteUrl}" style="color:#059669;text-decoration:none;font-weight:500;">aphylia.app</a>
+                      <span style="color:#d1d5db;margin:0 8px;">•</span>
+                      <a href="${websiteUrl}/about" style="color:#9ca3af;text-decoration:none;">About</a>
+                      <span style="color:#d1d5db;margin:0 8px;">•</span>
+                      <a href="${websiteUrl}/contact" style="color:#9ca3af;text-decoration:none;">Contact</a>
+                    </p>
+                    <p style="margin:0;font-size:12px;color:#d1d5db;">
+                      © ${currentYear} Aphylia. Made with 💚 for plant enthusiasts everywhere.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }

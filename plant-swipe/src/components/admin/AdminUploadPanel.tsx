@@ -1,8 +1,7 @@
 import React from "react"
-import { UploadCloud, Loader2, Check, Copy } from "lucide-react"
+import { UploadCloud, Loader2, Check, Copy, FileImage, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { cn } from "@/lib/utils"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -147,198 +146,248 @@ export const AdminUploadPanel: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-2xl">
-        <CardContent className="p-6 space-y-6">
-          <div>
-            <div className="text-xl font-semibold">Upload media</div>
-            <p className="text-sm text-muted-foreground">
-              Drop a single image to optimize it as WebP and store it under the
-              Supabase <span className="font-medium">UTILITY</span> bucket.
-            </p>
-          </div>
-          <div
-            onDragOver={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              if (!dragActive) setDragActive(true)
-            }}
-            onDragEnter={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setDragActive(true)
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setDragActive(false)
-            }}
-            onDrop={handleDrop}
-            className={cn(
-              "rounded-3xl border-2 border-dashed p-8 text-center transition-colors",
-              dragActive
-                ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-500/10"
-                : "border-stone-200 dark:border-[#3e3e42] bg-white/60 dark:bg-[#1a1a1d]",
-              uploading && "opacity-70 cursor-not-allowed",
-            )}
-            aria-disabled={uploading}
-          >
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={handleFileChange}
-              disabled={uploading}
-            />
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200">
-              {uploading ? (
-                <Loader2 className="h-8 w-8 animate-spin" />
-              ) : (
-                <UploadCloud className="h-8 w-8" />
-              )}
-            </div>
-            <div className="text-lg font-medium">
-              Drag &amp; drop an image or{" "}
-              <button
-                type="button"
-                onClick={handleBrowseClick}
-                className="text-emerald-600 underline underline-offset-4"
-                disabled={uploading}
-              >
-                browse your files
-              </button>
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              PNG, JPG, WebP, HEIC, AVIF, GIF (first frame). Limit one file, max{" "}
-              {DEFAULT_MAX_MB} MB. We will convert to WebP automatically.
-            </p>
-          </div>
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-100">
-              {error}
-            </div>
-          )}
-          {uploading && (
-            <div className="text-sm text-muted-foreground">
-              Uploading and optimizing... This usually takes just a few seconds.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Header */}
+      <div>
+        <h2 className="text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
+          <UploadCloud className="h-5 w-5 text-emerald-600" />
+          Upload Media
+        </h2>
+        <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+          Drop an image to optimize and store it in the <span className="font-medium text-emerald-600">UTILITY</span> bucket
+        </p>
+      </div>
 
+      {/* Drop Zone */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          if (!dragActive) setDragActive(true)
+        }}
+        onDragEnter={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setDragActive(true)
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setDragActive(false)
+        }}
+        onDrop={handleDrop}
+        className={cn(
+          "relative rounded-2xl border-2 border-dashed p-12 text-center transition-all cursor-pointer",
+          dragActive
+            ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-500/10 scale-[1.02]"
+            : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800",
+          uploading && "opacity-70 pointer-events-none",
+        )}
+        onClick={handleBrowseClick}
+        aria-disabled={uploading}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={handleFileChange}
+          disabled={uploading}
+        />
+        
+        <div className={cn(
+          "mx-auto mb-6 w-20 h-20 rounded-3xl flex items-center justify-center transition-colors",
+          dragActive 
+            ? "bg-emerald-500 text-white" 
+            : "bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 text-emerald-600 dark:text-emerald-400"
+        )}>
+          {uploading ? (
+            <Loader2 className="h-10 w-10 animate-spin" />
+          ) : (
+            <UploadCloud className="h-10 w-10" />
+          )}
+        </div>
+        
+        <div className="text-lg font-semibold text-stone-900 dark:text-white mb-2">
+          {dragActive ? (
+            "Drop your image here"
+          ) : uploading ? (
+            "Uploading..."
+          ) : (
+            <>
+              Drag & drop an image or{" "}
+              <span className="text-emerald-600 dark:text-emerald-400">browse</span>
+            </>
+          )}
+        </div>
+        
+        <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm mx-auto">
+          PNG, JPG, WebP, HEIC, AVIF, GIF. Max {DEFAULT_MAX_MB} MB.
+          <br />
+          <span className="text-emerald-600 dark:text-emerald-400">Automatically converted to WebP</span>
+        </p>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-200">
+          {error}
+        </div>
+      )}
+
+      {/* Upload Progress */}
+      {uploading && (
+        <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4">
+          <div className="flex items-center gap-3 text-sm text-stone-600 dark:text-stone-400">
+            <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+            Optimizing and uploading... This usually takes a few seconds.
+          </div>
+        </div>
+      )}
+
+      {/* Result */}
       {result && (
-        <Card className="rounded-2xl border-emerald-200/70 dark:border-emerald-500/30">
-          <CardContent className="p-6 space-y-6">
+        <div className="rounded-2xl border-2 border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-[#1e1e20] p-6 space-y-6">
+          {/* Success Header */}
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center flex-shrink-0">
+              <Check className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
             <div>
-              <div className="text-lg font-semibold">Upload complete</div>
-              <p className="text-sm text-muted-foreground">
-                Stored in <span className="font-medium">{result.bucket}</span> at{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  {result.path}
-                </code>
-                .
+              <h3 className="text-lg font-semibold text-stone-900 dark:text-white">
+                Upload Complete!
+              </h3>
+              <p className="text-sm text-stone-500 dark:text-stone-400 mt-0.5">
+                Stored in <span className="font-medium">{result.bucket}</span>
               </p>
             </div>
-              {result.warning && (
-                <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900 dark:border-yellow-600/60 dark:bg-yellow-900/20 dark:text-yellow-100">
-                  {result.warning}
+          </div>
+
+          {/* Warning */}
+          {result.warning && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+              {result.warning}
+            </div>
+          )}
+
+          {/* URL Copy */}
+          {result.url && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">
+                Public URL
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={result.url}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="rounded-xl font-mono text-sm bg-white dark:bg-[#1a1a1d]"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="rounded-xl flex-shrink-0"
+                  onClick={() => copyToClipboard(result.url || "", "url")}
+                >
+                  {copiedField === "url" ? (
+                    <>
+                      <Check className="mr-2 h-4 w-4" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Stats Grid */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            {/* Compression Stats */}
+            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-emerald-600" />
+                <span className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">
+                  Optimization
+                </span>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Original</span>
+                  <span className="font-medium text-stone-700 dark:text-stone-300">
+                    {formatBytes(result.originalSize)} · {result.originalMimeType}
+                  </span>
                 </div>
-              )}
-              {result.url && (
-                <div>
-                  <div className="text-xs font-semibold uppercase text-muted-foreground">
-                    Public URL
-                  </div>
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                    <Input
-                      readOnly
-                      value={result.url ?? ""}
-                      onFocus={(e) => e.currentTarget.select()}
-                      className="rounded-2xl"
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="rounded-2xl"
-                      onClick={() => copyToClipboard(result.url || "", "url")}
-                    >
-                      {copiedField === "url" ? (
-                        <>
-                          <Check className="mr-2 h-4 w-4" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Copy URL
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Optimized</span>
+                  <span className="font-medium text-stone-700 dark:text-stone-300">
+                    {formatBytes(result.size)} · {result.mimeType}
+                  </span>
                 </div>
-              )}
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border p-4 dark:border-[#3e3e42]">
-                  <div className="text-xs font-semibold uppercase text-muted-foreground">
-                    File details
-                  </div>
-                  <div className="mt-2 space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span>Original</span>
-                      <span>
-                        {formatBytes(result.originalSize)} · {result.originalMimeType}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Optimized</span>
-                      <span>
-                        {formatBytes(result.size)} · {result.mimeType}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Compression</span>
-                      <span>{compressionPct}% smaller</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-2xl border p-4 dark:border-[#3e3e42]">
-                  <div className="text-xs font-semibold uppercase text-muted-foreground">
-                    Storage path
-                  </div>
-                  <div className="mt-2 flex flex-col gap-2">
-                    <Input
-                      readOnly
-                      value={result.path}
-                      onFocus={(e) => e.currentTarget.select()}
-                      className="rounded-2xl font-mono text-sm"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-2xl"
-                      onClick={() => copyToClipboard(result.path, "path")}
-                    >
-                      {copiedField === "path" ? (
-                        <>
-                          <Check className="mr-2 h-4 w-4" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Copy path
-                        </>
-                      )}
-                    </Button>
-                    <div className="text-xs text-muted-foreground">
-                      Use this path for Supabase Storage signed URLs or to reference the
-                      asset elsewhere in the admin tools.
-                    </div>
-                  </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Saved</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    {compressionPct}% smaller
+                  </span>
                 </div>
               </div>
-          </CardContent>
-        </Card>
+            </div>
+
+            {/* Storage Path */}
+            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <FileImage className="h-4 w-4 text-emerald-600" />
+                <span className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">
+                  Storage Path
+                </span>
+              </div>
+              <div className="space-y-2">
+                <Input
+                  readOnly
+                  value={result.path}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="rounded-lg font-mono text-xs bg-stone-50 dark:bg-[#2a2a2d]"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-lg w-full"
+                  onClick={() => copyToClipboard(result.path, "path")}
+                >
+                  {copiedField === "path" ? (
+                    <>
+                      <Check className="mr-2 h-3.5 w-3.5" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-2 h-3.5 w-3.5" />
+                      Copy Path
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Upload Another */}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full rounded-xl"
+            onClick={() => {
+              setResult(null)
+              inputRef.current?.click()
+            }}
+          >
+            <UploadCloud className="mr-2 h-4 w-4" />
+            Upload Another
+          </Button>
+        </div>
       )}
     </div>
   )

@@ -1,22 +1,26 @@
 import React from "react"
 import "./AdminEmailsPanel.css"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
   Plus,
-  RefreshCw,
   Send,
-  Clock,
   Trash2,
   Play,
   Square,
   Loader2,
+  Mail,
+  FileText,
+  Calendar,
+  Users,
+  ChevronRight,
+  Sparkles,
+  Search,
+  X,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -80,49 +84,59 @@ const DEFAULT_TIMEZONE =
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—"
   try {
-    return new Date(value).toLocaleString()
+    return new Date(value).toLocaleString(undefined, { 
+      month: 'short', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    })
   } catch {
     return value
   }
 }
 
-const formatStatus = (status: string) => {
-  switch (status) {
-    case "scheduled":
-      return "Scheduled"
-    case "draft":
-      return "Draft"
-    case "running":
-      return "Sending"
-    case "sent":
-      return "Sent"
-    case "cancelled":
-      return "Cancelled"
-    case "partial":
-      return "Partial"
-    case "failed":
-      return "Failed"
-    default:
-      return status
+const formatRelativeTime = (value?: string | null) => {
+  if (!value) return null
+  try {
+    const date = new Date(value)
+    const now = new Date()
+    const diffMs = date.getTime() - now.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    
+    if (diffMs < 0) {
+      const absDays = Math.abs(diffDays)
+      if (absDays === 0) return "Today"
+      if (absDays === 1) return "Yesterday"
+      return `${absDays} days ago`
+    }
+    if (diffDays === 0) {
+      if (diffHours <= 1) return "In less than an hour"
+      return `In ${diffHours} hours`
+    }
+    if (diffDays === 1) return "Tomorrow"
+    return `In ${diffDays} days`
+  } catch {
+    return null
   }
 }
 
-const statusBadgeClass = (status: string) => {
+const getStatusConfig = (status: string) => {
   switch (status) {
     case "scheduled":
-      return "bg-blue-100 text-blue-800"
+      return { label: "Scheduled", bg: "bg-blue-500/10", text: "text-blue-600", dot: "bg-blue-500" }
     case "running":
-      return "bg-amber-100 text-amber-800"
+      return { label: "Sending", bg: "bg-amber-500/10", text: "text-amber-600", dot: "bg-amber-500 animate-pulse" }
     case "sent":
-      return "bg-emerald-100 text-emerald-800"
+      return { label: "Sent", bg: "bg-emerald-500/10", text: "text-emerald-600", dot: "bg-emerald-500" }
     case "partial":
-      return "bg-purple-100 text-purple-800"
+      return { label: "Partial", bg: "bg-purple-500/10", text: "text-purple-600", dot: "bg-purple-500" }
     case "failed":
-      return "bg-rose-100 text-rose-800"
+      return { label: "Failed", bg: "bg-red-500/10", text: "text-red-600", dot: "bg-red-500" }
     case "cancelled":
-      return "bg-slate-200 text-slate-700"
+      return { label: "Cancelled", bg: "bg-stone-500/10", text: "text-stone-500", dot: "bg-stone-400" }
     default:
-      return "bg-stone-200 text-stone-700"
+      return { label: status, bg: "bg-stone-500/10", text: "text-stone-500", dot: "bg-stone-400" }
   }
 }
 
@@ -146,6 +160,17 @@ export const AdminEmailsPanel: React.FC = () => {
   const location = useLocation()
   const activeView = location.pathname.includes("/templates") ? "templates" : "campaigns"
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
+  const [templateSearch, setTemplateSearch] = React.useState("")
+
+  // Filter templates based on search query
+  const filteredTemplates = React.useMemo(() => {
+    if (!templateSearch.trim()) return templates
+    const query = templateSearch.toLowerCase()
+    return templates.filter(t => 
+      t.title.toLowerCase().includes(query) || 
+      t.subject.toLowerCase().includes(query)
+    )
+  }, [templates, templateSearch])
 
   const loadTemplates = React.useCallback(async () => {
     setLoadingTemplates(true)
@@ -180,7 +205,6 @@ export const AdminEmailsPanel: React.FC = () => {
   React.useEffect(() => {
     if (activeView === "campaigns") loadCampaigns().catch(() => {})
     if (activeView === "templates") loadTemplates().catch(() => {})
-    // Always load templates once for the campaign dropdown
     loadTemplates().catch(() => {}) 
   }, [activeView, loadTemplates, loadCampaigns])
 
@@ -271,7 +295,7 @@ export const AdminEmailsPanel: React.FC = () => {
     async (campaign: EmailCampaign) => {
       const isSent = campaign.status === "sent" || campaign.status === "partial"
       const confirmMsg = isSent 
-        ? `WARNING: This campaign "${campaign.title}" has already been sent to ${campaign.sentCount} users.\n\nDeleting it will remove the record of these emails being sent.\n\nAre you sure you want to delete it?`
+        ? `WARNING: This campaign "${campaign.title}" has already been sent to ${campaign.sentCount} users.\n\nAre you sure you want to delete it?`
         : `Delete campaign "${campaign.title}"? This cannot be undone.`
       
       if (!window.confirm(confirmMsg)) return
@@ -314,245 +338,395 @@ export const AdminEmailsPanel: React.FC = () => {
   )
 
   return (
-    <div className="space-y-6">
-      {/* Top Menu / Tabs */}
-      <div className="flex justify-center mb-6">
-        <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-bold text-stone-900 dark:text-white">Email Center</h1>
+          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+            Create templates and schedule campaigns to reach your users
+          </p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-2">
           <Link
             to="/admin/emails"
-            className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all",
               activeView === "campaigns"
-                ? "bg-emerald-600 text-white shadow"
-                : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
-            }`}
+                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+            )}
           >
+            <Send className="h-4 w-4" />
             Campaigns
+            {campaigns.length > 0 && (
+              <span className={cn(
+                "ml-1 px-2 py-0.5 rounded-full text-xs",
+                activeView === "campaigns" 
+                  ? "bg-white/20 text-white" 
+                  : "bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300"
+              )}>
+                {campaigns.length}
+              </span>
+            )}
           </Link>
           <Link
             to="/admin/emails/templates"
-            className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all",
               activeView === "templates"
-                ? "bg-emerald-600 text-white shadow"
-                : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
-            }`}
+                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+            )}
           >
+            <FileText className="h-4 w-4" />
             Templates
+            {templates.length > 0 && (
+              <span className={cn(
+                "ml-1 px-2 py-0.5 rounded-full text-xs",
+                activeView === "templates" 
+                  ? "bg-white/20 text-white" 
+                  : "bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300"
+              )}>
+                {templates.length}
+              </span>
+            )}
           </Link>
+
+          <div className="flex-1" />
+
+          {/* Action Buttons */}
+          {activeView === "campaigns" && (
+            <Button 
+              onClick={() => setSheetOpen(true)}
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New Campaign
+            </Button>
+          )}
+          {activeView === "templates" && (
+            <Button 
+              onClick={() => navigate("/admin/emails/templates/create")}
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New Template
+            </Button>
+          )}
         </div>
       </div>
 
+      {/* Campaigns View */}
       {activeView === "campaigns" && (
-        <>
-          <div className="flex items-center justify-end mb-4">
-            <Button className="rounded-2xl" onClick={() => setSheetOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" /> New Campaign
-            </Button>
-          </div>
-
-          <Card className="rounded-2xl">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Email Campaigns</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Schedule broadcasts that send a selected template to every user.
-                </p>
+        <div className="space-y-4">
+          {loadingCampaigns ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Loading campaigns...</span>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => loadCampaigns().catch(() => {})}>
-                {loadingCampaigns ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </div>
+          ) : campaigns.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-12 text-center">
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-4">
+                <Mail className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">No campaigns yet</h3>
+              <p className="text-sm text-stone-500 dark:text-stone-400 mb-6 max-w-sm mx-auto">
+                Create your first campaign to start sending emails to your users.
+              </p>
+              <Button onClick={() => setSheetOpen(true)} className="rounded-xl">
+                <Plus className="mr-2 h-4 w-4" />
+                Create Campaign
               </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {loadingCampaigns ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading campaigns...
-                </div>
-              ) : campaigns.length === 0 ? (
-                <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  No campaigns have been scheduled yet.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {campaigns.map((campaign) => (
-                    <div
-                      key={campaign.id}
-                      className="rounded-2xl border border-stone-200 p-4 dark:border-stone-700"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-semibold">{campaign.title}</h3>
-                            <Badge className={cn("text-xs", statusBadgeClass(campaign.status))}>
-                              {formatStatus(campaign.status)}
-                            </Badge>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {campaigns.map((campaign) => {
+                const statusConfig = getStatusConfig(campaign.status)
+                const relativeTime = formatRelativeTime(campaign.scheduledFor)
+                
+                return (
+                  <div
+                    key={campaign.id}
+                    className="group relative rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5"
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* Icon */}
+                      <div className={cn(
+                        "flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center",
+                        statusConfig.bg
+                      )}>
+                        <Send className={cn("h-5 w-5", statusConfig.text)} />
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-semibold text-stone-900 dark:text-white truncate">
+                            {campaign.title}
+                          </h3>
+                          <div className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
+                            statusConfig.bg, statusConfig.text
+                          )}>
+                            <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
+                            {statusConfig.label}
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {campaign.templateTitle || "Template removed"} · {campaign.subject}
+                        </div>
+                        
+                        <p className="text-sm text-stone-500 dark:text-stone-400 truncate">
+                          {campaign.templateTitle || "Template removed"} · {campaign.subject}
+                        </p>
+
+                        <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-stone-500 dark:text-stone-400">
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {formatDateTime(campaign.scheduledFor)}
+                            {relativeTime && (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                ({relativeTime})
+                              </span>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <Users className="h-3.5 w-3.5" />
+                            {campaign.sentCount} / {campaign.totalRecipients} sent
+                            {campaign.failedCount > 0 && (
+                              <span className="text-red-500">({campaign.failedCount} failed)</span>
+                            )}
+                          </span>
+                        </div>
+
+                        {campaign.sendError && (
+                          <p className="mt-2 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg">
+                            Error: {campaign.sendError}
                           </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleRunCampaign(campaign)}
-                            disabled={campaign.status === "running"}
-                          >
-                            <Play className="mr-2 h-4 w-4" /> Send now
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleCancelCampaign(campaign)}>
-                            <Square className="mr-2 h-4 w-4" /> Cancel
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDeleteCampaign(campaign)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        )}
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                        <span>
-                          <Clock className="mr-1 inline h-3 w-3" />
-                          {campaign.scheduledFor ? formatDateTime(campaign.scheduledFor) : "No schedule"}
-                        </span>
-                        <span className="font-medium text-foreground">
-                          Sent: {campaign.sentCount} / {campaign.totalRecipients}
-                          {campaign.failedCount > 0 ? ` · Failed ${campaign.failedCount}` : ""}
-                        </span>
-                        {campaign.variables?.length ? (
-                          <span className="flex items-center gap-1">
-                            Variables:
-                            {campaign.variables.map((variable) => (
-                              <Badge key={`${campaign.id}-${variable}`} variant="secondary">
-                                {variable}
-                              </Badge>
-                            ))}
-                          </span>
-                        ) : null}
-                        {campaign.sendError ? (
-                          <span className="text-rose-500">Error: {campaign.sendError}</span>
-                        ) : null}
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRunCampaign(campaign)}
+                          disabled={campaign.status === "running"}
+                          className="rounded-lg h-9 px-3 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                        >
+                          <Play className="h-4 w-4 mr-1.5" />
+                          Send
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleCancelCampaign(campaign)}
+                          className="rounded-lg h-9 px-3 text-stone-500 hover:text-stone-700"
+                        >
+                          <Square className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleDeleteCampaign(campaign)}
+                          className="rounded-lg h-9 px-3 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       )}
 
+      {/* Templates View */}
       {activeView === "templates" && (
-        <>
-          <div className="flex items-center justify-end mb-4">
-            <Button
-              className="rounded-2xl"
-              onClick={() => navigate("/admin/emails/templates/create")}
-            >
-              <Plus className="mr-2 h-4 w-4" /> New Template
-            </Button>
-          </div>
-          
-          <Card className="rounded-2xl">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>All Templates</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {templates.length} templates found
-                </p>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => loadTemplates().catch(() => {})}>
-                {loadingTemplates ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {loadingTemplates ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading templates...
-                </div>
-              ) : templates.length === 0 ? (
-                <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  No templates yet. Create one to get started.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {templates.map((template) => (
-                    <div
-                      key={template.id}
-                      className="rounded-2xl border border-stone-200 p-4 dark:border-stone-700"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <h3 className="text-base font-semibold">{template.title}</h3>
-                          <p className="text-sm text-muted-foreground">{template.subject}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={() => navigate(`/admin/emails/templates/${template.id}`)}>
-                            Edit
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDeleteTemplate(template)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                        <span>
-                          Versions: v{template.version} · Used {template.campaignCount}{" "}
-                          {template.campaignCount === 1 ? "time" : "times"}
-                        </span>
-                        <span>Last used: {template.lastUsedAt ? formatDateTime(template.lastUsedAt) : "Never"}</span>
-                        {template.variables?.length ? (
-                          <span className="flex items-center gap-1">
-                            Variables:
-                            {template.variables.map((variable) => (
-                              <Badge key={variable} variant="secondary">
-                                {variable}
-                              </Badge>
-                            ))}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+        <div className="space-y-4">
+          {/* Search Bar */}
+          {templates.length > 0 && (
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <Input
+                type="text"
+                placeholder="Search templates by name or subject..."
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                className="pl-11 pr-10 h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+              />
+              {templateSearch && (
+                <button
+                  type="button"
+                  onClick={() => setTemplateSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               )}
-            </CardContent>
-          </Card>
-        </>
+            </div>
+          )}
+
+          {loadingTemplates ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Loading templates...</span>
+              </div>
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-12 text-center">
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-4">
+                <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">No templates yet</h3>
+              <p className="text-sm text-stone-500 dark:text-stone-400 mb-6 max-w-sm mx-auto">
+                Create a template to define the look and content of your email campaigns.
+              </p>
+              <Button onClick={() => navigate("/admin/emails/templates/create")} className="rounded-xl">
+                <Plus className="mr-2 h-4 w-4" />
+                Create Template
+              </Button>
+            </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-12 text-center">
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-stone-100 dark:bg-[#2a2a2d] flex items-center justify-center mb-4">
+                <Search className="h-6 w-6 text-stone-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">No results found</h3>
+              <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">
+                No templates match "<span className="font-medium">{templateSearch}</span>"
+              </p>
+              <Button variant="outline" onClick={() => setTemplateSearch("")} className="rounded-xl">
+                Clear search
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredTemplates.map((template) => (
+                <div
+                  key={template.id}
+                  onClick={() => navigate(`/admin/emails/templates/${template.id}`)}
+                  className="group relative rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 cursor-pointer transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-xl hover:shadow-emerald-500/10 hover:-translate-y-0.5"
+                >
+                  {/* Preview gradient */}
+                  <div className="absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
+                      <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-stone-900 dark:text-white truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                        {template.title}
+                      </h3>
+                      <p className="text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                        {template.subject}
+                      </p>
+                    </div>
+
+                    <ChevronRight className="h-5 w-5 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all" />
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-stone-100 dark:border-[#2a2a2d]">
+                    <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
+                      <span>v{template.version}</span>
+                      <span>Used {template.campaignCount}×</span>
+                    </div>
+                    
+                    {template.variables?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-3">
+                        {template.variables.slice(0, 3).map((variable) => (
+                          <span 
+                            key={variable} 
+                            className="px-2 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-xs text-stone-600 dark:text-stone-400 font-mono"
+                          >
+                            {variable}
+                          </span>
+                        ))}
+                        {template.variables.length > 3 && (
+                          <span className="px-2 py-0.5 text-xs text-stone-400">
+                            +{template.variables.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Delete button (stops propagation) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteTemplate(template)
+                    }}
+                    className="absolute top-3 right-3 p-2 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
+      {/* New Campaign Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full max-w-xl">
-          <SheetHeader>
-            <SheetTitle>Schedule campaign</SheetTitle>
+        <SheetContent className="w-full max-w-lg border-l border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d]">
+          <SheetHeader className="pb-6 border-b border-stone-100 dark:border-[#2a2a2d]">
+            <SheetTitle className="text-xl font-bold">Create Campaign</SheetTitle>
+            <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+              Schedule an email to send to all users
+            </p>
           </SheetHeader>
-          <div className="mt-6 space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="campaign-title">Campaign name</Label>
+          
+          <div className="mt-6 space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="campaign-title" className="text-sm font-medium">Campaign Name</Label>
               <Input
                 id="campaign-title"
                 value={campaignForm.title}
                 onChange={(event) =>
                   setCampaignForm((prev) => ({ ...prev, title: event.target.value }))
                 }
-                placeholder="Spring update"
+                placeholder="e.g., Spring Newsletter"
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="campaign-template">Template</Label>
+            
+            <div className="space-y-2">
+              <Label htmlFor="campaign-template" className="text-sm font-medium">Email Template</Label>
               <Select
                 id="campaign-template"
                 value={campaignForm.templateId}
                 onChange={(event) =>
                   setCampaignForm((prev) => ({ ...prev, templateId: event.target.value }))
                 }
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
               >
-                <option value="">Select template</option>
+                <option value="">Select a template...</option>
                 {templates.map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.title}
                   </option>
                 ))}
               </Select>
+              {templates.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  No templates available. Create one first.
+                </p>
+              )}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="campaign-datetime">Send at</Label>
+            
+            <div className="space-y-2">
+              <Label htmlFor="campaign-datetime" className="text-sm font-medium">Schedule For</Label>
               <Input
                 id="campaign-datetime"
                 type="datetime-local"
@@ -560,47 +734,72 @@ export const AdminEmailsPanel: React.FC = () => {
                 onChange={(event) =>
                   setCampaignForm((prev) => ({ ...prev, scheduledFor: event.target.value }))
                 }
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="campaign-timezone">Timezone</Label>
+            
+            <div className="space-y-2">
+              <Label htmlFor="campaign-timezone" className="text-sm font-medium">Timezone</Label>
               <Input
                 id="campaign-timezone"
                 value={campaignForm.timezone}
                 onChange={(event) =>
                   setCampaignForm((prev) => ({ ...prev, timezone: event.target.value }))
                 }
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="campaign-preview">Preview text override</Label>
+            
+            <div className="space-y-2">
+              <Label htmlFor="campaign-preview" className="text-sm font-medium">
+                Preview Text <span className="text-stone-400 font-normal">(optional)</span>
+              </Label>
               <Input
                 id="campaign-preview"
                 value={campaignForm.previewText}
                 onChange={(event) =>
                   setCampaignForm((prev) => ({ ...prev, previewText: event.target.value }))
                 }
-                placeholder="Optional preview text"
+                placeholder="Short preview shown in inbox"
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="campaign-description">Notes (optional)</Label>
+            
+            <div className="space-y-2">
+              <Label htmlFor="campaign-description" className="text-sm font-medium">
+                Internal Notes <span className="text-stone-400 font-normal">(optional)</span>
+              </Label>
               <Textarea
                 id="campaign-description"
                 value={campaignForm.description}
                 onChange={(event) =>
                   setCampaignForm((prev) => ({ ...prev, description: event.target.value }))
                 }
+                placeholder="Notes for your team..."
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42] min-h-[80px]"
               />
             </div>
           </div>
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setSheetOpen(false)}>
-              Close
+          
+          <div className="mt-8 pt-6 border-t border-stone-100 dark:border-[#2a2a2d] flex gap-3">
+            <Button 
+              variant="outline" 
+              onClick={() => setSheetOpen(false)}
+              className="flex-1 rounded-xl"
+            >
+              Cancel
             </Button>
-            <Button onClick={handleCreateCampaign} disabled={campaignSaving}>
-              {campaignSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Schedule
+            <Button 
+              onClick={handleCreateCampaign} 
+              disabled={campaignSaving}
+              className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+            >
+              {campaignSaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              Schedule Campaign
             </Button>
           </div>
         </SheetContent>
