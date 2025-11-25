@@ -1,7 +1,7 @@
 {
   "plantType": [
     "Classify {{plantName}} by its dominant growth habit or planting form.",
-    "Return a single lowercase string chosen from: \"plant\", \"flower\", \"bamboo\", \"shrub\", \"tree\"."
+    "Return a single lowercase string chosen from: \"plant\", \"flower\", \"bamboo\", \"shrub\", \"tree\", \"cactus\", \"succulent\"."
   ],
   "utility": [
     "List every practical or ornamental role {{plantName}} is commonly grown for.",

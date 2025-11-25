@@ -203,6 +203,8 @@ export const plantTypeEnum = createEnumTools([
   { dbValue: 'bamboo', uiValue: 'bamboo' },
   { dbValue: 'shrub', uiValue: 'shrub' },
   { dbValue: 'tree', uiValue: 'tree' },
+  { dbValue: 'cactus', uiValue: 'cactus' },
+  { dbValue: 'succulent', uiValue: 'succulent' },
 ])
 
 export const utilityEnum = createEnumTools([
