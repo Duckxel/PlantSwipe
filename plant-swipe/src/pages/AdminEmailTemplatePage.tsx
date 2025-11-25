@@ -194,62 +194,64 @@ export const AdminEmailTemplatePage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-emerald-50/30 dark:from-[#0f0f11] dark:via-[#1a1a1d] dark:to-[#0f0f11]">
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <button
-            type="button"
-            onClick={() => navigate("/admin/emails/templates")}
-            className="inline-flex items-center gap-2 text-sm text-stone-500 hover:text-emerald-600 dark:text-stone-400 dark:hover:text-emerald-400 transition-colors mb-4"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to templates
-          </button>
-          
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-stone-900 dark:text-white">
-                {isNew ? "Create Template" : "Edit Template"}
-              </h1>
-              <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-                Design beautiful emails with the rich text editor
-              </p>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-stone-100 via-stone-50 to-emerald-50/50 dark:from-[#0a0a0c] dark:via-[#111113] dark:to-[#0a0a0c] p-4 md:p-6 lg:p-8">
+      <div className="max-w-6xl mx-auto">
+        {/* Rounded Background Wrapper */}
+        <div className="rounded-3xl bg-white/80 dark:bg-[#1a1a1d]/90 backdrop-blur-xl border border-stone-200/50 dark:border-[#2a2a2d] shadow-xl shadow-stone-200/50 dark:shadow-black/20 p-6 md:p-8">
+          {/* Header */}
+          <div className="mb-8">
+            <button
+              type="button"
+              onClick={() => navigate("/admin/emails/templates")}
+              className="inline-flex items-center gap-2 text-sm text-stone-500 hover:text-emerald-600 dark:text-stone-400 dark:hover:text-emerald-400 transition-colors mb-4"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to templates
+            </button>
             
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setPreviewOpen(true)}
-                disabled={!templateForm.bodyHtml.trim()}
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-800"
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                Preview
-              </Button>
-              <Button 
-                onClick={handleSave} 
-                disabled={templateSaving}
-                className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
-              >
-                {templateSaving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="mr-2 h-4 w-4" />
-                    {isNew ? "Create Template" : "Save Changes"}
-                  </>
-                )}
-              </Button>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-stone-900 dark:text-white">
+                  {isNew ? "Create Template" : "Edit Template"}
+                </h1>
+                <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+                  Design beautiful emails with the rich text editor
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setPreviewOpen(true)}
+                  disabled={!templateForm.bodyHtml.trim()}
+                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-800"
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Preview
+                </Button>
+                <Button 
+                  onClick={handleSave} 
+                  disabled={templateSaving}
+                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+                >
+                  {templateSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      {isNew ? "Create Template" : "Save Changes"}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Main Content */}
-        <div className="grid lg:grid-cols-[340px,1fr] gap-6">
+          {/* Main Content */}
+          <div className="grid lg:grid-cols-[340px,1fr] gap-6">
           {/* Sidebar - Template Settings */}
           <div className="space-y-5">
             {/* Template Info Card */}
@@ -398,6 +400,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               }
             />
           </div>
+        </div>
         </div>
       </div>
 
