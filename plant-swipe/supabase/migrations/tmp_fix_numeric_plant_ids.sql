@@ -75,12 +75,104 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- Step 1.5: Rename original plants to avoid unique constraint violations
+-- Step 1.5: Handle unique constraint conflicts
 -- ============================================================================
 -- The plants table has unique indexes on:
 --   - lower(name)
 --   - lower(scientific_name)  [may exist in DB]
--- We must rename/nullify these fields before creating new plants.
+-- 
+-- We must:
+-- 1. Rename old plants to free up the unique values
+-- 2. Check if another plant (not being migrated) already uses the same values
+-- 3. If conflict exists with external plant, set to NULL in migration table
+
+-- Step 1.5a: Check for conflicts with OTHER plants (not being migrated)
+DO $$
+DECLARE
+    rec RECORD;
+BEGIN
+    RAISE NOTICE 'Checking for unique constraint conflicts...';
+    
+    -- Check scientific_name conflicts with other plants
+    FOR rec IN 
+        SELECT m.old_id, m.scientific_name
+        FROM plant_id_migration m
+        WHERE m.scientific_name IS NOT NULL
+        AND EXISTS (
+            SELECT 1 FROM public.plants p 
+            WHERE lower(p.scientific_name) = lower(m.scientific_name)
+            AND p.id NOT IN (SELECT old_id FROM plant_id_migration)
+        )
+    LOOP
+        RAISE NOTICE 'WARNING: scientific_name "%" conflicts with another plant. Will be set to NULL for new plant (old_id: %)', 
+            rec.scientific_name, rec.old_id;
+        UPDATE plant_id_migration SET scientific_name = NULL WHERE old_id = rec.old_id;
+    END LOOP;
+    
+    -- Check for duplicate scientific_names WITHIN plants being migrated
+    FOR rec IN
+        SELECT scientific_name, count(*) as cnt
+        FROM plant_id_migration
+        WHERE scientific_name IS NOT NULL
+        GROUP BY lower(scientific_name)
+        HAVING count(*) > 1
+    LOOP
+        RAISE NOTICE 'WARNING: scientific_name "%" is duplicated among migrated plants. Keeping only first occurrence.', 
+            rec.scientific_name;
+        -- Keep only the first one (by old_id), set others to NULL
+        UPDATE plant_id_migration m1
+        SET scientific_name = NULL
+        WHERE m1.scientific_name IS NOT NULL
+        AND lower(m1.scientific_name) = lower(rec.scientific_name)
+        AND m1.old_id != (
+            SELECT min(m2.old_id) 
+            FROM plant_id_migration m2 
+            WHERE lower(m2.scientific_name) = lower(rec.scientific_name)
+        );
+    END LOOP;
+    
+    -- Check name conflicts with other plants
+    FOR rec IN 
+        SELECT m.old_id, m.plant_name
+        FROM plant_id_migration m
+        WHERE m.plant_name IS NOT NULL
+        AND EXISTS (
+            SELECT 1 FROM public.plants p 
+            WHERE lower(p.name) = lower(m.plant_name)
+            AND p.id NOT IN (SELECT old_id FROM plant_id_migration)
+        )
+    LOOP
+        RAISE NOTICE 'WARNING: name "%" conflicts with another plant. Will append UUID suffix (old_id: %)', 
+            rec.plant_name, rec.old_id;
+        UPDATE plant_id_migration 
+        SET plant_name = plant_name || ' [' || substring(new_id, 1, 8) || ']' 
+        WHERE old_id = rec.old_id;
+    END LOOP;
+    
+    -- Check for duplicate names WITHIN plants being migrated  
+    FOR rec IN
+        SELECT plant_name, count(*) as cnt
+        FROM plant_id_migration
+        WHERE plant_name IS NOT NULL
+        GROUP BY lower(plant_name)
+        HAVING count(*) > 1
+    LOOP
+        RAISE NOTICE 'WARNING: name "%" is duplicated among migrated plants. Appending suffixes.', 
+            rec.plant_name;
+        -- Add suffix to all but the first one
+        UPDATE plant_id_migration m1
+        SET plant_name = plant_name || ' [' || substring(new_id, 1, 8) || ']'
+        WHERE m1.plant_name IS NOT NULL
+        AND lower(m1.plant_name) = lower(rec.plant_name)
+        AND m1.old_id != (
+            SELECT min(m2.old_id) 
+            FROM plant_id_migration m2 
+            WHERE lower(m2.plant_name) = lower(rec.plant_name)
+        );
+    END LOOP;
+END $$;
+
+-- Step 1.5b: Rename the original plants to free up unique values
 DO $$
 DECLARE
     affected integer;
@@ -97,7 +189,7 @@ BEGIN
     WHERE p.id = m.old_id;
     
     GET DIAGNOSTICS affected = ROW_COUNT;
-    RAISE NOTICE 'Step 1.5: Renamed % original plant(s) to avoid unique constraint conflicts', affected;
+    RAISE NOTICE 'Step 1.5b: Renamed % original plant(s) to free up unique values', affected;
 END $$;
 
 -- ============================================================================
