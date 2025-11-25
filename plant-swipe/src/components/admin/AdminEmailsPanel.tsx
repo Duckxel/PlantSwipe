@@ -17,7 +17,6 @@ import {
   Play,
   Square,
   Loader2,
-  LayoutTemplate,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
