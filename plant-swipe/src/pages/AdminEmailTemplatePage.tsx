@@ -19,8 +19,6 @@ import {
   ArrowLeft,
   Save,
   Eye,
-  Monitor,
-  Smartphone,
   X,
 } from "lucide-react"
 import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
@@ -90,7 +88,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
   const [templateEditorKey, setTemplateEditorKey] = React.useState("initial")
   const [existingTemplate, setExistingTemplate] = React.useState<EmailTemplate | null>(null)
   const [previewOpen, setPreviewOpen] = React.useState(false)
-  const [previewMode, setPreviewMode] = React.useState<"desktop" | "mobile">("desktop")
 
   React.useEffect(() => {
     if (isNew) return
@@ -381,110 +378,157 @@ export const AdminEmailTemplatePage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Email Preview - Full Screen Overlay */}
+      {/* Email Preview - Full Screen Overlay (always light theme) */}
       {previewOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%)' }}>
+        <div 
+          className="fixed inset-0 z-50 flex flex-col overflow-y-auto"
+          style={{ 
+            background: 'linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%)',
+            colorScheme: 'light',
+          }}
+        >
           {/* Floating Controls */}
-          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl border border-stone-200/50 bg-white/95 backdrop-blur-xl px-4 py-2 shadow-2xl dark:border-[#3e3e42]/50 dark:bg-[#1a1a1d]/95">
-            {/* Device Toggle */}
-            <div className="flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#252526] p-1">
-              <button
-                type="button"
-                onClick={() => setPreviewMode("desktop")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-all ${
-                  previewMode === "desktop"
-                    ? "bg-emerald-600 text-white shadow-lg"
-                    : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
-                }`}
-              >
-                <Monitor className="h-4 w-4" />
-                Desktop
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewMode("mobile")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-all ${
-                  previewMode === "mobile"
-                    ? "bg-emerald-600 text-white shadow-lg"
-                    : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
-                }`}
-              >
-                <Smartphone className="h-4 w-4" />
-                Mobile
-              </button>
-            </div>
-
-            <div className="h-6 w-px bg-stone-200 dark:bg-[#3e3e42]" />
-
+          <div 
+            className="fixed top-6 left-1/2 z-50 flex items-center gap-3 px-5 py-2.5 rounded-2xl shadow-2xl"
+            style={{ 
+              transform: 'translateX(-50%)',
+              background: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(0, 0, 0, 0.08)',
+            }}
+          >
             {/* Subject */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-stone-400 dark:text-stone-500">Subject:</span>
-              <span className="font-medium text-stone-700 dark:text-stone-200 max-w-[200px] truncate">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
+              <span style={{ color: '#9ca3af' }}>Subject:</span>
+              <span style={{ fontWeight: 500, color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {templateForm.subject.replace(/\{\{user\}\}/gi, "John") || "(No subject)"}
               </span>
             </div>
 
-            <div className="h-6 w-px bg-stone-200 dark:bg-[#3e3e42]" />
+            <div style={{ height: '24px', width: '1px', background: '#e5e7eb' }} />
             
             <button
               type="button"
               onClick={() => setPreviewOpen(false)}
-              className="flex items-center gap-2 rounded-full bg-stone-100 dark:bg-[#2d2d30] px-4 py-1.5 text-sm font-medium text-stone-700 dark:text-stone-200 transition-colors hover:bg-stone-200 dark:hover:bg-[#3e3e42]"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                borderRadius: '9999px',
+                background: '#f3f4f6',
+                border: 'none',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: '#374151',
+                cursor: 'pointer',
+              }}
             >
-              <X className="h-4 w-4" />
+              <X style={{ width: '16px', height: '16px' }} />
               Close
             </button>
           </div>
 
-          {/* Email Content - Full Window */}
-          <div className="flex-1 overflow-y-auto pt-20 pb-8">
-            <div className={`mx-auto transition-all duration-300 ${previewMode === "mobile" ? "max-w-[400px] px-3" : "max-w-[680px] px-6"}`}>
+          {/* Email Content */}
+          <div style={{ flex: 1, paddingTop: '80px', paddingBottom: '80px', paddingLeft: '24px', paddingRight: '24px' }}>
+            <div style={{ maxWidth: '680px', margin: '0 auto' }}>
               {/* Email Container */}
               <div 
-                className={`rounded-[32px] border shadow-2xl overflow-hidden transition-all duration-300 ${
-                  previewMode === "mobile"
-                    ? "border-stone-800 dark:border-stone-600"
-                    : "border-emerald-200/50 dark:border-emerald-800/30"
-                }`}
                 style={{
+                  borderRadius: '32px',
+                  overflow: 'hidden',
                   background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%)',
+                  border: '1px solid rgba(16, 185, 129, 0.12)',
                   boxShadow: '0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset',
                 }}
               >
+                {/* Header */}
+                <div 
+                  style={{
+                    background: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%)',
+                    padding: '32px 48px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div 
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      borderRadius: '20px',
+                      padding: '14px 28px',
+                    }}
+                  >
+                    <img 
+                      src="/icons/plant-swipe-icon.svg" 
+                      alt="" 
+                      style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)' }}
+                    />
+                    <span 
+                      style={{ 
+                        fontSize: '26px', 
+                        fontWeight: 700, 
+                        color: '#ffffff', 
+                        letterSpacing: '-0.5px',
+                        fontFamily: "'Quicksand', -apple-system, BlinkMacSystemFont, sans-serif",
+                      }}
+                    >
+                      Aphylia
+                    </span>
+                  </div>
+                </div>
+
                 {/* Email Body */}
                 <div 
-                  className="p-8 md:p-12 text-stone-700 dark:text-stone-200 text-base leading-relaxed"
-                  style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" }}
+                  style={{ 
+                    padding: '48px', 
+                    color: '#374151', 
+                    fontSize: '16px', 
+                    lineHeight: 1.75,
+                    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+                  }}
                   dangerouslySetInnerHTML={{ 
                     __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "John") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
                   }}
                 />
 
                 {/* Signature Section */}
-                <div className="mx-8 md:mx-12 mb-8 md:mb-12">
+                <div style={{ margin: '0 48px 48px 48px' }}>
                   <div 
-                    className="rounded-[20px] p-6 md:p-7"
                     style={{ 
+                      borderRadius: '20px',
+                      padding: '28px 32px',
                       background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%)',
                       border: '1px solid rgba(16, 185, 129, 0.1)',
                     }}
                   >
-                    <div className="flex items-center gap-5">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                       {/* Logo */}
                       <div 
-                        className="flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center"
                         style={{
+                          flexShrink: 0,
+                          width: '56px',
+                          height: '56px',
+                          borderRadius: '16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                           background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
                           boxShadow: '0 8px 24px -8px rgba(16, 185, 129, 0.5)',
                         }}
                       >
-                        <img src="/icons/plant-swipe-icon.svg" alt="Aphylia" className="w-8 h-8 brightness-0 invert" />
+                        <img 
+                          src="/icons/plant-swipe-icon.svg" 
+                          alt="Aphylia" 
+                          style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)' }}
+                        />
                       </div>
                       <div>
-                        <p className="font-bold text-lg text-stone-800 dark:text-stone-100 mb-0.5">
+                        <p style={{ margin: '0 0 4px 0', fontWeight: 700, fontSize: '18px', color: '#1f2937' }}>
                           The Aphylia Team
                         </p>
-                        <p className="text-sm text-stone-500 dark:text-stone-400">
+                        <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
                           Helping you grow your plant knowledge 🌱
                         </p>
                       </div>
@@ -494,27 +538,37 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
                 {/* Footer */}
                 <div 
-                  className="px-8 md:px-12 py-8 text-center"
-                  style={{ borderTop: '1px solid rgba(16, 185, 129, 0.08)' }}
+                  style={{ 
+                    padding: '32px 48px', 
+                    textAlign: 'center',
+                    borderTop: '1px solid rgba(16, 185, 129, 0.08)',
+                  }}
                 >
                   <a 
                     href="#"
-                    className="inline-block mb-6 px-7 py-3 text-sm font-semibold text-white rounded-full"
                     style={{
+                      display: 'inline-block',
+                      marginBottom: '24px',
+                      padding: '14px 32px',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      color: '#ffffff',
+                      borderRadius: '9999px',
+                      textDecoration: 'none',
                       background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
                       boxShadow: '0 8px 24px -6px rgba(16, 185, 129, 0.4)',
                     }}
                   >
                     Explore Aphylia →
                   </a>
-                  <p className="text-sm text-stone-400 dark:text-stone-500 mb-2">
-                    <a href="#" className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline">aphylia.app</a>
-                    <span className="mx-2">•</span>
-                    <a href="#" className="text-stone-400 hover:underline">About</a>
-                    <span className="mx-2">•</span>
-                    <a href="#" className="text-stone-400 hover:underline">Contact</a>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#9ca3af' }}>
+                    <a href="#" style={{ color: '#059669', fontWeight: 500, textDecoration: 'none' }}>aphylia.app</a>
+                    <span style={{ margin: '0 8px', color: '#d1d5db' }}>•</span>
+                    <a href="#" style={{ color: '#9ca3af', textDecoration: 'none' }}>About</a>
+                    <span style={{ margin: '0 8px', color: '#d1d5db' }}>•</span>
+                    <a href="#" style={{ color: '#9ca3af', textDecoration: 'none' }}>Contact</a>
                   </p>
-                  <p className="text-xs text-stone-300 dark:text-stone-600">
+                  <p style={{ margin: 0, fontSize: '12px', color: '#d1d5db' }}>
                     © {new Date().getFullYear()} Aphylia. Made with 💚 for plant enthusiasts everywhere.
                   </p>
                 </div>
@@ -523,9 +577,23 @@ export const AdminEmailTemplatePage: React.FC = () => {
           </div>
 
           {/* Bottom hint */}
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-            <p className="text-xs text-stone-400 dark:text-stone-500 bg-white/80 dark:bg-[#1a1a1d]/80 backdrop-blur px-4 py-2 rounded-full border border-stone-200/50 dark:border-[#3e3e42]/50">
-              Variables like <code className="px-1.5 py-0.5 bg-stone-100 dark:bg-stone-800 rounded text-emerald-600 dark:text-emerald-400 text-[10px]">{"{{user}}"}</code> are replaced with sample data
+          <div 
+            className="fixed bottom-6 left-1/2 z-50"
+            style={{ transform: 'translateX(-50%)' }}
+          >
+            <p 
+              style={{ 
+                fontSize: '12px', 
+                color: '#9ca3af', 
+                background: 'rgba(255, 255, 255, 0.9)', 
+                backdropFilter: 'blur(8px)',
+                padding: '8px 16px', 
+                borderRadius: '9999px', 
+                border: '1px solid rgba(0, 0, 0, 0.08)',
+                margin: 0,
+              }}
+            >
+              Variables like <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{user}}"}</code> are replaced with sample data
             </p>
           </div>
         </div>
