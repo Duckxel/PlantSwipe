@@ -20,7 +20,7 @@ import { zodResponseFormat } from 'openai/helpers/zod'
 import multer from 'multer'
 import sharp from 'sharp'
 import webpush from 'web-push'
-
+import cron from 'node-cron'
 
 dotenv.config()
 // Optionally load server-only secrets from .env.server (ignored if missing)
@@ -62,6 +62,42 @@ try {
   console.warn('[server] Failed to load AI field prompts JSON:', err?.message || err)
   aiFieldPromptsTemplate = {}
 }
+
+// --- Scheduled Tasks ---
+// Fallback scheduler: Invoke Edge Function from Node when pg_cron is unavailable
+cron.schedule('* * * * *', async () => {
+  try {
+    if (!supabaseUrlEnv || !supabaseServiceKey) return
+    
+    // Construct the Edge Function URL
+    const functionName = 'email-campaign-runner'
+    const projectRef = (new URL(supabaseUrlEnv).hostname || '').split('.')[0]
+    
+    // Support both local dev and production URLs
+    let endpoint = ''
+    if (supabaseUrlEnv.includes('localhost') || supabaseUrlEnv.includes('127.0.0.1')) {
+       endpoint = `${supabaseUrlEnv}/functions/v1/${functionName}`
+    } else {
+       // Production standard: https://<project_ref>.supabase.co/functions/v1/<function_name>
+       endpoint = `https://${projectRef}.supabase.co/functions/v1/${functionName}`
+    }
+
+    // Fire and forget - we don't want to block the event loop
+    // The Edge Function handles concurrency and idempotency via DB locks
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    }).catch(err => {
+      console.error('[scheduler] Failed to invoke email-campaign-runner:', err.message)
+    })
+  } catch (e) {
+    console.error('[scheduler] Error in campaign cron:', e)
+  }
+})
 
 // Resolve the real Git repository root, even when running under a symlinked
 // deployment directory like /var/www/PlantSwipe/plant-swipe.

@@ -52,6 +52,7 @@
     "lodash.throttle": "^4.1.1",
     "lucide-react": "^0.542.0",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "openai": "^6.8.1",
     "postgres": "^3.4.7",
     "react": "^19.1.1",
