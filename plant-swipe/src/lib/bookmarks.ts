@@ -32,8 +32,13 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
 
   // For each bookmark, we might want to fetch a few plant images for the collage
   // To avoid N+1 queries, we can collect all unique plant IDs first
-  // Filter out invalid IDs (must be valid UUIDs)
+  // Accept both UUIDs and numeric IDs (for legacy plants)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const numericIdRegex = /^\d+$/
+  const isValidPlantId = (id: string): boolean => {
+    return uuidRegex.test(id) || numericIdRegex.test(id)
+  }
+  
   const allPlantIds = new Set<string>()
   data?.forEach((b: any) => {
     if (b.items && Array.isArray(b.items)) {
@@ -41,8 +46,8 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
         // Filter out null, undefined, or empty plant_ids
         if (i && i.plant_id != null && i.plant_id !== '') {
           const plantId = String(i.plant_id).trim()
-          // Only add valid UUIDs
-          if (plantId && plantId !== 'null' && plantId !== 'undefined' && uuidRegex.test(plantId)) {
+          // Accept valid UUIDs or numeric IDs (for legacy plants like ID 0)
+          if (plantId && plantId !== 'null' && plantId !== 'undefined' && isValidPlantId(plantId)) {
             allPlantIds.add(plantId)
           }
         }
@@ -73,7 +78,8 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
           plantImages.forEach((img: any) => {
             if (!img || !img.plant_id || !img.link) return
             const pid = String(img.plant_id).trim()
-            if (!pid || !uuidRegex.test(pid)) return
+            // Accept both UUIDs and numeric IDs
+            if (!pid || !isValidPlantId(pid)) return
             const link = String(img.link).trim()
             if (!link) return
             
@@ -122,16 +128,16 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
     const validItemsForCount = (b.items || []).filter((i: any) => {
       if (!i || i.plant_id == null || i.plant_id === '') return false
       const plantId = String(i.plant_id).trim()
-      return plantId && plantId !== 'null' && plantId !== 'undefined' && uuidRegex.test(plantId)
+      return plantId && plantId !== 'null' && plantId !== 'undefined' && isValidPlantId(plantId)
     })
     const originalCount = validItemsForCount.length
     
-    // Filter items to only include valid UUIDs for image fetching
+    // Filter items to only include valid IDs (UUIDs or numeric) for image fetching
     const validItems = (b.items || [])
       .filter((i: any) => {
         if (!i || i.plant_id == null || i.plant_id === '') return false
         const plantId = String(i.plant_id).trim()
-        return plantId && plantId !== 'null' && plantId !== 'undefined' && uuidRegex.test(plantId)
+        return plantId && plantId !== 'null' && plantId !== 'undefined' && isValidPlantId(plantId)
       })
       .map((i: any) => ({
         id: i.id,
@@ -206,9 +212,15 @@ export async function deleteBookmark(bookmarkId: string): Promise<void> {
 }
 
 export async function addPlantToBookmark(bookmarkId: string, plantId: string): Promise<BookmarkItem> {
+  // Ensure plantId is a valid string (handles numeric IDs like "0" for legacy plants)
+  const validPlantId = String(plantId).trim()
+  if (!validPlantId || validPlantId === 'null' || validPlantId === 'undefined') {
+    throw new Error('Invalid plant ID')
+  }
+  
   const { data, error } = await supabase
     .from('bookmark_items')
-    .insert({ bookmark_id: bookmarkId, plant_id: plantId })
+    .insert({ bookmark_id: bookmarkId, plant_id: validPlantId })
     .select()
     .single()
 
