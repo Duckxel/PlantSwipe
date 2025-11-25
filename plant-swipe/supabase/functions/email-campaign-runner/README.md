@@ -11,7 +11,7 @@ Configure these variables in the Supabase dashboard (`Project Settings → Funct
 | `SUPABASE_URL` | Supabase project URL (injected automatically when deploying via CLI) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key so the function can read auth users and update tables |
 | `RESEND_API_KEY` | Resend API key (alternatively `EMAIL_CAMPAIGN_RESEND_KEY` or `SUPABASE_RESEND_API_KEY`) |
-| `EMAIL_CAMPAIGN_FROM` | Friendly from header, e.g. `Plant Swipe <support@aphylia.app>` (falls back to `RESEND_FROM`) |
+| `EMAIL_CAMPAIGN_FROM` | Friendly from header, e.g. `Plant Swipe <info@aphylia.app>` (falls back to `RESEND_FROM`) |
 | `EMAIL_CAMPAIGN_REPLY_TO` | Optional reply-to email |
 | `EMAIL_CAMPAIGN_BATCH_SIZE` | Optional max recipients per Resend batch (default 40, max 100) |
 
