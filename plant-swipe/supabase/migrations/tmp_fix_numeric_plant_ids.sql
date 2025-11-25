@@ -81,19 +81,41 @@ END $$;
 --   - lower(name)
 --   - lower(scientific_name)  [may exist in DB]
 -- 
--- We must:
--- 1. Rename old plants to free up the unique values
--- 2. Check if another plant (not being migrated) already uses the same values
--- 3. If conflict exists with external plant, set to NULL in migration table
+-- IMPORTANT ORDER OF OPERATIONS:
+-- 1. FIRST rename old plants to free up the unique values
+-- 2. THEN check if another plant still uses the same values
+-- 3. If conflict exists, modify migration table values
 
--- Step 1.5a: Check for conflicts with OTHER plants (not being migrated)
+-- Step 1.5a: FIRST - Rename the original plants to free up unique values
+DO $$
+DECLARE
+    affected integer;
+BEGIN
+    RAISE NOTICE 'Step 1.5a: Renaming original plants to free up unique values...';
+    
+    UPDATE public.plants p
+    SET 
+        name = p.name || ' [TO-DELETE-' || p.id || ']',
+        scientific_name = CASE 
+            WHEN p.scientific_name IS NOT NULL 
+            THEN p.scientific_name || ' [TO-DELETE-' || p.id || ']'
+            ELSE NULL 
+        END
+    FROM plant_id_migration m
+    WHERE p.id = m.old_id;
+    
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    RAISE NOTICE 'Step 1.5a: Renamed % original plant(s)', affected;
+END $$;
+
+-- Step 1.5b: THEN - Check for conflicts with OTHER plants (after old ones are renamed)
 DO $$
 DECLARE
     rec RECORD;
 BEGIN
-    RAISE NOTICE 'Checking for unique constraint conflicts...';
+    RAISE NOTICE 'Step 1.5b: Checking for remaining unique constraint conflicts...';
     
-    -- Check scientific_name conflicts with other plants
+    -- Check scientific_name conflicts with other plants (old ones are now renamed, so this checks truly external conflicts)
     FOR rec IN 
         SELECT m.old_id, m.scientific_name
         FROM plant_id_migration m
@@ -101,7 +123,6 @@ BEGIN
         AND EXISTS (
             SELECT 1 FROM public.plants p 
             WHERE lower(p.scientific_name) = lower(m.scientific_name)
-            AND p.id NOT IN (SELECT old_id FROM plant_id_migration)
         )
     LOOP
         RAISE NOTICE 'WARNING: scientific_name "%" conflicts with another plant. Will be set to NULL for new plant (old_id: %)', 
@@ -139,7 +160,6 @@ BEGIN
         AND EXISTS (
             SELECT 1 FROM public.plants p 
             WHERE lower(p.name) = lower(m.plant_name)
-            AND p.id NOT IN (SELECT old_id FROM plant_id_migration)
         )
     LOOP
         RAISE NOTICE 'WARNING: name "%" conflicts with another plant. Will append UUID suffix (old_id: %)', 
@@ -170,26 +190,8 @@ BEGIN
             WHERE lower(m2.plant_name) = lower(rec.plant_name)
         );
     END LOOP;
-END $$;
-
--- Step 1.5b: Rename the original plants to free up unique values
-DO $$
-DECLARE
-    affected integer;
-BEGIN
-    UPDATE public.plants p
-    SET 
-        name = p.name || ' [OLD-' || p.id || ']',
-        scientific_name = CASE 
-            WHEN p.scientific_name IS NOT NULL 
-            THEN p.scientific_name || ' [OLD-' || p.id || ']'
-            ELSE NULL 
-        END
-    FROM plant_id_migration m
-    WHERE p.id = m.old_id;
     
-    GET DIAGNOSTICS affected = ROW_COUNT;
-    RAISE NOTICE 'Step 1.5b: Renamed % original plant(s) to free up unique values', affected;
+    RAISE NOTICE 'Step 1.5b: Conflict check complete';
 END $$;
 
 -- ============================================================================
