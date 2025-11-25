@@ -21,7 +21,7 @@ import {
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabaseClient"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation, Link } from "react-router-dom"
 
 type EmailTemplate = {
   id: string
@@ -143,7 +143,8 @@ export const AdminEmailsPanel: React.FC = () => {
   const [campaignSaving, setCampaignSaving] = React.useState(false)
   const [sheetOpen, setSheetOpen] = React.useState(false)
 
-  const [activeView, setActiveView] = React.useState<"campaigns" | "templates">("campaigns")
+  const location = useLocation()
+  const activeView = location.pathname.includes("/templates") ? "templates" : "campaigns"
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
 
   const loadTemplates = React.useCallback(async () => {
@@ -310,35 +311,29 @@ export const AdminEmailsPanel: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Menu / Tabs */}
-      <div className="flex items-center gap-4 border-b border-stone-200 dark:border-stone-700 pb-2 mb-6">
-        <button
-          onClick={() => setActiveView("campaigns")}
-          className={cn(
-            "px-4 py-2 text-sm font-medium transition-colors relative",
-            activeView === "campaigns"
-              ? "text-stone-900 dark:text-stone-100"
-              : "text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200"
-          )}
-        >
-          Campaigns
-          {activeView === "campaigns" && (
-            <span className="absolute bottom-[-9px] left-0 right-0 h-[2px] bg-stone-900 dark:bg-stone-100" />
-          )}
-        </button>
-        <button
-          onClick={() => setActiveView("templates")}
-          className={cn(
-            "px-4 py-2 text-sm font-medium transition-colors relative",
-            activeView === "templates"
-              ? "text-stone-900 dark:text-stone-100"
-              : "text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200"
-          )}
-        >
-          Templates
-          {activeView === "templates" && (
-            <span className="absolute bottom-[-9px] left-0 right-0 h-[2px] bg-stone-900 dark:bg-stone-100" />
-          )}
-        </button>
+      <div className="flex justify-center mb-6">
+        <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
+          <Link
+            to="/admin/emails"
+            className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
+              activeView === "campaigns"
+                ? "bg-emerald-600 text-white shadow"
+                : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
+            }`}
+          >
+            Campaigns
+          </Link>
+          <Link
+            to="/admin/emails/templates"
+            className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
+              activeView === "templates"
+                ? "bg-emerald-600 text-white shadow"
+                : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"
+            }`}
+          >
+            Templates
+          </Link>
+        </div>
       </div>
 
       {activeView === "campaigns" && (
