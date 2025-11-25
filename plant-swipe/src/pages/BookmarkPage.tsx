@@ -135,7 +135,7 @@ export const BookmarkPage = () => {
       <motion.section 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="relative overflow-hidden"
+        className="relative overflow-hidden mx-4 mt-4 rounded-[32px]"
       >
         {/* Background with gradient and blur */}
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/80 via-white to-stone-50 dark:from-emerald-950/20 dark:via-[#1e1e1e] dark:to-[#171717]" />
