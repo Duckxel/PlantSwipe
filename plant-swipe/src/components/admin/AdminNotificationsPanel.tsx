@@ -92,6 +92,9 @@ type FormState = {
   customUserIds: string
 }
 
+// Default timezone for notification campaigns - must be defined before defaultFormState
+const DEFAULT_TIMEZONE = 'Europe/London'
+
 const defaultFormState = (): FormState => ({
   title: '',
   description: '',
@@ -111,9 +114,6 @@ const defaultFormState = (): FormState => ({
 const TEMPLATE_VARIABLES = [
   { variable: '{{user}}', description: 'User display name' },
 ]
-
-// Default timezone for notification campaigns
-const DEFAULT_TIMEZONE = 'Europe/London'
 
 function isoToInputValue(value?: string | null): string {
   if (!value) return ''
