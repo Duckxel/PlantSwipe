@@ -1,6 +1,6 @@
 import React from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Plus, Lock, Globe, Check, X } from 'lucide-react'
+import { Plus, Lock, Globe, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getUserBookmarks, addPlantToBookmark, removePlantFromBookmark } from '@/lib/bookmarks'
 import type { Bookmark } from '@/types/bookmark'
