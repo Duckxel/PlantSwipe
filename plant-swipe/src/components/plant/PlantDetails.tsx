@@ -25,9 +25,10 @@ interface PlantDetailsProps {
   liked?: boolean
   onToggleLike?: () => void
   onBookmark?: () => void
+  isBookmarked?: boolean
 }
 
-export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onToggleLike, onBookmark }) => {
+export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onToggleLike, onBookmark, isBookmarked = false }) => {
   const images = (plant.images || []).filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const activeImage = images[activeImageIndex] || null
@@ -303,12 +304,13 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
             <Button
               type="button"
               size="lg"
-              variant="secondary"
+              variant={isBookmarked ? "default" : "secondary"}
               className="rounded-full px-4 py-2 sm:px-5 sm:py-3 text-sm sm:text-base shadow-lg"
               onClick={onBookmark}
             >
-              <Bookmark className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="hidden sm:inline">Save</span>
+              <Bookmark className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" fill={isBookmarked ? "currentColor" : "none"} />
+              <span className="hidden sm:inline">{isBookmarked ? "Saved" : "Save"}</span>
+              <span className="sm:hidden">{isBookmarked ? "✓" : "○"}</span>
             </Button>
           )}
         </div>

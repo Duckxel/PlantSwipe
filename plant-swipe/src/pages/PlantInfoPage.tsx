@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
 import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
 import { supabase } from '@/lib/supabaseClient'
+import { getUserBookmarks } from '@/lib/bookmarks'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
@@ -269,6 +270,28 @@ const PlantInfoPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null)
   const [likedIds, setLikedIds] = React.useState<string[]>([])
   const [bookmarkOpen, setBookmarkOpen] = React.useState(false)
+  const [isBookmarked, setIsBookmarked] = React.useState(false)
+
+  const checkIfBookmarked = React.useCallback(async () => {
+    if (!user?.id || !plant?.id) {
+      setIsBookmarked(false)
+      return
+    }
+    try {
+      const bookmarks = await getUserBookmarks(user.id)
+      const isInAnyBookmark = bookmarks.some(b => 
+        b.items?.some(item => item.plant_id === plant.id)
+      )
+      setIsBookmarked(isInAnyBookmark)
+    } catch (e) {
+      console.error('Failed to check bookmarks:', e)
+      setIsBookmarked(false)
+    }
+  }, [user?.id, plant?.id])
+
+  React.useEffect(() => {
+    checkIfBookmarked()
+  }, [checkIfBookmarked])
 
   const fallbackTitle = t('seo.plant.fallbackTitle', { defaultValue: 'Plant encyclopedia entry' })
   const fallbackDescription = t('seo.plant.fallbackDescription', {
@@ -388,6 +411,7 @@ const PlantInfoPage: React.FC = () => {
         liked={likedIds.includes(plant.id)} 
         onToggleLike={toggleLiked} 
         onBookmark={handleBookmark}
+        isBookmarked={isBookmarked}
       />
       <MoreInformationSection plant={plant} />
       
@@ -396,7 +420,8 @@ const PlantInfoPage: React.FC = () => {
           open={bookmarkOpen} 
           onOpenChange={setBookmarkOpen} 
           plantId={plant.id} 
-          userId={user.id} 
+          userId={user.id}
+          onAdded={checkIfBookmarked}
         />
       )}
     </div>

@@ -12,9 +12,10 @@ interface AddToBookmarkDialogProps {
   onOpenChange: (open: boolean) => void
   plantId: string
   userId: string
+  onAdded?: () => void
 }
 
-export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, onOpenChange, plantId, userId }) => {
+export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, onOpenChange, plantId, userId, onAdded }) => {
   const { t } = useTranslation('common')
   const [bookmarks, setBookmarks] = React.useState<Bookmark[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -44,9 +45,12 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
     setAddingToId(bookmark.id)
     try {
       await addPlantToBookmark(bookmark.id, plantId)
+      onAdded?.()
       onOpenChange(false)
     } catch (e: any) {
        if (e.message?.includes('unique constraint') || e.message?.includes('duplicate')) {
+         // Already in bookmark, just refresh state and close
+         onAdded?.()
          onOpenChange(false)
        } else {
          console.error(e)
@@ -130,7 +134,10 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
         open={createOpen} 
         onOpenChange={setCreateOpen} 
         userId={userId}
-        onSaved={fetchBookmarks}
+        onSaved={() => {
+          fetchBookmarks()
+          // After creating a new bookmark, the dialog will close and user can add plant to it
+        }}
     />
     </>
   )
