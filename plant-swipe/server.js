@@ -20,7 +20,7 @@ import { zodResponseFormat } from 'openai/helpers/zod'
 import multer from 'multer'
 import sharp from 'sharp'
 import webpush from 'web-push'
-
+import cron from 'node-cron'
 
 dotenv.config()
 // Optionally load server-only secrets from .env.server (ignored if missing)
@@ -61,6 +61,145 @@ try {
 } catch (err) {
   console.warn('[server] Failed to load AI field prompts JSON:', err?.message || err)
   aiFieldPromptsTemplate = {}
+}
+
+// --- Scheduled Tasks ---
+// Local campaign runner (avoids Edge Function auth complexity)
+cron.schedule('* * * * *', async () => {
+  if (!sql) return
+  try {
+    await processEmailCampaigns()
+  } catch (err) {
+    console.error('[campaign-runner] Error:', err)
+  }
+})
+
+async function processEmailCampaigns() {
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+  if (!apiKey) return
+
+  // 1. Lock and fetch a campaign
+  const campaigns = await sql`
+    update public.admin_email_campaigns
+    set status = 'running', send_started_at = now(), send_error = null
+    where id = (
+      select id from public.admin_email_campaigns
+      where status = 'scheduled'
+      and scheduled_for <= now()
+      order by scheduled_for asc
+      limit 1
+      for update skip locked
+    )
+    returning *
+  `
+
+  if (!campaigns || campaigns.length === 0) return
+  const campaign = campaigns[0]
+  console.log('[campaign-runner] Starting campaign:', campaign.title)
+
+  try {
+    // 2. Fetch recipients (direct DB access)
+    const recipients = await sql`
+      select
+        au.id,
+        au.email,
+        coalesce(p.display_name, au.raw_user_meta_data->>'full_name', split_part(au.email, '@', 1)) as display_name
+      from auth.users au
+      left join public.profiles p on p.id = au.id
+      where (au.email_confirmed_at is not null or au.confirmed_at is not null)
+      limit 5000
+    `
+
+    if (!recipients || recipients.length === 0) {
+       await sql`
+         update public.admin_email_campaigns
+         set status = 'failed', send_completed_at = now(), send_error = 'No recipients found'
+         where id = ${campaign.id}
+       `
+       return
+    }
+
+    // 3. Send batches
+    const batchSize = 40
+    let sentCount = 0
+    let failedCount = 0
+    const summaryBatches = []
+    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Plant Swipe <support@aphylia.app>'
+
+    for (let i = 0; i < recipients.length; i += batchSize) {
+      const batch = recipients.slice(i, i + batchSize)
+      const payload = batch.map(r => {
+         const context = { user: r.display_name || 'User' }
+         const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] || `{{${k}}}`)
+         const html = replaceVars(campaign.body_html)
+         const subject = replaceVars(campaign.subject)
+         // Simple strip tags for text version
+         const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+
+         return {
+           from: fromEmail,
+           to: r.email,
+           subject: subject,
+           html: html,
+           text: text,
+           headers: { 'X-Campaign-Id': campaign.id },
+           tags: [{ name: 'campaign_id', value: campaign.id }]
+         }
+      })
+
+      // Use global fetch (Node 18+)
+      const res = await fetch('https://api.resend.com/emails/batch', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (res.ok) {
+        sentCount += batch.length
+        summaryBatches.push({ index: i, size: batch.length, status: 'sent' })
+      } else {
+        failedCount += batch.length
+        const txt = await res.text()
+        summaryBatches.push({ index: i, size: batch.length, status: 'failed', error: txt })
+        console.error('[campaign-runner] Batch failed:', txt)
+      }
+    }
+
+    // 4. Finalize
+    const finalStatus = failedCount === 0 ? 'sent' : (sentCount > 0 ? 'partial' : 'failed')
+    const summary = {
+      totalRecipients: recipients.length,
+      sentCount,
+      failedCount,
+      batches: summaryBatches
+    }
+
+    await sql`
+      update public.admin_email_campaigns
+      set status = ${finalStatus},
+          send_completed_at = now(),
+          sent_count = ${sentCount},
+          failed_count = ${failedCount},
+          send_summary = ${sql.json(summary)}
+      where id = ${campaign.id}
+    `
+
+    if (campaign.template_id && sentCount > 0) {
+      await sql`update public.admin_email_templates set last_used_at = now() where id = ${campaign.template_id}`
+    }
+    console.log('[campaign-runner] Completed:', finalStatus)
+
+  } catch (err) {
+    console.error('[campaign-runner] Exception:', err)
+    await sql`
+      update public.admin_email_campaigns
+      set status = 'failed', send_completed_at = now(), send_error = ${String(err)}
+      where id = ${campaign.id}
+    `
+  }
 }
 
 // Resolve the real Git repository root, even when running under a symlinked
@@ -4501,7 +4640,7 @@ app.post('/api/admin/email-templates', async (req, res) => {
         ${previewText},
         ${parsed.bodyHtml},
         ${bodyJsonFragment},
-        ${sql.json(variables)},
+        ${variables},
         ${isActive},
         ${adminId},
         ${adminId},
@@ -4564,7 +4703,7 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
           preview_text = ${previewText},
           body_html = ${parsed.bodyHtml},
           body_json = ${bodyJsonFragment},
-          variables = ${sql.json(variables)},
+          variables = ${variables},
           is_active = ${isActive},
           updated_by = ${adminId},
           updated_at = now()
@@ -4750,7 +4889,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         ${previewText},
         ${template.body_html},
         ${bodyJsonFragment},
-        ${sql.json(variables)},
+        ${variables},
         ${timezone || 'UTC'},
         ${scheduledFor},
         'scheduled',
@@ -4887,7 +5026,7 @@ app.put('/api/admin/email-campaigns/:id', async (req, res) => {
           preview_text = ${previewText},
           body_html = ${bodyHtml},
           body_json = ${bodyJsonFragment},
-          variables = ${sql.json(variablesSnapshot)},
+          variables = ${variablesSnapshot},
           template_id = ${templateId},
           template_version = ${templateVersion},
           timezone = ${timezone},

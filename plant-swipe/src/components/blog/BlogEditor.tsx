@@ -14,6 +14,7 @@ import Superscript from "@tiptap/extension-superscript"
 import Subscript from "@tiptap/extension-subscript"
 import { Selection } from "@tiptap/extensions"
 import Image from "@tiptap/extension-image"
+import GapCursor from "@tiptap/extension-gapcursor"
 import type { Extension, JSONContent } from "@tiptap/core"
 
 import { cn } from "@/lib/utils"
@@ -209,6 +210,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
         Subscript,
         Selection,
         Image,
+        GapCursor,
         HorizontalRule,
         ImageUploadNode.configure({
           accept: "image/*",

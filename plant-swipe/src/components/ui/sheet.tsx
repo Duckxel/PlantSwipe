@@ -98,6 +98,16 @@ const SheetContent = React.forwardRef<
     const el = contentRef.current
     if (!el) return
     
+    // Check if target is interactive
+    const target = e.target as HTMLElement;
+    if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'LABEL', 'OPTION'].includes(target.tagName) || 
+        target.closest('button') || 
+        target.closest('a') ||
+        target.closest('[role="button"]') ||
+        target.closest('.tiptap-editor')) { // Don't drag when interacting with editor
+        return;
+    }
+    
     const rect = el.getBoundingClientRect()
     const isTopArea = e.clientY - rect.top < 60 // Top 60px is draggable area
     const isScrolledToTop = el.scrollTop <= 0

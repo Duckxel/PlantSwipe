@@ -6,6 +6,63 @@
 create extension if not exists pgcrypto;
 -- Optional: scheduling support
 create extension if not exists pg_cron;
+-- Optional: network requests (for edge functions)
+create extension if not exists pg_net;
+
+-- ========== Secrets Management (for DB-initiated edge functions) ==========
+create table if not exists public.admin_secrets (
+  key text primary key,
+  value text not null,
+  description text,
+  updated_at timestamptz default now()
+);
+alter table public.admin_secrets enable row level security;
+-- Only allows service_role to access
+drop policy if exists "Service role only" on public.admin_secrets;
+create policy "Service role only" on public.admin_secrets for all using (false);
+
+-- ========== Helper: Invoke Edge Function ==========
+create or replace function public.invoke_edge_function(
+  function_name text,
+  payload jsonb default '{}'::jsonb
+) returns uuid as $$
+declare
+  project_url text;
+  service_key text;
+  request_id uuid;
+begin
+  select value into project_url from public.admin_secrets where key = 'SUPABASE_URL';
+  select value into service_key from public.admin_secrets where key = 'SUPABASE_SERVICE_ROLE_KEY';
+
+  if project_url is null or service_key is null then
+    return null;
+  end if;
+
+  -- Ensure URL ends with /functions/v1/
+  if not project_url like '%/functions/v1%' then
+     project_url := trim(both '/' from project_url) || '/functions/v1';
+  end if;
+  
+  select net.http_post(
+    url := project_url || '/' || function_name,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || service_key
+    ),
+    body := payload
+  ) into request_id;
+
+  return request_id;
+end;
+$$ language plpgsql security definer;
+
+-- ========== Scheduled Tasks ==========
+-- Email Campaign Runner (every minute)
+select cron.schedule(
+  'invoke-email-campaign-runner',
+  '* * * * *',
+  $$select public.invoke_edge_function('email-campaign-runner')$$
+);
 
 -- ========== Public schema hard cleanup (drops rogue tables) ==========
 do $$ declare
@@ -3471,6 +3528,87 @@ do $$ begin
   end if;
   create policy pan_admin_delete on public.profile_admin_notes for delete to authenticated
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Admin Email Templates
+create table if not exists public.admin_email_templates (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  subject text not null,
+  description text,
+  preview_text text,
+  body_html text not null,
+  body_json jsonb,
+  variables text[] default '{}',
+  is_active boolean default true,
+  version integer default 1,
+  last_used_at timestamptz,
+  campaign_count integer default 0,
+  created_by uuid references public.profiles(id) on delete set null,
+  updated_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Ensure columns exist if table was already created
+alter table public.admin_email_templates add column if not exists created_by uuid references public.profiles(id) on delete set null;
+alter table public.admin_email_templates add column if not exists updated_by uuid references public.profiles(id) on delete set null;
+
+alter table public.admin_email_templates enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_email_templates' and policyname='aet_admin_all') then
+    drop policy aet_admin_all on public.admin_email_templates;
+  end if;
+  create policy aet_admin_all on public.admin_email_templates for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Admin Email Campaigns
+create table if not exists public.admin_email_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  status text not null default 'draft',
+  template_id uuid references public.admin_email_templates(id) on delete set null,
+  template_version integer,
+  template_title text,
+  subject text not null,
+  preview_text text,
+  body_html text,
+  body_json jsonb,
+  variables text[] default '{}',
+  timezone text default 'UTC',
+  scheduled_for timestamptz,
+  total_recipients integer default 0,
+  sent_count integer default 0,
+  failed_count integer default 0,
+  send_error text,
+  send_started_at timestamptz,
+  send_completed_at timestamptz,
+  created_by uuid references public.profiles(id) on delete set null,
+  updated_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Ensure columns exist if table was already created
+alter table public.admin_email_campaigns add column if not exists template_version integer;
+alter table public.admin_email_campaigns add column if not exists body_html text;
+alter table public.admin_email_campaigns add column if not exists body_json jsonb;
+alter table public.admin_email_campaigns add column if not exists created_by uuid references public.profiles(id) on delete set null;
+alter table public.admin_email_campaigns add column if not exists updated_by uuid references public.profiles(id) on delete set null;
+
+alter table public.admin_email_campaigns enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_email_campaigns' and policyname='aec_admin_all') then
+    drop policy aec_admin_all on public.admin_email_campaigns;
+  end if;
+  create policy aec_admin_all on public.admin_email_campaigns for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
 -- Captures per-garden human-readable activity events for the current day view

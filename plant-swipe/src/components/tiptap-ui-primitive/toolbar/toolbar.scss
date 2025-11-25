@@ -13,6 +13,7 @@
 .tiptap-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap; /* Allow wrapping on smaller screens or if toolbar is long */
   gap: 0.25rem;
 
   &-group {

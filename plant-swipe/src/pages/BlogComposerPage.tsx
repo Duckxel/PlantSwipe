@@ -411,8 +411,7 @@ export default function BlogComposerPage() {
 
       {!loadingPost && !postsError && (
         <div className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-2">
+          <div className="space-y-2">
               <Label htmlFor="blog-title">{t("blogPage.editor.titleLabel", { defaultValue: "Title" })}</Label>
               <Input
                 id="blog-title"
@@ -464,9 +463,7 @@ export default function BlogComposerPage() {
                 </div>
               )}
             </div>
-          </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="blog-cover">{t("blogPage.editor.coverLabel", { defaultValue: "Cover image URL" })}</Label>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -539,7 +536,6 @@ export default function BlogComposerPage() {
               </div>
               {summaryError && <p className="text-xs text-red-500">{summaryError}</p>}
             </div>
-          </div>
 
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-3 text-xs text-stone-500 dark:text-stone-400">
             {t("blogPage.editor.canvasHelper", {
