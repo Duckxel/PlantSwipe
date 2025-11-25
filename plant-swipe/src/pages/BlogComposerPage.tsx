@@ -411,8 +411,7 @@ export default function BlogComposerPage() {
 
       {!loadingPost && !postsError && (
         <div className="space-y-6">
-          <div className="space-y-6">
-            <div className="space-y-2">
+          <div className="space-y-2">
               <Label htmlFor="blog-title">{t("blogPage.editor.titleLabel", { defaultValue: "Title" })}</Label>
               <Input
                 id="blog-title"
