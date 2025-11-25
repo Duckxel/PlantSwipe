@@ -5,7 +5,10 @@ import { DimensionCube } from '@/components/plant/DimensionCube'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
+import { useAuthActions } from '@/context/AuthActionsContext'
+import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
 import { supabase } from '@/lib/supabaseClient'
+import { getUserBookmarks } from '@/lib/bookmarks'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
@@ -259,12 +262,36 @@ const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useLanguageNavigate()
   const { user, profile, refreshProfile } = useAuth()
+  const { openLogin } = useAuthActions()
   const { t } = useTranslation('common')
   const currentLang = useLanguage()
   const [plant, setPlant] = React.useState<Plant | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [likedIds, setLikedIds] = React.useState<string[]>([])
+  const [bookmarkOpen, setBookmarkOpen] = React.useState(false)
+  const [isBookmarked, setIsBookmarked] = React.useState(false)
+
+  const checkIfBookmarked = React.useCallback(async () => {
+    if (!user?.id || !plant?.id) {
+      setIsBookmarked(false)
+      return
+    }
+    try {
+      const bookmarks = await getUserBookmarks(user.id)
+      const isInAnyBookmark = bookmarks.some(b => 
+        b.items?.some(item => item.plant_id === plant.id)
+      )
+      setIsBookmarked(isInAnyBookmark)
+    } catch (e) {
+      console.error('Failed to check bookmarks:', e)
+      setIsBookmarked(false)
+    }
+  }, [user?.id, plant?.id])
+
+  React.useEffect(() => {
+    checkIfBookmarked()
+  }, [checkIfBookmarked])
 
   const fallbackTitle = t('seo.plant.fallbackTitle', { defaultValue: 'Plant encyclopedia entry' })
   const fallbackDescription = t('seo.plant.fallbackDescription', {
@@ -341,6 +368,14 @@ const PlantInfoPage: React.FC = () => {
     navigate(`/plants/${plant.id}/edit`)
   }
 
+  const handleBookmark = () => {
+    if (!user) {
+      openLogin()
+      return
+    }
+    setBookmarkOpen(true)
+  }
+
   if (loading) {
     return <PlantInfoSkeleton label={t('common.loading', { defaultValue: 'Loading plant data' })} />
   }
@@ -371,8 +406,24 @@ const PlantInfoPage: React.FC = () => {
           </Button>
         )}
       </div>
-      <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
+      <PlantDetails 
+        plant={plant} 
+        liked={likedIds.includes(plant.id)} 
+        onToggleLike={toggleLiked} 
+        onBookmark={handleBookmark}
+        isBookmarked={isBookmarked}
+      />
       <MoreInformationSection plant={plant} />
+      
+      {user?.id && plant && (
+        <AddToBookmarkDialog 
+          open={bookmarkOpen} 
+          onOpenChange={setBookmarkOpen} 
+          plantId={plant.id} 
+          userId={user.id}
+          onAdded={checkIfBookmarked}
+        />
+      )}
     </div>
   )
 }

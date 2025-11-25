@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { BookmarksSection } from "@/components/profile/BookmarksSection"
 
 type PublicProfile = {
   id: string
@@ -304,7 +305,7 @@ export default function PublicProfilePage() {
     return () => { cancelled = true }
   }, [displayParam, user?.id])
 
-  const isOwner = user?.id && pp?.id && user.id === pp.id
+  const isOwner = Boolean(user?.id && pp?.id && user.id === pp.id)
 
   React.useEffect(() => {
     setSearchTerm('')
@@ -1043,6 +1044,8 @@ export default function PublicProfilePage() {
               </CardContent>
             </Card>
           </div>
+          
+          <BookmarksSection userId={pp.id} isOwner={isOwner} />
             </>
           )}
 
