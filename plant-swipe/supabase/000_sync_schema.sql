@@ -3463,6 +3463,10 @@ create table if not exists public.admin_email_templates (
   updated_at timestamptz default now()
 );
 
+-- Ensure columns exist if table was already created
+alter table public.admin_email_templates add column if not exists created_by uuid references public.profiles(id) on delete set null;
+alter table public.admin_email_templates add column if not exists updated_by uuid references public.profiles(id) on delete set null;
+
 alter table public.admin_email_templates enable row level security;
 
 do $$ begin
@@ -3501,6 +3505,13 @@ create table if not exists public.admin_email_campaigns (
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- Ensure columns exist if table was already created
+alter table public.admin_email_campaigns add column if not exists template_version integer;
+alter table public.admin_email_campaigns add column if not exists body_html text;
+alter table public.admin_email_campaigns add column if not exists body_json jsonb;
+alter table public.admin_email_campaigns add column if not exists created_by uuid references public.profiles(id) on delete set null;
+alter table public.admin_email_campaigns add column if not exists updated_by uuid references public.profiles(id) on delete set null;
 
 alter table public.admin_email_campaigns enable row level security;
 
