@@ -1,5 +1,5 @@
 import React from "react"
-import { CloudUpload, ImageIcon } from "lucide-react"
+import { CloudUpload, ImageIcon, FolderOpen, HardDrive } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { AdminUploadPanel } from "@/components/admin/AdminUploadPanel"
@@ -11,19 +11,21 @@ type MediaBucketView = "utility" | "photos"
 const sectionTabs: Array<{
   key: UploadMediaSection
   label: string
+  description: string
   Icon: React.ComponentType<{ className?: string }>
   path: string
 }> = [
-  { key: "upload", label: "Upload", Icon: CloudUpload, path: "/admin/upload" },
-  { key: "media", label: "Media library", Icon: ImageIcon, path: "/admin/upload/library" },
+  { key: "upload", label: "Upload", description: "Add new files", Icon: CloudUpload, path: "/admin/upload" },
+  { key: "media", label: "Library", description: "Browse files", Icon: ImageIcon, path: "/admin/upload/library" },
 ]
 
 const mediaBucketOptions: Array<{
   key: MediaBucketView
   label: string
+  icon: React.ComponentType<{ className?: string }>
 }> = [
-  { key: "utility", label: "Utility" },
-  { key: "photos", label: "Photos" },
+  { key: "utility", label: "Utility", icon: FolderOpen },
+  { key: "photos", label: "Photos", icon: HardDrive },
 ]
 
 export const AdminUploadMediaPanel: React.FC = () => {
@@ -47,70 +49,69 @@ export const AdminUploadMediaPanel: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-stone-200 bg-white/90 p-5 shadow-sm dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
-        <div className="flex flex-col gap-4">
-          <div>
-            <div className="text-sm font-semibold tracking-wide text-stone-600 dark:text-stone-200">
-              Upload and Media
-            </div>
-            <p className="text-xs text-stone-500 dark:text-stone-300">
-              Switch between uploading new assets or reviewing what was already uploaded.
-            </p>
-          </div>
-          <div className="inline-flex flex-wrap gap-2">
-            <div className="inline-flex rounded-full bg-stone-100 p-1 shadow-inner dark:bg-[#2d2d30]">
-              {sectionTabs.map(({ key, label, Icon, path }) => (
-                <Link
-                  key={key}
-                  to={path}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
-                    section === key
-                      ? "bg-white text-emerald-600 shadow-sm dark:bg-white/90"
-                      : "text-stone-600 hover:text-black dark:text-stone-200 dark:hover:text-white",
-                  )}
-                  aria-pressed={section === key}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </Link>
-              ))}
-            </div>
-          </div>
+      {/* Header with Navigation */}
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-stone-900 dark:text-white">Media Center</h1>
+          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+            Upload and manage media files
+          </p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-2">
+          {sectionTabs.map(({ key, label, Icon, path }) => (
+            <Link
+              key={key}
+              to={path}
+              className={cn(
+                "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all",
+                section === key
+                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </Link>
+          ))}
         </div>
       </div>
 
+      {/* Content */}
       {section === "upload" && <AdminUploadPanel />}
 
       {section === "media" && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-dashed border-stone-200 bg-white/80 px-4 py-3 dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Bucket
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {mediaBucketOptions.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={cn(
-                      "rounded-full px-3 py-1.5 text-sm transition",
-                      bucketView === key
-                        ? "bg-emerald-600 text-white shadow"
-                        : "text-stone-700 hover:text-black dark:text-stone-200 dark:hover:text-white",
-                    )}
-                    onClick={() => setBucketView(key)}
-                    aria-pressed={bucketView === key}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+        <div className="space-y-6">
+          {/* Bucket Filter */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+              Bucket:
+            </span>
+            <div className="flex gap-2">
+              {mediaBucketOptions.map(({ key, label, icon: BucketIcon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                    bucketView === key
+                      ? "bg-emerald-600 text-white shadow-md"
+                      : "bg-white dark:bg-[#1e1e20] text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-800"
+                  )}
+                  onClick={() => setBucketView(key)}
+                >
+                  <BucketIcon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
-          <AdminMediaPanel filterBuckets={bucketFilters} filterLabel={bucketView === "utility" ? "Utility" : "Photos"} />
+          <AdminMediaPanel 
+            filterBuckets={bucketFilters} 
+            filterLabel={bucketView === "utility" ? "Utility" : "Photos"} 
+          />
         </div>
       )}
     </div>

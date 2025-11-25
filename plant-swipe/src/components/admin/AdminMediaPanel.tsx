@@ -7,11 +7,17 @@ import {
   Trash2,
   Copy,
   Check,
+  Search,
+  X,
+  Calendar,
+  HardDrive,
+  User,
+  FileImage,
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 
 type RuntimeEnv = {
   __ENV__?: Record<string, string | undefined>
@@ -56,17 +62,6 @@ function formatBytes(value?: number | null) {
   return `${(value / BYTES_IN_MB).toFixed(2)} MB`
 }
 
-function formatTimestamp(value?: string | null) {
-  if (!value) return "-"
-  try {
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return "-"
-    return date.toLocaleString()
-  } catch {
-    return "-"
-  }
-}
-
 function formatRelativeTime(value?: string | null) {
   if (!value) return "-"
   try {
@@ -95,6 +90,7 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
   const [error, setError] = React.useState<string | null>(null)
   const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = React.useState("")
   const runtimeEnv = (globalThis as typeof globalThis & RuntimeEnv).__ENV__
   const adminToken =
     import.meta.env?.VITE_ADMIN_STATIC_TOKEN ?? runtimeEnv?.VITE_ADMIN_STATIC_TOKEN
@@ -151,19 +147,19 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
     [adminToken, normalizedFilterBuckets],
   )
 
-    React.useEffect(() => {
-      fetchMedia().catch(() => {})
-    }, [fetchMedia])
+  React.useEffect(() => {
+    fetchMedia().catch(() => {})
+  }, [fetchMedia])
 
   const handleDelete = React.useCallback(
-      async (entry: MediaEntry) => {
-        const storageName =
-          entry.metadata?.storageName ||
-          entry.metadata?.displayName ||
-          entry.path
+    async (entry: MediaEntry) => {
+      const storageName =
+        entry.metadata?.storageName ||
+        entry.metadata?.displayName ||
+        entry.path
       if (
         !window.confirm(
-            `Delete "${storageName}"?\nThis will remove the optimized file from storage.`,
+          `Delete "${storageName}"?\nThis will remove the file from storage.`,
         )
       ) {
         return
@@ -217,212 +213,233 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
   }, [])
 
   const visibleEntries = React.useMemo(() => {
-    if (!normalizedFilterBuckets || normalizedFilterBuckets.length === 0) {
-      return entries
+    let filtered = entries
+    if (normalizedFilterBuckets && normalizedFilterBuckets.length > 0) {
+      filtered = entries.filter((entry) =>
+        entry.bucket
+          ? normalizedFilterBuckets.includes(entry.bucket.toLowerCase())
+          : false,
+      )
     }
-    return entries.filter((entry) =>
-      entry.bucket
-        ? normalizedFilterBuckets.includes(entry.bucket.toLowerCase())
-        : false,
-    )
-  }, [entries, normalizedFilterBuckets])
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter((entry) => {
+        const name = entry.metadata?.storageName || entry.metadata?.displayName || entry.path
+        return name.toLowerCase().includes(query) || 
+          entry.adminName?.toLowerCase().includes(query) ||
+          entry.adminEmail?.toLowerCase().includes(query)
+      })
+    }
+    return filtered
+  }, [entries, normalizedFilterBuckets, searchQuery])
 
   const hasBucketFilter =
     Array.isArray(normalizedFilterBuckets) && normalizedFilterBuckets.length > 0
-  const emptyStateMessage = hasBucketFilter
-    ? `No ${(filterLabel || "filtered").toLowerCase()} uploads found yet.`
-    : "No media uploads found yet."
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-2xl">
-        <CardContent className="p-6 space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="text-2xl font-semibold tracking-tight">Media library</div>
-                <p className="text-sm text-muted-foreground">
-                  Recent uploads to the Supabase bucket, including who uploaded them and
-                  file details.
-                </p>
-                {hasBucketFilter && (
-                  <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
-                    Showing {filterLabel || "filtered"} bucket
-                  </div>
-                )}
-              </div>
-            <Button
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
+            <FileImage className="h-5 w-5 text-emerald-600" />
+            Media Library
+          </h2>
+          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+            {hasBucketFilter && (
+              <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                {filterLabel || "Filtered"} bucket · {" "}
+              </span>
+            )}
+            {visibleEntries.length} file{visibleEntries.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-xl"
+          onClick={() => fetchMedia({ showSpinner: true })}
+          disabled={refreshing}
+        >
+          <RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Search */}
+      {entries.length > 0 && (
+        <div className="relative max-w-md">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+          <Input
+            type="text"
+            placeholder="Search files by name or uploader..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-11 pr-10 h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
+          />
+          {searchQuery && (
+            <button
               type="button"
-              variant="outline"
-              className="rounded-2xl"
-              onClick={() => fetchMedia({ showSpinner: true })}
-              disabled={refreshing}
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d]"
             >
-              <RefreshCw
-                className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </Button>
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-200">
+          {error}
+        </div>
+      )}
+
+      {/* Content */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>Loading media...</span>
           </div>
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200">
-              {error}
-            </div>
-          )}
-            {loading ? (
-              <div className="text-sm text-muted-foreground">Loading media uploads...</div>
-            ) : visibleEntries.length === 0 ? (
-              <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                {emptyStateMessage}
-              </div>
+        </div>
+      ) : visibleEntries.length === 0 ? (
+        <div className="rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-12 text-center">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-stone-100 dark:bg-[#2a2a2d] flex items-center justify-center mb-4">
+            {searchQuery ? (
+              <Search className="h-6 w-6 text-stone-400" />
             ) : (
-              <div className="space-y-4">
-                {visibleEntries.map((entry) => {
-                  const storageName =
-                    entry.metadata?.storageName ||
-                    entry.metadata?.displayName ||
-                    entry.path.split("/").filter(Boolean).pop() ||
-                    entry.path
-                  const shouldShorten = storageName.length > 15
-                  const shortName = shouldShorten
-                    ? `${storageName.slice(0, Math.max(3, 15 - 3))}...`
-                    : storageName
-                const displayLink =
-                  entry.url || `supabase://${entry.bucket}/${entry.path}`
-                const isImage =
-                  (entry.mimeType || entry.originalMimeType || "").startsWith(
-                    "image/",
-                  )
-                return (
-                  <div
-                    key={entry.id}
-                    className="rounded-2xl border bg-white/70 p-4 dark:border-[#3e3e42] dark:bg-[#1a1a1d]"
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div className="flex flex-1 items-center gap-3">
-                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-200 overflow-hidden">
-                            {isImage && entry.url ? (
-                              <div className="h-full w-full rounded-xl bg-muted">
-                                <img
-                                  src={entry.url}
-                                  alt={storageName}
-                                  className="h-full w-full object-cover"
-                                  loading="lazy"
-                                />
-                              </div>
-                            ) : (
-                              <ImageIcon className="h-5 w-5" />
-                            )}
-                          </div>
-                        <div className="min-w-0">
-                          <div
-                            className="truncate text-sm font-semibold"
-                            title={storageName}
-                          >
-                            {shortName}
-                          </div>
-                  <div className="text-xs text-muted-foreground space-x-1">
-                    <span>{entry.bucket}</span>
-                    <span>·</span>
-                    <span>{entry.mimeType || entry.originalMimeType || "-"}</span>
-                    {entry.metadata?.typeSegment && (
-                      <>
-                        <span>·</span>
-                        <span>{entry.metadata.typeSegment}</span>
-                      </>
-                    )}
-                  </div>
-                          <div className="text-xs text-muted-foreground">
-                            Uploaded by{" "}
-                            <span className="font-medium">
-                              {entry.adminName || entry.adminEmail || "Unknown"}
-                            </span>{" "}
-                            · {formatRelativeTime(entry.createdAt)}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-1 text-sm text-muted-foreground md:text-right">
-                        <div>
-                          Size:{" "}
-                          <span className="font-medium text-foreground">
-                            {formatBytes(entry.sizeBytes)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-2 md:items-end">
-                        <Input
-                          readOnly
-                          value={displayLink}
-                          onFocus={(e) => e.currentTarget.select()}
-                          className="rounded-2xl font-mono text-xs"
-                        />
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="rounded-2xl"
-                            onClick={() => handleCopy(entry.id, displayLink)}
-                            disabled={copiedId === entry.id}
-                          >
-                            {copiedId === entry.id ? (
-                              <>
-                                <Check className="mr-2 h-4 w-4" />
-                                Copied
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="mr-2 h-4 w-4" />
-                                Copy link
-                              </>
-                            )}
-                          </Button>
-                          {entry.url && (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="rounded-2xl"
-                            asChild
-                          >
-                            <a href={entry.url} target="_blank" rel="noreferrer">
-                              <ExternalLink className="mr-2 h-4 w-4" />
-                              Open
-                            </a>
-                          </Button>
-                          )}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="rounded-2xl"
-                          onClick={() => handleDelete(entry)}
-                          disabled={deletingId === entry.id}
-                        >
-                          {deletingId === entry.id ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Deleting...
-                            </>
-                          ) : (
-                            <>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </>
-                          )}
-                        </Button>
-                        <div className="text-xs text-muted-foreground">
-                          {formatTimestamp(entry.createdAt)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+              <ImageIcon className="h-6 w-6 text-stone-400" />
+            )}
+          </div>
+          <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">
+            {searchQuery ? "No results found" : "No media files yet"}
+          </h3>
+          <p className="text-sm text-stone-500 dark:text-stone-400">
+            {searchQuery 
+              ? `No files match "${searchQuery}"`
+              : hasBucketFilter 
+                ? `No ${(filterLabel || "filtered").toLowerCase()} uploads found.`
+                : "Upload some files to see them here."
+            }
+          </p>
+          {searchQuery && (
+            <Button variant="outline" onClick={() => setSearchQuery('')} className="rounded-xl mt-4">
+              Clear search
+            </Button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {visibleEntries.map((entry) => {
+            const storageName =
+              entry.metadata?.storageName ||
+              entry.metadata?.displayName ||
+              entry.path.split("/").filter(Boolean).pop() ||
+              entry.path
+            const displayLink = entry.url || `supabase://${entry.bucket}/${entry.path}`
+            const isImage = (entry.mimeType || entry.originalMimeType || "").startsWith("image/")
+            
+            return (
+              <div
+                key={entry.id}
+                className="group rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5"
+              >
+                {/* Image Preview */}
+                <div className="aspect-video bg-stone-100 dark:bg-[#2a2a2d] relative overflow-hidden">
+                  {isImage && entry.url ? (
+                    <img
+                      src={entry.url}
+                      alt={storageName}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="h-12 w-12 text-stone-300 dark:text-stone-600" />
+                    </div>
+                  )}
+                  
+                  {/* Overlay Actions */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center gap-2 p-4">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-lg bg-white/90 text-stone-900 hover:bg-white"
+                      onClick={() => handleCopy(entry.id, displayLink)}
+                      disabled={copiedId === entry.id}
+                    >
+                      {copiedId === entry.id ? (
+                        <>
+                          <Check className="mr-1.5 h-3.5 w-3.5" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="mr-1.5 h-3.5 w-3.5" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                    {entry.url && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="rounded-lg bg-white/90 text-stone-900 hover:bg-white"
+                        asChild
+                      >
+                        <a href={entry.url} target="_blank" rel="noreferrer">
+                          <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                          Open
+                        </a>
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-lg bg-red-500 text-white hover:bg-red-600"
+                      onClick={() => handleDelete(entry)}
+                      disabled={deletingId === entry.id}
+                    >
+                      {deletingId === entry.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="p-4">
+                  <h3 className="font-medium text-stone-900 dark:text-white truncate text-sm" title={storageName}>
+                    {storageName}
+                  </h3>
+                  
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
+                    <span className="flex items-center gap-1">
+                      <HardDrive className="h-3 w-3" />
+                      {formatBytes(entry.sizeBytes)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {formatRelativeTime(entry.createdAt)}
+                    </span>
+                  </div>
+                  
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-400">
+                    <User className="h-3 w-3" />
+                    <span className="truncate">
+                      {entry.adminName || entry.adminEmail || "Unknown"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
