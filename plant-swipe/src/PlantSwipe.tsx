@@ -2,6 +2,7 @@ import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
+import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
 import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -712,6 +713,18 @@ export default function PlantSwipe() {
     setAuthSubmitting(true)
     try {
       console.log('[auth] submit start', { mode: authMode })
+      
+      // Execute reCAPTCHA v3 Enterprise
+      let recaptchaToken: string | undefined
+      try {
+        const action = authMode === 'signup' ? 'signup' : 'login'
+        recaptchaToken = await executeRecaptcha(action)
+        console.log('[auth] reCAPTCHA token obtained')
+      } catch (recaptchaError) {
+        console.warn('[auth] reCAPTCHA execution failed', recaptchaError)
+        // Continue without token - backend will decide how to handle
+      }
+      
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
           console.warn('[auth] password mismatch')
@@ -725,7 +738,7 @@ export default function PlantSwipe() {
           setAuthSubmitting(false)
           return
         }
-        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, recaptchaToken })
         if (error) {
           console.error('[auth] signup error', error)
           setAuthError(error)
@@ -734,7 +747,7 @@ export default function PlantSwipe() {
         }
         console.log('[auth] signup ok')
       } else {
-        const { error } = await signIn({ email: authEmail, password: authPassword })
+        const { error } = await signIn({ email: authEmail, password: authPassword, recaptchaToken })
         if (error) {
           console.error('[auth] login error', error)
           setAuthError(error)

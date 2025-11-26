@@ -6802,6 +6802,87 @@ app.get('/api/banned/check', async (req, res) => {
   }
 })
 
+// reCAPTCHA Enterprise v3 verification endpoint
+const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY || process.env.VITE_RECAPTCHA_SECRET_KEY || ''
+const RECAPTCHA_SITE_KEY = '6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd'
+
+app.post('/api/recaptcha/verify', async (req, res) => {
+  try {
+    const { token, action } = req.body || {}
+    
+    if (!token) {
+      res.status(400).json({ success: false, error: 'Missing reCAPTCHA token' })
+      return
+    }
+    
+    if (!RECAPTCHA_SECRET_KEY) {
+      // If no secret key configured, log warning and allow request
+      // This enables development without reCAPTCHA verification
+      console.warn('[recaptcha] No secret key configured, skipping verification')
+      res.json({ success: true, score: 1.0, warning: 'verification_skipped' })
+      return
+    }
+
+    // Call Google reCAPTCHA Enterprise verification API
+    const verifyUrl = 'https://recaptchaenterprise.googleapis.com/v1/projects/' + 
+      (process.env.GOOGLE_CLOUD_PROJECT || 'aphylia') + 
+      '/assessments?key=' + RECAPTCHA_SECRET_KEY
+
+    const verifyResponse = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: {
+          token: token,
+          siteKey: RECAPTCHA_SITE_KEY,
+          expectedAction: action || 'submit'
+        }
+      })
+    })
+
+    const verifyData = await verifyResponse.json()
+
+    if (!verifyResponse.ok) {
+      console.error('[recaptcha] Verification API error:', verifyData)
+      res.status(400).json({ success: false, error: 'Verification failed' })
+      return
+    }
+
+    // Check the token properties
+    const tokenProperties = verifyData.tokenProperties
+    const riskAnalysis = verifyData.riskAnalysis
+    
+    if (!tokenProperties?.valid) {
+      console.warn('[recaptcha] Invalid token:', tokenProperties?.invalidReason)
+      res.status(400).json({ success: false, error: 'Invalid token', reason: tokenProperties?.invalidReason })
+      return
+    }
+
+    // Check if action matches (important for security)
+    if (action && tokenProperties.action !== action) {
+      console.warn('[recaptcha] Action mismatch:', { expected: action, got: tokenProperties.action })
+      res.status(400).json({ success: false, error: 'Action mismatch' })
+      return
+    }
+
+    // Get the risk score (0.0 = likely bot, 1.0 = likely human)
+    const score = riskAnalysis?.score ?? 0.5
+    
+    // Threshold: scores below 0.3 are likely bots
+    if (score < 0.3) {
+      console.warn('[recaptcha] Low score, likely bot:', score)
+      res.status(400).json({ success: false, error: 'Suspicious activity detected', score })
+      return
+    }
+
+    res.json({ success: true, score })
+  } catch (e) {
+    console.error('[recaptcha] Verification error:', e)
+    // On error, we still allow the request but log the issue
+    res.json({ success: true, score: 0.5, warning: 'verification_error' })
+  }
+})
+
 // Admin: ban a user by email, record IPs, and attempt account deletion
 app.post('/api/admin/ban', async (req, res) => {
   try {
