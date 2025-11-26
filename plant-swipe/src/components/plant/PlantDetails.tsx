@@ -7,8 +7,6 @@ import {
     SunMedium,
     Droplets,
     Thermometer,
-    Heart,
-    Share2,
     ChevronLeft,
     ChevronRight,
     X,
@@ -17,23 +15,24 @@ import {
     RefreshCw,
     Droplet,
     Wrench,
-    Bookmark,
   } from "lucide-react"
 
 interface PlantDetailsProps {
   plant: Plant
+  /** @deprecated Now handled in PlantInfoPage header */
   liked?: boolean
+  /** @deprecated Now handled in PlantInfoPage header */
   onToggleLike?: () => void
+  /** @deprecated Now handled in PlantInfoPage header */
   onBookmark?: () => void
+  /** @deprecated Now handled in PlantInfoPage header */
   isBookmarked?: boolean
 }
 
-export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onToggleLike, onBookmark, isBookmarked = false }) => {
+export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   const images = (plant.images || []).filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const activeImage = images[activeImageIndex] || null
-  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "shared" | "error">("idle")
-  const shareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerZoom, setViewerZoom] = useState(1)
   const [viewerOffset, setViewerOffset] = useState({ x: 0, y: 0 })
@@ -50,12 +49,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       setActiveImageIndex(0)
     }
   }, [images.length, activeImageIndex])
-
-  useEffect(() => {
-    return () => {
-      if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
-    }
-  }, [])
 
     const heroColors = useMemo(() => plant.identity?.colors?.filter((c) => c.hexCode) || [], [plant.identity?.colors])
     const commonNames = useMemo(() => {
@@ -92,30 +85,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     },
     [goToNextImage, goToPrevImage],
   )
-
-  const handleShare = useCallback(async () => {
-    if (typeof window === "undefined") return
-    const shareUrl = window.location.href
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: plant.name,
-          text: plant.identity?.overview || undefined,
-          url: shareUrl,
-        })
-        setShareStatus("shared")
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl)
-        setShareStatus("copied")
-      } else {
-        setShareStatus("error")
-      }
-    } catch {
-      setShareStatus("error")
-    }
-    if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
-    shareTimeoutRef.current = setTimeout(() => setShareStatus("idle"), 2500)
-  }, [plant.identity?.overview, plant.name])
 
   const openViewer = useCallback(() => {
     if (!activeImage) return
@@ -190,14 +159,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
 
   const utilityBadges = plant.utility?.length ? plant.utility : []
   const seasons = plant.identity?.season || plant.seasons || []
-  const shareFeedback =
-    shareStatus === "copied"
-      ? "Link copied"
-      : shareStatus === "shared"
-      ? "Shared!"
-      : shareStatus === "error"
-      ? "Share unavailable"
-      : ""
 
   const formatWateringNeed = (schedules?: PlantWateringSchedule[]) => {
     if (!schedules?.length) return "Flexible"
@@ -273,48 +234,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
               "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)",
           }}
         />
-        <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 flex flex-col items-end gap-1.5 sm:gap-2 md:gap-3 pointer-events-auto">
-          {onToggleLike && (
-            <Button
-              type="button"
-              size="lg"
-              variant={liked ? "default" : "secondary"}
-              className="rounded-full px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base shadow-lg"
-              onClick={onToggleLike}
-            >
-              <Heart className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" fill={liked ? "currentColor" : "none"} />
-              <span className="hidden sm:inline">{liked ? "Liked" : "Like"}</span>
-              <span className="sm:hidden">{liked ? "✓" : "♡"}</span>
-            </Button>
-          )}
-          <div className="flex flex-col items-end gap-1">
-            <Button
-              type="button"
-              size="lg"
-              variant="outline"
-              className="rounded-full px-4 py-2 sm:px-5 sm:py-3 text-sm sm:text-base shadow-lg"
-              onClick={handleShare}
-            >
-              <Share2 className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="hidden sm:inline">Share</span>
-            </Button>
-            {shareFeedback && <span className="text-[10px] sm:text-xs font-medium text-white drop-shadow">{shareFeedback}</span>}
-          </div>
-          {onBookmark && (
-            <Button
-              type="button"
-              size="lg"
-              variant={isBookmarked ? "default" : "secondary"}
-              className="rounded-full px-4 py-2 sm:px-5 sm:py-3 text-sm sm:text-base shadow-lg"
-              onClick={onBookmark}
-            >
-              <Bookmark className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" fill={isBookmarked ? "currentColor" : "none"} />
-              <span className="hidden sm:inline">{isBookmarked ? "Saved" : "Save"}</span>
-              <span className="sm:hidden">{isBookmarked ? "✓" : "○"}</span>
-            </Button>
-          )}
-        </div>
-        <div className="relative flex flex-col gap-3 sm:gap-4 p-3 pt-14 sm:p-4 sm:pt-16 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
+        <div className="relative flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
           <div className="flex-1 space-y-3 sm:space-y-4">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <Badge variant="secondary" className="uppercase tracking-wide text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
