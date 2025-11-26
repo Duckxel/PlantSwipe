@@ -260,3 +260,10 @@
     @apply text-base text-stone-700 dark:text-stone-200;
   }
 }
+
+/* Hide reCAPTCHA badge - disclosure text is shown in the auth dialog instead */
+.grecaptcha-badge {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
