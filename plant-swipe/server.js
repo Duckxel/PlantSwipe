@@ -63,6 +63,233 @@ try {
   aiFieldPromptsTemplate = {}
 }
 
+// --- Email Wrapper ---
+// Localized strings for email wrapper
+const EMAIL_WRAPPER_STRINGS = {
+  en: {
+    teamName: 'The Aphylia Team',
+    tagline: 'Helping you grow your plant knowledge 🌱',
+    exploreButton: 'Explore Aphylia →',
+    aboutLink: 'About',
+    contactLink: 'Contact',
+    copyright: '© {{year}} Aphylia. Made with 💚 for plant enthusiasts everywhere.',
+  },
+  fr: {
+    teamName: "L'équipe Aphylia",
+    tagline: 'Vous aider à développer vos connaissances botaniques 🌱',
+    exploreButton: 'Explorer Aphylia →',
+    aboutLink: 'À propos',
+    contactLink: 'Contact',
+    copyright: '© {{year}} Aphylia. Fait avec 💚 pour les passionnés de plantes partout.',
+  },
+}
+
+/**
+ * Wraps email body content with a beautiful styled template
+ * Matches the Aphylia website aesthetic with gradients and rounded corners
+ * @param {string} bodyHtml - The email body content
+ * @param {string} subject - The email subject line
+ * @param {string} language - The user's preferred language (defaults to 'en')
+ */
+function wrapEmailHtml(bodyHtml, subject, language = 'en') {
+  const currentYear = new Date().getFullYear()
+  const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+  
+  // Get localized strings for the wrapper (fallback to English if language not found)
+  const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS['en']
+  const copyrightText = strings.copyright.replace('{{year}}', String(currentYear))
+
+  // Simplified Aphylia logo as inline SVG for emails
+  const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32"><path fill="#ffffff" d="M50 5c-2.5 8-8 15-15 20 5 3 8 10 8 18 0 12-8 22-18 25 3 5 10 12 20 17 10-5 17-12 20-17-10-3-18-13-18-25 0-8 3-15 8-18-7-5-12.5-12-15-20z"/><circle cx="35" cy="58" r="5" fill="#ffffff"/><circle cx="65" cy="58" r="5" fill="#ffffff"/></svg>`
+
+  return `<!DOCTYPE html>
+<html lang="${language}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>${subject || 'Aphylia'}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <style>
+    table, td, div, p, a { font-family: Arial, sans-serif; }
+  </style>
+  <![endif]-->
+  <style>
+    /* Reset */
+    body, table, td, p, a, li, blockquote { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; max-width: 100%; }
+    
+    /* Base */
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%); min-height: 100vh; }
+    
+    /* Typography */
+    h1 { font-size: 32px; font-weight: 700; color: #111827; margin: 0 0 20px 0; line-height: 1.2; letter-spacing: -0.5px; }
+    h2 { font-size: 26px; font-weight: 700; color: #1f2937; margin: 32px 0 16px 0; line-height: 1.3; }
+    h3 { font-size: 22px; font-weight: 600; color: #374151; margin: 28px 0 12px 0; line-height: 1.4; }
+    h4 { font-size: 18px; font-weight: 600; color: #4b5563; margin: 24px 0 10px 0; }
+    p { margin: 0 0 16px 0; line-height: 1.75; color: #374151; }
+    
+    /* Links */
+    a { color: #059669; text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
+    a:hover { color: #047857; }
+    
+    /* Code */
+    code { background: #f3f4f6; color: #dc2626; padding: 3px 8px; border-radius: 6px; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em; }
+    pre { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: #e5e7eb; padding: 20px 24px; border-radius: 16px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; line-height: 1.6; margin: 20px 0; }
+    pre code { background: transparent; color: #e5e7eb; padding: 0; border-radius: 0; }
+    
+    /* Highlight */
+    mark { background: linear-gradient(135deg, #fef08a 0%, #fde047 100%); color: #713f12; padding: 2px 6px; border-radius: 4px; }
+    
+    /* Blockquote */
+    blockquote { border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.08); margin: 20px 0; padding: 16px 24px; border-radius: 0 12px 12px 0; font-style: italic; color: #374151; }
+    
+    /* Lists */
+    ul, ol { margin: 16px 0; padding-left: 28px; }
+    li { margin: 8px 0; color: #374151; }
+    
+    /* Horizontal Rule */
+    hr { border: none; height: 2px; background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%); margin: 32px 0; }
+    
+    /* Strong/Bold */
+    strong, b { font-weight: 600; color: #111827; }
+    
+    /* Dark mode */
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
+      .email-wrapper { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
+      .email-container { background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(24, 24, 27, 0.98) 50%, rgba(251, 191, 36, 0.03) 100%) !important; border-color: rgba(63, 63, 70, 0.5) !important; }
+      .email-body { color: #f4f4f5 !important; }
+      .email-body p, .email-body li, .email-body span, .email-body td { color: #e4e4e7 !important; }
+      .email-body h1, .email-body h2, .email-body h3, .email-body h4 { color: #ffffff !important; }
+      .email-body a { color: #34d399 !important; }
+      .email-body code { background: #374151 !important; color: #fca5a5 !important; }
+      .email-body mark { background: #854d0e !important; color: #fef08a !important; }
+      .signature-section { background: rgba(16, 185, 129, 0.08) !important; border-color: rgba(16, 185, 129, 0.15) !important; }
+      .footer-section { border-color: rgba(63, 63, 70, 0.3) !important; }
+      .footer-section p { color: #71717a !important; }
+    }
+    
+    /* Responsive */
+    @media screen and (max-width: 640px) {
+      .email-container { width: 100% !important; margin: 0 !important; border-radius: 0 !important; border-left: none !important; border-right: none !important; }
+      .email-body { padding: 32px 24px !important; }
+      .signature-section { margin: 24px !important; padding: 24px !important; }
+      .footer-section { padding: 24px !important; }
+      h1 { font-size: 26px !important; }
+      h2 { font-size: 22px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+  <table role="presentation" class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%);margin:0;padding:0;min-height:100vh;">
+    <tr>
+      <td align="center" style="padding:48px 20px;">
+        <table role="presentation" class="email-container" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%);border-radius:32px;border:1px solid rgba(16, 185, 129, 0.12);box-shadow:0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;overflow:hidden;">
+          <tr>
+            <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:32px 48px;text-align:center;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="vertical-align:middle;padding-right:12px;">
+                            ${logoSvg}
+                          </td>
+                          <td style="vertical-align:middle;">
+                            <span style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;font-family:'Quicksand',-apple-system,BlinkMacSystemFont,sans-serif;">Aphylia</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-body" style="padding:48px 48px 32px 48px;color:#374151;font-size:16px;line-height:1.75;">
+              ${bodyHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 48px 48px 48px;">
+              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
+                <tr>
+                  <td style="padding:28px 32px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="64" style="vertical-align:top;padding-right:20px;">
+                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;text-align:center;line-height:56px;">
+                            ${logoSvg}
+                          </div>
+                        </td>
+                        <td style="vertical-align:middle;">
+                          <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">
+                            ${strings.teamName}
+                          </p>
+                          <p style="margin:0;font-size:14px;color:#6b7280;">
+                            ${strings.tagline}
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="footer-section" style="padding:32px 48px;text-align:center;border-top:1px solid rgba(16, 185, 129, 0.08);">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
+                      <tr>
+                        <td>
+                          <a href="${websiteUrl}" style="display:inline-block;background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:50px;text-decoration:none;box-shadow:0 8px 24px -6px rgba(16, 185, 129, 0.4);">
+                            ${strings.exploreButton}
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;">
+                      <a href="${websiteUrl}" style="color:#059669;text-decoration:none;font-weight:500;">aphylia.app</a>
+                      <span style="color:#d1d5db;margin:0 8px;">•</span>
+                      <a href="${websiteUrl}/about" style="color:#9ca3af;text-decoration:none;">${strings.aboutLink}</a>
+                      <span style="color:#d1d5db;margin:0 8px;">•</span>
+                      <a href="${websiteUrl}/contact" style="color:#9ca3af;text-decoration:none;">${strings.contactLink}</a>
+                    </p>
+                    <p style="margin:0;font-size:12px;color:#d1d5db;">
+                      ${copyrightText}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
 // --- Scheduled Tasks ---
 // Local campaign runner (avoids Edge Function auth complexity)
 cron.schedule('* * * * *', async () => {
@@ -73,6 +300,37 @@ cron.schedule('* * * * *', async () => {
     console.error('[campaign-runner] Error:', err)
   }
 })
+
+/**
+ * Fetches email template translations for multi-language support
+ * @param {string} templateId - The template ID to fetch translations for
+ * @returns {Promise<Map<string, {subject: string, bodyHtml: string}>>} Map of language code to translation content
+ */
+async function fetchEmailTemplateTranslations(templateId) {
+  const translations = new Map()
+  if (!templateId || !sql) return translations
+  
+  try {
+    const data = await sql`
+      select language, subject, body_html
+      from public.admin_email_template_translations
+      where template_id = ${templateId}
+    `
+    
+    for (const row of data || []) {
+      if (row?.language) {
+        translations.set(row.language, {
+          subject: row.subject,
+          bodyHtml: row.body_html,
+        })
+      }
+    }
+  } catch (err) {
+    console.warn('[campaign-runner] failed to load email translations:', err?.message || err)
+  }
+  
+  return translations
+}
 
 async function processEmailCampaigns() {
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
@@ -116,6 +374,9 @@ async function processEmailCampaigns() {
       // Check if this is a test mode campaign
       const isTestMode = campaign.test_mode === true
       const testEmail = campaign.test_email
+      
+      // Fetch email template translations for multi-language support
+      const emailTranslations = await fetchEmailTemplateTranslations(campaign.template_id)
 
       // 2. Fetch recipients who have NOT received this campaign yet
       // For test mode, we create a fake recipient with the test email
@@ -127,7 +388,8 @@ async function processEmailCampaigns() {
           id: null, // No real user ID for test
           email: testEmail,
           display_name: 'Test User',
-          user_timezone: campaign.timezone || 'UTC'
+          user_timezone: campaign.timezone || 'UTC',
+          user_language: 'en'
         }]
       } else {
         // Normal mode: fetch all users who haven't received this campaign
@@ -136,10 +398,12 @@ async function processEmailCampaigns() {
             au.id,
             au.email,
             coalesce(p.display_name, au.raw_user_meta_data->>'full_name', split_part(au.email, '@', 1)) as display_name,
-            coalesce(p.timezone, 'UTC') as user_timezone
+            coalesce(p.timezone, 'UTC') as user_timezone,
+            coalesce(p.language, 'en') as user_language
           from auth.users au
           left join public.profiles p on p.id = au.id
           where (au.email_confirmed_at is not null or au.confirmed_at is not null)
+          and coalesce(p.notify_email, true) = true
           and not exists (
             select 1 from public.admin_campaign_sends s 
             where s.campaign_id = ${campaign.id} and s.user_id = au.id
@@ -210,11 +474,20 @@ async function processEmailCampaigns() {
         const payload = batch.map(r => {
            const userRaw = r.display_name || 'User'
            const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+           const userLang = r.user_language || 'en'
            const context = { user: userCap }
            const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] || `{{${k}}}`)
-           const html = replaceVars(campaign.body_html)
-           const subject = replaceVars(campaign.subject)
-           const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+           
+           // Get user's language-specific content (fallback to campaign's default content)
+           const translation = emailTranslations.get(userLang)
+           const rawSubject = translation?.subject || campaign.subject
+           const rawBodyHtml = translation?.bodyHtml || campaign.body_html
+           
+           const bodyHtml = replaceVars(rawBodyHtml)
+           const subject = replaceVars(rawSubject)
+           // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
+           const html = wrapEmailHtml(bodyHtml, subject, userLang)
+           const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
 
            return {
              from: fromEmail,
