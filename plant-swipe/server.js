@@ -99,8 +99,10 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS['en']
   const copyrightText = strings.copyright.replace('{{year}}', String(currentYear))
 
-  // Simplified Aphylia logo as inline SVG for emails
-  const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32"><path fill="#ffffff" d="M50 5c-2.5 8-8 15-15 20 5 3 8 10 8 18 0 12-8 22-18 25 3 5 10 12 20 17 10-5 17-12 20-17-10-3-18-13-18-25 0-8 3-15 8-18-7-5-12.5-12-15-20z"/><circle cx="35" cy="58" r="5" fill="#ffffff"/><circle cx="65" cy="58" r="5" fill="#ffffff"/></svg>`
+  // Aphylia logo URL for emails
+  const logoUrl = 'https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
+  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
+  const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
   return `<!DOCTYPE html>
 <html lang="${language}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -208,7 +210,7 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
                       <table role="presentation" cellpadding="0" cellspacing="0">
                         <tr>
                           <td style="vertical-align:middle;padding-right:12px;">
-                            ${logoSvg}
+                            ${logoImg}
                           </td>
                           <td style="vertical-align:middle;">
                             <span style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;font-family:'Quicksand',-apple-system,BlinkMacSystemFont,sans-serif;">Aphylia</span>
@@ -234,8 +236,8 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td width="64" style="vertical-align:top;padding-right:20px;">
-                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;text-align:center;line-height:56px;">
-                            ${logoSvg}
+                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;">
+                            ${logoImgLarge}
                           </div>
                         </td>
                         <td style="vertical-align:middle;">
@@ -5425,17 +5427,21 @@ app.delete('/api/admin/email-campaigns/:id', async (req, res) => {
     return
   }
   try {
+    // First, delete any campaign sends records (in case cascade doesn't work)
+    await sql`delete from public.admin_campaign_sends where campaign_id = ${campaignId}`
+    
+    // Allow deletion of campaigns in any status (including sent, partial, failed, running)
     const rows = await sql`
       delete from public.admin_email_campaigns
       where id = ${campaignId}
-        and status in ('draft','scheduled','cancelled')
       returning *
     `
     if (!rows || !rows.length) {
-      res.status(404).json({ error: 'Campaign not found or already sent' })
+      res.status(404).json({ error: 'Campaign not found' })
       return
     }
     const campaign = normalizeEmailCampaignRow(rows[0])
+    console.log('[email-campaigns] deleted campaign:', campaign.id, campaign.title, 'status:', campaign.status)
     res.json({ campaign })
   } catch (err) {
     console.error('[email-campaigns] failed to delete campaign', err)

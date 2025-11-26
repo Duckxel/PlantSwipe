@@ -56,8 +56,10 @@ export function getEmailWrapperStrings(language: SupportedLanguage = 'en') {
   return EMAIL_WRAPPER_I18N[language] || EMAIL_WRAPPER_I18N.en
 }
 
-// Aphylia logo as inline SVG (simplified and optimized for email)
-const APHYLIA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="48" height="48"><path fill="#059669" d="M50 5c-2.5 8-8 15-15 20 5 3 8 10 8 18 0 12-8 22-18 25 3 5 10 12 20 17 10-5 17-12 20-17-10-3-18-13-18-25 0-8 3-15 8-18-7-5-12.5-12-15-20z"/><circle cx="35" cy="58" r="5" fill="#059669"/><circle cx="65" cy="58" r="5" fill="#059669"/></svg>`
+// Aphylia logo URL for emails
+const APHYLIA_LOGO_URL = 'https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
+const APHYLIA_LOGO_IMG = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
+const APHYLIA_LOGO_IMG_LARGE = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="48" height="48" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
 /**
  * Wraps email body content with a beautiful styled template
@@ -188,7 +190,7 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
                       <table role="presentation" cellpadding="0" cellspacing="0">
                         <tr>
                           <td style="vertical-align:middle;padding-right:12px;">
-                            ${APHYLIA_LOGO_SVG.replace('fill="#059669"', 'fill="#ffffff"').replace('width="48" height="48"', 'width="32" height="32"')}
+                            ${APHYLIA_LOGO_IMG}
                           </td>
                           <td style="vertical-align:middle;">
                             <span style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;font-family:'Quicksand',-apple-system,BlinkMacSystemFont,sans-serif;">Aphylia</span>
@@ -218,15 +220,9 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td width="64" style="vertical-align:top;padding-right:20px;">
-                          <!-- Logo SVG -->
+                          <!-- Logo -->
                           <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px -8px rgba(16, 185, 129, 0.5);">
-                            <table role="presentation" width="56" height="56" cellpadding="0" cellspacing="0">
-                              <tr>
-                                <td align="center" valign="middle" style="padding:8px;">
-                                  ${APHYLIA_LOGO_SVG.replace('fill="#059669"', 'fill="#ffffff"')}
-                                </td>
-                              </tr>
-                            </table>
+                            ${APHYLIA_LOGO_IMG_LARGE}
                           </div>
                         </td>
                         <td style="vertical-align:middle;">
@@ -318,7 +314,7 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
     <div style="margin-top:32px;padding:24px;background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);">
       <div style="display:flex;align-items:center;gap:16px;">
         <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px -8px rgba(16, 185, 129, 0.5);">
-          ${APHYLIA_LOGO_SVG.replace('fill="#059669"', 'fill="#ffffff"')}
+          ${APHYLIA_LOGO_IMG_LARGE}
         </div>
         <div>
           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;">${strings.teamName}</p>
