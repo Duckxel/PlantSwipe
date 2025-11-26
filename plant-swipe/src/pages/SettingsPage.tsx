@@ -159,27 +159,40 @@ export default function SettingsPage() {
         if (profile) {
           setIsPrivate(Boolean((profile as any).is_private || false))
           setDisableFriendRequests(Boolean((profile as any).disable_friend_requests || false))
-          // Notification preferences default to true if not set
-          setNotifyPush((profile as any).notify_push !== false)
-          setNotifyEmail((profile as any).notify_email !== false)
           const savedTimezone = (profile as any).timezone
           setTimezone(savedTimezone || detectedTimezone)
         } else {
           // Fetch profile if not loaded
           const { data } = await supabase
             .from('profiles')
-            .select('is_private, disable_friend_requests, timezone, notify_push, notify_email')
+            .select('is_private, disable_friend_requests, timezone')
             .eq('id', user.id)
             .maybeSingle()
           if (data) {
             setIsPrivate(Boolean(data.is_private || false))
             setDisableFriendRequests(Boolean(data.disable_friend_requests || false))
-            setNotifyPush(data.notify_push !== false)
-            setNotifyEmail(data.notify_email !== false)
             setTimezone(data.timezone || detectedTimezone)
           } else {
             setTimezone(detectedTimezone)
           }
+        }
+
+        // Try to fetch notification preferences (columns may not exist yet)
+        try {
+          const { data: notifData } = await supabase
+            .from('profiles')
+            .select('notify_push, notify_email')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (notifData) {
+            // Notification preferences default to true if not set (null)
+            setNotifyPush(notifData.notify_push !== false)
+            setNotifyEmail(notifData.notify_email !== false)
+          }
+        } catch {
+          // Columns don't exist yet - use defaults (enabled)
+          setNotifyPush(true)
+          setNotifyEmail(true)
         }
       } catch (e: any) {
         setError(e?.message || t('settings.failedToLoad'))
@@ -340,7 +353,13 @@ export default function SettingsPage() {
         .update({ notify_push: newValue })
         .eq('id', user.id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        // Column might not exist yet - show helpful message
+        if (updateError.message?.includes('column') || updateError.code === '42703') {
+          throw new Error(t('settings.notifications.columnNotReady', { defaultValue: 'This feature is not available yet. Please wait for the database update.' }))
+        }
+        throw updateError
+      }
 
       setNotifyPush(newValue)
       setSuccess(newValue 
@@ -370,7 +389,13 @@ export default function SettingsPage() {
         .update({ notify_email: newValue })
         .eq('id', user.id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        // Column might not exist yet - show helpful message
+        if (updateError.message?.includes('column') || updateError.code === '42703') {
+          throw new Error(t('settings.notifications.columnNotReady', { defaultValue: 'This feature is not available yet. Please wait for the database update.' }))
+        }
+        throw updateError
+      }
 
       setNotifyEmail(newValue)
       setSuccess(newValue 
