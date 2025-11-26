@@ -6803,7 +6803,8 @@ app.get('/api/banned/check', async (req, res) => {
 })
 
 // reCAPTCHA Enterprise v3 verification endpoint
-const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY || process.env.VITE_RECAPTCHA_SECRET_KEY || ''
+// Uses GOOGLE_API_KEY for authentication with Google Cloud
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || ''
 const RECAPTCHA_SITE_KEY = '6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd'
 
 app.post('/api/recaptcha/verify', async (req, res) => {
@@ -6815,36 +6816,37 @@ app.post('/api/recaptcha/verify', async (req, res) => {
       return
     }
     
-    if (!RECAPTCHA_SECRET_KEY) {
-      // If no secret key configured, log warning and allow request
+    if (!GOOGLE_API_KEY) {
+      // If no API key configured, log warning and allow request
       // This enables development without reCAPTCHA verification
-      console.warn('[recaptcha] No secret key configured, skipping verification')
+      console.warn('[recaptcha] No GOOGLE_API_KEY configured, skipping verification')
       res.json({ success: true, score: 1.0, warning: 'verification_skipped' })
       return
     }
 
     // Call Google reCAPTCHA Enterprise verification API
-    const verifyUrl = 'https://recaptchaenterprise.googleapis.com/v1/projects/' + 
-      (process.env.GOOGLE_CLOUD_PROJECT || 'aphylia') + 
-      '/assessments?key=' + RECAPTCHA_SECRET_KEY
+    // POST https://recaptchaenterprise.googleapis.com/v1/projects/PROJECT_ID/assessments?key=API_KEY
+    const verifyUrl = `https://recaptchaenterprise.googleapis.com/v1/projects/aphylia/assessments?key=${GOOGLE_API_KEY}`
+
+    const requestBody = {
+      event: {
+        token: token,
+        expectedAction: action || 'submit',
+        siteKey: RECAPTCHA_SITE_KEY
+      }
+    }
 
     const verifyResponse = await fetch(verifyUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: {
-          token: token,
-          siteKey: RECAPTCHA_SITE_KEY,
-          expectedAction: action || 'submit'
-        }
-      })
+      body: JSON.stringify(requestBody)
     })
 
     const verifyData = await verifyResponse.json()
 
     if (!verifyResponse.ok) {
       console.error('[recaptcha] Verification API error:', verifyData)
-      res.status(400).json({ success: false, error: 'Verification failed' })
+      res.status(400).json({ success: false, error: 'Verification failed', details: verifyData.error?.message })
       return
     }
 
@@ -6875,6 +6877,7 @@ app.post('/api/recaptcha/verify', async (req, res) => {
       return
     }
 
+    console.log('[recaptcha] Verification success, score:', score)
     res.json({ success: true, score })
   } catch (e) {
     console.error('[recaptcha] Verification error:', e)
