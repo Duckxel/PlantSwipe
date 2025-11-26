@@ -50,7 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, experience_years, accent_key, is_private, disable_friend_requests')
+      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, experience_years, accent_key, is_private, disable_friend_requests, notify_push, notify_email')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
@@ -130,13 +130,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
       : DEFAULT_TIMEZONE
     
-    // Create profile row
+    // Create profile row with notification preferences enabled by default
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
       display_name: displayName,
       liked_plant_ids: [],
       timezone: detectedTimezone,
       accent_key: 'emerald',
+      notify_push: true,
+      notify_email: true,
     })
     if (perr) return { error: perr.message }
 

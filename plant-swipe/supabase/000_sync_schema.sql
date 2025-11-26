@@ -152,6 +152,9 @@ alter table if exists public.profiles add column if not exists is_private boolea
 alter table if exists public.profiles add column if not exists disable_friend_requests boolean not null default false;
 -- Language preference: stores user's preferred language code (e.g., 'en', 'fr')
 alter table if exists public.profiles add column if not exists language text default 'en';
+-- Notification preferences: push notifications and email campaigns (default to true/enabled)
+alter table if exists public.profiles add column if not exists notify_push boolean default true;
+alter table if exists public.profiles add column if not exists notify_email boolean default true;
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin
