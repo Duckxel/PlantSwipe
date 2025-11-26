@@ -42,9 +42,15 @@ export const StyledDividerNode = Node.create<StyledDividerNodeOptions>({
     return {
       style: {
         default: "gradient" as DividerStyle,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-style") as DividerStyle) || "gradient"
+        },
       },
       color: {
         default: "emerald",
+        parseHTML: (element: HTMLElement) => {
+          return element.getAttribute("data-color") || "emerald"
+        },
       },
     }
   },

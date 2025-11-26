@@ -46,21 +46,42 @@ export const ResizableImageNode = Node.create<ResizableImageNodeOptions>({
     return {
       src: {
         default: null,
+        parseHTML: (element: HTMLElement) => {
+          const img = element.querySelector("img")
+          return img?.getAttribute("src") || null
+        },
       },
       alt: {
         default: null,
+        parseHTML: (element: HTMLElement) => {
+          const img = element.querySelector("img")
+          return img?.getAttribute("alt") || null
+        },
       },
       title: {
         default: null,
+        parseHTML: (element: HTMLElement) => {
+          const img = element.querySelector("img")
+          return img?.getAttribute("title") || null
+        },
       },
       width: {
         default: "100%",
+        parseHTML: (element: HTMLElement) => {
+          return element.getAttribute("data-width") || "100%"
+        },
       },
       height: {
         default: "auto",
+        parseHTML: (element: HTMLElement) => {
+          return element.getAttribute("data-height") || "auto"
+        },
       },
       align: {
         default: "center" as ImageAlign,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-align") as ImageAlign) || "center"
+        },
       },
     }
   },
@@ -88,7 +109,13 @@ export const ResizableImageNode = Node.create<ResizableImageNodeOptions>({
     return [
       "div",
       mergeAttributes(
-        { "data-type": "resizable-image", style: containerStyle },
+        { 
+          "data-type": "resizable-image",
+          "data-width": typeof width === "number" ? `${width}px` : width || "100%",
+          "data-height": typeof height === "number" ? `${height}px` : height || "auto",
+          "data-align": align || "center",
+          style: containerStyle,
+        },
         this.options.HTMLAttributes
       ),
       [

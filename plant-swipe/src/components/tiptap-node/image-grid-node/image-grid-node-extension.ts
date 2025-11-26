@@ -51,7 +51,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
     return {
       images: {
         default: [] as ImageGridImage[],
-        parseHTML: (element) => {
+        parseHTML: (element: HTMLElement) => {
           try {
             return JSON.parse(element.getAttribute("data-images") || "[]")
           } catch {
@@ -64,12 +64,23 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
       },
       columns: {
         default: 2 as GridColumns,
+        parseHTML: (element: HTMLElement) => {
+          const val = element.getAttribute("data-columns")
+          return val ? (parseInt(val, 10) as GridColumns) : 2
+        },
       },
       gap: {
         default: "md" as GridGap,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-gap") as GridGap) || "md"
+        },
       },
       rounded: {
         default: true,
+        parseHTML: (element: HTMLElement) => {
+          const val = element.getAttribute("data-rounded")
+          return val !== "false"
+        },
       },
     }
   },
@@ -107,7 +118,13 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
     return [
       "div",
       mergeAttributes(
-        { "data-type": "image-grid", style: gridStyle },
+        { 
+          "data-type": "image-grid",
+          "data-columns": String(columns),
+          "data-gap": gap,
+          "data-rounded": String(rounded),
+          style: gridStyle,
+        },
         this.options.HTMLAttributes,
         { "data-images": JSON.stringify(images) }
       ),

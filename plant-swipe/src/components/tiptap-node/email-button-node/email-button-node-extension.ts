@@ -46,18 +46,36 @@ export const EmailButtonNode = Node.create<EmailButtonNodeOptions>({
     return {
       text: {
         default: "Click Here",
+        parseHTML: (element: HTMLElement) => {
+          // Extract text from the <a> element inside
+          const anchor = element.querySelector("a")
+          return anchor?.textContent || "Click Here"
+        },
       },
       url: {
         default: "",
+        parseHTML: (element: HTMLElement) => {
+          const anchor = element.querySelector("a")
+          return anchor?.getAttribute("href") || ""
+        },
       },
       style: {
         default: "primary" as ButtonStyle,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-button-style") as ButtonStyle) || "primary"
+        },
       },
       size: {
         default: "md" as ButtonSize,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-button-size") as ButtonSize) || "md"
+        },
       },
       align: {
         default: "center" as const,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-button-align") as "left" | "center" | "right") || "center"
+        },
       },
     }
   },
@@ -76,7 +94,13 @@ export const EmailButtonNode = Node.create<EmailButtonNodeOptions>({
     return [
       "div",
       mergeAttributes(
-        { "data-type": "email-button", style: `${alignStyle} padding: 16px 0;` },
+        { 
+          "data-type": "email-button",
+          "data-button-style": style || "primary",
+          "data-button-size": size || "md",
+          "data-button-align": align || "center",
+          style: `${alignStyle} padding: 16px 0;`,
+        },
         this.options.HTMLAttributes
       ),
       [
