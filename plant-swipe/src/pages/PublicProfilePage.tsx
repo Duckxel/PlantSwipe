@@ -415,8 +415,13 @@ export default function PublicProfilePage() {
       }
 
       const fetchViaApi = async () => {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        if (!token) return null
+        const headers: Record<string, string> = { Accept: 'application/json' }
+        headers['Authorization'] = `Bearer ${token}`
         const resp = await fetch(`/api/users/${targetId}/private`, {
-          headers: { Accept: 'application/json' },
+          headers,
           credentials: 'same-origin',
         })
         if (!resp.ok) return null
