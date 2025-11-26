@@ -567,10 +567,11 @@ export const AdminEmailTemplatePage: React.FC = () => {
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
       
-      // Find clickable elements: sensitive code boxes, buttons, etc.
+      // Find clickable elements: sensitive code boxes, buttons, cards
       const codeBox = target.closest('[data-code]') as HTMLElement
       const sensitiveCodeContainer = target.closest('[data-type="sensitive-code"]') as HTMLElement
       const buttonLink = target.closest('[data-type="email-button"] a') as HTMLAnchorElement
+      const emailCard = target.closest('[data-type="email-card"]') as HTMLElement
       
       let textToCopy = ''
       let elementRect: DOMRect | null = null
@@ -586,6 +587,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
         e.preventDefault()
         textToCopy = buttonLink.href || buttonLink.textContent || ''
         elementRect = buttonLink.getBoundingClientRect()
+      } else if (emailCard) {
+        // Copy card content
+        const titleEl = emailCard.querySelector('strong')
+        const contentEl = emailCard.querySelector('td:last-child > div > div')
+        const title = titleEl?.textContent || ''
+        const content = contentEl?.textContent || ''
+        textToCopy = title ? `${title}: ${content}` : content
+        elementRect = emailCard.getBoundingClientRect()
       }
       
       if (textToCopy && elementRect) {
@@ -602,45 +611,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
     const container = previewBodyRef.current
     container.addEventListener('click', handleClick)
-    
-    // Add hover styles via CSS class
-    const styleId = 'preview-copy-styles'
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style')
-      style.id = styleId
-      style.textContent = `
-        .email-preview-body [data-type="sensitive-code"] {
-          cursor: pointer;
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .email-preview-body [data-type="sensitive-code"]:hover {
-          transform: scale(1.02);
-          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15) !important;
-        }
-        .email-preview-body [data-type="sensitive-code"] [data-code] {
-          transition: background 0.15s ease;
-        }
-        .email-preview-body [data-type="sensitive-code"]:hover [data-code] {
-          background: rgba(255, 255, 255, 1) !important;
-        }
-        .email-preview-body [data-type="email-button"] a {
-          cursor: pointer;
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .email-preview-body [data-type="email-button"] a:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 12px 32px rgba(16, 185, 129, 0.5) !important;
-        }
-        .email-preview-body [data-type="email-card"] {
-          cursor: pointer;
-          transition: transform 0.15s ease;
-        }
-        .email-preview-body [data-type="email-card"]:hover {
-          transform: scale(1.01);
-        }
-      `
-      document.head.appendChild(style)
-    }
     
     return () => {
       container.removeEventListener('click', handleClick)
@@ -1390,40 +1360,36 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 transform: translate(-50%, -100%);
               }
             }
-            /* Interactive element indicators */
-            .email-preview-body [data-type="sensitive-code"]::after {
-              content: "Click to copy";
-              position: absolute;
-              bottom: 8px;
-              right: 12px;
-              font-size: 10px;
-              color: #9ca3af;
-              opacity: 0;
-              transition: opacity 0.2s ease;
-              pointer-events: none;
-            }
+            /* Interactive element styles for preview */
             .email-preview-body [data-type="sensitive-code"] {
-              position: relative;
+              cursor: pointer;
+              transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
-            .email-preview-body [data-type="sensitive-code"]:hover::after {
-              opacity: 1;
-            }
-            .email-preview-body [data-type="sensitive-code"] [data-code]::before {
-              content: "📋";
-              position: absolute;
-              right: -8px;
-              top: -8px;
-              font-size: 16px;
-              opacity: 0;
-              transition: opacity 0.2s ease, transform 0.2s ease;
-              pointer-events: none;
+            .email-preview-body [data-type="sensitive-code"]:hover {
+              transform: scale(1.02);
+              box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
             }
             .email-preview-body [data-type="sensitive-code"] [data-code] {
-              position: relative;
+              transition: background 0.2s ease, border-color 0.2s ease;
             }
-            .email-preview-body [data-type="sensitive-code"]:hover [data-code]::before {
-              opacity: 1;
-              transform: scale(1.1);
+            .email-preview-body [data-type="sensitive-code"]:hover [data-code] {
+              background: #ffffff !important;
+              border-color: #10b981 !important;
+            }
+            .email-preview-body [data-type="email-button"] a {
+              cursor: pointer;
+              transition: transform 0.2s ease, box-shadow 0.2s ease;
+            }
+            .email-preview-body [data-type="email-button"] a:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 12px 32px rgba(16, 185, 129, 0.5) !important;
+            }
+            .email-preview-body [data-type="email-card"] {
+              cursor: pointer;
+              transition: transform 0.2s ease;
+            }
+            .email-preview-body [data-type="email-card"]:hover {
+              transform: scale(1.01);
             }
           `}</style>
           {/* Floating Controls */}

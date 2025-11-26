@@ -187,73 +187,105 @@ function getTypeIcon(type: CodeType): string {
 }
 
 function getCodeStyles(type: CodeType): Record<string, string> {
-  const baseContainer = `
-    border-radius: 24px;
-    padding: 32px;
-    text-align: center;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  `.replace(/\s+/g, " ").trim()
-
-  const styleMap: Record<CodeType, { bg: string; border: string; shadow: string; accent: string }> = {
+  // Styles matching the editor component (sensitive-code-node.tsx)
+  const styleMap: Record<CodeType, { bgGradient: string; borderColor: string; accentColor: string; iconBg: string }> = {
     otp: {
-      bg: "linear-gradient(145deg, #fef3c7 0%, #ffffff 50%, #fef9c3 100%)",
-      border: "3px dashed #f59e0b",
-      shadow: "0 12px 40px rgba(245, 158, 11, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
-      accent: "#b45309",
+      bgGradient: "linear-gradient(to bottom right, #fef3c7, #fefce8)",
+      borderColor: "#fbbf24",
+      accentColor: "#b45309",
+      iconBg: "#fde68a",
     },
     verification: {
-      bg: "linear-gradient(145deg, #d1fae5 0%, #ffffff 50%, #ecfdf5 100%)",
-      border: "3px dashed #10b981",
-      shadow: "0 12px 40px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
-      accent: "#047857",
+      bgGradient: "linear-gradient(to bottom right, #d1fae5, #ecfdf5)",
+      borderColor: "#34d399",
+      accentColor: "#047857",
+      iconBg: "#a7f3d0",
     },
     password: {
-      bg: "linear-gradient(145deg, #ede9fe 0%, #ffffff 50%, #f5f3ff 100%)",
-      border: "3px dashed #8b5cf6",
-      shadow: "0 12px 40px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
-      accent: "#6d28d9",
+      bgGradient: "linear-gradient(to bottom right, #ede9fe, #f5f3ff)",
+      borderColor: "#a78bfa",
+      accentColor: "#6d28d9",
+      iconBg: "#ddd6fe",
     },
     link: {
-      bg: "linear-gradient(145deg, #dbeafe 0%, #ffffff 50%, #eff6ff 100%)",
-      border: "3px dashed #3b82f6",
-      shadow: "0 12px 40px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
-      accent: "#1d4ed8",
+      bgGradient: "linear-gradient(to bottom right, #dbeafe, #eff6ff)",
+      borderColor: "#60a5fa",
+      accentColor: "#1d4ed8",
+      iconBg: "#bfdbfe",
     },
     email: {
-      bg: "linear-gradient(145deg, #fce7f3 0%, #ffffff 50%, #fdf2f8 100%)",
-      border: "3px dashed #ec4899",
-      shadow: "0 12px 40px rgba(236, 72, 153, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
-      accent: "#be185d",
+      bgGradient: "linear-gradient(to bottom right, #fce7f3, #fdf2f8)",
+      borderColor: "#f472b6",
+      accentColor: "#be185d",
+      iconBg: "#fbcfe8",
     },
     code: {
-      bg: "linear-gradient(145deg, #f3f4f6 0%, #ffffff 50%, #f9fafb 100%)",
-      border: "3px dashed #6b7280",
-      shadow: "0 12px 40px rgba(107, 114, 128, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
-      accent: "#374151",
+      bgGradient: "linear-gradient(to bottom right, #f3f4f6, #f9fafb)",
+      borderColor: "#9ca3af",
+      accentColor: "#374151",
+      iconBg: "#e5e7eb",
     },
   }
 
   const s = styleMap[type] ?? styleMap.otp
 
   return {
-    container: `${baseContainer} background: ${s.bg}; border: ${s.border}; box-shadow: ${s.shadow};`,
-    innerWrapper: "display: flex; flex-direction: column; align-items: center; gap: 12px;",
-    iconWrapper: "font-size: 40px; line-height: 1;",
-    label: `font-size: 14px; font-weight: 600; color: ${s.accent}; text-transform: uppercase; letter-spacing: 1px;`,
+    container: `
+      border-radius: 24px;
+      padding: 32px;
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: ${s.bgGradient};
+      border: 3px dashed ${s.borderColor};
+    `.replace(/\s+/g, " ").trim(),
+    innerWrapper: `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    `.replace(/\s+/g, " ").trim(),
+    iconWrapper: `
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: ${s.iconBg};
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      line-height: 1;
+    `.replace(/\s+/g, " ").trim(),
+    label: `
+      font-size: 12px;
+      font-weight: 700;
+      color: ${s.accentColor};
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    `.replace(/\s+/g, " ").trim(),
     codeBox: `
       font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-      font-size: 32px;
+      font-size: 28px;
       font-weight: 700;
-      letter-spacing: 8px;
+      letter-spacing: 0.3em;
       color: #111827;
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.9);
       padding: 16px 32px;
       border-radius: 16px;
-      border: 2px solid rgba(0, 0, 0, 0.08);
+      border: 2px solid #e5e7eb;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
       margin: 8px 0;
     `.replace(/\s+/g, " ").trim(),
-    copyHint: `font-size: 12px; color: #9ca3af; margin-top: 4px;`,
-    expiry: `font-size: 13px; color: #ef4444; font-weight: 500; margin-top: 8px;`,
+    copyHint: `
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 4px;
+    `.replace(/\s+/g, " ").trim(),
+    expiry: `
+      font-size: 13px;
+      color: #ef4444;
+      font-weight: 500;
+      margin-top: 8px;
+    `.replace(/\s+/g, " ").trim(),
   }
 }
 
