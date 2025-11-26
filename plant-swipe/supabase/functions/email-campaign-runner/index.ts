@@ -1068,9 +1068,8 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS[DEFAULT_LANGUAGE]
   const copyrightText = strings.copyright.replace("{{year}}", String(currentYear))
 
-  // Use hosted PNG logo for maximum email client compatibility
-  // PNG works better than SVG in most email clients
-  const logoUrl = `${websiteUrl}/icons/icon-192x192.png`
+  // Use hosted SVG logo
+  const logoUrl = `${websiteUrl}/icons/plant-swipe-icon.svg`
 
   return `<!DOCTYPE html>
 <html lang="${language}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">

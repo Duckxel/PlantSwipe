@@ -119,9 +119,8 @@ export function getEmailWrapperStrings(language: SupportedLanguage = 'en') {
   return EMAIL_WRAPPER_I18N[language] || EMAIL_WRAPPER_I18N.en
 }
 
-// Use hosted PNG logo for maximum email client compatibility
-// PNG works better than SVG in most email clients
-const getLogoUrl = (websiteUrl: string) => `${websiteUrl}/icons/icon-192x192.png`
+// Use hosted SVG logo
+const getLogoUrl = (websiteUrl: string) => `${websiteUrl}/icons/plant-swipe-icon.svg`
 
 /**
  * Wraps email body content with a beautiful styled template
