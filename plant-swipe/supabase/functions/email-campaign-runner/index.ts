@@ -1063,8 +1063,8 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS[DEFAULT_LANGUAGE]
   const copyrightText = strings.copyright.replace("{{year}}", String(currentYear))
 
-  // Aphylia logo URL for emails
-  const logoUrl = "https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/plant-swipe-icon.svg"
+  // Aphylia logo URL for emails (via media.aphylia.app CDN)
+  const logoUrl = "https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg"
   const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
   const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
 
