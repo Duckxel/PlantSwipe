@@ -76,6 +76,7 @@ type TemplateVersion = {
 
 const VARIABLE_CATALOG = [
   { token: "{{user}}", description: "Replaced with the user's display name" },
+  { token: "{{code}}", description: "Replaced with verification code, OTP, or sensitive data" },
 ]
 
 async function buildAdminHeaders() {

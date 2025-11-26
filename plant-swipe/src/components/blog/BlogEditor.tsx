@@ -26,6 +26,7 @@ import { StyledDividerNode } from "@/components/tiptap-node/styled-divider-node/
 import { ImageGridNode } from "@/components/tiptap-node/image-grid-node/image-grid-node-extension"
 import { ResizableImageNode } from "@/components/tiptap-node/resizable-image-node/resizable-image-node-extension"
 import { EmailCardNode } from "@/components/tiptap-node/email-card-node/email-card-node-extension"
+import { SensitiveCodeNode } from "@/components/tiptap-node/sensitive-code-node/sensitive-code-node-extension"
 
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "@/components/tiptap-ui-primitive/toolbar"
 import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
@@ -48,6 +49,7 @@ import { EmailButtonButton } from "@/components/tiptap-ui/email-button-button"
 import { DividerDropdownMenu } from "@/components/tiptap-ui/divider-dropdown-menu"
 import { ImageGridButton } from "@/components/tiptap-ui/image-grid-button"
 import { EmailCardButton } from "@/components/tiptap-ui/email-card-button"
+import { SensitiveCodeButton } from "@/components/tiptap-ui/sensitive-code-button"
 import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
 import { LinkIcon } from "@/components/tiptap-icons/link-icon"
@@ -150,6 +152,7 @@ const MainToolbarContent: React.FC<{
     <ToolbarGroup>
       <EmailButtonButton />
       <EmailCardButton />
+      <SensitiveCodeButton />
       <DividerDropdownMenu portal={isMobile} />
     </ToolbarGroup>
 
@@ -243,6 +246,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
         ImageGridNode,
         ResizableImageNode,
         EmailCardNode,
+        SensitiveCodeNode,
         ...(extraExtensions || []),
       ],
       content: initialDocument ?? initialHtml ?? DEFAULT_CONTENT,
