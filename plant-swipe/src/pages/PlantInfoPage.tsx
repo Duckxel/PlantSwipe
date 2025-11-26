@@ -37,6 +37,9 @@ import {
   RefreshCw,
   Utensils,
   Plus,
+  Heart,
+  Share2,
+  Bookmark,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -274,6 +277,38 @@ const PlantInfoPage: React.FC = () => {
   const [bookmarkOpen, setBookmarkOpen] = React.useState(false)
   const [isBookmarked, setIsBookmarked] = React.useState(false)
   const [gardenOpen, setGardenOpen] = React.useState(false)
+  const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'shared' | 'error'>('idle')
+  const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    return () => {
+      if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    }
+  }, [])
+
+  const handleShare = React.useCallback(async () => {
+    if (typeof window === 'undefined' || !plant) return
+    const shareUrl = window.location.href
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: plant.name,
+          text: plant.identity?.overview || undefined,
+          url: shareUrl,
+        })
+        setShareStatus('shared')
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+        setShareStatus('copied')
+      } else {
+        setShareStatus('error')
+      }
+    } catch {
+      setShareStatus('error')
+    }
+    if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500)
+  }, [plant])
 
   const checkIfBookmarked = React.useCallback(async () => {
     if (!user?.id || !plant?.id) {
@@ -411,17 +446,67 @@ const PlantInfoPage: React.FC = () => {
         >
           <ChevronLeft className="h-5 w-5" />
         </Button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Share Button */}
+          <div className="relative">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="rounded-full border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#3e3e42] dark:bg-[#1f1f1f]"
+              onClick={handleShare}
+              aria-label={t('common.share', { defaultValue: 'Share' })}
+            >
+              <Share2 className="h-5 w-5" />
+            </Button>
+            {shareStatus !== 'idle' && (
+              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                {shareStatus === 'copied' ? 'Copied!' : shareStatus === 'shared' ? 'Shared!' : 'Error'}
+              </span>
+            )}
+          </div>
+          {/* Like Button */}
+          <Button
+            type="button"
+            variant={likedIds.includes(plant?.id || '') ? 'default' : 'outline'}
+            size="icon"
+            className={`rounded-full h-10 w-10 shadow-sm ${
+              likedIds.includes(plant?.id || '')
+                ? 'bg-rose-500 hover:bg-rose-600 border-rose-500 text-white dark:bg-rose-500 dark:hover:bg-rose-600'
+                : 'border-stone-200 bg-white dark:border-[#3e3e42] dark:bg-[#1f1f1f]'
+            }`}
+            onClick={toggleLiked}
+            aria-label={likedIds.includes(plant?.id || '') ? t('common.unlike', { defaultValue: 'Unlike' }) : t('common.like', { defaultValue: 'Like' })}
+          >
+            <Heart className="h-5 w-5" fill={likedIds.includes(plant?.id || '') ? 'currentColor' : 'none'} />
+          </Button>
+          {/* Save/Bookmark Button */}
+          <Button
+            type="button"
+            variant={isBookmarked ? 'default' : 'outline'}
+            size="icon"
+            className={`rounded-full h-10 w-10 shadow-sm ${
+              isBookmarked
+                ? 'bg-amber-500 hover:bg-amber-600 border-amber-500 text-white dark:bg-amber-500 dark:hover:bg-amber-600'
+                : 'border-stone-200 bg-white dark:border-[#3e3e42] dark:bg-[#1f1f1f]'
+            }`}
+            onClick={handleBookmark}
+            aria-label={isBookmarked ? t('common.unsave', { defaultValue: 'Remove from bookmarks' }) : t('common.save', { defaultValue: 'Save' })}
+          >
+            <Bookmark className="h-5 w-5" fill={isBookmarked ? 'currentColor' : 'none'} />
+          </Button>
+          {/* Add to Garden Button */}
           <Button
             type="button"
             variant="default"
-            size="icon"
-            className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 w-10 shadow-sm dark:bg-emerald-600 dark:hover:bg-emerald-700"
+            className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 px-3 sm:px-4 shadow-sm dark:bg-emerald-600 dark:hover:bg-emerald-700"
             onClick={handleAddToGarden}
             aria-label={t('garden.add', { defaultValue: 'Add to garden' })}
           >
             <Plus className="h-5 w-5" />
+            <span className="hidden sm:inline ml-1.5">{t('garden.addToGarden', { defaultValue: 'Add to Garden' })}</span>
           </Button>
+          {/* Edit Button (Admin only) */}
           {profile?.is_admin && plant && (
             <Button
               type="button"
