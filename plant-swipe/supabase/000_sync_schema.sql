@@ -110,7 +110,9 @@ do $$ declare
     'friends',
     'notification_campaigns',
     'user_notifications',
-    'user_push_subscriptions'
+    'user_push_subscriptions',
+    'bookmarks',
+    'bookmark_items'
   ];
   rec record;
 begin
