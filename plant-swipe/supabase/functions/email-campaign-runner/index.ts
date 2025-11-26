@@ -814,7 +814,24 @@ async function sendBatch(
   const payload = recipients.map((recipient) => {
     const userRaw = recipient.displayName
     const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
-    const context = { user: userCap }
+    
+    // Generate random 10-character string (uppercase, lowercase, numbers)
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    let randomStr = ""
+    for (let i = 0; i < 10; i++) {
+      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    
+    const websiteUrl = Deno.env.get("WEBSITE_URL") ?? "https://aphylia.app"
+    
+    // Variables available for replacement in email templates
+    const context: Record<string, string> = { 
+      user: userCap,                                    // User's display name (capitalized)
+      email: recipient.email,                           // User's email address
+      random: randomStr,                                // 10 random characters (unique per email)
+      url: websiteUrl.replace(/^https?:\/\//, ""),      // Website URL without protocol (e.g., "aphylia.app")
+      code: "XXXXXX"                                    // Placeholder for campaign emails (real codes are for transactional emails)
+    }
     
     // Get user's language and find appropriate translation
     const userLang = recipient.language as SupportedLanguage
@@ -824,8 +841,10 @@ async function sendBatch(
     const rawSubject = translation?.subject || campaign.subject
     const rawBodyHtml = translation?.body_html || campaign.body_html
     
-    const bodyHtml = renderTemplate(rawBodyHtml, context)
+    const bodyHtmlRaw = renderTemplate(rawBodyHtml, context)
     const subject = renderTemplate(rawSubject, context)
+    // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
+    const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
     // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
     const html = wrapEmailHtml(bodyHtml, subject, userLang)
     const text = stripHtml(bodyHtml || rawBodyHtml)
@@ -928,6 +947,81 @@ function stripHtml(input: string): string {
     .trim()
 }
 
+/**
+ * Sanitizes HTML content to make it email-client compatible
+ * Replaces CSS properties that email clients don't support with compatible alternatives
+ */
+function sanitizeHtmlForEmail(html: string): string {
+  if (!html) return html
+  
+  let result = html
+  
+  // 1. Replace CSS variables with hardcoded colors (Gmail doesn't support var())
+  const cssVarMap: Record<string, string> = {
+    "--tt-color-highlight-yellow": "#fef08a",
+    "--tt-color-highlight-red": "#fecaca",
+    "--tt-color-highlight-green": "#bbf7d0",
+    "--tt-color-highlight-blue": "#bfdbfe",
+    "--tt-color-highlight-purple": "#e9d5ff",
+    "--tt-color-highlight-pink": "#fbcfe8",
+    "--tt-color-highlight-orange": "#fed7aa",
+  }
+  // Replace var(--variable-name) with actual color
+  result = result.replace(/var\(\s*(--tt-color-[a-zA-Z-]+)\s*\)/gi, (_match, varName) => {
+    return cssVarMap[varName] || "#fef08a" // Default to yellow
+  })
+  
+  // 2. Replace linear-gradient backgrounds with solid colors
+  // Match the full gradient including nested parentheses for rgb/rgba
+  result = result.replace(/background:\s*linear-gradient\s*\([^;"}]*\)\s*;?/gi, (match) => {
+    // Try to extract a hex color first
+    const hexMatch = match.match(/#[a-fA-F0-9]{6}|#[a-fA-F0-9]{3}/)
+    if (hexMatch) {
+      return `background-color: ${hexMatch[0]};`
+    }
+    // Try to extract rgb color
+    const rgbMatch = match.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/)
+    if (rgbMatch) {
+      const toHex = (n: string) => {
+        const hex = parseInt(n).toString(16)
+        return hex.length === 1 ? "0" + hex : hex
+      }
+      return `background-color: #${toHex(rgbMatch[1])}${toHex(rgbMatch[2])}${toHex(rgbMatch[3])};`
+    }
+    return "background-color: #ffffff;"
+  })
+  
+  // 3. Remove box-shadow properties entirely (not supported in most email clients)
+  result = result.replace(/box-shadow:\s*[^;"}]+;?/gi, "")
+  
+  // 4. Replace rgba() colors with solid hex (in all contexts, not just background)
+  result = result.replace(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/gi, (_match, r, g, b) => {
+    const toHex = (n: string) => {
+      const hex = parseInt(n).toString(16)
+      return hex.length === 1 ? "0" + hex : hex
+    }
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+  })
+  
+  // 5. Replace display: flex with text-align: center for centering
+  result = result.replace(/display:\s*flex\s*;\s*flex-direction:\s*column\s*;\s*align-items:\s*center\s*;?/gi, "text-align: center;")
+  result = result.replace(/display:\s*flex\s*;\s*align-items:\s*center\s*;\s*justify-content:\s*center\s*;?/gi, "text-align: center;")
+  result = result.replace(/display:\s*flex\s*;\s*align-items:\s*center\s*;/gi, "")
+  
+  // 6. Remove transition properties (not supported in email)
+  result = result.replace(/transition:\s*[^;"}]+;?/gi, "")
+  
+  // 7. Remove gap property (not supported in email)
+  result = result.replace(/gap:\s*[^;"}]+;?/gi, "")
+  
+  // 8. Clean up any double semicolons or empty style artifacts
+  result = result.replace(/;\s*;/g, ";")
+  result = result.replace(/style="\s*;/g, 'style="')
+  result = result.replace(/;\s*"/g, '"')
+  
+  return result
+}
+
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
@@ -969,8 +1063,10 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS[DEFAULT_LANGUAGE]
   const copyrightText = strings.copyright.replace("{{year}}", String(currentYear))
 
-  // Simplified Aphylia logo as inline SVG for emails
-  const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32"><path fill="#ffffff" d="M50 5c-2.5 8-8 15-15 20 5 3 8 10 8 18 0 12-8 22-18 25 3 5 10 12 20 17 10-5 17-12 20-17-10-3-18-13-18-25 0-8 3-15 8-18-7-5-12.5-12-15-20z"/><circle cx="35" cy="58" r="5" fill="#ffffff"/><circle cx="65" cy="58" r="5" fill="#ffffff"/></svg>`
+  // Aphylia logo URL for emails (via media.aphylia.app CDN)
+  const logoUrl = "https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg"
+  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
+  const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
 
   return `<!DOCTYPE html>
 <html lang="${language}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -1078,7 +1174,7 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
                       <table role="presentation" cellpadding="0" cellspacing="0">
                         <tr>
                           <td style="vertical-align:middle;padding-right:12px;">
-                            ${logoSvg}
+                            ${logoImg}
                           </td>
                           <td style="vertical-align:middle;">
                             <span style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;font-family:'Quicksand',-apple-system,BlinkMacSystemFont,sans-serif;">Aphylia</span>
@@ -1104,8 +1200,8 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td width="64" style="vertical-align:top;padding-right:20px;">
-                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;text-align:center;line-height:56px;">
-                            ${logoSvg}
+                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;">
+                            ${logoImgLarge}
                           </div>
                         </td>
                         <td style="vertical-align:middle;">

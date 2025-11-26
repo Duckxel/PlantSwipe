@@ -75,8 +75,11 @@ type TemplateVersion = {
 }
 
 const VARIABLE_CATALOG = [
-  { token: "{{user}}", description: "Replaced with the user's display name" },
-  { token: "{{code}}", description: "Replaced with verification code, OTP, or sensitive data" },
+  { token: "{{user}}", description: "Replaced with the user's display name (capitalized)" },
+  { token: "{{email}}", description: "Replaced with the user's email address" },
+  { token: "{{random}}", description: "Generates 10 random characters (letters & numbers) - unique per email" },
+  { token: "{{url}}", description: "Replaced with the Aphylia website URL (aphylia.app)" },
+  { token: "{{code}}", description: "Replaced with verification code, OTP, or sensitive data (use in transactional emails)" },
 ]
 
 async function buildAdminHeaders() {
@@ -1406,7 +1409,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
               <span style={{ color: '#9ca3af' }}>Subject:</span>
               <span style={{ fontWeight: 500, color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {templateForm.subject.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{code\}\}/gi, "50L57IC3") || "(No subject)"}
+                {templateForm.subject.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{email\}\}/gi, "dev@aphylia.app").replace(/\{\{random\}\}/gi, "1234567890").replace(/\{\{url\}\}/gi, "aphylia.app").replace(/\{\{code\}\}/gi, "50L57IC3") || "(No subject)"}
               </span>
             </div>
 
@@ -1496,7 +1499,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
                   }}
                   dangerouslySetInnerHTML={{ 
-                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{code\}\}/gi, "50L57IC3") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
+                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{email\}\}/gi, "dev@aphylia.app").replace(/\{\{random\}\}/gi, "1234567890").replace(/\{\{url\}\}/gi, "aphylia.app").replace(/\{\{code\}\}/gi, "50L57IC3") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
                   }}
                 />
 
@@ -1628,7 +1631,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 margin: 0,
               }}
             >
-              Variables like <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{user}}"}</code> → "Five" and <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{code}}"}</code> → "50L57IC3" · Click elements to copy
+              Variables: <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{user}}"}</code> <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{email}}"}</code> <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{random}}"}</code> <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{url}}"}</code> · Click elements to copy
             </p>
           </div>
         </div>
