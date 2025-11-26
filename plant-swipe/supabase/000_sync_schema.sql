@@ -104,6 +104,7 @@ do $$ declare
     'admin_email_template_translations',
     'admin_email_template_versions',
     'admin_email_campaigns',
+    'admin_campaign_sends',
     'garden_activity_logs',
     'friend_requests',
     'friends',
@@ -3672,6 +3673,63 @@ do $$ begin
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
+
+-- Admin Campaign Sends (tracks which users have been sent each campaign)
+create table if not exists public.admin_campaign_sends (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid references public.admin_email_campaigns(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  sent_at timestamptz default now(),
+  status text default 'sent',
+  error text
+);
+
+create index if not exists idx_admin_campaign_sends_campaign_user 
+  on public.admin_campaign_sends(campaign_id, user_id);
+
+alter table public.admin_campaign_sends enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_campaign_sends' and policyname='acs_admin_all') then
+    drop policy acs_admin_all on public.admin_campaign_sends;
+  end if;
+  create policy acs_admin_all on public.admin_campaign_sends for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Function to check if a user is eligible for a timezone-aware campaign
+-- Returns true if now() >= scheduled_time adjusted for user timezone
+create or replace function public.is_campaign_due_for_user(
+  _scheduled_for timestamptz,
+  _campaign_tz text,
+  _user_tz text
+) returns boolean language plpgsql as $$
+declare
+  _target_time timestamptz;
+  _user_offset interval;
+  _campaign_offset interval;
+begin
+  -- Default timezones if null
+  _campaign_tz := coalesce(_campaign_tz, 'UTC');
+  _user_tz := coalesce(_user_tz, 'UTC');
+  
+  -- Calculate offsets
+  -- We want to find the moment when User's Wall Clock Time == Campaign Scheduled Wall Clock Time
+  -- Formula: Target_UTC = Scheduled_UTC - (User_Offset - Camp_Offset)
+  
+  return now() >= (
+    _scheduled_for - (
+      (now() at time zone _user_tz at time zone 'UTC') - (now() at time zone 'UTC')
+    ) + (
+      (now() at time zone _campaign_tz at time zone 'UTC') - (now() at time zone 'UTC')
+    )
+  );
+exception when others then
+  -- Fallback to immediate send if timezone math fails (invalid TZ strings)
+  return true;
+end;
+$$;
 
 -- Captures per-garden human-readable activity events for the current day view
 create table if not exists public.garden_activity_logs (
