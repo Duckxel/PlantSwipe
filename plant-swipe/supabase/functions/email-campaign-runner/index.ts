@@ -956,20 +956,45 @@ function sanitizeHtmlForEmail(html: string): string {
   
   let result = html
   
-  // 1. Replace linear-gradient backgrounds with solid colors
-  result = result.replace(/background:\s*linear-gradient\([^)]+\)/gi, (match) => {
-    // Try to extract a solid color from the gradient
-    const colorMatch = match.match(/#[a-fA-F0-9]{6}|#[a-fA-F0-9]{3}|rgb\([^)]+\)/)
-    if (colorMatch) {
-      return `background-color: ${colorMatch[0]}`
-    }
-    return "background-color: #ffffff"
+  // 1. Replace CSS variables with hardcoded colors (Gmail doesn't support var())
+  const cssVarMap: Record<string, string> = {
+    "--tt-color-highlight-yellow": "#fef08a",
+    "--tt-color-highlight-red": "#fecaca",
+    "--tt-color-highlight-green": "#bbf7d0",
+    "--tt-color-highlight-blue": "#bfdbfe",
+    "--tt-color-highlight-purple": "#e9d5ff",
+    "--tt-color-highlight-pink": "#fbcfe8",
+    "--tt-color-highlight-orange": "#fed7aa",
+  }
+  // Replace var(--variable-name) with actual color
+  result = result.replace(/var\(\s*(--tt-color-[a-zA-Z-]+)\s*\)/gi, (_match, varName) => {
+    return cssVarMap[varName] || "#fef08a" // Default to yellow
   })
   
-  // 2. Remove box-shadow properties entirely
-  result = result.replace(/box-shadow:\s*[^;"}]+[;]?/gi, "")
+  // 2. Replace linear-gradient backgrounds with solid colors
+  // Match the full gradient including nested parentheses for rgb/rgba
+  result = result.replace(/background:\s*linear-gradient\s*\([^;"}]*\)\s*;?/gi, (match) => {
+    // Try to extract a hex color first
+    const hexMatch = match.match(/#[a-fA-F0-9]{6}|#[a-fA-F0-9]{3}/)
+    if (hexMatch) {
+      return `background-color: ${hexMatch[0]};`
+    }
+    // Try to extract rgb color
+    const rgbMatch = match.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/)
+    if (rgbMatch) {
+      const toHex = (n: string) => {
+        const hex = parseInt(n).toString(16)
+        return hex.length === 1 ? "0" + hex : hex
+      }
+      return `background-color: #${toHex(rgbMatch[1])}${toHex(rgbMatch[2])}${toHex(rgbMatch[3])};`
+    }
+    return "background-color: #ffffff;"
+  })
   
-  // 3. Replace rgba() colors with solid hex approximations
+  // 3. Remove box-shadow properties entirely (not supported in most email clients)
+  result = result.replace(/box-shadow:\s*[^;"}]+;?/gi, "")
+  
+  // 4. Replace rgba() colors with solid hex (in all contexts, not just background)
   result = result.replace(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/gi, (_match, r, g, b) => {
     const toHex = (n: string) => {
       const hex = parseInt(n).toString(16)
@@ -978,15 +1003,21 @@ function sanitizeHtmlForEmail(html: string): string {
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`
   })
   
-  // 4. Replace display: flex with text-align: center for centering
-  result = result.replace(/display:\s*flex\s*;?\s*flex-direction:\s*column\s*;?\s*align-items:\s*center\s*;?/gi, "text-align: center;")
-  result = result.replace(/display:\s*flex\s*;?\s*align-items:\s*center\s*;?\s*justify-content:\s*center\s*;?/gi, "text-align: center;")
+  // 5. Replace display: flex with text-align: center for centering
+  result = result.replace(/display:\s*flex\s*;\s*flex-direction:\s*column\s*;\s*align-items:\s*center\s*;?/gi, "text-align: center;")
+  result = result.replace(/display:\s*flex\s*;\s*align-items:\s*center\s*;\s*justify-content:\s*center\s*;?/gi, "text-align: center;")
+  result = result.replace(/display:\s*flex\s*;\s*align-items:\s*center\s*;/gi, "")
   
-  // 5. Remove transition properties (not supported in email)
-  result = result.replace(/transition:\s*[^;"}]+[;]?/gi, "")
+  // 6. Remove transition properties (not supported in email)
+  result = result.replace(/transition:\s*[^;"}]+;?/gi, "")
   
-  // 6. Fix gap property (not supported in email) - remove it
-  result = result.replace(/gap:\s*[^;"}]+[;]?/gi, "")
+  // 7. Remove gap property (not supported in email)
+  result = result.replace(/gap:\s*[^;"}]+;?/gi, "")
+  
+  // 8. Clean up any double semicolons or empty style artifacts
+  result = result.replace(/;\s*;/g, ";")
+  result = result.replace(/style="\s*;/g, 'style="')
+  result = result.replace(/;\s*"/g, '"')
   
   return result
 }
