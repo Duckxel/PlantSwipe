@@ -2,8 +2,9 @@ import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
+import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -712,6 +713,18 @@ export default function PlantSwipe() {
     setAuthSubmitting(true)
     try {
       console.log('[auth] submit start', { mode: authMode })
+      
+      // Execute reCAPTCHA v3 Enterprise
+      let recaptchaToken: string | undefined
+      try {
+        const action = authMode === 'signup' ? 'signup' : 'login'
+        recaptchaToken = await executeRecaptcha(action)
+        console.log('[auth] reCAPTCHA token obtained')
+      } catch (recaptchaError) {
+        console.warn('[auth] reCAPTCHA execution failed', recaptchaError)
+        // Continue without token - backend will decide how to handle
+      }
+      
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
           console.warn('[auth] password mismatch')
@@ -725,7 +738,7 @@ export default function PlantSwipe() {
           setAuthSubmitting(false)
           return
         }
-        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, recaptchaToken })
         if (error) {
           console.error('[auth] signup error', error)
           setAuthError(error)
@@ -734,7 +747,7 @@ export default function PlantSwipe() {
         }
         console.log('[auth] signup ok')
       } else {
-        const { error } = await signIn({ email: authEmail, password: authPassword })
+        const { error } = await signIn({ email: authEmail, password: authPassword, recaptchaToken })
         if (error) {
           console.error('[auth] login error', error)
           setAuthError(error)
@@ -1495,16 +1508,23 @@ export default function PlantSwipe() {
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
-            <Button className="w-full rounded-2xl" onClick={submitAuth}>
+            <Button className="w-full rounded-2xl" onClick={submitAuth} disabled={authSubmitting}>
+              {authSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
             </Button>
             <div className="text-center text-sm">
               {authMode === 'login' ? (
-                <button className="underline" onClick={() => setAuthMode('signup')}>{t('auth.noAccount')}</button>
+                <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
               ) : (
-                <button className="underline" onClick={() => setAuthMode('login')}>{t('auth.haveAccount')}</button>
+                <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
               )}
             </div>
+            {/* reCAPTCHA disclosure (required when hiding the badge) */}
+            <p className="text-[10px] text-center text-stone-400 dark:text-stone-500 mt-2">
+              This site is protected by reCAPTCHA and the Google{' '}
+              <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+              <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+            </p>
           </div>
         </DialogContent>
       </Dialog>
