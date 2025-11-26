@@ -9743,35 +9743,47 @@ async function resolveNotificationAudience(campaign) {
       if (value) recipients.add(String(value))
     }
   }
+  // Only include users who have NOT explicitly disabled push notifications (notify_push defaults to true)
   if (campaign.audience === 'all') {
-    const rows = await sql`select id::text as id from public.profiles where id is not null`
+    const rows = await sql`select id::text as id from public.profiles where id is not null and (notify_push is null or notify_push = true)`
     addRows(rows, 'id')
   } else if (campaign.audience === 'tasks_open') {
     const today = new Date().toISOString().slice(0, 10)
     const rows = await sql`
-      select distinct user_id::text as user_id
-      from public.user_task_daily_cache
-      where cache_date = ${today} and gardens_with_remaining_tasks > 0 and user_id is not null
+      select distinct c.user_id::text as user_id
+      from public.user_task_daily_cache c
+      join public.profiles p on p.id = c.user_id
+      where c.cache_date = ${today} and c.gardens_with_remaining_tasks > 0 and c.user_id is not null
+        and (p.notify_push is null or p.notify_push = true)
     `
     addRows(rows, 'user_id')
   } else if (campaign.audience === 'inactive_week') {
     const rows = await sql`
-      select user_id::text as user_id
-      from public.web_visits
-      where user_id is not null
-      group by user_id
-      having max(occurred_at) < now() - interval '7 days'
+      select v.user_id::text as user_id
+      from public.web_visits v
+      join public.profiles p on p.id = v.user_id
+      where v.user_id is not null
+        and (p.notify_push is null or p.notify_push = true)
+      group by v.user_id
+      having max(v.occurred_at) < now() - interval '7 days'
     `
     addRows(rows, 'user_id')
   } else if (campaign.audience === 'admins') {
-    const rows = await sql`select id::text as id from public.profiles where is_admin = true`
+    const rows = await sql`select id::text as id from public.profiles where is_admin = true and (notify_push is null or notify_push = true)`
     addRows(rows, 'id')
   } else if (campaign.audience === 'custom') {
-    for (const userId of campaign.customUserIds || []) {
-      if (userId) recipients.add(String(userId))
+    // For custom audience, still filter by notify_push preference
+    const customIds = (campaign.customUserIds || []).filter(Boolean)
+    if (customIds.length > 0) {
+      const rows = await sql`
+        select id::text as id from public.profiles 
+        where id = any(${sql.array(customIds)}::uuid[]) 
+          and (notify_push is null or notify_push = true)
+      `
+      addRows(rows, 'id')
     }
   } else {
-    const rows = await sql`select id::text as id from public.profiles where id is not null`
+    const rows = await sql`select id::text as id from public.profiles where id is not null and (notify_push is null or notify_push = true)`
     addRows(rows, 'id')
   }
   return Array.from(recipients)

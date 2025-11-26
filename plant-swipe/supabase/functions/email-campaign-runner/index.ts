@@ -490,6 +490,11 @@ async function collectRecipients(
       if (!confirmed) continue
 
       const profile = profileMeta.get(user.id)
+      
+      // Skip users who have explicitly opted out of email campaigns
+      // notify_email defaults to true (null means opted in)
+      if (profile?.notifyEmail === false) continue
+
       const displayName =
         profile?.displayName ||
         (typeof user.user_metadata?.full_name === "string"
@@ -527,6 +532,7 @@ type ProfileMeta = {
   displayName: string | null
   timezone: string | null
   language: string
+  notifyEmail: boolean | null
 }
 
 async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<Map<string, ProfileMeta>> {
@@ -534,7 +540,7 @@ async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<
   if (!ids.length) return map
   const { data, error } = await client
     .from("profiles")
-    .select("id, display_name, timezone, language")
+    .select("id, display_name, timezone, language, notify_email")
     .in("id", ids)
   if (error) {
     console.warn("[email-campaign-runner] failed to load profile metadata", error)
@@ -546,6 +552,7 @@ async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<
         displayName: typeof row.display_name === "string" ? row.display_name : null,
         timezone: typeof row.timezone === "string" && row.timezone.trim().length ? row.timezone : null,
         language: typeof row.language === "string" && row.language.trim().length ? row.language : DEFAULT_LANGUAGE,
+        notifyEmail: row.notify_email === false ? false : null, // null means opted in (default)
       })
     }
   }

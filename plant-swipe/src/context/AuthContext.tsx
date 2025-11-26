@@ -48,6 +48,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try { localStorage.removeItem('plantswipe.profile') } catch {}
       return
     }
+    // Note: notify_push and notify_email columns may not exist yet in the database
+    // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
       .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, experience_years, accent_key, is_private, disable_friend_requests')
@@ -131,6 +133,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       : DEFAULT_TIMEZONE
     
     // Create profile row
+    // Note: notify_push and notify_email columns will default to true once the migration is applied
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
       display_name: displayName,

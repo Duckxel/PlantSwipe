@@ -62,6 +62,8 @@ export type ProfileRow = {
   accent_key?: string | null
   is_private?: boolean | null
   disable_friend_requests?: boolean | null
+  notify_push?: boolean | null
+  notify_email?: boolean | null
 }
 
 export type BlogPostRow = {

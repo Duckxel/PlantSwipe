@@ -65,9 +65,14 @@ select cron.schedule(
 );
 
 -- ========== Public schema hard cleanup (drops rogue tables) ==========
+-- IMPORTANT: All tables created in this schema MUST be listed here to avoid data loss!
+-- When adding a new table, add it to this list immediately.
 do $$ declare
   allowed_tables constant text[] := array[
+    -- Core tables
+    'admin_secrets',
     'profiles',
+    -- Plant data
     'plants',
     'plant_watering_schedules',
     'plant_sources',
@@ -78,8 +83,16 @@ do $$ declare
     'translation_languages',
     'plant_translations',
     'requested_plants',
-    'admin_media_uploads',
     'plant_request_users',
+    -- Admin & media
+    'admin_media_uploads',
+    'admin_activity_logs',
+    'admin_email_templates',
+    'admin_email_template_translations',
+    'admin_email_template_versions',
+    'admin_email_campaigns',
+    'admin_campaign_sends',
+    -- Gardens
     'gardens',
     'garden_members',
     'garden_plants',
@@ -93,21 +106,20 @@ do $$ declare
     'garden_plant_tasks',
     'garden_plant_task_occurrences',
     'garden_task_user_completions',
+    'garden_activity_logs',
+    -- Social
+    'friend_requests',
+    'friends',
+    'bookmarks',
+    'bookmark_items',
+    -- Moderation & analytics
     'web_visits',
     'banned_accounts',
     'banned_ips',
     'broadcast_messages',
     'blog_posts',
     'profile_admin_notes',
-    'admin_activity_logs',
-    'admin_email_templates',
-    'admin_email_template_translations',
-    'admin_email_template_versions',
-    'admin_email_campaigns',
-    'admin_campaign_sends',
-    'garden_activity_logs',
-    'friend_requests',
-    'friends',
+    -- Notifications
     'notification_campaigns',
     'user_notifications',
     'user_push_subscriptions'
@@ -152,6 +164,9 @@ alter table if exists public.profiles add column if not exists is_private boolea
 alter table if exists public.profiles add column if not exists disable_friend_requests boolean not null default false;
 -- Language preference: stores user's preferred language code (e.g., 'en', 'fr')
 alter table if exists public.profiles add column if not exists language text default 'en';
+-- Notification preferences: push notifications and email campaigns (default to true/enabled)
+alter table if exists public.profiles add column if not exists notify_push boolean default true;
+alter table if exists public.profiles add column if not exists notify_email boolean default true;
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin
