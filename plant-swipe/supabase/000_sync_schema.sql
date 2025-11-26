@@ -101,6 +101,7 @@ do $$ declare
     'profile_admin_notes',
     'admin_activity_logs',
     'admin_email_templates',
+    'admin_email_template_translations',
     'admin_email_campaigns',
     'garden_activity_logs',
     'friend_requests',
@@ -147,6 +148,8 @@ alter table if exists public.profiles add column if not exists accent_key text d
 alter table if exists public.profiles add column if not exists is_private boolean not null default false;
 -- Friend requests setting: when true, users cannot send friend requests (prevents unwanted invites)
 alter table if exists public.profiles add column if not exists disable_friend_requests boolean not null default false;
+-- Language preference: stores user's preferred language code (e.g., 'en', 'fr')
+alter table if exists public.profiles add column if not exists language text default 'en';
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin
@@ -3562,6 +3565,33 @@ do $$ begin
     drop policy aet_admin_all on public.admin_email_templates;
   end if;
   create policy aet_admin_all on public.admin_email_templates for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Admin Email Template Translations (stores translated versions of email templates)
+create table if not exists public.admin_email_template_translations (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references public.admin_email_templates(id) on delete cascade,
+  language text not null,
+  subject text not null,
+  preview_text text,
+  body_html text not null,
+  body_json jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(template_id, language)
+);
+
+create index if not exists aett_template_lang_idx on public.admin_email_template_translations (template_id, language);
+
+alter table public.admin_email_template_translations enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_email_template_translations' and policyname='aett_admin_all') then
+    drop policy aett_admin_all on public.admin_email_template_translations;
+  end if;
+  create policy aett_admin_all on public.admin_email_template_translations for all to authenticated
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;

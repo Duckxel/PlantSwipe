@@ -1,17 +1,59 @@
 /**
  * Email HTML Wrapper
  * Creates a beautiful, styled email that matches the Aphylia website aesthetic
+ * Supports multiple languages for internationalization
  */
+
+import type { SupportedLanguage } from './i18n'
 
 export interface EmailWrapperOptions {
   subject?: string
   previewText?: string
   unsubscribeUrl?: string
   websiteUrl?: string
+  language?: SupportedLanguage
 }
 
 const DEFAULT_OPTIONS: EmailWrapperOptions = {
   websiteUrl: 'https://aphylia.app',
+  language: 'en',
+}
+
+// Localized strings for the email wrapper
+const EMAIL_WRAPPER_I18N: Record<SupportedLanguage, {
+  teamName: string
+  tagline: string
+  exploreButton: string
+  aboutLink: string
+  contactLink: string
+  unsubscribeLink: string
+  copyright: string
+}> = {
+  en: {
+    teamName: 'The Aphylia Team',
+    tagline: 'Helping you grow your plant knowledge 🌱',
+    exploreButton: 'Explore Aphylia →',
+    aboutLink: 'About',
+    contactLink: 'Contact',
+    unsubscribeLink: 'Unsubscribe',
+    copyright: '© {year} Aphylia. Made with 💚 for plant enthusiasts everywhere.',
+  },
+  fr: {
+    teamName: "L'équipe Aphylia",
+    tagline: 'Vous accompagne dans votre découverte des plantes 🌱',
+    exploreButton: 'Découvrir Aphylia →',
+    aboutLink: 'À propos',
+    contactLink: 'Contact',
+    unsubscribeLink: 'Se désabonner',
+    copyright: '© {year} Aphylia. Fait avec 💚 pour les passionnés de plantes partout dans le monde.',
+  },
+}
+
+/**
+ * Get localized strings for the email wrapper based on language
+ */
+export function getEmailWrapperStrings(language: SupportedLanguage = 'en') {
+  return EMAIL_WRAPPER_I18N[language] || EMAIL_WRAPPER_I18N.en
 }
 
 // Aphylia logo as inline SVG (simplified and optimized for email)
@@ -20,10 +62,13 @@ const APHYLIA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1
 /**
  * Wraps email body content with a beautiful styled template
  * Uses inline CSS for maximum email client compatibility
+ * Supports language parameter for internationalization
  */
 export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {}): string {
   const opts = { ...DEFAULT_OPTIONS, ...options }
   const currentYear = new Date().getFullYear()
+  const lang = opts.language || 'en'
+  const strings = getEmailWrapperStrings(lang)
   
   // Preview text (hidden text that shows in email inbox previews)
   const previewTextHtml = opts.previewText 
@@ -31,7 +76,7 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
     : ''
 
   return `<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="${lang}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -186,10 +231,10 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
                         </td>
                         <td style="vertical-align:middle;">
                           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">
-                            The Aphylia Team
+                            ${strings.teamName}
                           </p>
                           <p style="margin:0;font-size:14px;color:#6b7280;">
-                            Helping you grow your plant knowledge 🌱
+                            ${strings.tagline}
                           </p>
                         </td>
                       </tr>
@@ -211,7 +256,7 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
                       <tr>
                         <td>
                           <a href="${opts.websiteUrl}" style="display:inline-block;background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:50px;text-decoration:none;box-shadow:0 8px 24px -6px rgba(16, 185, 129, 0.4);">
-                            Explore Aphylia →
+                            ${strings.exploreButton}
                           </a>
                         </td>
                       </tr>
@@ -221,15 +266,15 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
                     <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;">
                       <a href="${opts.websiteUrl}" style="color:#059669;text-decoration:none;font-weight:500;">aphylia.app</a>
                       <span style="color:#d1d5db;margin:0 8px;">•</span>
-                      <a href="${opts.websiteUrl}/about" style="color:#9ca3af;text-decoration:none;">About</a>
+                      <a href="${opts.websiteUrl}/about" style="color:#9ca3af;text-decoration:none;">${strings.aboutLink}</a>
                       <span style="color:#d1d5db;margin:0 8px;">•</span>
-                      <a href="${opts.websiteUrl}/contact" style="color:#9ca3af;text-decoration:none;">Contact</a>
-                      ${opts.unsubscribeUrl ? `<span style="color:#d1d5db;margin:0 8px;">•</span><a href="${opts.unsubscribeUrl}" style="color:#9ca3af;text-decoration:none;">Unsubscribe</a>` : ''}
+                      <a href="${opts.websiteUrl}/contact" style="color:#9ca3af;text-decoration:none;">${strings.contactLink}</a>
+                      ${opts.unsubscribeUrl ? `<span style="color:#d1d5db;margin:0 8px;">•</span><a href="${opts.unsubscribeUrl}" style="color:#9ca3af;text-decoration:none;">${strings.unsubscribeLink}</a>` : ''}
                     </p>
                     
                     <!-- Copyright -->
                     <p style="margin:0;font-size:12px;color:#d1d5db;">
-                      © ${currentYear} Aphylia. Made with 💚 for plant enthusiasts everywhere.
+                      ${strings.copyright.replace('{year}', String(currentYear))}
                     </p>
                   </td>
                 </tr>
@@ -266,6 +311,8 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
 } {
   const opts = { ...DEFAULT_OPTIONS, ...options }
   const currentYear = new Date().getFullYear()
+  const lang = opts.language || 'en'
+  const strings = getEmailWrapperStrings(lang)
 
   const signature = `
     <div style="margin-top:32px;padding:24px;background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);">
@@ -274,8 +321,8 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
           ${APHYLIA_LOGO_SVG.replace('fill="#059669"', 'fill="#ffffff"')}
         </div>
         <div>
-          <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;">The Aphylia Team</p>
-          <p style="margin:0;font-size:14px;color:#6b7280;">Helping you grow your plant knowledge 🌱</p>
+          <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;">${strings.teamName}</p>
+          <p style="margin:0;font-size:14px;color:#6b7280;">${strings.tagline}</p>
         </div>
       </div>
     </div>
@@ -284,10 +331,10 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
   const footer = `
     <div style="margin-top:24px;padding-top:24px;border-top:1px solid rgba(16, 185, 129, 0.1);text-align:center;">
       <a href="${opts.websiteUrl}" style="display:inline-block;background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:50px;text-decoration:none;box-shadow:0 8px 24px -6px rgba(16, 185, 129, 0.4);margin-bottom:16px;">
-        Explore Aphylia →
+        ${strings.exploreButton}
       </a>
       <p style="margin:12px 0 0 0;font-size:12px;color:#9ca3af;">
-        © ${currentYear} Aphylia. Made with 💚 for plant enthusiasts everywhere.
+        ${strings.copyright.replace('{year}', String(currentYear))}
       </p>
     </div>
   `

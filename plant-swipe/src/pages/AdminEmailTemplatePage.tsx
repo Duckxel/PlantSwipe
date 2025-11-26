@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Select } from "@/components/ui/select"
 import {
   Info,
   Loader2,
@@ -19,11 +20,25 @@ import {
   Save,
   Eye,
   X,
+  Languages,
+  Globe,
 } from "lucide-react"
 import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
 import { VariableHighlighter } from "@/components/tiptap-extensions/variable-highlighter"
 import type { JSONContent } from "@tiptap/core"
 import { supabase } from "@/lib/supabaseClient"
+import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
+import { 
+  saveEmailTemplateTranslation, 
+  getEmailTemplateTranslations,
+} from "@/lib/emailTranslations"
+import { translateEmailToAllLanguages } from "@/lib/deepl"
+
+// Language display names
+const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
+  en: "English",
+  fr: "Français",
+}
 
 type EmailTemplate = {
   id: string
@@ -87,6 +102,16 @@ export const AdminEmailTemplatePage: React.FC = () => {
   const [templateEditorKey, setTemplateEditorKey] = React.useState("initial")
   const [existingTemplate, setExistingTemplate] = React.useState<EmailTemplate | null>(null)
   const [previewOpen, setPreviewOpen] = React.useState(false)
+  
+  // Language/Translation state
+  const [currentLanguage, setCurrentLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
+  const [translationsCache, setTranslationsCache] = React.useState<Record<SupportedLanguage, {
+    subject: string
+    bodyHtml: string
+    bodyDoc: JSONContent | null
+  }>>({} as any)
+  const [isTranslating, setIsTranslating] = React.useState(false)
+  const [translatedLanguages, setTranslatedLanguages] = React.useState<Set<SupportedLanguage>>(new Set())
 
   React.useEffect(() => {
     if (isNew) return
@@ -123,6 +148,43 @@ export const AdminEmailTemplatePage: React.FC = () => {
             doc: foundTemplate.bodyJson,
           })
           setTemplateEditorKey(`loaded-${foundTemplate.id}`)
+          
+          // Load translations for this template
+          const { data: translations } = await getEmailTemplateTranslations(foundTemplate.id)
+          if (translations && translations.length > 0) {
+            const cache: Record<SupportedLanguage, { subject: string; bodyHtml: string; bodyDoc: JSONContent | null }> = {} as any
+            const translated = new Set<SupportedLanguage>()
+            
+            for (const t of translations) {
+              cache[t.language as SupportedLanguage] = {
+                subject: t.subject,
+                bodyHtml: t.body_html,
+                bodyDoc: t.body_json as JSONContent | null,
+              }
+              translated.add(t.language as SupportedLanguage)
+            }
+            
+            // Also include the default (English) content from the main template
+            cache[DEFAULT_LANGUAGE] = {
+              subject: foundTemplate.subject,
+              bodyHtml: foundTemplate.bodyHtml,
+              bodyDoc: foundTemplate.bodyJson,
+            }
+            translated.add(DEFAULT_LANGUAGE)
+            
+            setTranslationsCache(cache)
+            setTranslatedLanguages(translated)
+          } else {
+            // No translations yet, just set the default language
+            setTranslationsCache({
+              [DEFAULT_LANGUAGE]: {
+                subject: foundTemplate.subject,
+                bodyHtml: foundTemplate.bodyHtml,
+                bodyDoc: foundTemplate.bodyJson,
+              }
+            } as any)
+            setTranslatedLanguages(new Set([DEFAULT_LANGUAGE]))
+          }
         } else {
            throw new Error("Template not found")
         }
@@ -137,6 +199,122 @@ export const AdminEmailTemplatePage: React.FC = () => {
     loadTemplate()
   }, [id, isNew, navigate])
 
+  // Handle language switching
+  const handleLanguageChange = (newLang: SupportedLanguage) => {
+    // Save current form state to cache before switching
+    setTranslationsCache(prev => ({
+      ...prev,
+      [currentLanguage]: {
+        subject: templateForm.subject,
+        bodyHtml: templateForm.bodyHtml,
+        bodyDoc: templateForm.bodyDoc,
+      }
+    }))
+    
+    // Switch to new language
+    setCurrentLanguage(newLang)
+    
+    // Load from cache if available
+    const cached = translationsCache[newLang]
+    if (cached) {
+      setTemplateForm(prev => ({
+        ...prev,
+        subject: cached.subject,
+        bodyHtml: cached.bodyHtml,
+        bodyDoc: cached.bodyDoc,
+      }))
+      setInitialBody({
+        html: cached.bodyHtml,
+        doc: cached.bodyDoc,
+      })
+      setTemplateEditorKey(`lang-${newLang}-${Date.now()}`)
+    } else {
+      // No translation yet for this language - start with empty or default
+      setTemplateForm(prev => ({
+        ...prev,
+        subject: "",
+        bodyHtml: "",
+        bodyDoc: null,
+      }))
+      setInitialBody({
+        html: "",
+        doc: null,
+      })
+      setTemplateEditorKey(`lang-${newLang}-empty-${Date.now()}`)
+    }
+  }
+
+  // Handle translate to all languages using DeepL
+  const handleTranslateToAll = async () => {
+    if (!templateForm.subject.trim() || !templateForm.bodyHtml.trim()) {
+      alert("Please add subject and body content before translating.")
+      return
+    }
+    
+    setIsTranslating(true)
+    try {
+      // Save current language content to cache first
+      setTranslationsCache(prev => ({
+        ...prev,
+        [currentLanguage]: {
+          subject: templateForm.subject,
+          bodyHtml: templateForm.bodyHtml,
+          bodyDoc: templateForm.bodyDoc,
+        }
+      }))
+      
+      // Translate to all other languages
+      const translations = await translateEmailToAllLanguages(
+        {
+          subject: templateForm.subject,
+          previewText: null,
+          bodyHtml: templateForm.bodyHtml,
+        },
+        currentLanguage
+      )
+      
+      // Update cache with all translations
+      const newCache = { ...translationsCache }
+      const translated = new Set(translatedLanguages)
+      
+      for (const lang of SUPPORTED_LANGUAGES) {
+        if (translations[lang]) {
+          newCache[lang] = {
+            subject: translations[lang].subject,
+            bodyHtml: translations[lang].bodyHtml,
+            bodyDoc: lang === currentLanguage ? templateForm.bodyDoc : null, // Only keep doc for current lang
+          }
+          translated.add(lang)
+        }
+      }
+      
+      setTranslationsCache(newCache)
+      setTranslatedLanguages(translated)
+      
+      // If template exists, save all translations to DB
+      if (existingTemplate?.id) {
+        for (const lang of SUPPORTED_LANGUAGES) {
+          if (lang !== DEFAULT_LANGUAGE && newCache[lang]) {
+            await saveEmailTemplateTranslation({
+              template_id: existingTemplate.id,
+              language: lang,
+              subject: newCache[lang].subject,
+              body_html: newCache[lang].bodyHtml,
+              body_json: newCache[lang].bodyDoc,
+            })
+          }
+        }
+      }
+      
+      alert("Successfully translated to all languages!")
+    } catch (err) {
+      console.error("Translation error:", err)
+      alert(`Translation failed: ${(err as Error).message}`)
+    } finally {
+      setIsTranslating(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!templateForm.title.trim() || !templateForm.subject.trim() || !templateForm.bodyHtml.trim()) {
       alert("Template title, subject, and body are required.")
@@ -144,14 +322,29 @@ export const AdminEmailTemplatePage: React.FC = () => {
     }
     setTemplateSaving(true)
     try {
+      // Save current content to cache first
+      const updatedCache = {
+        ...translationsCache,
+        [currentLanguage]: {
+          subject: templateForm.subject,
+          bodyHtml: templateForm.bodyHtml,
+          bodyDoc: templateForm.bodyDoc,
+        }
+      }
+      
+      // Get the default language content for the main template
+      const defaultContent = currentLanguage === DEFAULT_LANGUAGE 
+        ? { subject: templateForm.subject, bodyHtml: templateForm.bodyHtml, bodyDoc: templateForm.bodyDoc }
+        : updatedCache[DEFAULT_LANGUAGE] || { subject: templateForm.subject, bodyHtml: templateForm.bodyHtml, bodyDoc: templateForm.bodyDoc }
+      
       const headers = await buildAdminHeaders()
       const payload = {
         title: templateForm.title.trim(),
-        subject: templateForm.subject.trim(),
+        subject: defaultContent.subject.trim(),
         previewText: "",
         description: templateForm.description.trim(),
-        bodyHtml: templateForm.bodyHtml,
-        bodyJson: templateForm.bodyDoc,
+        bodyHtml: defaultContent.bodyHtml,
+        bodyJson: defaultContent.bodyDoc,
         isActive: true,
       }
       
@@ -171,7 +364,24 @@ export const AdminEmailTemplatePage: React.FC = () => {
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || "Failed to save template")
       
-      // alert("Template saved successfully")
+      // Get template ID (from response for new, from existing for edit)
+      const templateId = isNew ? data.template?.id : id
+      
+      // Save translations for non-default languages
+      if (templateId) {
+        for (const lang of SUPPORTED_LANGUAGES) {
+          if (lang !== DEFAULT_LANGUAGE && updatedCache[lang]) {
+            await saveEmailTemplateTranslation({
+              template_id: templateId,
+              language: lang,
+              subject: updatedCache[lang].subject,
+              body_html: updatedCache[lang].bodyHtml,
+              body_json: updatedCache[lang].bodyDoc,
+            })
+          }
+        }
+      }
+      
       navigate("/admin/emails/templates") 
     } catch (err) {
       alert((err as Error).message)
@@ -347,6 +557,79 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     {v.token}
                   </span>
                 ))}
+              </div>
+            </div>
+
+            {/* Language Card */}
+            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
+              <h2 className="text-sm font-semibold text-stone-900 dark:text-white mb-4 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                  <Globe className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                </div>
+                Language
+              </h2>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                    Editing Language
+                  </Label>
+                  <Select
+                    value={currentLanguage}
+                    onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
+                    className="w-full rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d]"
+                  >
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {LANGUAGE_NAMES[lang]}{translatedLanguages.has(lang) ? ' ✓' : ''}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-[11px] text-stone-400">
+                    Currently editing: <span className="font-medium text-stone-600 dark:text-stone-300">{LANGUAGE_NAMES[currentLanguage]}</span>
+                  </p>
+                </div>
+                
+                <div className="pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTranslateToAll}
+                    disabled={isTranslating || !templateForm.bodyHtml.trim()}
+                    className="w-full rounded-xl border-sky-200 dark:border-sky-900/50 hover:border-sky-300 dark:hover:border-sky-800 hover:bg-sky-50 dark:hover:bg-sky-900/20"
+                  >
+                    {isTranslating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Translating...
+                      </>
+                    ) : (
+                      <>
+                        <Languages className="mr-2 h-4 w-4" />
+                        Translate to All
+                      </>
+                    )}
+                  </Button>
+                  <p className="mt-2 text-[10px] text-stone-400 text-center">
+                    Uses DeepL to translate to all supported languages
+                  </p>
+                </div>
+                
+                {/* Translation status */}
+                <div className="flex flex-wrap gap-1.5 pt-2">
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <span
+                      key={lang}
+                      className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                        translatedLanguages.has(lang)
+                          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-stone-100 dark:bg-[#2a2a2d] text-stone-500 dark:text-stone-500'
+                      }`}
+                    >
+                      {LANGUAGE_NAMES[lang]}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
 
