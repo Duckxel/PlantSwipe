@@ -814,11 +814,23 @@ async function sendBatch(
   const payload = recipients.map((recipient) => {
     const userRaw = recipient.displayName
     const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+    
+    // Generate random 10-character string (uppercase, lowercase, numbers)
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    let randomStr = ""
+    for (let i = 0; i < 10; i++) {
+      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    
+    const websiteUrl = Deno.env.get("WEBSITE_URL") ?? "https://aphylia.app"
+    
     // Variables available for replacement in email templates
-    // Note: {{code}} is typically for verification emails, but we provide a placeholder for campaigns
     const context: Record<string, string> = { 
-      user: userCap,
-      code: "XXXXXX" // Placeholder for campaign emails (real codes are for transactional emails)
+      user: userCap,                                    // User's display name (capitalized)
+      email: recipient.email,                           // User's email address
+      random: randomStr,                                // 10 random characters (unique per email)
+      url: websiteUrl.replace(/^https?:\/\//, ""),      // Website URL without protocol (e.g., "aphylia.app")
+      code: "XXXXXX"                                    // Placeholder for campaign emails (real codes are for transactional emails)
     }
     
     // Get user's language and find appropriate translation

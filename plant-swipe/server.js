@@ -525,11 +525,23 @@ async function processEmailCampaigns() {
            const userRaw = r.display_name || 'User'
            const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
            const userLang = r.user_language || 'en'
+           
+           // Generate random 10-character string (uppercase, lowercase, numbers)
+           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+           let randomStr = ''
+           for (let i = 0; i < 10; i++) {
+             randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+           }
+           
+           const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+           
            // Variables available for replacement in email templates
-           // Note: {{code}} is typically for verification emails, but we provide a placeholder for campaigns
            const context = { 
-             user: userCap,
-             code: 'XXXXXX' // Placeholder for campaign emails (real codes are for transactional emails)
+             user: userCap,                           // User's display name (capitalized)
+             email: r.email,                          // User's email address
+             random: randomStr,                       // 10 random characters (unique per email)
+             url: websiteUrl.replace(/^https?:\/\//, ''), // Website URL without protocol (e.g., "aphylia.app")
+             code: 'XXXXXX'                           // Placeholder for campaign emails (real codes are for transactional emails)
            }
            const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
            
