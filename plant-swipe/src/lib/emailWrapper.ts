@@ -2,6 +2,9 @@
  * Email HTML Wrapper
  * Creates a beautiful, styled email that matches the Aphylia website aesthetic
  * Supports multiple languages for internationalization
+ * 
+ * IMPORTANT: This file should stay in sync with the email-campaign-runner edge function
+ * Both should produce identical HTML output for consistency between preview and sent emails.
  */
 
 import type { SupportedLanguage } from './i18n'
@@ -12,6 +15,66 @@ export interface EmailWrapperOptions {
   unsubscribeUrl?: string
   websiteUrl?: string
   language?: SupportedLanguage
+}
+
+/**
+ * Variables that can be used in email templates
+ * These are replaced at send time with actual values
+ */
+export const EMAIL_TEMPLATE_VARIABLES = [
+  { token: '{{user}}', description: "The recipient's display name (capitalized)" },
+  { token: '{{email}}', description: "The recipient's email address" },
+  { token: '{{random}}', description: '10 random alphanumeric characters (A-Z, a-z, 0-9)' },
+  { token: '{{code}}', description: 'Verification code, OTP, or sensitive data' },
+  { token: '{{date}}', description: 'Current date in user-friendly format' },
+  { token: '{{year}}', description: 'Current year' },
+] as const
+
+/**
+ * Generates a random string of alphanumeric characters
+ */
+export function generateRandomString(length: number = 10): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return result
+}
+
+/**
+ * Replaces template variables with their values
+ * Use for preview or when sending emails
+ */
+export function replaceEmailTemplateVariables(
+  input: string, 
+  context: Record<string, string> = {}
+): string {
+  if (!input) return ''
+  
+  return input.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key: string) => {
+    const normalized = key.trim().toLowerCase()
+    
+    // Handle special dynamic variables
+    if (normalized === 'random') {
+      return generateRandomString(10)
+    }
+    if (normalized === 'date') {
+      return new Date().toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+    }
+    if (normalized === 'year') {
+      return String(new Date().getFullYear())
+    }
+    
+    // Handle context-provided variables
+    const replacement = context[normalized]
+    return replacement !== undefined ? replacement : match
+  })
 }
 
 const DEFAULT_OPTIONS: EmailWrapperOptions = {
@@ -296,9 +359,30 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
 
 /**
  * Generates a preview-friendly HTML for display (non-iframe version)
+ * Applies variable replacement with sample values for preview
  */
 export function generateEmailPreviewHtml(bodyHtml: string, options: EmailWrapperOptions = {}): string {
-  return wrapEmailHtml(bodyHtml, options)
+  // Apply variable replacement with sample preview values
+  const previewContext: Record<string, string> = {
+    user: 'Alex',
+    email: 'alex@example.com',
+    code: 'A1B2C3',
+  }
+  
+  const processedBody = replaceEmailTemplateVariables(bodyHtml, previewContext)
+  const processedSubject = options.subject 
+    ? replaceEmailTemplateVariables(options.subject, previewContext) 
+    : options.subject
+    
+  return wrapEmailHtml(processedBody, { ...options, subject: processedSubject })
+}
+
+/**
+ * Returns a complete HTML document that can be used in an iframe for 100% accurate preview
+ * This is the recommended way to preview emails as it uses the exact same wrapper function
+ */
+export function generateIframePreviewHtml(bodyHtml: string, options: EmailWrapperOptions = {}): string {
+  return generateEmailPreviewHtml(bodyHtml, options)
 }
 
 /**

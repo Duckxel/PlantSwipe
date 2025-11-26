@@ -35,6 +35,14 @@ type EmailTranslation = {
   body_json: Record<string, unknown> | null
 }
 
+type EmailTemplateRow = {
+  id: string
+  subject: string
+  body_html: string
+  body_json: Record<string, unknown> | null
+  version: number
+}
+
 // Supported languages - should match frontend i18n config
 const SUPPORTED_LANGUAGES = ['en', 'fr'] as const
 type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]
@@ -319,8 +327,24 @@ async function processCampaign(
 
     const unsentRecipients = recipients.filter((recipient) => !alreadySentSet.has(recipient.userId))
 
+    // IMPORTANT: Fetch the LATEST template content from the database
+    // This ensures any last-minute edits are included in the campaign
+    const latestTemplate = await fetchLatestEmailTemplate(client, campaign.template_id)
+    
     // Fetch email template translations for multi-language support
     const emailTranslations = await fetchEmailTemplateTranslations(client, campaign.template_id)
+    
+    // If we have a template, add English/default content to translations map from latest template
+    if (latestTemplate) {
+      emailTranslations.set(DEFAULT_LANGUAGE, {
+        language: DEFAULT_LANGUAGE,
+        subject: latestTemplate.subject,
+        preview_text: null,
+        body_html: latestTemplate.body_html,
+        body_json: latestTemplate.body_json,
+      })
+      console.log(`[email-campaign-runner] Using latest template v${latestTemplate.version}`)
+    }
 
     if (!unsentRecipients.length) {
       summary.status = "sent"
@@ -710,6 +734,30 @@ function convertCampaignTimeToUserUtc(scheduledUtc: string, campaignTimezone: st
   }
 }
 
+/**
+ * Fetches the LATEST version of an email template from the database
+ * This ensures campaigns always use the most up-to-date template content
+ */
+async function fetchLatestEmailTemplate(
+  client: SupabaseClient,
+  templateId: string | null,
+): Promise<EmailTemplateRow | null> {
+  if (!templateId) return null
+  
+  const { data, error } = await client
+    .from("admin_email_templates")
+    .select("id, subject, body_html, body_json, version")
+    .eq("id", templateId)
+    .single()
+  
+  if (error) {
+    console.warn("[email-campaign-runner] failed to load latest template", error)
+    return null
+  }
+  
+  return data as EmailTemplateRow
+}
+
 async function fetchEmailTemplateTranslations(
   client: SupabaseClient,
   templateId: string | null,
@@ -814,15 +862,23 @@ async function sendBatch(
   const payload = recipients.map((recipient) => {
     const userRaw = recipient.displayName
     const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
-    const context = { user: userCap }
+    
+    // Build context with all available variables for template replacement
+    const context: Record<string, string> = { 
+      user: userCap,
+      email: recipient.email,
+      // Note: {{random}}, {{date}}, {{year}} are handled dynamically in renderTemplate
+    }
     
     // Get user's language and find appropriate translation
     const userLang = recipient.language as SupportedLanguage
     const translation = translations.get(userLang)
     
-    // Use translated content if available, otherwise fall back to default campaign content
-    const rawSubject = translation?.subject || campaign.subject
-    const rawBodyHtml = translation?.body_html || campaign.body_html
+    // Use translated content if available, otherwise fall back to default language
+    // Priority: 1) User's language translation, 2) Default language from translations map, 3) Campaign defaults
+    const defaultTranslation = translations.get(DEFAULT_LANGUAGE)
+    const rawSubject = translation?.subject || defaultTranslation?.subject || campaign.subject
+    const rawBodyHtml = translation?.body_html || defaultTranslation?.body_html || campaign.body_html
     
     const bodyHtml = renderTemplate(rawBodyHtml, context)
     const subject = renderTemplate(rawSubject, context)
@@ -906,10 +962,53 @@ async function finalizeCampaign(
   }
 }
 
+/**
+ * Generates a random string of alphanumeric characters (letters and numbers, mixed case)
+ * Used for {{random}} variable replacement
+ */
+function generateRandomString(length: number = 10): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  const randomValues = new Uint8Array(length)
+  crypto.getRandomValues(randomValues)
+  for (let i = 0; i < length; i++) {
+    result += chars[randomValues[i] % chars.length]
+  }
+  return result
+}
+
+/**
+ * Replaces template variables with their values
+ * Supported variables:
+ *   - {{user}} - User's display name (capitalized)
+ *   - {{email}} - User's email address
+ *   - {{random}} - 10 random alphanumeric characters (generated fresh each time)
+ *   - {{code}} - Verification/OTP code (must be in context)
+ *   - {{date}} - Current date in user-friendly format
+ *   - {{year}} - Current year
+ */
 function renderTemplate(input: string | null | undefined, context: Record<string, string>): string {
   if (!input) return ""
   return input.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => {
     const normalized = key.trim().toLowerCase()
+    
+    // Handle special dynamic variables
+    if (normalized === 'random') {
+      return generateRandomString(10)
+    }
+    if (normalized === 'date') {
+      return new Date().toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+    }
+    if (normalized === 'year') {
+      return String(new Date().getFullYear())
+    }
+    
+    // Handle context-provided variables
     const replacement = context[normalized]
     return replacement !== undefined ? replacement : `{{${key}}}`
   })

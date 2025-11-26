@@ -36,6 +36,7 @@ import {
   getEmailTemplateTranslations,
 } from "@/lib/emailTranslations"
 import { translateEmailToAllLanguages } from "@/lib/deepl"
+import { generateEmailPreviewHtml } from "@/lib/emailWrapper"
 
 // Language display names
 const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
@@ -74,10 +75,72 @@ type TemplateVersion = {
   createdAt: string
 }
 
+// Template variables available for email personalization
+// These are replaced at send time with actual values
 const VARIABLE_CATALOG = [
-  { token: "{{user}}", description: "Replaced with the user's display name" },
-  { token: "{{code}}", description: "Replaced with verification code, OTP, or sensitive data" },
+  { 
+    token: "{{user}}", 
+    description: "The recipient's display name (capitalized). Example: 'John'" 
+  },
+  { 
+    token: "{{email}}", 
+    description: "The recipient's email address. Example: 'user@example.com'" 
+  },
+  { 
+    token: "{{random}}", 
+    description: "10 random alphanumeric characters (A-Z, a-z, 0-9). Generated fresh for each email. Example: 'aB3xK9mZ2n'" 
+  },
+  { 
+    token: "{{code}}", 
+    description: "Verification code, OTP, or sensitive data. Use for security-related emails." 
+  },
+  { 
+    token: "{{date}}", 
+    description: "Current date in user-friendly format. Example: 'Monday, January 15, 2024'" 
+  },
+  { 
+    token: "{{year}}", 
+    description: "Current year. Example: '2024'" 
+  },
 ]
+
+/**
+ * Generates a random string of alphanumeric characters for preview
+ */
+function generateRandomString(length: number = 10): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return result
+}
+
+/**
+ * Replaces template variables with preview values
+ * Mirrors the backend renderTemplate function
+ */
+function replaceTemplateVariables(input: string): string {
+  if (!input) return ""
+  
+  // Generate a random string for preview (consistent within this render)
+  const randomPreview = generateRandomString(10)
+  const datePreview = new Date().toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  })
+  const yearPreview = String(new Date().getFullYear())
+  
+  return input
+    .replace(/\{\{\s*user\s*\}\}/gi, "Alex")
+    .replace(/\{\{\s*email\s*\}\}/gi, "alex@example.com")
+    .replace(/\{\{\s*random\s*\}\}/gi, randomPreview)
+    .replace(/\{\{\s*code\s*\}\}/gi, "A1B2C3")
+    .replace(/\{\{\s*date\s*\}\}/gi, datePreview)
+    .replace(/\{\{\s*year\s*\}\}/gi, yearPreview)
+}
 
 async function buildAdminHeaders() {
   const session = (await supabase.auth.getSession()).data.session
@@ -120,8 +183,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
   const [templateEditorKey, setTemplateEditorKey] = React.useState("initial")
   const [existingTemplate, setExistingTemplate] = React.useState<EmailTemplate | null>(null)
   const [previewOpen, setPreviewOpen] = React.useState(false)
-  const previewBodyRef = React.useRef<HTMLDivElement>(null)
-  const [copyNotification, setCopyNotification] = React.useState<{ text: string; x: number; y: number } | null>(null)
   
   // Language/Translation state
   const [currentLanguage, setCurrentLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
@@ -559,63 +620,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
       loadVersionHistory()
     }
   }, [versionHistoryOpen, existingTemplate?.id, loadVersionHistory])
-
-  // Set up click-to-copy handlers in preview mode
-  React.useEffect(() => {
-    if (!previewOpen || !previewBodyRef.current) return
-
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      
-      // Find clickable elements: sensitive code boxes, buttons, cards
-      const codeBox = target.closest('[data-code]') as HTMLElement
-      const sensitiveCodeContainer = target.closest('[data-type="sensitive-code"]') as HTMLElement
-      const buttonLink = target.closest('[data-type="email-button"] a') as HTMLAnchorElement
-      const emailCard = target.closest('[data-type="email-card"]') as HTMLElement
-      
-      let textToCopy = ''
-      let elementRect: DOMRect | null = null
-      
-      if (codeBox) {
-        textToCopy = codeBox.textContent || ''
-        elementRect = codeBox.getBoundingClientRect()
-      } else if (sensitiveCodeContainer) {
-        const codeEl = sensitiveCodeContainer.querySelector('[data-code]')
-        textToCopy = codeEl?.textContent || ''
-        elementRect = sensitiveCodeContainer.getBoundingClientRect()
-      } else if (buttonLink) {
-        e.preventDefault()
-        textToCopy = buttonLink.href || buttonLink.textContent || ''
-        elementRect = buttonLink.getBoundingClientRect()
-      } else if (emailCard) {
-        // Copy card content
-        const titleEl = emailCard.querySelector('strong')
-        const contentEl = emailCard.querySelector('td:last-child > div > div')
-        const title = titleEl?.textContent || ''
-        const content = contentEl?.textContent || ''
-        textToCopy = title ? `${title}: ${content}` : content
-        elementRect = emailCard.getBoundingClientRect()
-      }
-      
-      if (textToCopy && elementRect) {
-        navigator.clipboard?.writeText(textToCopy).then(() => {
-          setCopyNotification({
-            text: textToCopy.length > 30 ? textToCopy.slice(0, 30) + '...' : textToCopy,
-            x: elementRect!.left + elementRect!.width / 2,
-            y: elementRect!.top - 10,
-          })
-          setTimeout(() => setCopyNotification(null), 2000)
-        })
-      }
-    }
-
-    const container = previewBodyRef.current
-    container.addEventListener('click', handleClick)
-    
-    return () => {
-      container.removeEventListener('click', handleClick)
-    }
-  }, [previewOpen, templateForm.bodyHtml])
 
   const handleSave = async () => {
     if (!templateForm.title.trim() || !templateForm.subject.trim() || !templateForm.bodyHtml.trim()) {
@@ -1151,266 +1155,42 @@ export const AdminEmailTemplatePage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Email Preview - Full Screen Overlay (always light theme) */}
+      {/* Email Preview - Full Screen Overlay using actual email wrapper via iframe */}
+      {/* This ensures 100% accuracy between preview and sent email */}
       {previewOpen && (
         <div 
-          className="fixed inset-0 z-50 flex flex-col overflow-y-auto"
+          className="fixed inset-0 z-50 flex flex-col"
           style={{ 
-            background: 'linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%)',
-            colorScheme: 'light',
+            background: '#1a1a1d',
           }}
         >
-          {/* Google Fonts for Quicksand */}
-          <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet" />
-          
-          {/* Email Content Styles */}
-          <style>{`
-            .email-preview-body h1 {
-              font-size: 32px !important;
-              font-weight: 700 !important;
-              color: #111827 !important;
-              margin: 0 0 20px 0 !important;
-              line-height: 1.2 !important;
-              letter-spacing: -0.5px !important;
-            }
-            .email-preview-body h2 {
-              font-size: 26px !important;
-              font-weight: 700 !important;
-              color: #1f2937 !important;
-              margin: 32px 0 16px 0 !important;
-              line-height: 1.3 !important;
-            }
-            .email-preview-body h3 {
-              font-size: 22px !important;
-              font-weight: 600 !important;
-              color: #374151 !important;
-              margin: 28px 0 12px 0 !important;
-              line-height: 1.4 !important;
-            }
-            .email-preview-body h4 {
-              font-size: 18px !important;
-              font-weight: 600 !important;
-              color: #4b5563 !important;
-              margin: 24px 0 10px 0 !important;
-            }
-            .email-preview-body p {
-              margin: 0 0 16px 0 !important;
-              line-height: 1.75 !important;
-              color: #374151 !important;
-            }
-            .email-preview-body a {
-              color: #059669 !important;
-              text-decoration: underline !important;
-              text-decoration-color: rgba(5, 150, 105, 0.4) !important;
-              text-underline-offset: 2px !important;
-              font-weight: 500 !important;
-              transition: all 0.15s ease !important;
-            }
-            .email-preview-body a:hover {
-              color: #047857 !important;
-              text-decoration-color: #047857 !important;
-            }
-            .email-preview-body code {
-              background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%) !important;
-              color: #dc2626 !important;
-              padding: 3px 8px !important;
-              border-radius: 6px !important;
-              font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
-              font-size: 0.9em !important;
-              border: 1px solid rgba(0, 0, 0, 0.08) !important;
-              font-weight: 500 !important;
-            }
-            .email-preview-body pre {
-              background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
-              color: #e5e7eb !important;
-              padding: 20px 24px !important;
-              border-radius: 16px !important;
-              overflow-x: auto !important;
-              font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
-              font-size: 14px !important;
-              line-height: 1.6 !important;
-              margin: 20px 0 !important;
-              border: 1px solid rgba(255, 255, 255, 0.1) !important;
-              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
-            }
-            .email-preview-body pre code {
-              background: transparent !important;
-              color: #e5e7eb !important;
-              padding: 0 !important;
-              border: none !important;
-              border-radius: 0 !important;
-              font-size: inherit !important;
-            }
-            .email-preview-body mark,
-            .email-preview-body [data-color] {
-              background: linear-gradient(135deg, #fef08a 0%, #fde047 100%) !important;
-              color: #713f12 !important;
-              padding: 2px 6px !important;
-              border-radius: 4px !important;
-              box-decoration-break: clone !important;
-              -webkit-box-decoration-break: clone !important;
-            }
-            .email-preview-body blockquote {
-              border-left: 4px solid #10b981 !important;
-              background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 100%) !important;
-              margin: 20px 0 !important;
-              padding: 16px 24px !important;
-              border-radius: 0 12px 12px 0 !important;
-              font-style: italic !important;
-              color: #374151 !important;
-            }
-            .email-preview-body ul, .email-preview-body ol {
-              margin: 16px 0 !important;
-              padding-left: 28px !important;
-            }
-            .email-preview-body li {
-              margin: 8px 0 !important;
-              color: #374151 !important;
-            }
-            .email-preview-body hr {
-              border: none !important;
-              height: 2px !important;
-              background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%) !important;
-              margin: 32px 0 !important;
-            }
-            .email-preview-body strong, .email-preview-body b {
-              font-weight: 600 !important;
-              color: #111827 !important;
-            }
-            .email-preview-body em, .email-preview-body i {
-              font-style: italic !important;
-            }
-            .email-preview-body img {
-              max-width: 100% !important;
-              height: auto !important;
-              border-radius: 12px !important;
-            }
-            /* Email Card Styles */
-            .email-preview-body [data-type="email-card"] {
-              margin: 28px 0 !important;
-              padding: 0 !important;
-              border-radius: 20px !important;
-              background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(255, 255, 255, 1) 50%, rgba(16, 185, 129, 0.06) 100%) !important;
-              border: 2px solid rgba(16, 185, 129, 0.25) !important;
-              box-shadow: 0 8px 32px rgba(16, 185, 129, 0.15), 0 2px 8px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
-              overflow: hidden !important;
-            }
-            .email-preview-body [data-type="email-card"] table {
-              margin: 0 !important;
-              border: none !important;
-            }
-            .email-preview-body [data-type="email-card"] td {
-              padding: 24px !important;
-              border: none !important;
-            }
-            .email-preview-body [data-type="email-card"] td:first-child {
-              padding-right: 8px !important;
-              font-size: 32px !important;
-            }
-            .email-preview-body [data-type="email-card"] strong {
-              display: block !important;
-              font-size: 17px !important;
-              font-weight: 700 !important;
-              color: #065f46 !important;
-              margin-bottom: 6px !important;
-              letter-spacing: -0.3px !important;
-            }
-            .email-preview-body [data-type="email-card"] > table > tbody > tr > td:last-child > div > div {
-              font-size: 15px !important;
-              color: #374151 !important;
-              line-height: 1.6 !important;
-            }
-            /* Email Button Styles */
-            .email-preview-body [data-type="email-button"] a,
-            .email-preview-body a[style*="border-radius"][style*="padding"] {
-              display: inline-block !important;
-              background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
-              color: #ffffff !important;
-              padding: 14px 32px !important;
-              border-radius: 50px !important;
-              text-decoration: none !important;
-              font-weight: 600 !important;
-              font-size: 15px !important;
-              box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35) !important;
-              transition: all 0.2s ease !important;
-            }
-            /* Table styling */
-            .email-preview-body table {
-              width: 100% !important;
-              border-collapse: collapse !important;
-              margin: 20px 0 !important;
-            }
-            .email-preview-body th, .email-preview-body td {
-              padding: 12px 16px !important;
-              border: 1px solid #e5e7eb !important;
-              text-align: left !important;
-            }
-            .email-preview-body th {
-              background: #f9fafb !important;
-              font-weight: 600 !important;
-              color: #111827 !important;
-            }
-            @keyframes fadeInUp {
-              from {
-                opacity: 0;
-                transform: translate(-50%, -80%);
-              }
-              to {
-                opacity: 1;
-                transform: translate(-50%, -100%);
-              }
-            }
-            /* Interactive element styles for preview */
-            .email-preview-body [data-type="sensitive-code"] {
-              cursor: pointer;
-              transition: transform 0.2s ease, box-shadow 0.2s ease;
-            }
-            .email-preview-body [data-type="sensitive-code"]:hover {
-              transform: scale(1.02);
-              box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
-            }
-            .email-preview-body [data-type="sensitive-code"] [data-code] {
-              transition: background 0.2s ease, border-color 0.2s ease;
-            }
-            .email-preview-body [data-type="sensitive-code"]:hover [data-code] {
-              background: #ffffff !important;
-              border-color: #10b981 !important;
-            }
-            .email-preview-body [data-type="email-button"] a {
-              cursor: pointer;
-              transition: transform 0.2s ease, box-shadow 0.2s ease;
-            }
-            .email-preview-body [data-type="email-button"] a:hover {
-              transform: translateY(-2px);
-              box-shadow: 0 12px 32px rgba(16, 185, 129, 0.5) !important;
-            }
-            .email-preview-body [data-type="email-card"] {
-              cursor: pointer;
-              transition: transform 0.2s ease;
-            }
-            .email-preview-body [data-type="email-card"]:hover {
-              transform: scale(1.01);
-            }
-          `}</style>
           {/* Floating Controls */}
           <div 
             className="fixed top-6 left-1/2 z-50 flex items-center gap-3 px-5 py-2.5 rounded-2xl shadow-2xl"
             style={{ 
               transform: 'translateX(-50%)',
-              background: 'rgba(255, 255, 255, 0.95)',
+              background: 'rgba(26, 26, 29, 0.95)',
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(0, 0, 0, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
             }}
           >
             {/* Subject */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
               <span style={{ color: '#9ca3af' }}>Subject:</span>
-              <span style={{ fontWeight: 500, color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {templateForm.subject.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{code\}\}/gi, "50L57IC3") || "(No subject)"}
+              <span style={{ fontWeight: 500, color: '#f3f4f6', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {replaceTemplateVariables(templateForm.subject) || "(No subject)"}
               </span>
             </div>
 
-            <div style={{ height: '24px', width: '1px', background: '#e5e7eb' }} />
+            <div style={{ height: '24px', width: '1px', background: '#3e3e42' }} />
+            
+            {/* Language indicator */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+              <Globe style={{ width: '14px', height: '14px', color: '#9ca3af' }} />
+              <span style={{ color: '#9ca3af' }}>{LANGUAGE_NAMES[currentLanguage]}</span>
+            </div>
+
+            <div style={{ height: '24px', width: '1px', background: '#3e3e42' }} />
             
             <button
               type="button"
@@ -1421,11 +1201,11 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 gap: '8px',
                 padding: '8px 16px',
                 borderRadius: '9999px',
-                background: '#f3f4f6',
+                background: '#3e3e42',
                 border: 'none',
                 fontSize: '14px',
                 fontWeight: 500,
-                color: '#374151',
+                color: '#f3f4f6',
                 cursor: 'pointer',
               }}
             >
@@ -1434,182 +1214,26 @@ export const AdminEmailTemplatePage: React.FC = () => {
             </button>
           </div>
 
-          {/* Email Content */}
-          <div style={{ flex: 1, paddingTop: '80px', paddingBottom: '80px', paddingLeft: '24px', paddingRight: '24px' }}>
-            <div style={{ maxWidth: '680px', margin: '0 auto' }}>
-              {/* Email Container */}
-              <div 
+          {/* Email Preview iframe - renders EXACTLY what will be sent */}
+          <div style={{ flex: 1, paddingTop: '72px', paddingBottom: '64px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', maxWidth: '100%', margin: '0 auto', padding: '0 24px' }}>
+              <iframe
+                title="Email Preview"
+                srcDoc={generateEmailPreviewHtml(templateForm.bodyHtml, {
+                  subject: templateForm.subject,
+                  language: currentLanguage,
+                })}
                 style={{
-                  borderRadius: '32px',
-                  overflow: 'hidden',
-                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%)',
-                  border: '1px solid rgba(16, 185, 129, 0.12)',
-                  boxShadow: '0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset',
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  borderRadius: '16px',
+                  background: '#fff',
+                  boxShadow: '0 32px 64px -16px rgba(0, 0, 0, 0.5)',
                 }}
-              >
-                {/* Header */}
-                <div 
-                  style={{
-                    background: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%)',
-                    padding: '32px 48px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <div 
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      background: 'rgba(255, 255, 255, 0.15)',
-                      borderRadius: '20px',
-                      padding: '14px 28px',
-                    }}
-                  >
-                    <img 
-                      src="/icons/plant-swipe-icon.svg" 
-                      alt="" 
-                      style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)' }}
-                    />
-                    <span 
-                      style={{ 
-                        fontSize: '26px', 
-                        fontWeight: 700, 
-                        color: '#ffffff', 
-                        letterSpacing: '-0.5px',
-                        fontFamily: "'Quicksand', -apple-system, BlinkMacSystemFont, sans-serif",
-                      }}
-                    >
-                      Aphylia
-                    </span>
-                  </div>
-                </div>
-
-                {/* Email Body */}
-                <div 
-                  ref={previewBodyRef}
-                  className="email-preview-body"
-                  style={{ 
-                    padding: '48px', 
-                    color: '#374151', 
-                    fontSize: '16px', 
-                    lineHeight: 1.75,
-                    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-                  }}
-                  dangerouslySetInnerHTML={{ 
-                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{code\}\}/gi, "50L57IC3") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
-                  }}
-                />
-
-                {/* Signature Section */}
-                <div style={{ margin: '0 48px 48px 48px' }}>
-                  <div 
-                    style={{ 
-                      borderRadius: '20px',
-                      padding: '28px 32px',
-                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%)',
-                      border: '1px solid rgba(16, 185, 129, 0.1)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                      {/* Logo */}
-                      <div 
-                        style={{
-                          flexShrink: 0,
-                          width: '56px',
-                          height: '56px',
-                          borderRadius: '16px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                          boxShadow: '0 8px 24px -8px rgba(16, 185, 129, 0.5)',
-                        }}
-                      >
-                        <img 
-                          src="/icons/plant-swipe-icon.svg" 
-                          alt="Aphylia" 
-                          style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)' }}
-                        />
-                      </div>
-                      <div>
-                        <p style={{ margin: '0 0 4px 0', fontWeight: 700, fontSize: '18px', color: '#1f2937' }}>
-                          The Aphylia Team
-                        </p>
-                        <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
-                          Helping you grow your plant knowledge 🌱
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div 
-                  style={{ 
-                    padding: '32px 48px', 
-                    textAlign: 'center',
-                    borderTop: '1px solid rgba(16, 185, 129, 0.08)',
-                  }}
-                >
-                  <a 
-                    href="#"
-                    style={{
-                      display: 'inline-block',
-                      marginBottom: '24px',
-                      padding: '14px 32px',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      color: '#ffffff',
-                      borderRadius: '9999px',
-                      textDecoration: 'none',
-                      background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                      boxShadow: '0 8px 24px -6px rgba(16, 185, 129, 0.4)',
-                    }}
-                  >
-                    Explore Aphylia →
-                  </a>
-                  <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#9ca3af' }}>
-                    <a href="#" style={{ color: '#059669', fontWeight: 500, textDecoration: 'none' }}>aphylia.app</a>
-                    <span style={{ margin: '0 8px', color: '#d1d5db' }}>•</span>
-                    <a href="#" style={{ color: '#9ca3af', textDecoration: 'none' }}>About</a>
-                    <span style={{ margin: '0 8px', color: '#d1d5db' }}>•</span>
-                    <a href="#" style={{ color: '#9ca3af', textDecoration: 'none' }}>Contact</a>
-                  </p>
-                  <p style={{ margin: 0, fontSize: '12px', color: '#d1d5db' }}>
-                    © {new Date().getFullYear()} Aphylia. Made with 💚 for plant enthusiasts everywhere.
-                  </p>
-                </div>
-              </div>
+              />
             </div>
           </div>
-
-          {/* Copy notification popup */}
-          {copyNotification && (
-            <div
-              className="fixed z-[100] pointer-events-none"
-              style={{
-                left: copyNotification.x,
-                top: copyNotification.y,
-                transform: 'translate(-50%, -100%)',
-                animation: 'fadeInUp 0.2s ease-out',
-              }}
-            >
-              <div
-                style={{
-                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                  color: 'white',
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                ✓ Copied: {copyNotification.text}
-              </div>
-            </div>
-          )}
 
           {/* Bottom hint */}
           <div 
@@ -1620,15 +1244,17 @@ export const AdminEmailTemplatePage: React.FC = () => {
               style={{ 
                 fontSize: '12px', 
                 color: '#9ca3af', 
-                background: 'rgba(255, 255, 255, 0.9)', 
+                background: 'rgba(26, 26, 29, 0.95)', 
                 backdropFilter: 'blur(8px)',
                 padding: '8px 16px', 
                 borderRadius: '9999px', 
-                border: '1px solid rgba(0, 0, 0, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
                 margin: 0,
               }}
             >
-              Variables like <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{user}}"}</code> → "Five" and <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{code}}"}</code> → "50L57IC3" · Click elements to copy
+              <span style={{ color: '#10b981', fontWeight: 600 }}>✓ Exact Preview</span>
+              <span style={{ margin: '0 8px', color: '#3e3e42' }}>|</span>
+              Variables: <code style={{ padding: '2px 6px', background: '#3e3e42', borderRadius: '4px', color: '#10b981', fontSize: '10px' }}>{"{{user}}"}</code> <code style={{ padding: '2px 6px', background: '#3e3e42', borderRadius: '4px', color: '#10b981', fontSize: '10px' }}>{"{{email}}"}</code> <code style={{ padding: '2px 6px', background: '#3e3e42', borderRadius: '4px', color: '#10b981', fontSize: '10px' }}>{"{{random}}"}</code> <code style={{ padding: '2px 6px', background: '#3e3e42', borderRadius: '4px', color: '#10b981', fontSize: '10px' }}>{"{{date}}"}</code> <code style={{ padding: '2px 6px', background: '#3e3e42', borderRadius: '4px', color: '#10b981', fontSize: '10px' }}>{"{{year}}"}</code>
             </p>
           </div>
         </div>
