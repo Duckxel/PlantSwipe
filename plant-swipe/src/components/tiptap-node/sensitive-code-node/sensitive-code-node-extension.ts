@@ -120,13 +120,13 @@ export const SensitiveCodeNode = Node.create<SensitiveCodeNodeOptions>({
           { "data-code": "true", style: styles.codeBox },
           code || "{{code}}",
         ],
-        // Copy hint
+        // Copy instruction (static text for emails - no JS interaction)
         ...(showCopyHint !== false
           ? [
               [
                 "div",
                 { style: styles.copyHint },
-                "Click to copy",
+                "Copy and paste this code",
               ],
             ]
           : []),

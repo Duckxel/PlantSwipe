@@ -1306,7 +1306,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
               <span style={{ color: '#9ca3af' }}>Subject:</span>
               <span style={{ fontWeight: 500, color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {templateForm.subject.replace(/\{\{user\}\}/gi, "John") || "(No subject)"}
+                {templateForm.subject.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{code\}\}/gi, "50L57IC3") || "(No subject)"}
               </span>
             </div>
 
@@ -1395,7 +1395,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
                   }}
                   dangerouslySetInnerHTML={{ 
-                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "John") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
+                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{code\}\}/gi, "50L57IC3") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
                   }}
                 />
 
@@ -1499,7 +1499,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 margin: 0,
               }}
             >
-              Variables like <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{user}}"}</code> are replaced with sample data
+              Variables like <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{user}}"}</code> → "Five" and <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{code}}"}</code> → "50L57IC3"
             </p>
           </div>
         </div>

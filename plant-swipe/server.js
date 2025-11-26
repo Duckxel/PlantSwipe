@@ -113,23 +113,40 @@ async function processEmailCampaigns() {
   for (const campaign of campaigns) {
     // console.log('[campaign-runner] Processing:', campaign.title, campaign.id)
     try {
+      // Check if this is a test mode campaign
+      const isTestMode = campaign.test_mode === true
+      const testEmail = campaign.test_email
+
       // 2. Fetch recipients who have NOT received this campaign yet
-      // We also fetch their timezone to check eligibility
-      const recipients = await sql`
-        select
-          au.id,
-          au.email,
-          coalesce(p.display_name, au.raw_user_meta_data->>'full_name', split_part(au.email, '@', 1)) as display_name,
-          coalesce(p.timezone, 'UTC') as user_timezone
-        from auth.users au
-        left join public.profiles p on p.id = au.id
-        where (au.email_confirmed_at is not null or au.confirmed_at is not null)
-        and not exists (
-          select 1 from public.admin_campaign_sends s 
-          where s.campaign_id = ${campaign.id} and s.user_id = au.id
-        )
-        limit 2000
-      `
+      // For test mode, we create a fake recipient with the test email
+      let recipients
+      if (isTestMode && testEmail) {
+        // In test mode, send only to the test email address
+        console.log('[campaign-runner] Test mode - sending to:', testEmail)
+        recipients = [{
+          id: null, // No real user ID for test
+          email: testEmail,
+          display_name: 'Test User',
+          user_timezone: campaign.timezone || 'UTC'
+        }]
+      } else {
+        // Normal mode: fetch all users who haven't received this campaign
+        recipients = await sql`
+          select
+            au.id,
+            au.email,
+            coalesce(p.display_name, au.raw_user_meta_data->>'full_name', split_part(au.email, '@', 1)) as display_name,
+            coalesce(p.timezone, 'UTC') as user_timezone
+          from auth.users au
+          left join public.profiles p on p.id = au.id
+          where (au.email_confirmed_at is not null or au.confirmed_at is not null)
+          and not exists (
+            select 1 from public.admin_campaign_sends s 
+            where s.campaign_id = ${campaign.id} and s.user_id = au.id
+          )
+          limit 2000
+        `
+      }
 
       if (!recipients || recipients.length === 0) {
          // No pending recipients for this campaign. 
@@ -222,25 +239,40 @@ async function processEmailCampaigns() {
 
         if (res.ok) {
           batchSentCount += batch.length
-          // Record success in tracking table
-          const values = batch.map(u => ({
-             campaign_id: campaign.id,
-             user_id: u.id,
-             status: 'sent'
-          }))
-          await sql`insert into public.admin_campaign_sends ${sql(values, 'campaign_id', 'user_id', 'status')}`
+          // Record success in tracking table (only for non-test mode with real user IDs)
+          if (!isTestMode) {
+            const values = batch.map(u => ({
+               campaign_id: campaign.id,
+               user_id: u.id,
+               status: 'sent'
+            }))
+            await sql`insert into public.admin_campaign_sends ${sql(values, 'campaign_id', 'user_id', 'status')}`
+          }
         } else {
           console.error('[campaign-runner] Batch failed:', await res.text())
         }
       }
       
       // Update total stats
-      await sql`
-        update public.admin_email_campaigns
-        set sent_count = (select count(*) from public.admin_campaign_sends where campaign_id = ${campaign.id}),
-            total_recipients = (select count(*) from auth.users where email_confirmed_at is not null)
-        where id = ${campaign.id}
-      `
+      if (isTestMode) {
+        // For test mode, mark as sent immediately
+        await sql`
+          update public.admin_email_campaigns
+          set sent_count = 1,
+              total_recipients = 1,
+              status = 'sent',
+              send_completed_at = now()
+          where id = ${campaign.id}
+        `
+        console.log('[campaign-runner] Test campaign completed:', campaign.id)
+      } else {
+        await sql`
+          update public.admin_email_campaigns
+          set sent_count = (select count(*) from public.admin_campaign_sends where campaign_id = ${campaign.id}),
+              total_recipients = (select count(*) from auth.users where email_confirmed_at is not null)
+          where id = ${campaign.id}
+        `
+      }
 
     } catch (err) {
       console.error('[campaign-runner] Exception for campaign ' + campaign.id, err)
@@ -3471,6 +3503,8 @@ const emailCampaignInputSchema = z.object({
     .max(240)
     .optional()
     .nullable(),
+  testMode: z.boolean().optional().default(false),
+  testEmail: z.string().email().optional().nullable(),
 })
 
 const emailCampaignUpdateSchema = z.object({
@@ -4908,6 +4942,9 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
     const variables = extractEmailTemplateVariables(template.subject, template.body_html)
     const timezone = parsed.timezone && parsed.timezone.length ? parsed.timezone : 'UTC'
 
+    const testMode = parsed.testMode === true
+    const testEmail = testMode && parsed.testEmail ? parsed.testEmail : null
+
     const rows = await sql`
       insert into public.admin_email_campaigns (
         template_id,
@@ -4925,6 +4962,8 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         total_recipients,
         sent_count,
         failed_count,
+        test_mode,
+        test_email,
         created_by,
         updated_by,
         created_at,
@@ -4943,9 +4982,11 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         ${timezone || 'UTC'},
         ${scheduledFor},
         'scheduled',
+        ${testMode ? 1 : 0},
         0,
         0,
-        0,
+        ${testMode},
+        ${testEmail},
         ${adminId},
         ${adminId},
         now(),
@@ -5281,6 +5322,8 @@ function normalizeEmailCampaignRow(row) {
     sendError: row.send_error || null,
     sendStartedAt: row.send_started_at || null,
     sendCompletedAt: row.send_completed_at || null,
+    testMode: row.test_mode === true,
+    testEmail: row.test_email || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

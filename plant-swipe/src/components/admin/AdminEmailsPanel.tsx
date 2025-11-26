@@ -63,6 +63,8 @@ type EmailCampaign = {
   sendError: string | null
   sendStartedAt: string | null
   sendCompletedAt: string | null
+  testMode: boolean
+  testEmail: string | null
   createdAt: string
   updatedAt: string
 }
@@ -154,6 +156,8 @@ export const AdminEmailsPanel: React.FC = () => {
     timezone: DEFAULT_TIMEZONE,
     description: "",
     previewText: "",
+    testMode: false,
+    testEmail: "dev@aphylia.app",
   })
   const [campaignSaving, setCampaignSaving] = React.useState(false)
   const [sheetOpen, setSheetOpen] = React.useState(false)
@@ -224,6 +228,8 @@ export const AdminEmailsPanel: React.FC = () => {
         timezone: campaignForm.timezone || DEFAULT_TIMEZONE,
         description: campaignForm.description.trim(),
         previewText: campaignForm.previewText.trim(),
+        testMode: campaignForm.testMode,
+        testEmail: campaignForm.testMode ? campaignForm.testEmail.trim() : null,
       }
       const resp = await fetch("/api/admin/email-campaigns", {
         method: "POST",
@@ -240,6 +246,8 @@ export const AdminEmailsPanel: React.FC = () => {
         timezone: campaignForm.timezone,
         description: "",
         previewText: "",
+        testMode: false,
+        testEmail: "dev@aphylia.app",
       })
       setSheetOpen(false)
       loadCampaigns().catch(() => {})
@@ -503,6 +511,11 @@ export const AdminEmailsPanel: React.FC = () => {
                           <h3 className="font-semibold text-stone-900 dark:text-white truncate">
                             {campaign.title}
                           </h3>
+                          {campaign.testMode && (
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                              🧪 Test
+                            </div>
+                          )}
                           <div className={cn(
                             "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
                             statusConfig.bg, statusConfig.text
@@ -528,9 +541,17 @@ export const AdminEmailsPanel: React.FC = () => {
                           </span>
                           <span className="flex items-center gap-1.5">
                             <Users className="h-3.5 w-3.5" />
-                            {campaign.sentCount} / {campaign.totalRecipients} sent
-                            {campaign.failedCount > 0 && (
-                              <span className="text-red-500">({campaign.failedCount} failed)</span>
+                            {campaign.testMode ? (
+                              <span className="text-amber-600 dark:text-amber-400">
+                                → {campaign.testEmail || "test email"}
+                              </span>
+                            ) : (
+                              <>
+                                {campaign.sentCount} / {campaign.totalRecipients} sent
+                                {campaign.failedCount > 0 && (
+                                  <span className="text-red-500">({campaign.failedCount} failed)</span>
+                                )}
+                              </>
                             )}
                           </span>
                         </div>
@@ -827,6 +848,53 @@ export const AdminEmailsPanel: React.FC = () => {
                 className="rounded-xl border-stone-200 dark:border-[#3e3e42] min-h-[80px]"
               />
             </div>
+
+            {/* Test Mode Toggle */}
+            <div className="rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                    🧪 Test Mode
+                  </Label>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                    Send only to a test email instead of all users
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCampaignForm((prev) => ({ ...prev, testMode: !prev.testMode }))}
+                  className={cn(
+                    "relative h-6 w-11 rounded-full transition-colors",
+                    campaignForm.testMode ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-1 h-4 w-4 rounded-full bg-white transition-transform shadow-sm",
+                      campaignForm.testMode ? "left-6" : "left-1"
+                    )}
+                  />
+                </button>
+              </div>
+              
+              {campaignForm.testMode && (
+                <div className="space-y-2">
+                  <Label htmlFor="test-email" className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    Test Email Address
+                  </Label>
+                  <Input
+                    id="test-email"
+                    type="email"
+                    value={campaignForm.testEmail}
+                    onChange={(event) =>
+                      setCampaignForm((prev) => ({ ...prev, testEmail: event.target.value }))
+                    }
+                    placeholder="dev@aphylia.app"
+                    className="rounded-lg border-amber-300 dark:border-amber-700 bg-white dark:bg-[#1a1a1d] text-sm"
+                  />
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="mt-8 pt-6 border-t border-stone-100 dark:border-[#2a2a2d] flex gap-3">
@@ -840,14 +908,19 @@ export const AdminEmailsPanel: React.FC = () => {
             <Button 
               onClick={handleCreateCampaign} 
               disabled={campaignSaving}
-              className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+              className={cn(
+                "flex-1 rounded-xl",
+                campaignForm.testMode 
+                  ? "bg-amber-500 hover:bg-amber-600" 
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              )}
             >
               {campaignSaving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              Schedule Campaign
+              {campaignForm.testMode ? "Schedule Test" : "Schedule Campaign"}
             </Button>
           </div>
         </SheetContent>
