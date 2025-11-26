@@ -58,8 +58,8 @@ export function getEmailWrapperStrings(language: SupportedLanguage = 'en') {
 
 // Aphylia logo URL for emails
 const APHYLIA_LOGO_URL = 'https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
-const APHYLIA_LOGO_IMG = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
-const APHYLIA_LOGO_IMG_LARGE = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="48" height="48" style="display:block;border:0;outline:none;text-decoration:none;" />`
+const APHYLIA_LOGO_IMG = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
+const APHYLIA_LOGO_IMG_LARGE = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="48" height="48" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
 
 /**
  * Wraps email body content with a beautiful styled template
