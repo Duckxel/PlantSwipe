@@ -392,12 +392,13 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
   const currentYear = new Date().getFullYear()
   const lang = opts.language || 'en'
   const strings = getEmailWrapperStrings(lang)
+  const logoUrl = getLogoUrl(opts.websiteUrl || 'https://aphylia.app')
 
   const signature = `
     <div style="margin-top:32px;padding:24px;background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);">
       <div style="display:flex;align-items:center;gap:16px;">
-        <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px -8px rgba(16, 185, 129, 0.5);">
-          ${APHYLIA_LOGO_SVG.replace('fill="#059669"', 'fill="#ffffff"')}
+        <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;text-align:center;padding:8px;box-sizing:border-box;">
+          <img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;border-radius:8px;">
         </div>
         <div>
           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;">${strings.teamName}</p>
