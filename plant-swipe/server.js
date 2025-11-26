@@ -5152,18 +5152,34 @@ app.delete('/api/admin/email-campaigns/:id', async (req, res) => {
     return
   }
   try {
+    // First, delete any related campaign send records (for completed campaigns)
+    await sql`
+      delete from public.admin_campaign_sends
+      where campaign_id = ${campaignId}
+    `
+    
+    // Now delete the campaign itself - allow deleting any status except 'running'
+    // Running campaigns should be cancelled first
     const rows = await sql`
       delete from public.admin_email_campaigns
       where id = ${campaignId}
-        and status in ('draft','scheduled','cancelled')
+        and status != 'running'
       returning *
     `
     if (!rows || !rows.length) {
-      res.status(404).json({ error: 'Campaign not found or already sent' })
+      // Check if it's running
+      const check = await sql`
+        select status from public.admin_email_campaigns where id = ${campaignId}
+      `
+      if (check?.length && check[0]?.status === 'running') {
+        res.status(400).json({ error: 'Cannot delete a running campaign. Cancel it first.' })
+        return
+      }
+      res.status(404).json({ error: 'Campaign not found' })
       return
     }
     const campaign = normalizeEmailCampaignRow(rows[0])
-    res.json({ campaign })
+    res.json({ campaign, deleted: true })
   } catch (err) {
     console.error('[email-campaigns] failed to delete campaign', err)
     res.status(500).json({ error: err?.message || 'Failed to delete campaign' })
