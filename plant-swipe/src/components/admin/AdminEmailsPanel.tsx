@@ -21,6 +21,7 @@ import {
   Sparkles,
   Search,
   X,
+  Copy,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -330,6 +331,39 @@ export const AdminEmailsPanel: React.FC = () => {
         const data = await resp.json().catch(() => ({}))
         if (!resp.ok) throw new Error(data?.error || "Failed to delete template")
         loadTemplates().catch(() => {})
+      } catch (err) {
+        alert((err as Error).message)
+      }
+    },
+    [loadTemplates],
+  )
+
+  const handleDuplicateTemplate = React.useCallback(
+    async (template: EmailTemplate) => {
+      try {
+        const headers = await buildAdminHeaders()
+        const payload = {
+          title: `${template.title}_copy`,
+          subject: template.subject,
+          previewText: template.previewText || "",
+          description: template.description || "",
+          bodyHtml: template.bodyHtml,
+          bodyJson: template.bodyJson,
+          isActive: template.isActive,
+        }
+        
+        const resp = await fetch("/api/admin/email-templates", {
+          method: "POST",
+          headers,
+          credentials: "same-origin",
+          body: JSON.stringify(payload),
+        })
+        
+        const data = await resp.json().catch(() => ({}))
+        if (!resp.ok) throw new Error(data?.error || "Failed to duplicate template")
+        
+        loadTemplates().catch(() => {})
+        alert(`Template duplicated as "${payload.title}"`)
       } catch (err) {
         alert((err as Error).message)
       }
@@ -659,17 +693,31 @@ export const AdminEmailsPanel: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Delete button (stops propagation) */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteTemplate(template)
-                    }}
-                    className="absolute top-3 right-3 p-2 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {/* Action buttons (stop propagation) */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDuplicateTemplate(template)
+                      }}
+                      className="p-2 rounded-lg text-stone-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all"
+                      title="Duplicate template"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteTemplate(template)
+                      }}
+                      className="p-2 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                      title="Delete template"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
