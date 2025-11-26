@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 const CHANNEL_EMAILS = {
   support: "support@aphylia.app",
@@ -37,6 +38,17 @@ type ContactUsPageProps = {
 
 export default function ContactUsPage({ defaultChannel = "support" }: ContactUsPageProps) {
   const { t } = useTranslation('common')
+  const seoKey = defaultChannel === "business" ? "contactBusiness" : "contactSupport"
+  const seoTitle = t(`seo.${seoKey}.title`, {
+    defaultValue: defaultChannel === "business" ? "Contact Aphylia business team" : "Contact Aphylia support",
+  })
+  const seoDescription = t(`seo.${seoKey}.description`, {
+    defaultValue:
+      defaultChannel === "business"
+        ? "Start partnership, press, or enterprise deployment conversations with the core team."
+        : "Reach the team for product questions, onboarding help, or to report an issue.",
+  })
+  usePageMetadata({ title: seoTitle, description: seoDescription })
   const [formOpen, setFormOpen] = useState(false)
   const [copyState, setCopyState] = useState<CopyState>("idle")
   const copyResetRef = useRef<number | null>(null)

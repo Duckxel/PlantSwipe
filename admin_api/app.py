@@ -578,6 +578,32 @@ def sync_schema():
         for line in (out + "\n" + (err or "")).splitlines():
             if "WARNING:" in line.upper() or "NOTICE:" in line.upper():
                 warnings.append(line)
+
+        # --- POST-SYNC: Populate Admin Secrets ---
+        try:
+            supa_url = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
+            supa_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            
+            if supa_url and supa_key:
+                secret_sql = f"""
+                INSERT INTO public.admin_secrets (key, value)
+                VALUES ('SUPABASE_URL', '{supa_url}'), ('SUPABASE_SERVICE_ROLE_KEY', '{supa_key}')
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+                """
+                # Use subprocess to pipe SQL to psql to avoid escaping issues with shell arguments
+                p = subprocess.Popen(
+                    ["psql", db_url, "-q", "-f", "-"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                _, secret_err = p.communicate(input=secret_sql)
+                if p.returncode != 0:
+                    warnings.append(f"Failed to update admin_secrets: {secret_err}")
+        except Exception as ex:
+            warnings.append(f"Failed to update admin_secrets: {str(ex)}")
+        # -----------------------------------------
         
         try:
             _log_admin_action("sync_schema", detail={"stdoutTail": tail, "stderrTail": stderr_tail, "warnings": warnings})

@@ -1,6 +1,5 @@
 /**
- * Comprehensive Plant Form Component
- * Handles all fields from PLANT-INFO-SCHEMA.json
+ * Comprehensive Plant Form primitives for structured plant fields.
  */
 
 import React from "react"

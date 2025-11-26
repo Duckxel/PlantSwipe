@@ -1,4 +1,4 @@
-import type { PlantPhoto } from "@/types/plant"
+import type { PlantImage, PlantPhoto } from "@/types/plant"
 
 export const MAX_PLANT_PHOTOS = 5
 
@@ -75,17 +75,51 @@ export function normalizePlantPhotos(raw: unknown, fallbackUrl?: string | null):
   return sanitized
 }
 
+const safeTrim = (value?: string) => (typeof value === "string" ? value.trim() : "")
+
 export function getPrimaryPhotoUrl(photos: PlantPhoto[]): string {
-  const primary = photos.find((photo) => photo.isPrimary && photo.url.trim())
-  if (primary) return primary.url.trim()
-  const first = photos.find((photo) => photo.url.trim())
-  return first ? first.url.trim() : ""
+  const primary = photos.find((photo) => photo.isPrimary && safeTrim(photo.url))
+  if (primary) return safeTrim(primary.url)
+  const first = photos.find((photo) => safeTrim(photo.url))
+  return first ? safeTrim(first.url) : ""
 }
 
 export function getVerticalPhotoUrl(photos: PlantPhoto[]): string {
-  const vertical = photos.find((photo) => photo.isVertical && photo.url.trim())
-  if (vertical) return vertical.url.trim()
+  const vertical = photos.find((photo) => photo.isVertical && safeTrim(photo.url))
+  if (vertical) return safeTrim(vertical.url)
   return ""
+}
+
+const extractImageLink = (image?: PlantImage | null): string => {
+  if (!image) return ""
+  return safeTrim(image.link) || safeTrim(image.url)
+}
+
+const getImageLinkByUse = (images: PlantImage[] | undefined, use: PlantImage["use"]): string => {
+  if (!Array.isArray(images) || !use) return ""
+  const candidate = images.find((image) => image?.use === use && extractImageLink(image))
+  return extractImageLink(candidate)
+}
+
+export function getDiscoveryPageImageUrl(
+  plant?: { images?: PlantImage[]; photos?: PlantPhoto[]; image?: string },
+): string {
+  if (!plant) return ""
+  const discovery = getImageLinkByUse(plant.images, "discovery")
+  if (discovery) return discovery
+
+  const primary = getImageLinkByUse(plant.images, "primary")
+  if (primary) return primary
+
+  if (plant.photos) {
+    const vertical = getVerticalPhotoUrl(plant.photos)
+    if (vertical) return vertical
+
+    const primaryPhoto = getPrimaryPhotoUrl(plant.photos)
+    if (primaryPhoto) return primaryPhoto
+  }
+
+  return safeTrim(plant.image)
 }
 
 export function upsertPrimaryPhoto(current: PlantPhoto[], url: string): PlantPhoto[] {

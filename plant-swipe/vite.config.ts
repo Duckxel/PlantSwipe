@@ -30,85 +30,58 @@ export default defineConfig({
   base: appBase,
   plugins: [
     react(),
-    VitePWA({
+      VitePWA({
         disable: isPwaDisabled,
-      base: appBase,
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
-        includeAssets: [
+        base: appBase,
+        registerType: 'autoUpdate',
+        injectRegister: null,
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      includeAssets: [
         'env-loader.js',
         'env.js',
         'icons/plant-swipe-icon.svg',
+        'icons/plant-swipe-icon-outline.svg',
         'icons/icon-192x192.png',
         'icons/icon-512x512.png',
         'icons/icon-maskable-512.png',
         'locales/en/common.json',
         'locales/fr/common.json',
-        'PLANT-INFO-SCHEMA.json',
+          'offline.html',
       ],
-        manifest: {
-          id: 'aphylia',
-          name: 'Aphylia',
-          short_name: 'Aphylia',
-          description: 'Discover, swipe and manage the perfect plants for every garden.',
+      manifest: {
+        id: 'aphylia',
+        name: 'Aphylia',
+        short_name: 'Aphylia',
+        description: 'Discover, swipe and manage the perfect plants for every garden.',
         lang: 'en',
         theme_color: '#052e16',
         background_color: '#03120c',
-          display: 'standalone',
-          display_override: ['window-controls-overlay', 'standalone'],
+        display: 'standalone',
+        display_override: ['window-controls-overlay', 'standalone'],
         scope,
         start_url: scope,
         orientation: 'portrait-primary',
         categories: ['productivity', 'lifestyle', 'utilities'],
+        // Cleared for general audiences today, while remaining flexible enough for
+        // the upcoming social/community and subscription experiences.
+        iarc_rating_id: 'IARC21-00000000-0000000000000000',
         icons: [
           { src: 'icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable any' },
           { src: 'icons/plant-swipe-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+          { src: 'icons/plant-swipe-icon-outline.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
         ],
         shortcuts: [
           { name: 'Swipe plants', url: scope === '/' ? '/swipe' : `${scope}swipe`, description: 'Jump directly into swipe mode' },
           { name: 'My gardens', url: scope === '/' ? '/gardens' : `${scope}gardens`, description: 'Open your garden dashboard' },
         ],
       },
-      workbox: {
-        cleanupOutdatedCaches: true,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff2}'],
-        navigateFallback: 'index.html',
-          runtimeCaching: [
-            {
-              urlPattern: ({ url }) => /\/api\/.+\/stream/.test(url.pathname),
-              handler: 'NetworkOnly',
-              options: {
-                cacheName: 'api-stream-bypass',
-              },
-            },
-            {
-              urlPattern: ({ url }) => url.pathname.startsWith('/api/') && !/\/stream/.test(url.pathname),
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'api-cache',
-                networkTimeoutSeconds: 10,
-                cacheableResponse: { statuses: [0, 200] },
-              },
-            },
-          {
-            urlPattern: /\/locales\/.*\.json$/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'i18n-cache',
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 },
-            },
-          },
-          {
-            urlPattern: ({ request }) => request.destination === 'image',
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'image-cache',
-              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 14 },
-            },
-          },
-        ],
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff,woff2,ttf}'],
+        globIgnores: ['**/*.map', '**/node_modules/**'],
       },
       devOptions: {
         enabled: process.env.VITE_ENABLE_PWA === 'true',
@@ -125,6 +98,7 @@ export default defineConfig({
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'recharts': ['recharts'],
+          'three': ['three'],
           'supabase': ['@supabase/supabase-js'],
           'ui-components': ['@radix-ui/react-dialog', '@radix-ui/react-label', '@radix-ui/react-slot'],
         },

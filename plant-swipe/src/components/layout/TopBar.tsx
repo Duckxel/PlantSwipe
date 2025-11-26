@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -10,8 +10,8 @@ interface TopBarProps {
   openSignup: () => void
   user?: { id: string | null } | null
   displayName?: string | null
-  onProfile?: () => void
-  onLogout?: () => void
+  onProfile?: () => void | Promise<void>
+  onLogout?: () => void | Promise<void>
 }
 
 import { useAuth } from "@/context/AuthContext"
@@ -66,14 +66,33 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
 
   const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
     return (
-      <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden desktop-drag-region">
-      <div className="h-10 w-10 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow">
-        <Leaf className="h-5 w-5 text-green-800 dark:text-green-200" />
-      </div>
+      <>
+        <style>{`
+          .plant-icon-theme {
+            filter: brightness(0) saturate(100%);
+          }
+          .dark .plant-icon-theme {
+            filter: brightness(0) saturate(100%) invert(100%);
+          }
+        `}</style>
+        <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden overflow-y-visible desktop-drag-region" style={{ paddingTop: '1.5rem', paddingBottom: '0.5rem', marginTop: '0' }}>
+          <Link
+            to="/"
+            className="flex-shrink-0 no-underline cursor-pointer"
+            style={{ marginTop: '-1.25rem', WebkitTapHighlightColor: 'transparent', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+          >
+            <img 
+              src="/icons/plant-swipe-icon.svg" 
+              alt="Aphylia" 
+              className="h-16 w-14 plant-icon-theme"
+              draggable="false"
+              style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            />
+          </Link>
       <Link
         to="/"
         className="font-brand text-[1.925rem] md:text-[2.625rem] leading-none font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90 whitespace-nowrap shrink-0"
-        style={{ WebkitTapHighlightColor: 'transparent' }}
+        style={{ WebkitTapHighlightColor: 'transparent', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       >
         {t('common.appName')}
       </Link>
@@ -130,6 +149,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         )}
       </div>
     </header>
+      </>
   )
 }
 

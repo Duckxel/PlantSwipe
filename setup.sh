@@ -68,6 +68,7 @@ PWA_BASE_PATH="${PWA_BASE_PATH:-${VITE_APP_BASE_PATH:-/}}"
 SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
+SERVICE_SITEMAP="plant-swipe-sitemap"
 # Service account that runs Node/Admin services (and git operations)
 SERVICE_USER="${SERVICE_USER:-www-data}"
 SERVICE_USER_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || true)"
@@ -84,6 +85,14 @@ ADMIN_DIR="/opt/admin"
 ADMIN_VENV="$ADMIN_DIR/venv"
 ADMIN_ENV_DIR="/etc/admin-api"
 ADMIN_ENV_FILE="$ADMIN_ENV_DIR/env"
+SITEMAP_GENERATOR_BIN="/usr/local/bin/plantswipe-generate-sitemap"
+SITEMAP_SERVICE_FILE="/etc/systemd/system/$SERVICE_SITEMAP.service"
+SITEMAP_TIMER_FILE="/etc/systemd/system/$SERVICE_SITEMAP.timer"
+SITEMAP_TIMER_SCHEDULE="${PLANTSWIPE_SITEMAP_SCHEDULE:-*-*-* 03:05:00}"
+SITEMAP_TIMER_RANDOM_DELAY="${PLANTSWIPE_SITEMAP_JITTER:-900}"
+if ! [[ "$SITEMAP_TIMER_RANDOM_DELAY" =~ ^[0-9]+$ ]]; then
+  SITEMAP_TIMER_RANDOM_DELAY="900"
+fi
 SYSTEMCTL_BIN="$(command -v systemctl || echo /usr/bin/systemctl)"
 NGINX_BIN="$(command -v nginx || echo /usr/sbin/nginx)"
 
@@ -496,6 +505,9 @@ render_service_env() {
   [[ -z "${kv[SUPABASE_URL]:-}" && -n "${kv[VITE_SUPABASE_URL]:-}" ]] && kv[SUPABASE_URL]="${kv[VITE_SUPABASE_URL]}"
   [[ -z "${kv[SUPABASE_ANON_KEY]:-}" && -n "${kv[VITE_SUPABASE_ANON_KEY]:-}" ]] && kv[SUPABASE_ANON_KEY]="${kv[VITE_SUPABASE_ANON_KEY]}"
   [[ -z "${kv[ADMIN_STATIC_TOKEN]:-}" && -n "${kv[VITE_ADMIN_STATIC_TOKEN]:-}" ]] && kv[ADMIN_STATIC_TOKEN]="${kv[VITE_ADMIN_STATIC_TOKEN]}"
+  kv[PLANTSWIPE_REPO_DIR]="$REPO_DIR"
+  kv[PLANTSWIPE_NODE_DIR]="$NODE_DIR"
+  kv[PLANTSWIPE_SERVICE_ENV]="$SERVICE_ENV_FILE"
   # enforce sslmode=require
   if [[ -n "${kv[DATABASE_URL]:-}" && "${kv[DATABASE_URL]}" != *"sslmode="* ]]; then
     if [[ "${kv[DATABASE_URL]}" == *"?"* ]]; then kv[DATABASE_URL]="${kv[DATABASE_URL]}&sslmode=require"; else kv[DATABASE_URL]="${kv[DATABASE_URL]}?sslmode=require"; fi
@@ -1369,6 +1381,51 @@ WantedBy=multi-user.target
 EOF
 "
 
+# Sitemap generator helper + unit files
+if [[ -f "$REPO_DIR/scripts/generate-sitemap-daily.sh" ]]; then
+  log "Installing sitemap generator helper to $SITEMAP_GENERATOR_BIN…"
+  $SUDO install -D -m 0755 "$REPO_DIR/scripts/generate-sitemap-daily.sh" "$SITEMAP_GENERATOR_BIN"
+else
+  log "[WARN] scripts/generate-sitemap-daily.sh missing; skipping sitemap helper installation."
+fi
+
+log "Installing sitemap generator systemd unit…"
+$SUDO bash -c "cat > '$SITEMAP_SERVICE_FILE' <<EOF
+[Unit]
+Description=PlantSwipe sitemap generator
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=$SERVICE_USER
+Group=$SERVICE_USER
+EnvironmentFile=$SERVICE_ENV_FILE
+WorkingDirectory=$REPO_DIR
+ExecStart=$SITEMAP_GENERATOR_BIN
+SuccessExitStatus=0
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=300
+EOF
+"
+
+log "Installing sitemap generator timer unit…"
+$SUDO bash -c "cat > '$SITEMAP_TIMER_FILE' <<EOF
+[Unit]
+Description=Daily sitemap.xml generation for PlantSwipe
+
+[Timer]
+OnCalendar=$SITEMAP_TIMER_SCHEDULE
+Persistent=true
+RandomizedDelaySec=$SITEMAP_TIMER_RANDOM_DELAY
+Unit=$SERVICE_SITEMAP.service
+
+[Install]
+WantedBy=timers.target
+EOF
+"
+
 # Ensure ownership for admin dir (www-data runs the service)
 $SUDO chown -R www-data:www-data "$ADMIN_DIR" || true
 
@@ -1402,8 +1459,14 @@ fi
 # Enable and restart services to pick up updated unit files
 log "Enabling and restarting services…"
 $SUDO systemctl daemon-reload
-$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX"
+$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVICE_SITEMAP.timer"
+$SUDO systemctl start "$SERVICE_SITEMAP.timer" || log "[WARN] Failed to start $SERVICE_SITEMAP.timer"
 $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
+if [[ -x "$SITEMAP_GENERATOR_BIN" ]]; then
+  if ! $SUDO systemctl start "$SERVICE_SITEMAP.service"; then
+    log "[WARN] Initial sitemap generation failed. Inspect: $SYSTEMCTL_BIN status $SERVICE_SITEMAP.service"
+  fi
+fi
 
 # Final nginx reload to apply site links (only if nginx config is valid)
 log "Reloading nginx…"

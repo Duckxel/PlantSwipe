@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { getEnvAny } from '@/lib/utils'
+import type { JSONContent } from '@tiptap/core'
 
 // Frontend should only consume public env vars. Accept common prefixes for portability.
 const supabaseUrl = getEnvAny([
@@ -61,6 +62,24 @@ export type ProfileRow = {
   accent_key?: string | null
   is_private?: boolean | null
   disable_friend_requests?: boolean | null
+  notify_push?: boolean | null
+  notify_email?: boolean | null
+}
+
+export type BlogPostRow = {
+  id: string
+  title: string
+  slug: string
+  body_html: string
+  editor_data: JSONContent | null
+  author_id: string
+  author_name: string | null
+  cover_image_url: string | null
+  excerpt: string | null
+  is_published: boolean
+  published_at: string
+  created_at: string
+  updated_at: string
 }
 
 // Garden-related table row types matching Supabase schema expectations

@@ -12,6 +12,8 @@ import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout,
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { BookmarksSection } from "@/components/profile/BookmarksSection"
 
 type PublicProfile = {
   id: string
@@ -64,7 +66,6 @@ export default function PublicProfilePage() {
   const [pp, setPp] = React.useState<PublicProfile | null>(null)
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
-  const [privateInfo, setPrivateInfo] = React.useState<{ id: string; email: string | null } | null>(null)
   const [canViewProfile, setCanViewProfile] = React.useState(true)
   const [searchTerm, setSearchTerm] = React.useState('')
   const [searchOpen, setSearchOpen] = React.useState(false)
@@ -75,7 +76,31 @@ export default function PublicProfilePage() {
   const searchRequestRef = React.useRef(0)
   const trimmedSearchTerm = searchTerm.trim()
   const needsMoreInput = trimmedSearchTerm.length < 2
-  
+  const fallbackProfileTitle = t('seo.profile.fallbackTitle', { defaultValue: 'Aphylia grower profile' })
+  const fallbackProfileDescription = t('seo.profile.fallbackDescription', {
+    defaultValue: 'Browse public gardens, streaks, and highlights from Aphylia growers.',
+  })
+  const preferredDisplayName = React.useMemo(() => {
+    const candidate =
+      (pp?.display_name && pp.display_name.trim()) ||
+      (pp?.username && pp.username.trim()) ||
+      (displayParam && displayParam !== '_me' ? displayParam : '')
+    return candidate ? candidate.trim() : ''
+  }, [pp?.display_name, pp?.username, displayParam])
+  const seoTitle = preferredDisplayName
+    ? t('seo.profile.title', { name: preferredDisplayName, defaultValue: `${preferredDisplayName} on Aphylia` })
+    : fallbackProfileTitle
+  const bioDescription = typeof pp?.bio === 'string' ? pp.bio.trim() : ''
+  const seoDescription =
+    bioDescription ||
+    (preferredDisplayName
+      ? t('seo.profile.description', {
+          name: preferredDisplayName,
+          defaultValue: `See shared gardens, stats, and activity from ${preferredDisplayName}.`,
+        })
+      : fallbackProfileDescription)
+  usePageMetadata({ title: seoTitle, description: seoDescription })
+
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
     if (!iso) return t('profile.aLongTimeAgo')
@@ -279,7 +304,7 @@ export default function PublicProfilePage() {
     return () => { cancelled = true }
   }, [displayParam, user?.id])
 
-  const isOwner = user?.id && pp?.id && user.id === pp.id
+  const isOwner = Boolean(user?.id && pp?.id && user.id === pp.id)
 
   React.useEffect(() => {
     setSearchTerm('')
@@ -371,61 +396,6 @@ export default function PublicProfilePage() {
     }
   }, [trimmedSearchTerm, searchOpen, user?.id, t])
 
-  // Load private info for owners
-  const privateInfoDisabledRef = React.useRef(false)
-
-  React.useEffect(() => {
-    let cancelled = false
-    const loadPrivate = async () => {
-      if (!isOwner || !pp?.id || privateInfoDisabledRef.current) {
-        setPrivateInfo(null)
-        return
-      }
-      const targetId = pp.id
-
-      const applyResult = (payload: any) => {
-        const row = payload ? { id: String(payload.id || targetId), email: payload.email || null } : null
-        if (!cancelled) setPrivateInfo(row)
-      }
-
-      const fetchViaApi = async () => {
-        const resp = await fetch(`/api/users/${targetId}/private`, {
-          headers: { Accept: 'application/json' },
-          credentials: 'same-origin',
-        })
-        if (!resp.ok) return null
-        const body = await resp.json().catch(() => null)
-        return body?.user || null
-      }
-
-      const fetchViaRpc = async () => {
-        const { data, error } = await supabase.rpc('get_user_private_info', { _user_id: targetId })
-        if (error) return null
-        return Array.isArray(data) ? data[0] : data
-      }
-
-      try {
-        const apiResult = await fetchViaApi()
-        if (apiResult) {
-          applyResult(apiResult)
-          return
-        }
-      } catch {}
-
-      try {
-        const rpcResult = await fetchViaRpc()
-        if (rpcResult) {
-          applyResult(rpcResult)
-          return
-        }
-      } catch {}
-
-      privateInfoDisabledRef.current = true
-      if (!cancelled) setPrivateInfo(null)
-    }
-    loadPrivate()
-    return () => { cancelled = true }
-  }, [isOwner, pp?.id])
 
   const [menuOpen, setMenuOpen] = React.useState(false)
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
@@ -1018,29 +988,11 @@ export default function PublicProfilePage() {
               </CardContent>
             </Card>
           </div>
+          
+          <BookmarksSection userId={pp.id} isOwner={isOwner} />
             </>
           )}
 
-            {isOwner && privateInfo && (
-              <div className="mt-4">
-                <Card className={glassCard}>
-                  <CardContent className="p-6 md:p-8 space-y-2">
-                    <div className="text-lg font-semibold">{t("profile.privateInfo.title")}</div>
-                    <div className="text-sm opacity-60">{t("profile.privateInfo.description")}</div>
-                    <div className="grid sm:grid-cols-2 gap-3 mt-2">
-                      <div className="rounded-xl border p-3">
-                        <div className="text-[11px] opacity-60">{t("profile.privateInfo.userId")}</div>
-                        <div className="text-xs break-all">{privateInfo.id || "-"}</div>
-                      </div>
-                      <div className="rounded-xl border p-3">
-                        <div className="text-[11px] opacity-60">{t("profile.privateInfo.email")}</div>
-                        <div className="text-sm">{privateInfo.email || (user as any)?.email || "-"}</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
 
 
           {isOwner && (
@@ -1051,7 +1003,6 @@ export default function PublicProfilePage() {
                 display_name: (pp.display_name || ''),
                 country: (pp.country || ''),
                 bio: (pp.bio || ''),
-                timezone: (profile?.timezone || ''),
                 experience_years: (profile?.experience_years != null ? String(profile.experience_years) : ''),
                 accent_key: null,
               }}
@@ -1078,7 +1029,6 @@ export default function PublicProfilePage() {
                     display_name: dn,
                     country: vals.country || null,
                     bio: vals.bio || null,
-                    timezone: vals.timezone || null,
                     experience_years: vals.experience_years ? Number(vals.experience_years) : null,
                   }
 

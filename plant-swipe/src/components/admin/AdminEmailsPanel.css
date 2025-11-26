@@ -1,0 +1,6 @@
+.tiptap-variable-token {
+  background-color: rgba(16, 185, 129, 0.15);
+  border-bottom: 1px dashed rgba(16, 185, 129, 0.8);
+  border-radius: 4px;
+  padding: 0 2px;
+}

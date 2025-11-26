@@ -1,12 +1,11 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
-import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting";
+import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
+import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus } from "lucide-react";
-// Sheet is used for plant info overlay
+import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,52 +16,101 @@ import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import { SearchPage } from "@/pages/SearchPage";
-import { SwipePage } from "@/pages/SwipePage";
-import { CreatePlantPage } from "@/pages/CreatePlantPage";
-import { EditPlantPage } from "@/pages/EditPlantPage";
-import type { Plant } from "@/types/plant";
-// PlantDetails imported in PlantInfoPage route component
-import PlantInfoPage from "@/pages/PlantInfoPage";
+import type { Plant, PlantSeason } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
-import PublicProfilePage from "@/pages/PublicProfilePage";
 import RequireAdmin from "@/pages/RequireAdmin";
-import { FriendsPage } from "@/pages/FriendsPage";
-import SettingsPage from "@/pages/SettingsPage";
-import ContactUsPage from "@/pages/ContactUsPage";
-import AboutPage from "@/pages/AboutPage";
-import DownloadPage from "@/pages/DownloadPage";
-import TermsPage from "@/pages/TermsPage";
-import { ErrorPage } from "@/pages/ErrorPage";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
-import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
+import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
+import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
 
+import { SwipePage } from "@/pages/SwipePage"
+
 // Lazy load heavy pages for code splitting
-const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
-const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })));
-const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })));
+const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })))
+const AdminEmailTemplatePageLazy = lazy(() => import("@/pages/AdminEmailTemplatePage").then(module => ({ default: module.AdminEmailTemplatePage })))
+const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })))
+const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })))
+// SwipePage is main view, loaded eagerly inside PlantSwipe chunk
+// const SwipePageLazy = lazy(() => import("@/pages/SwipePage").then(module => ({ default: module.SwipePage })))
+const SearchPageLazy = lazy(() => import("@/pages/SearchPage").then(module => ({ default: module.SearchPage })))
+const CreatePlantPageLazy = lazy(() => import("@/pages/CreatePlantPage").then(module => ({ default: module.CreatePlantPage })))
+const PlantInfoPageLazy = lazy(() => import("@/pages/PlantInfoPage"))
+const PublicProfilePageLazy = lazy(() => import("@/pages/PublicProfilePage"))
+const FriendsPageLazy = lazy(() => import("@/pages/FriendsPage").then(module => ({ default: module.FriendsPage })))
+const SettingsPageLazy = lazy(() => import("@/pages/SettingsPage"))
+const ContactUsPageLazy = lazy(() => import("@/pages/ContactUsPage"))
+const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
+const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
+const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
+const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
+const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
+const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
+const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
+const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
+
+type ColorOption = { id: string; name: string; hexCode: string }
+
+type ExtendedWindow = Window & {
+  requestIdleCallback?: (callback: (...args: any[]) => void, options?: { timeout?: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
+
+const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
+  if (typeof window === "undefined") {
+    return () => {}
+  }
+  const extendedWindow = window as ExtendedWindow
+  let cancelled = false
+  let timeoutId: number | null = null
+  let idleHandle: number | null = null
+
+  const run = () => {
+    if (cancelled) return
+    task()
+  }
+
+  if (typeof extendedWindow.requestIdleCallback === "function") {
+    idleHandle = extendedWindow.requestIdleCallback(() => run(), { timeout })
+  } else {
+    timeoutId = window.setTimeout(run, timeout)
+  }
+
+  return () => {
+    cancelled = true
+    if (idleHandle !== null && typeof extendedWindow.cancelIdleCallback === "function") {
+      extendedWindow.cancelIdleCallback(idleHandle)
+    }
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId)
+    }
+  }
+}
 
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
+  const routeLoadingFallback = (
+    <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>
+  )
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
-  const [colorFilter, setColorFilter] = useState<string | null>(null)
+  const [colorFilter, setColorFilter] = useState<string[]>([])
   const [onlySeeds, setOnlySeeds] = useState(false)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [usageFilters, setUsageFilters] = useState<string[]>([])
   const [seasonSectionOpen, setSeasonSectionOpen] = useState(true)
   const [colorSectionOpen, setColorSectionOpen] = useState(true)
+  const [advancedColorsOpen, setAdvancedColorsOpen] = useState(false)
   const [classificationSectionOpen, setClassificationSectionOpen] = useState(true)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
@@ -73,10 +121,9 @@ export default function PlantSwipe() {
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
+  const initialCardBoostRef = React.useRef(true)
 
   const location = useLocation()
-  const state = location.state as { backgroundLocation?: any } | null
-  const backgroundLocation = state?.backgroundLocation
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
@@ -92,12 +139,55 @@ export default function PlantSwipe() {
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
+  const [authAcceptedTerms, setAuthAcceptedTerms] = useState(false)
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
+  const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
 
-  const [plants, setPlants] = useState<Plant[]>([])
-  const [loading, setLoading] = useState(true)
+  const [plants, setPlants] = useState<Plant[]>(() => {
+    if (typeof localStorage === 'undefined') return []
+    try {
+      const cached = localStorage.getItem(`plantswipe.plants.${currentLang}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed
+        }
+      }
+    } catch {}
+    return []
+  })
+  const [loading, setLoading] = useState(() => {
+    if (typeof localStorage === 'undefined') return true
+    try {
+      const cached = localStorage.getItem(`plantswipe.plants.${currentLang}`)
+      return !cached
+    } catch {
+      return true
+    }
+  })
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [colorOptions, setColorOptions] = useState<ColorOption[]>([])
+
+  const { singleWordColors, multiWordColors } = React.useMemo(() => {
+    const single: ColorOption[] = []
+    const multi: ColorOption[] = []
+
+    colorOptions.forEach((color) => {
+      const normalized = (color.name || "").trim()
+      const preparedColor = color.name === normalized ? color : { ...color, name: normalized }
+      const hasSingleWord = normalized.length > 0 && !/\s/.test(normalized)
+
+      if (hasSingleWord) {
+        single.push(preparedColor)
+      } else {
+        multi.push(preparedColor)
+      }
+    })
+
+    return { singleWordColors: single, multiWordColors: multi }
+  }, [colorOptions])
+  
   const typeOptions = useMemo(() => {
     const labels = new Set<string>()
     plants.forEach((plant) => {
@@ -109,7 +199,7 @@ export default function PlantSwipe() {
   const usageOptions = useMemo(() => {
     const labels = new Set<string>()
     plants.forEach((plant) => {
-      getPlantUsageLabels(plant.classification).forEach((label) => labels.add(label))
+      getPlantUsageLabels(plant).forEach((label) => labels.add(label))
     })
     return Array.from(labels).sort((a, b) => a.localeCompare(b))
   }, [plants])
@@ -122,15 +212,27 @@ export default function PlantSwipe() {
   }, [profile?.liked_plant_ids])
 
   const loadPlants = React.useCallback(async () => {
-    setLoading(true)
+    // Only show loading if we don't have plants
+    if (plants.length === 0) {
+      setLoading(true)
+    }
     setLoadError(null)
     let ok = false
     try {
       // Always use Supabase with translations to ensure plants created in one language
       // display correctly when viewed in another language
       // This ensures translations are properly loaded for all languages, including English
-      const plantsWithTranslations = await loadPlantsWithTranslations(currentLang)
+      // Using optimized preview loader for faster initial render
+      const plantsWithTranslations = await loadPlantPreviews(currentLang)
       setPlants(plantsWithTranslations)
+      
+      // Cache results
+      try {
+        if (plantsWithTranslations.length > 0) {
+          localStorage.setItem(`plantswipe.plants.${currentLang}`, JSON.stringify(plantsWithTranslations))
+        }
+      } catch {}
+      
       ok = true
     } catch (e: unknown) {
       const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
@@ -141,9 +243,48 @@ export default function PlantSwipe() {
     return ok
   }, [currentLang])
 
+
   React.useEffect(() => {
     loadPlants()
   }, [loadPlants])
+
+  // Load colors from database
+  React.useEffect(() => {
+    const loadColors = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('colors')
+          .select('id, name, hex_code')
+          .order('name', { ascending: true })
+
+        if (error) {
+          console.error('Error loading colors:', error)
+          return
+        }
+
+        if (data) {
+          setColorOptions(data.map((c) => ({
+            id: c.id,
+            name: (c.name ?? "").trim(),
+            hexCode: c.hex_code ?? ""
+          })))
+        }
+      } catch (e) {
+        console.error('Error loading colors:', e)
+      }
+    }
+
+    loadColors()
+  }, [])
+
+  React.useEffect(() => {
+    if (colorFilter.length === 0) return
+    // Open advanced colors section if any selected color has whitespace
+    const hasMultiWordColor = colorFilter.some((color) => /\s/.test(color.trim()))
+    if (hasMultiWordColor) {
+      setAdvancedColorsOpen(true)
+    }
+  }, [colorFilter])
 
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
@@ -155,6 +296,7 @@ export default function PlantSwipe() {
   // Global presence tracking so Admin can see "currently online" users
   const presenceRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
   React.useEffect(() => {
+    if (typeof window === 'undefined') return
     // Track SPA route changes to server for visit analytics
     const sendVisit = async (path: string) => {
       try {
@@ -200,12 +342,11 @@ export default function PlantSwipe() {
       } catch {}
     }
 
-    // Initial on mount and on subsequent route changes
-    sendVisit(location.pathname + location.search).catch(() => {})
-    const unlisten = () => {
-      // react-router v6 provides useLocation, so listen via effect dependency
-    }
-    return () => { unlisten() }
+    const cancelIdleVisit = scheduleIdleTask(() => {
+      sendVisit(location.pathname + location.search).catch(() => {})
+    }, 2000)
+
+    return () => { cancelIdleVisit() }
   }, [location.pathname, location.search, user?.id])
 
   // Heartbeat: periodically record a lightweight visit so Admin "online" stays fresh
@@ -278,19 +419,53 @@ export default function PlantSwipe() {
     const lowerQuery = query.toLowerCase()
     const normalizedType = typeFilter?.toLowerCase() ?? null
     const normalizedUsage = usageFilters.map((u) => u.toLowerCase())
+    const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
+
+    const colorMatches = (colorName: string, normalizedColorFilter: string): boolean => {
+      const normalizedColor = (colorName || "").toLowerCase().trim()
+      if (!normalizedColor) return false
+
+      const colorFilterHasWhitespace = /\s/.test(normalizedColorFilter)
+
+      if (colorFilterHasWhitespace) {
+        return normalizedColor === normalizedColorFilter
+      }
+
+      if (normalizedColor === normalizedColorFilter) {
+        return true
+      }
+
+      const tokens = normalizedColor
+        .replace(/[-_/]+/g, " ")
+        .split(/\s+/)
+        .filter(Boolean)
+
+      return tokens.includes(normalizedColorFilter)
+    }
+
     return plants.filter((p: Plant) => {
-      const colors = Array.isArray(p.colors) ? p.colors : []
+      // Extract colors from both legacy format (p.colors) and new format (p.identity?.colors)
+      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+      const identityColors = Array.isArray(p.identity?.colors) 
+        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+        : []
+      const colors = [...legacyColors, ...identityColors]
       const seasons = Array.isArray(p.seasons) ? p.seasons : []
       const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
         .toLowerCase()
         .includes(lowerQuery)
-      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as Plant['seasons'][number]) : true
-      const matchesColor = colorFilter ? colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
+      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
+      // Match if any of the selected colors matches any of the plant's colors (OR logic)
+      const matchesColor = normalizedColorFilters.length === 0 
+        ? true 
+        : normalizedColorFilters.some((filterColor) => 
+            colors.some((plantColor) => colorMatches(plantColor, filterColor))
+          )
       const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
       const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
       const matchesType = normalizedType ? typeLabel === normalizedType : true
-      const plantUsageLabels = getPlantUsageLabels(p.classification).map((label) => label.toLowerCase())
+      const plantUsageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
       const matchesUsage = normalizedUsage.length
         ? normalizedUsage.every((usage) => plantUsageLabels.includes(usage))
         : true
@@ -359,6 +534,45 @@ export default function PlantSwipe() {
   }, [filtered, searchSort, likedSet])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
+  const heroImageCandidate = current ? getDiscoveryPageImageUrl(current) : ""
+  const boostImagePriority = initialCardBoostRef.current && index === 0 && Boolean(heroImageCandidate)
+
+  React.useEffect(() => {
+    if (!initialCardBoostRef.current) return
+    if (!heroImageCandidate) return
+    if (index !== 0) return
+    initialCardBoostRef.current = false
+  }, [heroImageCandidate, index])
+
+  React.useEffect(() => {
+    if (currentView !== "discovery") return
+    if (typeof document === "undefined" || typeof window === "undefined") return
+    if (!current || index !== 0) return
+    if (!heroImageCandidate) return
+    const href = new URL(heroImageCandidate, window.location.origin).toString()
+    const existing = document.querySelector<HTMLLinkElement>('link[data-aphylia-preload="hero"]')
+    if (existing && existing.href === href) {
+      return
+    }
+    if (existing) {
+      existing.remove()
+    }
+    const link = document.createElement("link")
+    link.rel = "preload"
+    link.as = "image"
+    link.href = href
+    try {
+      (link as HTMLLinkElement & { fetchPriority?: string }).fetchPriority = "high"
+    } catch {}
+    link.setAttribute("fetchpriority", "high")
+    link.setAttribute("data-aphylia-preload", "hero")
+    document.head.appendChild(link)
+    return () => {
+      if (link.parentNode) {
+        link.parentNode.removeChild(link)
+      }
+    }
+  }, [currentView, heroImageCandidate, index])
 
   const handlePass = () => {
     if (swipeList.length === 0) return
@@ -382,7 +596,7 @@ export default function PlantSwipe() {
   }
 
   const handleInfo = () => {
-    if (current) navigate(`/plants/${current.id}`, { state: { backgroundLocation: location } })
+    if (current) navigate(`/plants/${current.id}`)
   }
 
   // Swipe logic
@@ -490,6 +704,8 @@ export default function PlantSwipe() {
 
   const openLogin = React.useCallback(() => { setAuthMode("login"); setAuthOpen(true) }, [])
   const openSignup = React.useCallback(() => { setAuthMode("signup"); setAuthOpen(true) }, [])
+  const handleProfileNavigation = React.useCallback(() => { navigate('/profile') }, [navigate])
+  const handleLogoutNavigation = React.useCallback(async () => { await signOut(); navigate('/') }, [signOut, navigate])
 
   const submitAuth = async () => {
     if (authSubmitting) return
@@ -497,14 +713,32 @@ export default function PlantSwipe() {
     setAuthSubmitting(true)
     try {
       console.log('[auth] submit start', { mode: authMode })
+      
+      // Execute reCAPTCHA v3 Enterprise
+      let recaptchaToken: string | undefined
+      try {
+        const action = authMode === 'signup' ? 'signup' : 'login'
+        recaptchaToken = await executeRecaptcha(action)
+        console.log('[auth] reCAPTCHA token obtained')
+      } catch (recaptchaError) {
+        console.warn('[auth] reCAPTCHA execution failed', recaptchaError)
+        // Continue without token - backend will decide how to handle
+      }
+      
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
           console.warn('[auth] password mismatch')
-          setAuthError('Passwords do not match')
+          setAuthError(t('auth.passwordsDontMatch'))
           setAuthSubmitting(false)
           return
         }
-        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+        if (!authAcceptedTerms) {
+          console.warn('[auth] terms not accepted')
+          setAuthError(t('auth.mustAcceptTerms'))
+          setAuthSubmitting(false)
+          return
+        }
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, recaptchaToken })
         if (error) {
           console.error('[auth] signup error', error)
           setAuthError(error)
@@ -513,7 +747,7 @@ export default function PlantSwipe() {
         }
         console.log('[auth] signup ok')
       } else {
-        const { error } = await signIn({ email: authEmail, password: authPassword })
+        const { error } = await signIn({ email: authEmail, password: authPassword, recaptchaToken })
         if (error) {
           console.error('[auth] login error', error)
           setAuthError(error)
@@ -526,7 +760,7 @@ export default function PlantSwipe() {
     } catch (e: unknown) {
       console.error('[auth] unexpected error', e)
       const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
-      setAuthError(msg || 'Unexpected error')
+      setAuthError(msg || t('auth.unexpectedError'))
       setAuthSubmitting(false)
     }
   }
@@ -537,6 +771,18 @@ export default function PlantSwipe() {
       setAuthOpen(false)
     }
   }, [user])
+
+  React.useEffect(() => {
+    if (!authOpen) {
+      setAuthAcceptedTerms(false)
+    }
+  }, [authOpen])
+
+  React.useEffect(() => {
+    if (authMode !== 'signup') {
+      setAuthAcceptedTerms(false)
+    }
+  }, [authMode])
 
   const FilterSectionHeader: React.FC<{ label: string; isOpen: boolean; onToggle: () => void }> = ({
     label,
@@ -554,206 +800,269 @@ export default function PlantSwipe() {
     </button>
   )
 
-  const FilterControls = () => (
-    <div className="space-y-6">
-      {/* Sort */}
-      <div>
-        <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
-        <select
-          value={searchSort}
-          onChange={(e) => setSearchSort(e.target.value as SearchSortMode)}
-          className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
-        >
-          <option value="default">{t("plant.sortDefault")}</option>
-          <option value="newest">{t("plant.sortNewest")}</option>
-          <option value="popular">{t("plant.sortPopular")}</option>
-          <option value="favorites">{t("plant.sortFavorites")}</option>
-        </select>
-      </div>
+    const FilterControls = () => {
+      const renderColorOption = (color: ColorOption) => {
+        const isActive = colorFilter.includes(color.name)
+        const label = color.name || t("plant.unknownColor", { defaultValue: "Unnamed color" })
 
-      {/* Classification */}
-      <div>
-        <FilterSectionHeader
-          label={t("plant.classification")}
-          isOpen={classificationSectionOpen}
-          onToggle={() => setClassificationSectionOpen((prev) => !prev)}
-        />
-        {classificationSectionOpen && (
-          <div className="mt-3 space-y-4">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                {t("plantInfo.classification.type", { defaultValue: "Type" })}
+        return (
+          <button
+            key={color.id}
+            type="button"
+            onClick={() => setColorFilter((cur) => 
+              isActive 
+                ? cur.filter((c) => c !== color.name)
+                : [...cur, color.name]
+            )}
+            className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition flex items-center gap-2 ${
+              isActive
+                ? "bg-black dark:bg-white text-white dark:text-black"
+                : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+            }`}
+            aria-pressed={isActive}
+            style={!isActive && color.hexCode ? { borderColor: color.hexCode } : undefined}
+          >
+            <span
+              className="w-3 h-3 rounded-full flex-shrink-0 border border-black/5 dark:border-white/10"
+              style={{ backgroundColor: color.hexCode || "transparent" }}
+              aria-hidden="true"
+            />
+            <span>{label}</span>
+          </button>
+        )
+      }
+
+      return (
+        <div className="space-y-6">
+          {/* Sort */}
+          <div>
+            <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
+            <select
+              value={searchSort}
+              onChange={(e) => setSearchSort(e.target.value as SearchSortMode)}
+              className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
+            >
+              <option value="default">{t("plant.sortDefault")}</option>
+              <option value="newest">{t("plant.sortNewest")}</option>
+              <option value="popular">{t("plant.sortPopular")}</option>
+              <option value="favorites">{t("plant.sortFavorites")}</option>
+            </select>
+          </div>
+
+          {/* Classification */}
+          <div>
+            <FilterSectionHeader
+              label={t("plant.classification")}
+              isOpen={classificationSectionOpen}
+              onToggle={() => setClassificationSectionOpen((prev) => !prev)}
+            />
+            {classificationSectionOpen && (
+              <div className="mt-3 space-y-4">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
+                    {t("plantInfo.classification.type", { defaultValue: "Type" })}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {typeOptions.length > 0 ? (
+                      typeOptions.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setTypeFilter((current) => (current === option ? null : option))}
+                          className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                            typeFilter === option
+                              ? "bg-black dark:bg-white text-white dark:text-black"
+                              : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                          }`}
+                          aria-pressed={typeFilter === option}
+                        >
+                          {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-xs opacity-60">
+                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
+                    {t("plantInfo.sections.usage", { defaultValue: "Usage" })}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {usageOptions.length > 0 ? (
+                      usageOptions.map((option) => {
+                        const isSelected = usageFilters.includes(option)
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() =>
+                              setUsageFilters((current) =>
+                                isSelected ? current.filter((value) => value !== option) : [...current, option]
+                              )
+                            }
+                            className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                              isSelected
+                                ? "bg-emerald-600 dark:bg-emerald-500 text-white"
+                                : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                            }`}
+                            aria-pressed={isSelected}
+                          >
+                            {t(`plant.utility.${option.toLowerCase()}`, { defaultValue: option })}
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <p className="text-xs opacity-60">
+                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {typeOptions.length > 0 ? (
-                  typeOptions.map((option) => (
-                    <button
-                      key={option}
-                      onClick={() => setTypeFilter((current) => (current === option ? null : option))}
-                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                        typeFilter === option
-                          ? "bg-black dark:bg-white text-white dark:text-black"
-                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                      }`}
-                      aria-pressed={typeFilter === option}
-                    >
-                      {option}
-                    </button>
-                  ))
+            )}
+          </div>
+
+          {/* Seasons */}
+          <div>
+            <FilterSectionHeader
+              label={t("plant.season")}
+              isOpen={seasonSectionOpen}
+              onToggle={() => setSeasonSectionOpen((prev) => !prev)}
+            />
+            {seasonSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
+                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                      seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                    }`}
+                    aria-pressed={seasonFilter === s}
+                  >
+                    {t(`plant.${s.toLowerCase()}`)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Colors */}
+          <div>
+            <FilterSectionHeader
+              label={t("plant.color")}
+              isOpen={colorSectionOpen}
+              onToggle={() => setColorSectionOpen((prev) => !prev)}
+            />
+            {colorSectionOpen && (
+              <div className="mt-3 space-y-3">
+                {colorOptions.length === 0 ? (
+                  <div className="text-sm text-stone-500 dark:text-stone-400">{t("common.loading")}</div>
                 ) : (
-                  <p className="text-xs opacity-60">
-                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                  </p>
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {singleWordColors.length > 0 ? (
+                        singleWordColors.map(renderColorOption)
+                      ) : (
+                        <p className="text-xs opacity-60">
+                          {t("plant.noSimpleColors", { defaultValue: "No single-word colors available." })}
+                        </p>
+                      )}
+                    </div>
+                    {multiWordColors.length > 0 && (
+                      <div className="rounded-2xl border border-dashed border-stone-200 dark:border-[#3e3e42] p-3 bg-white/70 dark:bg-[#2d2d30]/50">
+                        <button
+                          type="button"
+                          onClick={() => setAdvancedColorsOpen((prev) => !prev)}
+                          className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-300"
+                          aria-expanded={advancedColorsOpen}
+                        >
+                          <span>{t("plant.advancedColors", { defaultValue: "Advanced colors" })}</span>
+                          {advancedColorsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </button>
+                        {advancedColorsOpen && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {multiWordColors.map(renderColorOption)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
+            )}
+          </div>
+
+          {/* Toggles */}
+          <div className="pt-2 space-y-2">
+            <button
+              type="button"
+              onClick={() => setOnlySeeds((v) => !v)}
+              className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                onlySeeds ? "bg-emerald-600 dark:bg-emerald-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+              }`}
+              aria-pressed={onlySeeds}
+            >
+              <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.seedsOnly")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlyFavorites((v) => !v)}
+              className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                onlyFavorites ? "bg-rose-600 dark:bg-rose-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+              }`}
+              aria-pressed={onlyFavorites}
+            >
+              <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.favoritesOnly")}
+            </button>
+          </div>
+
+          {/* Active filters summary */}
+          <div className="text-xs space-y-1">
+            <div className="font-medium uppercase tracking-wide opacity-60">{t("plant.active")}</div>
+            <div className="flex flex-wrap gap-2">
+              {seasonFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>}
+              {colorFilter.map((color) => (
+                <Badge key={color} variant="secondary" className="rounded-xl">{t(`plant.${color.toLowerCase()}`, { defaultValue: color })}</Badge>
+              ))}
+              {typeFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.classificationType.${typeFilter.toLowerCase()}`, { defaultValue: typeFilter })}</Badge>}
+              {usageFilters.map((usage) => (
+                <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
+              ))}
+              {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
+              {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
+              {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
+                <span className="opacity-50">{t("plant.none")}</span>
+              )}
             </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                {t("plantInfo.sections.usage", { defaultValue: "Usage" })}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {usageOptions.length > 0 ? (
-                  usageOptions.map((option) => {
-                    const isSelected = usageFilters.includes(option)
-                    return (
-                      <button
-                        key={option}
-                        onClick={() =>
-                          setUsageFilters((current) =>
-                            isSelected ? current.filter((value) => value !== option) : [...current, option]
-                          )
-                        }
-                        className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                          isSelected
-                            ? "bg-emerald-600 dark:bg-emerald-500 text-white"
-                            : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                        }`}
-                        aria-pressed={isSelected}
-                      >
-                        {option}
-                      </button>
-                    )
-                  })
-                ) : (
-                  <p className="text-xs opacity-60">
-                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                  </p>
-                )}
-              </div>
-            </div>
           </div>
-        )}
-      </div>
-
-      {/* Seasons */}
-      <div>
-        <FilterSectionHeader
-          label={t("plant.season")}
-          isOpen={seasonSectionOpen}
-          onToggle={() => setSeasonSectionOpen((prev) => !prev)}
-        />
-        {seasonSectionOpen && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
-                className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                  seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                }`}
-                aria-pressed={seasonFilter === s}
-              >
-                {t(`plant.${s.toLowerCase()}`)}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Colors */}
-      <div>
-        <FilterSectionHeader
-          label={t("plant.color")}
-          isOpen={colorSectionOpen}
-          onToggle={() => setColorSectionOpen((prev) => !prev)}
-        />
-        {colorSectionOpen && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
-              <button
-                key={c}
-                onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
-                className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                  colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                }`}
-                aria-pressed={colorFilter === c}
-              >
-                {t(`plant.${c.toLowerCase()}`)}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Toggles */}
-      <div className="pt-2 space-y-2">
-        <button
-          onClick={() => setOnlySeeds((v) => !v)}
-          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-            onlySeeds ? "bg-emerald-600 dark:bg-emerald-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-          }`}
-          aria-pressed={onlySeeds}
-        >
-          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.seedsOnly")}
-        </button>
-        <button
-          onClick={() => setOnlyFavorites((v) => !v)}
-          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-            onlyFavorites ? "bg-rose-600 dark:bg-rose-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-          }`}
-          aria-pressed={onlyFavorites}
-        >
-          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.favoritesOnly")}
-        </button>
-      </div>
-
-      {/* Active filters summary */}
-      <div className="text-xs space-y-1">
-        <div className="font-medium uppercase tracking-wide opacity-60">{t("plant.active")}</div>
-        <div className="flex flex-wrap gap-2">
-          {seasonFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>}
-          {colorFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>}
-          {typeFilter && <Badge variant="secondary" className="rounded-xl">{typeFilter}</Badge>}
-          {usageFilters.map((usage) => (
-            <Badge key={usage} variant="secondary" className="rounded-xl">{usage}</Badge>
-          ))}
-          {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
-          {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
-          {!seasonFilter && !colorFilter && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
-            <span className="opacity-50">{t("plant.none")}</span>
-          )}
         </div>
-      </div>
-    </div>
-  )
+      )
+    }
 
     return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
-          <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 pb-24 md:p-8 md:pb-8">
+          <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-24 pt-2 md:px-8 md:pb-8 md:pt-4 overflow-y-visible">
+          <div className="overflow-y-visible">
           <TopBar
             openLogin={openLogin}
             openSignup={openSignup}
             user={user}
             displayName={profile?.display_name || null}
-            onProfile={() => navigate('/profile')}
-            onLogout={async () => { await signOut(); navigate('/') }}
+            onProfile={handleProfileNavigation}
+            onLogout={handleLogoutNavigation}
           />
+          </div>
 
           {/* Mobile bottom nav (hide Create on phones) */}
-          <MobileNavBar 
-            canCreate={false} 
-            onProfile={() => navigate('/profile')}
-            onLogout={async () => { await signOut(); navigate('/') }}
+          <MobileNavBar
+            canCreate={false}
+            onProfile={handleProfileNavigation}
+            onLogout={handleLogoutNavigation}
             onLogin={openLogin}
           />
 
@@ -849,108 +1158,297 @@ export default function PlantSwipe() {
               </div>
             )}
 
-          {/* Use background location for primary routes so overlays render on top */}
-          <Routes location={(backgroundLocation as any) || location}>
-                <Route path="/gardens" element={
-                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}>
-                    <GardenListPage />
+          <Routes>
+            <Route
+              path="/gardens"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <GardenListPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/garden/:id/*"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <GardenDashboardPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/search"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <SearchPageLazy
+                    plants={sortedSearchResults}
+                    openInfo={(p) => navigate(`/plants/${p.id}`)}
+                    likedIds={likedIds}
+                  />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/profile"
+              element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />}
+            />
+            <Route
+              path="/u/:username"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PublicProfilePageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/friends"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <FriendsPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/settings"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <SettingsPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/contact/business"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ContactUsPageLazy defaultChannel="business" />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/contact"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ContactUsPageLazy defaultChannel="support" />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/about"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <AboutPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/download"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <DownloadPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/terms"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <TermsPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/blog"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <BlogPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/blog/create"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <BlogComposerPageLazy />
                   </Suspense>
-                } />
-                <Route path="/garden/:id/*" element={
-                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}>
-                    <GardenDashboardPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/blog/:postId/edit"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <BlogComposerPageLazy />
                   </Suspense>
-                } />
-                <Route
-                  path="/search"
-                    element={
-                      <SearchPage
-                        plants={sortedSearchResults}
-                        openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
-                        likedIds={likedIds}
-                      />
-                      }
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/blog/:slug"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <BlogPostPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/admin/emails/templates/create"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <AdminEmailTemplatePageLazy />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/emails/templates/:id"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <AdminEmailTemplatePageLazy />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/*"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
+                    <AdminPage />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/create"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <CreatePlantPageLazy
+                      onCancel={() => navigate('/')}
+                      onSaved={async (savedId) => {
+                        await loadPlants()
+                        if (savedId) {
+                          navigate(`/create/${savedId}`)
+                        }
+                      }}
+                    />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/create/:id"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <CreatePlantPageLazy
+                      onCancel={() => navigate('/')}
+                      onSaved={async (savedId) => {
+                        await loadPlants()
+                        if (savedId) {
+                          navigate(`/create/${savedId}`)
+                        }
+                      }}
+                    />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/plants/:id/edit"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <CreatePlantPageLazy
+                      onCancel={() => navigate('/search')}
+                      onSaved={async (savedId) => {
+                        await loadPlants()
+                        if (savedId) {
+                          navigate(`/create/${savedId}`)
+                        }
+                      }}
+                    />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/bookmarks/:id"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <BookmarkPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/plants/:id"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PlantInfoPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/"
+              element={plants.length > 0 ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <SwipePage
+                    current={current}
+                    index={index}
+                    setIndex={setIndex}
+                    x={x}
+                    y={y}
+                    onDragEnd={onDragEnd}
+                    handleInfo={handleInfo}
+                    handlePass={handlePass}
+                    handlePrevious={handlePrevious}
+                    liked={current ? likedIds.includes(current.id) : false}
+                    onToggleLike={() => {
+                      if (current) toggleLiked(current.id)
+                    }}
+                    boostImagePriority={boostImagePriority}
                   />
-                  <Route
-                    path="/profile"
-                    element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />}
-                  />
-                  <Route path="/u/:username" element={<PublicProfilePage />} />
-                    <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
-                    <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/" replace />} />
-                    <Route path="/contact/business" element={<ContactUsPage defaultChannel="business" />} />
-                    <Route path="/contact" element={<ContactUsPage defaultChannel="support" />} />
-                    <Route path="/about" element={<AboutPage />} />
-                    <Route path="/download" element={<DownloadPage />} />
-                    <Route path="/terms" element={<TermsPage />} />
-                <Route path="/admin" element={
-                  <RequireAdmin>
-                    <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
-                      <AdminPage />
-                    </Suspense>
-                  </RequireAdmin>
-                } />
-                <Route path="/create" element={user ? (
-                  <CreatePlantPage
-                    onCancel={() => navigate('/')}
-                    onSaved={async () => { await loadPlants(); navigate('/search') }}
-                  />
-                ) : (
-                  <Navigate to="/" replace />
-                )} />
-                <Route path="/plants/:id/edit" element={user ? (
-                  <EditPlantPage
-                    onCancel={() => navigate('/search')}
-                    onSaved={async () => { await loadPlants(); navigate('/search') }}
-                  />
-                ) : (
-                  <Navigate to="/" replace />
-                )} />
-                  <Route path="/plants/:id" element={<PlantInfoPage />} />
-                  <Route
-                    path="/"
-                    element={plants.length > 0 ? (
-                      <SwipePage
-                        current={current}
-                        index={index}
-                        setIndex={setIndex}
-                        x={x}
-                        y={y}
-                        onDragEnd={onDragEnd}
-                        handleInfo={handleInfo}
-                        handlePass={handlePass}
-                        handlePrevious={handlePrevious}
-                        liked={current ? likedIds.includes(current.id) : false}
-                        onToggleLike={() => { if (current) toggleLiked(current.id) }}
-                      />
-                    ) : (
+                </Suspense>
+              ) : (
+                <>
+                  {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
+                  {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
+                  {!loading && !loadError && (
                     <>
-                      {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
-                      {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
-                      {!loading && !loadError && (
-                        <>
-                          {plants.length === 0 && !query && !loadError && !loading && (
-                            <div className="p-8 text-center text-sm opacity-60">
-                              {t('plant.noResults')}
-                            </div>
-                          )}
-                        </>
+                      {plants.length === 0 && !query && !loadError && !loading && (
+                        <div className="p-8 text-center text-sm opacity-60">
+                          {t('plant.noResults')}
+                        </div>
                       )}
                     </>
                   )}
-                />
-                  <Route path="/error/:code" element={<ErrorPage />} />
-                  <Route path="*" element={<ErrorPage code="404" />} />
-              </Routes>
-              {/* When a background location is set, also render the overlay route on top */}
-              {backgroundLocation && (
-                <Routes>
-                  <Route
-                    path="/plants/:id"
-                    element={<PlantInfoOverlay />}
-                  />
-                </Routes>
+                </>
               )}
+            />
+            <Route
+              path="/error/:code"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ErrorPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="*"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ErrorPageLazy code="404" />
+                </Suspense>
+              }
+            />
+          </Routes>
         </main>
       </div>
 
@@ -986,17 +1484,47 @@ export default function PlantSwipe() {
                 <Input id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
               </div>
             )}
+            {authMode === 'signup' && (
+              <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                <input
+                  id="auth-accept-terms"
+                  type="checkbox"
+                  checked={authAcceptedTerms}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
+                  disabled={authSubmitting}
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                />
+                <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                  {t('auth.acceptTermsLabel')}{" "}
+                  <a
+                    href={termsPath}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                  >
+                    {t('auth.termsLinkLabel')}
+                  </a>.
+                </Label>
+              </div>
+            )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
-            <Button className="w-full rounded-2xl" onClick={submitAuth}>
+            <Button className="w-full rounded-2xl" onClick={submitAuth} disabled={authSubmitting}>
+              {authSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
             </Button>
             <div className="text-center text-sm">
               {authMode === 'login' ? (
-                <button className="underline" onClick={() => setAuthMode('signup')}>{t('auth.noAccount')}</button>
+                <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
               ) : (
-                <button className="underline" onClick={() => setAuthMode('login')}>{t('auth.haveAccount')}</button>
+                <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
               )}
             </div>
+            {/* reCAPTCHA disclosure (required when hiding the badge) */}
+            <p className="text-[10px] text-center text-stone-400 dark:text-stone-500 mt-2">
+              This site is protected by reCAPTCHA and the Google{' '}
+              <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+              <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+            </p>
           </div>
         </DialogContent>
       </Dialog>
@@ -1015,30 +1543,47 @@ function getPlantTypeLabel(classification?: Plant["classification"]): string | n
   return label || null
 }
 
-function getPlantUsageLabels(classification?: Plant["classification"]): string[] {
-  if (!classification?.activities) return []
-  return classification.activities
-    .map((activity) => formatClassificationLabel(activity))
-    .filter((label): label is string => Boolean(label))
-}
-
-function PlantInfoOverlay() {
-  const navigate = useLanguageNavigate()
-  return (
-    <Sheet open onOpenChange={(o) => { if (!o) navigate(-1) }}>
-      <SheetContent
-        side="bottom"
-        className="rounded-t-2xl max-h-[85vh] overflow-y-auto p-4 md:p-6"
-      >
-        <SheetHeader>
-          <SheetTitle className="sr-only">Plant Information</SheetTitle>
-          <SheetDescription className="sr-only">View detailed information about this plant</SheetDescription>
-        </SheetHeader>
-        <div className="max-w-4xl mx-auto w-full">
-          <PlantInfoPage />
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
+function getPlantUsageLabels(plant: Plant): string[] {
+  const labels: string[] = []
+  
+  // Get usage labels from utility field
+  if (plant.utility && Array.isArray(plant.utility) && plant.utility.length > 0) {
+    plant.utility.forEach((util) => {
+      if (util) {
+        const formatted = formatClassificationLabel(util)
+        if (formatted && !labels.includes(formatted)) {
+          labels.push(formatted)
+        }
+      }
+    })
+  }
+  
+  // Also check comestiblePart for edible-related labels
+  if (plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0) {
+    const hasEdible = plant.comestiblePart.some(part => part && part.trim().length > 0)
+    if (hasEdible) {
+      const edibleLabel = formatClassificationLabel('comestible')
+      if (edibleLabel && !labels.includes(edibleLabel)) {
+        labels.push(edibleLabel)
+      }
+    }
+  }
+  
+  // Check usage fields for additional indicators
+  if (plant.usage?.aromatherapy) {
+    const aromaticLabel = formatClassificationLabel('aromatic')
+    if (aromaticLabel && !labels.includes(aromaticLabel)) {
+      labels.push(aromaticLabel)
+    }
+  }
+  
+  if (plant.usage?.adviceMedicinal) {
+    const medicinalLabel = formatClassificationLabel('medicinal')
+    if (medicinalLabel && !labels.includes(medicinalLabel)) {
+      labels.push(medicinalLabel)
+    }
+  }
+  
+  return labels
 }
 

@@ -34,8 +34,7 @@ export interface PlantTranslation {
   // Legacy fields for backward compatibility
   scientific_name?: string | null
   meaning?: string | null
-  description?: string | null
-  care_soil?: string | null
+    description?: string | null
 }
 
 let ensureSchemaPromise: Promise<boolean> | null = null
@@ -132,8 +131,7 @@ function mapTranslationToRow(t: PlantTranslation, timestamp: string) {
     problems: t.problems || null,
     scientific_name: t.scientific_name || null,
     meaning: t.meaning || null,
-    description: t.description || null,
-    care_soil: t.care_soil || null,
+      description: t.description || null,
     updated_at: timestamp,
   }
 }

@@ -1,13 +1,8 @@
 import React from 'react'
 import { Info, AlertTriangle, XCircle } from 'lucide-react'
+import { loadPersistedBroadcast, savePersistedBroadcast, type BroadcastRecord } from '@/lib/broadcastStorage'
 
-export type Broadcast = {
-  id: string
-  message: string
-  severity?: 'info' | 'warning' | 'danger'
-  createdAt: string | null
-  expiresAt: string | null
-}
+export type Broadcast = BroadcastRecord
 
 function useNowTick(intervalMs: number = 1000) {
   const [now, setNow] = React.useState<number>(() => Date.now())
@@ -57,38 +52,58 @@ function savePosition(pos: PositionKey) {
   try { localStorage.setItem('plantswipe.broadcast.pos', pos) } catch {}
 }
 
-// Persist the last active broadcast so it survives reloads while still valid
-function loadPersistedBroadcast(nowMs: number): Broadcast | null {
-  try {
-    const raw = localStorage.getItem('plantswipe.broadcast.active')
-    if (!raw) return null
-    const data = JSON.parse(raw)
-    if (!data || typeof data !== 'object') return null
-    const b: Broadcast = {
-      id: String((data as any).id || ''),
-      message: String((data as any).message || ''),
-      severity: ((data as any).severity === 'warning' || (data as any).severity === 'danger') ? (data as any).severity : 'info',
-      createdAt: (data as any).createdAt || null,
-      expiresAt: (data as any).expiresAt || null,
-    }
-    const remaining = msRemaining(b.expiresAt, nowMs)
-    if (remaining !== null && remaining <= 0) return null
-    return b
-  } catch {}
-  return null
+function computeDurationMs(b: BroadcastRecord): number | null {
+  if (!b?.createdAt || !b?.expiresAt) return null
+  const start = Date.parse(b.createdAt)
+  const end = Date.parse(b.expiresAt)
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null
+  const diff = end - start
+  return diff > 0 ? diff : null
 }
 
-function savePersistedBroadcast(b: Broadcast | null) {
-  try {
-    if (!b) localStorage.removeItem('plantswipe.broadcast.active')
-    else localStorage.setItem('plantswipe.broadcast.active', JSON.stringify(b))
-  } catch {}
+function computeClientExpiresAt(
+  current: BroadcastRecord,
+  previous: Broadcast | null,
+): string | null {
+  const sameVersion =
+    previous &&
+    previous.id === current.id &&
+    previous.message === current.message &&
+    previous.severity === current.severity &&
+    previous.expiresAt === current.expiresAt
+
+  if (sameVersion && previous?.clientExpiresAt) return previous.clientExpiresAt
+  if (current.clientExpiresAt) return current.clientExpiresAt
+
+  const durationMs = computeDurationMs(current)
+  if (!durationMs) return current.expiresAt || null
+  return new Date(Date.now() + durationMs).toISOString()
+}
+
+function mergeBroadcast(next: BroadcastRecord, prev: Broadcast | null): Broadcast {
+  return {
+    ...next,
+    clientExpiresAt: computeClientExpiresAt(next, prev),
+  }
 }
 
 const BroadcastToast: React.FC = () => {
-  const [broadcast, setBroadcast] = React.useState<Broadcast | null>(() => loadPersistedBroadcast(Date.now()))
+  const [broadcast, setBroadcast] = React.useState<Broadcast | null>(() => loadPersistedBroadcast())
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
   const now = useNowTick(1000)
+
+  const applyBroadcast = React.useCallback((incoming: BroadcastRecord | null) => {
+    if (!incoming) {
+      setBroadcast(null)
+      savePersistedBroadcast(null)
+      return
+    }
+    setBroadcast((prev) => {
+      const merged = mergeBroadcast(incoming, prev)
+      savePersistedBroadcast(merged)
+      return merged
+    })
+  }, [])
 
   const refreshBroadcast = React.useCallback(async () => {
     try {
@@ -100,20 +115,27 @@ const BroadcastToast: React.FC = () => {
         const body = await r.json().catch(() => ({}))
         const next: Broadcast | null = body?.broadcast || null
         if (next) {
-          setBroadcast(next)
-          savePersistedBroadcast(next)
+          applyBroadcast(next)
         } else {
-          const persisted = loadPersistedBroadcast(Date.now())
+          const persisted = loadPersistedBroadcast()
           setBroadcast(persisted)
           if (!persisted) savePersistedBroadcast(null)
         }
         return true
       }
     } catch {}
-    const persisted = loadPersistedBroadcast(Date.now())
+    const persisted = loadPersistedBroadcast()
     setBroadcast(persisted)
     return false
-  }, [])
+    }, [applyBroadcast])
+
+  React.useEffect(() => {
+    if (broadcast && !broadcast.clientExpiresAt) {
+      const merged = mergeBroadcast(broadcast, null)
+      setBroadcast(merged)
+      savePersistedBroadcast(merged)
+    }
+  }, [broadcast])
 
   // Initial fetch to hydrate: on load, check server for active broadcast; if none, keep persisted
   React.useEffect(() => {
@@ -127,43 +149,41 @@ const BroadcastToast: React.FC = () => {
   }, [refreshBroadcast])
 
   // SSE stream for live updates with polling fallback
-    React.useEffect(() => {
-      let es: EventSource | null = null
-      let pollId: number | null = null
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    let pollId: number | null = null
 
     const startPolling = () => {
       if (pollId) return
-        const tick = () => { void refreshBroadcast().catch(() => {}) }
-        pollId = window.setInterval(tick, 60000)
+      const tick = () => { void refreshBroadcast().catch(() => {}) }
+      pollId = window.setInterval(tick, 60000)
       tick()
     }
 
     const stopPolling = () => {
-        if (pollId !== null) {
-          window.clearInterval(pollId)
-          pollId = null
-        }
+      if (pollId !== null) {
+        window.clearInterval(pollId)
+        pollId = null
+      }
     }
 
-    const handleBroadcast = (ev: MessageEvent) => {
-      try {
-        const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
-        const next: Broadcast = {
-          id: String(data?.id || ''),
-          message: String(data?.message || ''),
-          severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
-          createdAt: data?.createdAt || null,
-          expiresAt: data?.expiresAt || null,
-        }
-        setBroadcast(next)
-        savePersistedBroadcast(next)
-      } catch {}
-    }
+      const handleBroadcast = (ev: MessageEvent) => {
+        try {
+          const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+          const next: Broadcast = {
+            id: String(data?.id || ''),
+            message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+            createdAt: data?.createdAt || null,
+            expiresAt: data?.expiresAt || null,
+          }
+          applyBroadcast(next)
+        } catch {}
+      }
 
-    const handleClear = () => {
-      setBroadcast(null)
-      savePersistedBroadcast(null)
-    }
+      const handleClear = () => {
+        applyBroadcast(null)
+      }
 
     try {
       es = new EventSource('/api/broadcast/stream', { withCredentials: true })
@@ -184,25 +204,45 @@ const BroadcastToast: React.FC = () => {
       try { es?.close() } catch {}
       stopPolling()
     }
-  }, [refreshBroadcast])
+    }, [refreshBroadcast, applyBroadcast])
 
   // Auto-hide on expiry
   React.useEffect(() => {
-    if (!broadcast?.expiresAt) return
-    const remaining = msRemaining(broadcast.expiresAt, now)
+    const expirySource = broadcast?.clientExpiresAt || broadcast?.expiresAt
+    if (!expirySource) return
+    const remaining = msRemaining(expirySource, now)
     if (remaining !== null && remaining <= 0) {
       setBroadcast(null)
       savePersistedBroadcast(null)
     }
-  }, [broadcast?.expiresAt, now])
+  }, [broadcast?.clientExpiresAt, broadcast?.expiresAt, now])
+
+  const severity = (broadcast?.severity === 'warning' || broadcast?.severity === 'danger') ? broadcast?.severity : 'info'
+  const severityLabel = severity === 'warning' ? 'Warning' : severity === 'danger' ? 'Danger' : 'Information'
+  const severityVisuals = React.useMemo(() => {
+    switch (severity) {
+      case 'warning':
+        return {
+          border: 'border-yellow-400 dark:border-yellow-300/80',
+          square: 'border-yellow-300 dark:border-yellow-300/60 bg-yellow-400 dark:bg-yellow-400/40',
+          icon: 'text-yellow-600 dark:text-yellow-200',
+        }
+      case 'danger':
+        return {
+          border: 'border-red-500 dark:border-red-400/80',
+          square: 'border-red-400 dark:border-red-400/60 bg-red-500 dark:bg-red-500/35',
+          icon: 'text-red-600 dark:text-red-300',
+        }
+      default:
+        return {
+          border: 'border-white dark:border-white/20',
+          square: 'border-neutral-200 dark:border-white/25 bg-white dark:bg-white/15',
+          icon: 'text-neutral-500 dark:text-neutral-100',
+        }
+    }
+  }, [severity])
 
   if (!broadcast) return null
-
-  const severity = (broadcast.severity === 'warning' || broadcast.severity === 'danger') ? broadcast.severity : 'info'
-  const severityLabel = severity === 'warning' ? 'Warning' : severity === 'danger' ? 'Danger' : 'Information'
-  const borderClass = severity === 'warning' ? 'border-yellow-400' : severity === 'danger' ? 'border-red-500' : 'border-white'
-  const squareBgClass = severity === 'warning' ? 'bg-yellow-400' : severity === 'danger' ? 'bg-red-500' : 'bg-white'
-  const iconColorClass = severity === 'warning' ? 'text-yellow-600' : severity === 'danger' ? 'text-red-600' : 'text-neutral-500'
 
   const IconComp = severity === 'warning' ? AlertTriangle : severity === 'danger' ? XCircle : Info
 
@@ -222,14 +262,14 @@ const BroadcastToast: React.FC = () => {
       title="Click to move between corners"
       style={{ WebkitTapHighlightColor: 'transparent' }}
     >
-      <div className={`select-none rounded-2xl border ${borderClass} bg-white shadow-lg text-sm text-neutral-900 overflow-hidden p-3 sm:p-4`}>
+      <div className={`select-none rounded-2xl border ${severityVisuals.border} bg-white dark:bg-[#111217] shadow-lg dark:shadow-[0_25px_50px_rgba(0,0,0,0.65)] text-sm text-neutral-900 dark:text-neutral-100 overflow-hidden p-3 sm:p-4 transition-colors`}>
         <div className="flex items-start gap-2">
-          <span className={`mt-[2px] ${iconColorClass}`}>
+          <span className={`mt-[2px] ${severityVisuals.icon}`}>
             <IconComp className="h-4 w-4" />
           </span>
           <div className="break-words flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <span className={`h-3 w-3 rounded-sm border border-neutral-300 ${squareBgClass}`} aria-hidden />
+              <span className={`h-3 w-3 rounded-sm border ${severityVisuals.square}`} aria-hidden />
               <div className="font-semibold">{severityLabel}</div>
             </div>
             <div>{broadcast.message}</div>

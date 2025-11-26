@@ -32,18 +32,26 @@ interface PlantFillRequest {
   plantName: string
   schema: unknown
   existingData?: Record<string, unknown>
+  fields?: string[]
   onProgress?: (info: { field: string; completed: number; total: number }) => void
   onFieldComplete?: (info: { field: string; data: unknown }) => void
+  onFieldError?: (info: { field: string; error: string }) => void
   signal?: AbortSignal
+  language?: string
+  continueOnFieldError?: boolean
 }
 
 export async function fetchAiPlantFill({
   plantName,
   schema,
   existingData,
+  fields,
   onProgress,
   onFieldComplete,
+  onFieldError,
   signal,
+  language,
+  continueOnFieldError = false,
 }: PlantFillRequest) {
   const headers = await buildAuthHeaders()
 
@@ -61,7 +69,7 @@ export async function fetchAiPlantFill({
     const response = await fetch('/api/admin/ai/plant-fill', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ plantName, schema, existingData }),
+      body: JSON.stringify({ plantName, schema, existingData, language }),
       signal,
     })
 
@@ -83,59 +91,79 @@ export async function fetchAiPlantFill({
     return payload.data
   }
 
-  const disallowedFields = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
-  const fieldEntries = Object.keys(schemaObject).filter(
+  const disallowedFields = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
+  const allowedSet = Array.isArray(fields) && fields.length ? new Set(fields) : null
+  const schemaKeys = Object.keys(schemaObject)
+  const filteredKeys = allowedSet
+    ? fields!.filter((key) => schemaObject.hasOwnProperty(key))
+    : schemaKeys
+  const fieldEntries = filteredKeys.filter(
     (key) => !disallowedFields.has(key) && !disallowedFields.has(key.toLowerCase())
   )
   const totalFields = fieldEntries.length
   let completedFields = 0
   onProgress?.({ field: 'init', completed: completedFields, total: totalFields })
 
-  for (const fieldKey of fieldEntries) {
+    for (const fieldKey of fieldEntries) {
     if (signal?.aborted) {
       throw new Error('AI fill was cancelled')
     }
 
     onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
 
-    const response = await fetch('/api/admin/ai/plant-fill/field', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        plantName,
-        schema,
-        fieldKey,
-          existingField:
-            existingData && typeof existingData === 'object' && !Array.isArray(existingData)
-              ? existingData[fieldKey]
-              : undefined,
-      }),
-      signal,
-    })
+      let fieldError: Error | null = null
+      try {
+        const response = await fetch('/api/admin/ai/plant-fill/field', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            plantName,
+            schema,
+            fieldKey,
+            existingField:
+              existingData && typeof existingData === 'object' && !Array.isArray(existingData)
+                ? existingData[fieldKey]
+                : undefined,
+            language,
+          }),
+          signal,
+        })
 
-    let payload: any = null
-    try { payload = await response.json() } catch {}
+        let payload: any = null
+        try {
+          payload = await response.json()
+        } catch {}
 
-    if (!response.ok) {
-      const message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
-      throw new Error(message)
-    }
+        if (!response.ok) {
+          const message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+          throw new Error(message)
+        }
 
-    if (!payload?.success) {
-      const message = payload?.error || `AI fill failed for "${fieldKey}"`
-      throw new Error(message)
-    }
+        if (!payload?.success) {
+          const message = payload?.error || `AI fill failed for "${fieldKey}"`
+          throw new Error(message)
+        }
 
-    if (payload?.data !== undefined && payload?.data !== null) {
-      aggregated[fieldKey] = payload.data
-    } else {
-      delete aggregated[fieldKey]
-    }
+        if (payload?.data !== undefined && payload?.data !== null) {
+          aggregated[fieldKey] = payload.data
+        } else {
+          delete aggregated[fieldKey]
+        }
 
-    onFieldComplete?.({ field: fieldKey, data: payload?.data ?? null })
+        onFieldComplete?.({ field: fieldKey, data: payload?.data ?? null })
+      } catch (err) {
+        fieldError = err instanceof Error ? err : new Error(String(err || 'AI fill failed'))
+      }
 
-    completedFields += 1
-    onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
+      if (fieldError) {
+        if (!continueOnFieldError) {
+          throw fieldError
+        }
+        onFieldError?.({ field: fieldKey, error: fieldError.message })
+      }
+
+      completedFields += 1
+      onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
   }
 
   onProgress?.({ field: 'complete', completed: completedFields, total: totalFields })
@@ -150,6 +178,7 @@ interface PlantFillFieldRequest {
   existingField?: unknown
   onFieldComplete?: (info: { field: string; data: unknown }) => void
   signal?: AbortSignal
+  language?: string
 }
 
 export async function fetchAiPlantFillField({
@@ -159,6 +188,7 @@ export async function fetchAiPlantFillField({
   existingField,
   onFieldComplete,
   signal,
+  language,
 }: PlantFillFieldRequest) {
   const headers = await buildAuthHeaders()
 
@@ -170,6 +200,7 @@ export async function fetchAiPlantFillField({
       schema,
       fieldKey,
       existingField,
+      language,
     }),
     signal,
   })
@@ -192,4 +223,36 @@ export async function fetchAiPlantFillField({
   onFieldComplete?.({ field: fieldKey, data: payload?.data ?? null })
 
   return payload?.data ?? null
+}
+
+interface VerifyPlantNameResult {
+  isPlant: boolean
+  reason: string
+}
+
+export async function verifyPlantNameIsPlant(
+  plantName: string,
+  signal?: AbortSignal,
+): Promise<VerifyPlantNameResult> {
+  const headers = await buildAuthHeaders()
+  const response = await fetch('/api/admin/ai/plant-fill/verify-name', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ plantName }),
+    signal,
+  })
+  let payload: any = null
+  try {
+    payload = await response.json()
+  } catch {}
+
+  if (!response.ok) {
+    const message = payload?.error || 'Failed to verify plant name'
+    throw new Error(message)
+  }
+
+  return {
+    isPlant: Boolean(payload?.isPlant),
+    reason: typeof payload?.reason === 'string' ? payload.reason : '',
+  }
 }

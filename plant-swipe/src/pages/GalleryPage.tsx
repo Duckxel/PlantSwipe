@@ -20,7 +20,7 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ plants, onOpen }) => {
             <CardContent className="p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <Badge className={`${rarityTone[p.rarity ?? 'Common']} rounded-xl`}>{p.rarity}</Badge>
-                  {p.seasons.slice(0, 1).map((s: PlantSeason) => {
+                  {(p.seasons ?? []).slice(0, 1).map((s: PlantSeason) => {
                     const badgeClass = seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'
                     return (
                       <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{s}</span>

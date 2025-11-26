@@ -45,6 +45,37 @@ export const REQUIRED_FIELD_CONFIG: Array<{
     },
 ]
 
+const REQUIRED_FIELD_LABEL_LOOKUP: Record<RequiredFieldId, string> = REQUIRED_FIELD_CONFIG.reduce(
+  (acc, { id, label }) => {
+    acc[id] = label
+    return acc
+  },
+  {} as Record<RequiredFieldId, string>,
+)
+
+const SCHEMA_KEY_TO_REQUIRED_IDS: Record<string, RequiredFieldId[]> = REQUIRED_FIELD_CONFIG.reduce(
+  (acc, config) => {
+    for (const key of config.sourceKeys) {
+      if (!acc[key]) {
+        acc[key] = []
+      }
+      if (!acc[key].includes(config.id)) {
+        acc[key].push(config.id)
+      }
+    }
+    return acc
+  },
+  {} as Record<string, RequiredFieldId[]>,
+)
+
+export function getRequiredFieldLabel(id: RequiredFieldId): string {
+  return REQUIRED_FIELD_LABEL_LOOKUP[id] ?? id
+}
+
+export function getRequiredIdsBySchemaKey(fieldKey: string): RequiredFieldId[] {
+  return SCHEMA_KEY_TO_REQUIRED_IDS[fieldKey] ?? []
+}
+
 export const AI_FIELD_STATUS_TEXT: Record<AiFieldStatus, string> = {
   pending: 'Pending',
   working: 'In progress',

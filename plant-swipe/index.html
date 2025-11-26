@@ -9,17 +9,109 @@
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-      <link rel="icon" type="image/svg+xml" href="/icons/plant-swipe-icon.svg" />
+      <!-- Google tag (gtag.js) -->
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-LDSYW5QNK5"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-LDSYW5QNK5');
+      </script>
+      <!-- Google reCAPTCHA Enterprise v3 -->
+      <script src="https://www.google.com/recaptcha/enterprise.js?render=6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd"></script>
+      <script>
+        (function() {
+          try {
+            var savedTheme = localStorage.getItem('plantswipe.theme') || 'system';
+            var effectiveTheme = savedTheme;
+            if (savedTheme === 'system') {
+              effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            if (effectiveTheme === 'dark') {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          } catch (e) {}
+        })();
+      </script>
+      <link rel="icon" type="image/svg+xml" href="/icons/plant-swipe-icon-outline.svg" />
       <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
       <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png" />
       <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+      <style>
+        :root {
+          color: #0f172a;
+          background-color: #f0f4ef;
+          -webkit-text-size-adjust: 100%;
+        }
+        body {
+          margin: 0;
+          min-height: 100vh;
+          background: radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.2), transparent 55%),
+            radial-gradient(circle at 80% 0%, rgba(15, 118, 110, 0.25), transparent 45%),
+            linear-gradient(180deg, #f8faf7 0%, #eef2ed 45%, #e3e5df 100%);
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+          color: #0f172a;
+        }
+        #root {
+          min-height: 100vh;
+        }
+        
+        /* Loading State Styles */
+        .loading-container {
+            min-height: 100vh;
+            width: 100%;
+            padding: 2rem;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(to bottom, #f5f5f4, #e7e5e4);
+        }
+        
+        html.dark .loading-container {
+            background: linear-gradient(to bottom, #252526, #1e1e1e);
+        }
+        
+        html.dark body {
+            background: #1e1e1e; /* Fallback for dark mode body */
+            color: #f0f4ef;
+        }
+        
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      </style>
+      <!-- Preload CSS as usual, but do not preload the font aggressively -->
+      <!-- <link rel="preload" as="style" href="/src/index.scss" /> -->
+      <!-- Font preload reduced priority or removed if causing FCP block -->
+      <link
+        rel="preload"
+        as="font"
+        href="/src/assets/fonts/Lavonte.ttf"
+        type="font/ttf"
+        crossorigin
+      />
+      <!-- Use script to load CSS to avoid render blocking if possible, or standard link -->
+      <!-- Vite handles CSS loading via main.tsx import in dev, but for prod we might need this. -->
+      <!-- However, since we renamed to scss, we should rely on Vite injecting it. -->
+      <!-- We'll leave a noscript fallback or rely on built assets. -->
+      <!-- For dev/preview where src is served: -->
+      <noscript><link rel="stylesheet" href="/src/index.scss" /></noscript>
       <title>Aphylia</title>
-      <!-- Load runtime environment safely (tries /api/env.js then /env.js) -->
-      <script src="/env-loader.js"></script>
     </head>
-  <body>
-    <div id="root"></div>
-    <!-- Defer app module so env loader runs first -->
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+    <body>
+      <div id="root">
+          <div class="loading-container" aria-busy="true">
+              <svg style="width: 3rem; height: 3rem; color: #059669; animation: spin 1s linear infinite;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+          </div>
+      </div>
+      <script type="module" src="/src/main.tsx"></script>
+    </body>
 </html>

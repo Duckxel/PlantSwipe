@@ -17,7 +17,10 @@ import net from 'net'
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { zodResponseFormat } from 'openai/helpers/zod'
-
+import multer from 'multer'
+import sharp from 'sharp'
+import webpush from 'web-push'
+import cron from 'node-cron'
 
 dotenv.config()
 // Optionally load server-only secrets from .env.server (ignored if missing)
@@ -43,11 +46,609 @@ preferEnv('DATABASE_URL', ['DB_URL', 'PG_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_
 // Normalize Supabase envs for server code if only VITE_* are present
 preferEnv('SUPABASE_URL', ['VITE_SUPABASE_URL', 'REACT_APP_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'])
 preferEnv('SUPABASE_ANON_KEY', ['VITE_SUPABASE_ANON_KEY', 'REACT_APP_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'])
+preferEnv('SUPABASE_SERVICE_ROLE_KEY', ['SUPABASE_SERVICE_KEY', 'SUPABASE_SERVICE_ROLE', 'SUPABASE_SERVICE_ROLE_TOKEN'])
 // Normalize optional admin token from frontend env
 preferEnv('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+let aiFieldPromptsTemplate = {}
+try {
+  const promptPath = path.join(__dirname, 'src', 'lib', 'aiFieldPrompts.json')
+  const promptContents = fsSync.readFileSync(promptPath, 'utf-8')
+  aiFieldPromptsTemplate = JSON.parse(promptContents)
+} catch (err) {
+  console.warn('[server] Failed to load AI field prompts JSON:', err?.message || err)
+  aiFieldPromptsTemplate = {}
+}
+
+// --- Email Compatibility Sanitizer ---
+/**
+ * Sanitizes HTML content to make it email-client compatible
+ * Replaces CSS properties that email clients don't support with compatible alternatives
+ */
+function sanitizeHtmlForEmail(html) {
+  if (!html) return html
+  
+  let result = html
+  
+  // 1. Replace CSS variables with hardcoded colors (Gmail doesn't support var())
+  const cssVarMap = {
+    '--tt-color-highlight-yellow': '#fef08a',
+    '--tt-color-highlight-red': '#fecaca',
+    '--tt-color-highlight-green': '#bbf7d0',
+    '--tt-color-highlight-blue': '#bfdbfe',
+    '--tt-color-highlight-purple': '#e9d5ff',
+    '--tt-color-highlight-pink': '#fbcfe8',
+    '--tt-color-highlight-orange': '#fed7aa',
+  }
+  // Replace var(--variable-name) with actual color
+  result = result.replace(/var\(\s*(--tt-color-[a-zA-Z-]+)\s*\)/gi, (match, varName) => {
+    return cssVarMap[varName] || '#fef08a' // Default to yellow
+  })
+  
+  // 2. Replace linear-gradient backgrounds with solid colors
+  // Match the full gradient including nested parentheses for rgb/rgba
+  result = result.replace(/background:\s*linear-gradient\s*\([^;"}]*\)\s*;?/gi, (match) => {
+    // Try to extract a hex color first
+    const hexMatch = match.match(/#[a-fA-F0-9]{6}|#[a-fA-F0-9]{3}/)
+    if (hexMatch) {
+      return `background-color: ${hexMatch[0]};`
+    }
+    // Try to extract rgb color
+    const rgbMatch = match.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/)
+    if (rgbMatch) {
+      const toHex = (n) => {
+        const hex = parseInt(n).toString(16)
+        return hex.length === 1 ? '0' + hex : hex
+      }
+      return `background-color: #${toHex(rgbMatch[1])}${toHex(rgbMatch[2])}${toHex(rgbMatch[3])};`
+    }
+    return 'background-color: #ffffff;'
+  })
+  
+  // 3. Remove box-shadow properties entirely (not supported in most email clients)
+  result = result.replace(/box-shadow:\s*[^;"}]+;?/gi, '')
+  
+  // 4. Replace rgba() colors with solid hex (in all contexts, not just background)
+  result = result.replace(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/gi, (match, r, g, b) => {
+    const toHex = (n) => {
+      const hex = parseInt(n).toString(16)
+      return hex.length === 1 ? '0' + hex : hex
+    }
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+  })
+  
+  // 5. Replace display: flex with text-align: center for centering
+  result = result.replace(/display:\s*flex\s*;\s*flex-direction:\s*column\s*;\s*align-items:\s*center\s*;?/gi, 'text-align: center;')
+  result = result.replace(/display:\s*flex\s*;\s*align-items:\s*center\s*;\s*justify-content:\s*center\s*;?/gi, 'text-align: center;')
+  result = result.replace(/display:\s*flex\s*;\s*align-items:\s*center\s*;/gi, '')
+  
+  // 6. Remove transition properties (not supported in email)
+  result = result.replace(/transition:\s*[^;"}]+;?/gi, '')
+  
+  // 7. Remove gap property (not supported in email)
+  result = result.replace(/gap:\s*[^;"}]+;?/gi, '')
+  
+  // 8. Clean up any double semicolons or empty style artifacts
+  result = result.replace(/;\s*;/g, ';')
+  result = result.replace(/style="\s*;/g, 'style="')
+  result = result.replace(/;\s*"/g, '"')
+  
+  return result
+}
+
+// --- Email Wrapper ---
+// Localized strings for email wrapper
+const EMAIL_WRAPPER_STRINGS = {
+  en: {
+    teamName: 'The Aphylia Team',
+    tagline: 'Helping you grow your plant knowledge 🌱',
+    exploreButton: 'Explore Aphylia →',
+    aboutLink: 'About',
+    contactLink: 'Contact',
+    copyright: '© {{year}} Aphylia. Made with 💚 for plant enthusiasts everywhere.',
+  },
+  fr: {
+    teamName: "L'équipe Aphylia",
+    tagline: 'Vous aider à développer vos connaissances botaniques 🌱',
+    exploreButton: 'Explorer Aphylia →',
+    aboutLink: 'À propos',
+    contactLink: 'Contact',
+    copyright: '© {{year}} Aphylia. Fait avec 💚 pour les passionnés de plantes partout.',
+  },
+}
+
+/**
+ * Wraps email body content with a beautiful styled template
+ * Matches the Aphylia website aesthetic with gradients and rounded corners
+ * @param {string} bodyHtml - The email body content
+ * @param {string} subject - The email subject line
+ * @param {string} language - The user's preferred language (defaults to 'en')
+ */
+function wrapEmailHtml(bodyHtml, subject, language = 'en') {
+  const currentYear = new Date().getFullYear()
+  const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+  
+  // Get localized strings for the wrapper (fallback to English if language not found)
+  const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS['en']
+  const copyrightText = strings.copyright.replace('{{year}}', String(currentYear))
+
+  // Aphylia logo URL for emails (via media.aphylia.app CDN)
+  const logoUrl = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
+  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
+  const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
+
+  return `<!DOCTYPE html>
+<html lang="${language}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>${subject || 'Aphylia'}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <style>
+    table, td, div, p, a { font-family: Arial, sans-serif; }
+  </style>
+  <![endif]-->
+  <style>
+    /* Reset */
+    body, table, td, p, a, li, blockquote { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; max-width: 100%; }
+    
+    /* Base */
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%); min-height: 100vh; }
+    
+    /* Typography */
+    h1 { font-size: 32px; font-weight: 700; color: #111827; margin: 0 0 20px 0; line-height: 1.2; letter-spacing: -0.5px; }
+    h2 { font-size: 26px; font-weight: 700; color: #1f2937; margin: 32px 0 16px 0; line-height: 1.3; }
+    h3 { font-size: 22px; font-weight: 600; color: #374151; margin: 28px 0 12px 0; line-height: 1.4; }
+    h4 { font-size: 18px; font-weight: 600; color: #4b5563; margin: 24px 0 10px 0; }
+    p { margin: 0 0 16px 0; line-height: 1.75; color: #374151; }
+    
+    /* Links */
+    a { color: #059669; text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
+    a:hover { color: #047857; }
+    
+    /* Code */
+    code { background: #f3f4f6; color: #dc2626; padding: 3px 8px; border-radius: 6px; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em; }
+    pre { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: #e5e7eb; padding: 20px 24px; border-radius: 16px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; line-height: 1.6; margin: 20px 0; }
+    pre code { background: transparent; color: #e5e7eb; padding: 0; border-radius: 0; }
+    
+    /* Highlight */
+    mark { background: linear-gradient(135deg, #fef08a 0%, #fde047 100%); color: #713f12; padding: 2px 6px; border-radius: 4px; }
+    
+    /* Blockquote */
+    blockquote { border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.08); margin: 20px 0; padding: 16px 24px; border-radius: 0 12px 12px 0; font-style: italic; color: #374151; }
+    
+    /* Lists */
+    ul, ol { margin: 16px 0; padding-left: 28px; }
+    li { margin: 8px 0; color: #374151; }
+    
+    /* Horizontal Rule */
+    hr { border: none; height: 2px; background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%); margin: 32px 0; }
+    
+    /* Strong/Bold */
+    strong, b { font-weight: 600; color: #111827; }
+    
+    /* Dark mode */
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
+      .email-wrapper { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
+      .email-container { background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(24, 24, 27, 0.98) 50%, rgba(251, 191, 36, 0.03) 100%) !important; border-color: rgba(63, 63, 70, 0.5) !important; }
+      .email-body { color: #f4f4f5 !important; }
+      .email-body p, .email-body li, .email-body span, .email-body td { color: #e4e4e7 !important; }
+      .email-body h1, .email-body h2, .email-body h3, .email-body h4 { color: #ffffff !important; }
+      .email-body a { color: #34d399 !important; }
+      .email-body code { background: #374151 !important; color: #fca5a5 !important; }
+      .email-body mark { background: #854d0e !important; color: #fef08a !important; }
+      .signature-section { background: rgba(16, 185, 129, 0.08) !important; border-color: rgba(16, 185, 129, 0.15) !important; }
+      .footer-section { border-color: rgba(63, 63, 70, 0.3) !important; }
+      .footer-section p { color: #71717a !important; }
+    }
+    
+    /* Responsive */
+    @media screen and (max-width: 640px) {
+      .email-container { width: 100% !important; margin: 0 !important; border-radius: 0 !important; border-left: none !important; border-right: none !important; }
+      .email-body { padding: 32px 24px !important; }
+      .signature-section { margin: 24px !important; padding: 24px !important; }
+      .footer-section { padding: 24px !important; }
+      h1 { font-size: 26px !important; }
+      h2 { font-size: 22px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+  <table role="presentation" class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%);margin:0;padding:0;min-height:100vh;">
+    <tr>
+      <td align="center" style="padding:48px 20px;">
+        <table role="presentation" class="email-container" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%);border-radius:32px;border:1px solid rgba(16, 185, 129, 0.12);box-shadow:0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;overflow:hidden;">
+          <tr>
+            <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:32px 48px;text-align:center;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="vertical-align:middle;padding-right:12px;">
+                            ${logoImg}
+                          </td>
+                          <td style="vertical-align:middle;">
+                            <span style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;font-family:'Quicksand',-apple-system,BlinkMacSystemFont,sans-serif;">Aphylia</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-body" style="padding:48px 48px 32px 48px;color:#374151;font-size:16px;line-height:1.75;">
+              ${bodyHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 48px 48px 48px;">
+              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
+                <tr>
+                  <td style="padding:28px 32px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="64" style="vertical-align:top;padding-right:20px;">
+                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;">
+                            ${logoImgLarge}
+                          </div>
+                        </td>
+                        <td style="vertical-align:middle;">
+                          <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">
+                            ${strings.teamName}
+                          </p>
+                          <p style="margin:0;font-size:14px;color:#6b7280;">
+                            ${strings.tagline}
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="footer-section" style="padding:32px 48px;text-align:center;border-top:1px solid rgba(16, 185, 129, 0.08);">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
+                      <tr>
+                        <td>
+                          <a href="${websiteUrl}" style="display:inline-block;background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:50px;text-decoration:none;box-shadow:0 8px 24px -6px rgba(16, 185, 129, 0.4);">
+                            ${strings.exploreButton}
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;">
+                      <a href="${websiteUrl}" style="color:#059669;text-decoration:none;font-weight:500;">aphylia.app</a>
+                      <span style="color:#d1d5db;margin:0 8px;">•</span>
+                      <a href="${websiteUrl}/about" style="color:#9ca3af;text-decoration:none;">${strings.aboutLink}</a>
+                      <span style="color:#d1d5db;margin:0 8px;">•</span>
+                      <a href="${websiteUrl}/contact" style="color:#9ca3af;text-decoration:none;">${strings.contactLink}</a>
+                    </p>
+                    <p style="margin:0;font-size:12px;color:#d1d5db;">
+                      ${copyrightText}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
+// --- Scheduled Tasks ---
+// Local campaign runner (avoids Edge Function auth complexity)
+cron.schedule('* * * * *', async () => {
+  if (!sql) return
+  try {
+    await processEmailCampaigns()
+  } catch (err) {
+    console.error('[campaign-runner] Error:', err)
+  }
+})
+
+/**
+ * Fetches email template translations for multi-language support
+ * @param {string} templateId - The template ID to fetch translations for
+ * @returns {Promise<Map<string, {subject: string, bodyHtml: string}>>} Map of language code to translation content
+ */
+async function fetchEmailTemplateTranslations(templateId) {
+  const translations = new Map()
+  if (!templateId || !sql) return translations
+  
+  try {
+    const data = await sql`
+      select language, subject, body_html
+      from public.admin_email_template_translations
+      where template_id = ${templateId}
+    `
+    
+    for (const row of data || []) {
+      if (row?.language) {
+        translations.set(row.language, {
+          subject: row.subject,
+          bodyHtml: row.body_html,
+        })
+      }
+    }
+  } catch (err) {
+    console.warn('[campaign-runner] failed to load email translations:', err?.message || err)
+  }
+  
+  return translations
+}
+
+async function processEmailCampaigns() {
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+  if (!apiKey) return
+
+  // 0. Auto-migrate tracking table if missing
+  try {
+     await sql`
+       create table if not exists public.admin_campaign_sends (
+         id uuid primary key default gen_random_uuid(),
+         campaign_id uuid references public.admin_email_campaigns(id) on delete cascade,
+         user_id uuid references auth.users(id) on delete cascade,
+         sent_at timestamptz default now(),
+         status text default 'sent',
+         error text
+       );
+       create index if not exists idx_admin_campaign_sends_campaign_user 
+         on public.admin_campaign_sends(campaign_id, user_id);
+     `
+  } catch (e) { /* ignore */ }
+
+  // 1. Fetch active campaigns (scheduled OR running)
+  // We don't lock a single row anymore; we process all valid campaigns in parallel (or sequentially)
+  // We check for campaigns that are scheduled in the past OR running within last 48h
+  const campaigns = await sql`
+    update public.admin_email_campaigns
+    set status = 'running', send_started_at = coalesce(send_started_at, now()), send_error = null
+    where id in (
+      select id from public.admin_email_campaigns
+      where (status = 'scheduled' and scheduled_for <= now())
+         or (status = 'running' and created_at > now() - interval '3 days')
+    )
+    returning *
+  `
+
+  if (!campaigns || campaigns.length === 0) return
+
+  for (const campaign of campaigns) {
+    // console.log('[campaign-runner] Processing:', campaign.title, campaign.id)
+    try {
+      // Check if this is a test mode campaign
+      const isTestMode = campaign.test_mode === true
+      const testEmail = campaign.test_email
+      
+      // Fetch email template translations for multi-language support
+      const emailTranslations = await fetchEmailTemplateTranslations(campaign.template_id)
+
+      // 2. Fetch recipients who have NOT received this campaign yet
+      // For test mode, we create a fake recipient with the test email
+      let recipients
+      if (isTestMode && testEmail) {
+        // In test mode, send only to the test email address
+        console.log('[campaign-runner] Test mode - sending to:', testEmail)
+        recipients = [{
+          id: null, // No real user ID for test
+          email: testEmail,
+          display_name: 'Test User',
+          user_timezone: campaign.timezone || 'UTC',
+          user_language: 'en'
+        }]
+      } else {
+        // Normal mode: fetch all users who haven't received this campaign
+        recipients = await sql`
+          select
+            au.id,
+            au.email,
+            coalesce(p.display_name, au.raw_user_meta_data->>'full_name', split_part(au.email, '@', 1)) as display_name,
+            coalesce(p.timezone, 'UTC') as user_timezone,
+            coalesce(p.language, 'en') as user_language
+          from auth.users au
+          left join public.profiles p on p.id = au.id
+          where (au.email_confirmed_at is not null or au.confirmed_at is not null)
+          and coalesce(p.notify_email, true) = true
+          and not exists (
+            select 1 from public.admin_campaign_sends s 
+            where s.campaign_id = ${campaign.id} and s.user_id = au.id
+          )
+          limit 2000
+        `
+      }
+
+      if (!recipients || recipients.length === 0) {
+         // No pending recipients for this campaign. 
+         // If it's old enough (e.g. > 30h past schedule), mark as sent? 
+         // For now, just leave it running to catch stragglers or manual stop.
+         // Optionally verify if we are effectively "done"
+         const totalUsers = await sql`select count(*) as count from auth.users where email_confirmed_at is not null`
+         const sentCount = await sql`select count(*) as count from public.admin_campaign_sends where campaign_id = ${campaign.id}`
+         if (Number(totalUsers[0].count) <= Number(sentCount[0].count)) {
+            await sql`update public.admin_email_campaigns set status = 'sent', send_completed_at = now() where id = ${campaign.id}`
+         }
+         continue
+      }
+
+      // 3. Filter by Timezone
+      const campaignTz = campaign.timezone || 'UTC'
+      const scheduledFor = new Date(campaign.scheduled_for) // This is UTC
+      
+      const dueRecipients = recipients.filter(r => {
+        // Calculate when the campaign is due for THIS user
+        // Formula: Target_Time = Scheduled_UTC - (User_Offset - Camp_Offset)
+        // But since we don't have easy offset lookups in JS without a library like date-fns-tz or similar,
+        // we rely on Postgres or an approximation. 
+        // Alternatively, we can check if the *current local hour* matches.
+        
+        // Approximation using Intl (available in Node 18+)
+        try {
+          // Get "Wall Clock" time of the scheduled event in Campaign TZ
+          const schedInCampTzStr = scheduledFor.toLocaleString('en-US', { timeZone: campaignTz })
+          const schedInCampTz = new Date(schedInCampTzStr)
+          
+          // Get "Wall Clock" time of NOW in User TZ
+          const nowInUserTzStr = new Date().toLocaleString('en-US', { timeZone: r.user_timezone })
+          const nowInUserTz = new Date(nowInUserTzStr)
+
+          // Compare: Has User's Wall Clock passed the Scheduled Wall Clock?
+          // We normalize both to a generic date object to compare times/dates relative to "local"
+          // Actually, to handle dates correctly:
+          // If Sched is "Oct 25 9:00 AM" (Camp TZ), we want to know if "Oct 25 9:00 AM" has passed in User TZ.
+          // So we just compare the ISO strings or millis of these "floating" times?
+          // No, `new Date(string)` creates a date in local system time.
+          
+          // Let's compare the *absolute* epoch time if we treat them as same TZ.
+          // This works because if 9AM passed in JST, it's "later" in absolute terms than 8AM JST.
+          return nowInUserTz >= schedInCampTz
+        } catch (e) {
+          // Fallback: if invalid TZ, assume due
+          return true
+        }
+      })
+
+      if (dueRecipients.length === 0) continue
+
+      // 4. Send Batches
+      const batchSize = 40
+      const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Plant Swipe <info@aphylia.app>'
+      let batchSentCount = 0
+
+      for (let i = 0; i < dueRecipients.length; i += batchSize) {
+        const batch = dueRecipients.slice(i, i + batchSize)
+        const payload = batch.map(r => {
+           const userRaw = r.display_name || 'User'
+           const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+           const userLang = r.user_language || 'en'
+           
+           // Generate random 10-character string (uppercase, lowercase, numbers)
+           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+           let randomStr = ''
+           for (let i = 0; i < 10; i++) {
+             randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+           }
+           
+           const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+           
+           // Variables available for replacement in email templates
+           const context = { 
+             user: userCap,                           // User's display name (capitalized)
+             email: r.email,                          // User's email address
+             random: randomStr,                       // 10 random characters (unique per email)
+             url: websiteUrl.replace(/^https?:\/\//, ''), // Website URL without protocol (e.g., "aphylia.app")
+             code: 'XXXXXX'                           // Placeholder for campaign emails (real codes are for transactional emails)
+           }
+           const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
+           
+           // Get user's language-specific content (fallback to campaign's default content)
+           const translation = emailTranslations.get(userLang)
+           const rawSubject = translation?.subject || campaign.subject
+           const rawBodyHtml = translation?.bodyHtml || campaign.body_html
+           
+           const bodyHtmlRaw = replaceVars(rawBodyHtml)
+           const subject = replaceVars(rawSubject)
+           // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
+           const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
+           // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
+           const html = wrapEmailHtml(bodyHtml, subject, userLang)
+           const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+
+           return {
+             from: fromEmail,
+             to: r.email,
+             subject: subject,
+             html: html,
+             text: text,
+             headers: { 'X-Campaign-Id': campaign.id },
+             tags: [{ name: 'campaign_id', value: campaign.id }]
+           }
+        })
+
+        // Send via Resend
+        const res = await fetch('https://api.resend.com/emails/batch', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        })
+
+        if (res.ok) {
+          batchSentCount += batch.length
+          // Record success in tracking table (only for non-test mode with real user IDs)
+          if (!isTestMode) {
+            const values = batch.map(u => ({
+               campaign_id: campaign.id,
+               user_id: u.id,
+               status: 'sent'
+            }))
+            await sql`insert into public.admin_campaign_sends ${sql(values, 'campaign_id', 'user_id', 'status')}`
+          }
+        } else {
+          console.error('[campaign-runner] Batch failed:', await res.text())
+        }
+      }
+      
+      // Update total stats
+      if (isTestMode) {
+        // For test mode, mark as sent immediately
+        await sql`
+          update public.admin_email_campaigns
+          set sent_count = 1,
+              total_recipients = 1,
+              status = 'sent',
+              send_completed_at = now()
+          where id = ${campaign.id}
+        `
+        console.log('[campaign-runner] Test campaign completed:', campaign.id)
+      } else {
+        await sql`
+          update public.admin_email_campaigns
+          set sent_count = (select count(*) from public.admin_campaign_sends where campaign_id = ${campaign.id}),
+              total_recipients = (select count(*) from auth.users where email_confirmed_at is not null)
+          where id = ${campaign.id}
+        `
+      }
+
+    } catch (err) {
+      console.error('[campaign-runner] Exception for campaign ' + campaign.id, err)
+    }
+  }
+}
 
 // Resolve the real Git repository root, even when running under a symlinked
 // deployment directory like /var/www/PlantSwipe/plant-swipe.
@@ -137,6 +738,15 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABA
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
+const supabaseServiceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_SERVICE_KEY
+  || process.env.SUPABASE_SERVICE_ROLE
+  || process.env.SUPABASE_SERVICE_ROLE_TOKEN
+  || ''
+const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
+  ? createSupabaseClient(supabaseUrlEnv, supabaseServiceKey, { auth: { persistSession: false, autoRefreshToken: false } })
+  : null
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
@@ -169,10 +779,383 @@ const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
 const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
 const contactRateLimitStore = new Map()
 
+const vapidPublicKey =
+  process.env.VAPID_PUBLIC_KEY ||
+  process.env.WEB_PUSH_PUBLIC_KEY ||
+  process.env.VITE_VAPID_PUBLIC_KEY ||
+  ''
+const vapidPrivateKey =
+  process.env.VAPID_PRIVATE_KEY ||
+  process.env.WEB_PUSH_PRIVATE_KEY ||
+  process.env.VITE_VAPID_PRIVATE_KEY ||
+  ''
+let pushNotificationsEnabled = false
+if (vapidPublicKey && vapidPrivateKey) {
+  try {
+    webpush.setVapidDetails('mailto:support@aphylia.app', vapidPublicKey, vapidPrivateKey)
+    pushNotificationsEnabled = true
+  } catch (err) {
+    console.error('[notifications] Failed to configure VAPID keys:', err)
+  }
+} else {
+  console.warn('[notifications] VAPID keys not configured — push notifications disabled')
+}
+
 // Admin bypass configuration
 // Support both server-only and Vite-style env variable names
 const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
 const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || process.env.VITE_ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true'
+
+const adminUploadBucket = (process.env.ADMIN_UPLOAD_BUCKET || process.env.SUPABASE_UTILITY_BUCKET || 'UTILITY').trim() || 'UTILITY'
+const adminUploadPrefixRaw = (process.env.ADMIN_UPLOAD_PREFIX || 'admin/uploads').trim()
+const adminUploadPrefix = adminUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'admin/uploads'
+const blogUploadPrefixRaw = (process.env.BLOG_UPLOAD_PREFIX || 'blog').trim()
+const blogUploadPrefix = blogUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'blog'
+const adminUploadMaxBytes = (() => {
+  const raw = Number(process.env.ADMIN_UPLOAD_MAX_BYTES)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  return 15 * 1024 * 1024
+})()
+const adminUploadMaxDimension = (() => {
+  const raw = Number(process.env.ADMIN_UPLOAD_MAX_DIMENSION)
+  if (Number.isFinite(raw) && raw >= 256 && raw <= 8000) return Math.round(raw)
+  return 2000
+})()
+const adminUploadWebpQuality = (() => {
+  const raw = Number(process.env.ADMIN_UPLOAD_WEBP_QUALITY)
+  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
+  return 82
+})()
+const adminUploadMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: adminUploadMaxBytes },
+})
+const singleAdminImageUpload = adminUploadMulter.single('file')
+const adminUploadAllowedMimeTypes = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+  'image/heic',
+  'image/heif',
+  'image/gif',
+  'image/tiff',
+  'image/bmp',
+  'image/svg+xml',
+])
+
+const gardenCoverUploadBucket = (() => {
+  const fromEnv = (process.env.GARDEN_UPLOAD_BUCKET || '').trim()
+  if (fromEnv) return fromEnv
+  const preferred = 'PHOTOS'
+  if (preferred) return preferred
+  return adminUploadBucket
+})()
+const gardenCoverUploadPrefixRaw = (process.env.GARDEN_UPLOAD_PREFIX || 'gardens/covers').trim()
+const gardenCoverUploadPrefix = gardenCoverUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'gardens/covers'
+const gardenCoverMaxBytes = (() => {
+  const raw = Number(process.env.GARDEN_UPLOAD_MAX_BYTES)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  return adminUploadMaxBytes
+})()
+const gardenCoverMaxDimension = (() => {
+  const raw = Number(process.env.GARDEN_UPLOAD_MAX_DIMENSION)
+  if (Number.isFinite(raw) && raw >= 128 && raw <= 4000) return Math.round(raw)
+  return 1000
+})()
+const gardenCoverWebpQuality = (() => {
+  const raw = Number(process.env.GARDEN_UPLOAD_WEBP_QUALITY)
+  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
+  return adminUploadWebpQuality
+})()
+const gardenCoverMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: gardenCoverMaxBytes },
+})
+const singleGardenCoverUpload = gardenCoverMulter.single('file')
+
+async function handleScopedImageUpload(req, res, options = {}) {
+  const { prefixBuilder, auditLabel = 'admin', actorId = null, uploaderInfo = null } = options
+
+  singleAdminImageUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(adminUploadMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      try {
+        optimizedBuffer = await sharp(file.buffer)
+          .rotate()
+          .resize({
+            width: adminUploadMaxDimension,
+            height: adminUploadMaxDimension,
+            fit: 'inside',
+            withoutEnlargement: true,
+            fastShrinkOnLoad: true,
+          })
+          .webp({
+            quality: adminUploadWebpQuality,
+            effort: 5,
+            smartSubsample: true,
+          })
+          .toBuffer()
+      } catch (sharpErr) {
+        console.error('[upload-image] failed to convert image to webp', sharpErr)
+        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+        return
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const finalTypeSegment = sanitizePathSegment('webp', 'webp')
+      const originalTypeSegment = deriveUploadTypeSegment(file.originalname, mime)
+      const scopedPrefix =
+        typeof prefixBuilder === 'function'
+          ? prefixBuilder({ req, file })
+          : adminUploadPrefix
+      const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient.storage.from(adminUploadBucket).upload(objectPath, optimizedBuffer, {
+          cacheControl: '31536000',
+          contentType: 'image/webp',
+          upsert: false,
+        })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[upload-image] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient.storage.from(adminUploadBucket).getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      const uploadedAt = new Date().toISOString()
+      const compressionPercent =
+        file.size > 0 ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100)) : 0
+
+      const payload = {
+        ok: true,
+        bucket: adminUploadBucket,
+        path: objectPath,
+        url: publicUrl,
+        mimeType: 'image/webp',
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        uploadedAt,
+        quality: adminUploadWebpQuality,
+        compressionPercent,
+      }
+      if (!publicUrl) {
+        payload.warning = 'Bucket is not public; no public URL is available'
+      }
+
+      await recordAdminMediaUpload({
+        adminId: uploaderInfo?.id || null,
+        adminEmail: uploaderInfo?.email || null,
+        adminName: uploaderInfo?.name || null,
+        bucket: adminUploadBucket,
+        path: objectPath,
+        publicUrl,
+        mimeType: 'image/webp',
+        originalMimeType: mime,
+        sizeBytes: optimizedBuffer.length,
+        originalSizeBytes: file.size,
+        quality: adminUploadWebpQuality,
+        compressionPercent,
+        metadata: {
+          originalName: file.originalname,
+          typeSegment: finalTypeSegment,
+          originalTypeSegment,
+          scope: auditLabel,
+        },
+      })
+
+      if (actorId) {
+        try {
+          const detail = {
+            bucket: adminUploadBucket,
+            path: objectPath,
+            url: publicUrl,
+            originalMimeType: mime,
+            originalSize: file.size,
+            optimizedSize: optimizedBuffer.length,
+            quality: adminUploadWebpQuality,
+            scope: auditLabel,
+          }
+          let logged = false
+          if (sql) {
+            try {
+              await sql`
+                insert into public.admin_activity_logs (admin_id, action, target, detail)
+                values (${actorId}, 'upload_image', ${objectPath}, ${sql.json(detail)})
+              `
+              logged = true
+            } catch (logErr) {
+              console.error('[upload-image] failed to log admin activity (db)', logErr)
+            }
+          }
+          if (!logged) {
+            try {
+              await insertAdminActivityViaRest(req, {
+                admin_id: actorId,
+                admin_name: null,
+                action: 'upload_image',
+                target: objectPath,
+                detail,
+              })
+            } catch (restErr) {
+              console.error('[upload-image] failed to log admin activity (rest)', restErr)
+            }
+          }
+        } catch {}
+      }
+
+      res.json(payload)
+    })().catch((unhandled) => {
+      console.error('[upload-image] unexpected failure', unhandled)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
+      }
+    })
+  })
+}
+function sanitizeUploadBaseName(name) {
+  try {
+    const parsed = path.parse(String(name || '')).name || 'upload'
+    const normalized = parsed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    return normalized || 'upload'
+  } catch {
+    return 'upload'
+  }
+}
+
+function sanitizePathSegment(value, fallback = 'unknown') {
+  try {
+    const normalized = String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    return normalized || fallback
+  } catch {
+    return fallback
+  }
+}
+
+function deriveUploadTypeSegment(originalName, mimeType) {
+  try {
+    const ext = path.extname(String(originalName || ''))
+    if (ext && ext.length > 1) {
+      return sanitizePathSegment(ext.slice(1))
+    }
+  } catch {}
+  try {
+    if (mimeType && mimeType.includes('/')) {
+      const subtype = mimeType.split('/')[1]
+      if (subtype) return sanitizePathSegment(subtype)
+    }
+  } catch {}
+  return 'unknown'
+}
+
+function buildUploadObjectPath(baseName, typeSegment, prefix = adminUploadPrefix) {
+  const unique =
+    (typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : crypto.randomBytes(10).toString('hex'))
+  const cleanPrefix = typeof prefix === 'string' ? prefix.replace(/^\/+|\/+$/g, '') : ''
+  const segments = [
+    cleanPrefix,
+    sanitizePathSegment(typeSegment, 'unknown'),
+    `${baseName}-${unique}.webp`,
+  ].filter(Boolean)
+  return segments.join('/').replace(/\/{2,}/g, '/')
+}
+
+function sanitizeFolderInput(value) {
+  if (!value) return ''
+  return String(value)
+    .split('/')
+    .map((segment) => sanitizePathSegment(segment))
+    .filter(Boolean)
+    .join('/')
+}
+
+function parseStoragePublicUrl(url) {
+  try {
+    if (!url || !supabaseUrlEnv) return null
+    const normalizedBase = supabaseUrlEnv.replace(/\/+$/, '')
+    const publicPrefix = `${normalizedBase}/storage/v1/object/public/`
+    if (!String(url).startsWith(publicPrefix)) return null
+    const remainder = String(url).slice(publicPrefix.length)
+    const parts = remainder.split('/').filter(Boolean)
+    if (parts.length < 2) return null
+    const bucket = parts.shift()
+    const path = parts.join('/')
+    if (!bucket || !path) return null
+    return { bucket, path }
+  } catch {
+    return null
+  }
+}
+
+function extractPlainText(html, limit = 4000) {
+  if (!html) return ''
+  const cleaned = String(html)
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\/?(?:p|div|br|li|h\d)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!cleaned) return ''
+  if (cleaned.length <= limit) return cleaned
+  return cleaned.slice(0, limit)
+}
+
+async function deleteGardenCoverObject(publicUrl) {
+  if (!publicUrl || !supabaseServiceClient) return { deleted: false, reason: 'unavailable' }
+  const info = parseStoragePublicUrl(publicUrl)
+  if (!info) return { deleted: false, reason: 'not_managed' }
+  if (info.bucket !== gardenCoverUploadBucket) return { deleted: false, reason: 'different_bucket' }
+  if (gardenCoverUploadPrefix && !info.path.startsWith(`${gardenCoverUploadPrefix}/`)) {
+    return { deleted: false, reason: 'different_prefix' }
+  }
+  try {
+    const { error } = await supabaseServiceClient.storage.from(info.bucket).remove([info.path])
+    if (error) throw error
+    return { deleted: true }
+  } catch (err) {
+    console.error('[garden-cover] failed to delete storage object', err)
+    return { deleted: false, reason: err?.message || 'delete_failed' }
+  }
+}
 
 // Extract Supabase user id and email from Authorization header. Falls back to
 // decoding the JWT locally when the server anon client isn't configured.
@@ -411,6 +1394,74 @@ function pickPrimaryPhotoUrlFromArray(photos, fallback) {
     }
   }
   return typeof fallback === 'string' && fallback ? fallback : ''
+}
+
+const EMAIL_VARIABLE_REGEX = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g
+
+function extractEmailTemplateVariables(...inputs) {
+  const result = new Set()
+  for (const input of inputs) {
+    if (!input || typeof input !== 'string') continue
+    let match
+    while ((match = EMAIL_VARIABLE_REGEX.exec(input)) !== null) {
+      const key = (match[1] || '').trim().toLowerCase()
+      if (key) result.add(key)
+    }
+  }
+  return Array.from(result).sort()
+}
+
+function stripHtmlToPlainText(html = '', maxLength = 240) {
+  if (!html || typeof html !== 'string') return ''
+  const withoutTags = html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (withoutTags.length <= maxLength) return withoutTags
+  return `${withoutTags.slice(0, maxLength - 1).trim()}…`
+}
+
+function coerceJsonValue(value, fallback = null) {
+  if (value === null || value === undefined) return fallback
+  if (typeof value === 'object') return value
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
+function normalizeScheduledDate(value) {
+  if (!value || typeof value !== 'string') return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
+
+function resolvePreviewText(previewText, bodyHtml) {
+  if (previewText && typeof previewText === 'string' && previewText.trim().length > 0) {
+    return previewText.trim()
+  }
+  return stripHtmlToPlainText(bodyHtml || '', 200)
+}
+
+function coerceVariableArray(value) {
+  const raw = coerceJsonValue(value, [])
+  if (!Array.isArray(raw)) return []
+  const set = new Set()
+  for (const entry of raw) {
+    if (entry === null || entry === undefined) continue
+    const key = String(entry).trim().toLowerCase()
+    if (key) set.add(key)
+  }
+  return Array.from(set).sort()
 }
 
 const JsonValueSchema = z.lazy(() =>
@@ -664,6 +1715,24 @@ function collectFieldHints(node, path, hints = new Set()) {
   return hints
 }
 
+function renderFieldPromptFromTemplate(fieldKey, plantName) {
+  const template = aiFieldPromptsTemplate?.[fieldKey]
+  if (!template) return null
+
+  let segments = []
+  if (Array.isArray(template)) {
+    segments = template
+  } else if (typeof template === 'string') {
+    segments = [template]
+  } else if (template && Array.isArray(template.instructions)) {
+    segments = template.instructions
+  }
+
+  if (!segments.length) return null
+  const compiled = segments.join('\n')
+  return compiled.replace(/\{\{\s*plantName\s*\}\}/gi, plantName)
+}
+
 function inferExpectedKind(node) {
   if (Array.isArray(node)) return 'array'
   if (!node || typeof node !== 'object') {
@@ -793,11 +1862,11 @@ async function generateFieldData(options) {
 
   const hintList = Array.from(collectFieldHints(fieldSchema, fieldKey)).slice(0, 50)
   const commonInstructions = [
-    'You fill plant data for individual fields.',
-    'Respond only with valid JSON containing the requested field.',
-    'Never include explanations, markdown, or extra prose.',
-    'Never output null; use empty strings, empty arrays, or omit keys instead.',
-    'Reuse any existing data when it is already suitable.',
+    `Act as a horticulture researcher filling structured data for the plant named "${plantName}".`,
+    'Work only in concise English and rely on reputable botanical sources.',
+    'Respond strictly with valid JSON containing the requested field and nothing else.',
+    'Populate every possible sub-value; if data is missing, return an empty string or array instead of null.',
+    'Reuse suitable existing data and never fabricate meta/status/image information.',
   ].join('\n')
 
   const promptSections = [
@@ -806,22 +1875,9 @@ async function generateFieldData(options) {
     `Field definition (for reference):\n${JSON.stringify(fieldSchema, null, 2)}`,
   ]
 
-  if (fieldKey === 'description') {
-    promptSections.push(
-      'Write a cohesive botanical description between 100 and 400 words. Use complete sentences and paragraph-style prose, highlight appearance, growth habit, seasonal interest, and growing requirements. Do not use bullet lists, headings, or markdown. Stay factual and avoid repetition.'
-    )
-  }
-
-  if (fieldKey === 'meta') {
-    promptSections.push(
-      'When filling meta.funFact, write one or two concise sentences (under 40 words total) that share a distinct trivia, historical note, or surprising usage. Do not repeat symbolism information covered in the meaning field. Avoid lists, markdown, or restating care guidance.'
-    )
-  }
-
-  if (fieldKey === 'meaning') {
-    promptSections.push(
-      'Return a single string under 50 words that concentrates on the plant’s symbolism—highlight key themes such as emotions, rites, or values (e.g., love, marriage, protection). Mention cultural or historical contexts only when they reinforce the symbolism. Do not include care advice, botanical traits, bullet characters, or markdown.'
-    )
+  const templatePrompt = renderFieldPromptFromTemplate(fieldKey, plantName)
+  if (templatePrompt) {
+    promptSections.push(templatePrompt)
   }
 
   if (hintList.length > 0) {
@@ -881,6 +1937,71 @@ async function generateFieldData(options) {
 
   const cleanedValue = removeNullValues(coercedValue)
   return cleanedValue !== undefined ? cleanedValue : undefined
+}
+
+async function verifyPlantNameCandidate(plantName) {
+  if (!openaiClient) {
+    throw new Error('OpenAI client not configured')
+  }
+
+  const instructions = [
+    'You verify whether a provided term clearly refers to a plant species, cultivar, or commonly recognized plant.',
+    'Respond strictly with compact JSON: {"isPlant": true|false, "reason": "very short explanation"}',
+    'Return isPlant = true only when the name primarily identifies a plant (botanical or common).',
+    'Return false for people, companies, fictional characters, generic objects, or ambiguous inputs.',
+    'Do not include markdown or prose outside the JSON.',
+  ].join('\n')
+
+  const prompt = [`Name to classify: ${plantName}`].join('\n')
+
+  const response = await openaiClient.responses.create(
+    {
+      model: openaiModel,
+      reasoning: { effort: 'low' },
+      instructions,
+      input: prompt,
+    },
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+  )
+
+  const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+  if (!outputText) {
+    throw new Error('AI returned empty verification output')
+  }
+
+  let parsed
+  try {
+    parsed = JSON.parse(outputText)
+  } catch {
+    const jsonMatch = outputText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      try {
+        parsed = JSON.parse(jsonMatch[0])
+      } catch {}
+    }
+  }
+
+  const normalized =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+
+  let isPlant = false
+  if (typeof normalized.isPlant === 'boolean') {
+    isPlant = normalized.isPlant
+  } else if (typeof normalized.result === 'string') {
+    const lowered = normalized.result.trim().toLowerCase()
+    isPlant = lowered.startsWith('y') || lowered.includes('plant')
+  } else if (/"isPlant"\s*:\s*true/i.test(outputText)) {
+    isPlant = true
+  }
+
+  const reason =
+    typeof normalized.reason === 'string'
+      ? normalized.reason
+      : typeof normalized.explanation === 'string'
+        ? normalized.explanation
+        : outputText
+
+  return { isPlant: Boolean(isPlant), reason: reason.trim() }
 }
 
 function removeExternalIds(node) {
@@ -994,6 +2115,295 @@ try {
 } catch {}
 const sql = connectionString ? postgres(connectionString, postgresOptions) : null
 
+let adminMediaUploadsEnsured = false
+async function ensureAdminMediaUploadsTable() {
+  if (!sql) return
+  if (adminMediaUploadsEnsured) return
+  const ddl = `
+    create table if not exists public.admin_media_uploads (
+      id uuid primary key default gen_random_uuid(),
+      admin_id uuid,
+      admin_email text,
+      admin_name text,
+      bucket text not null,
+      path text not null,
+      public_url text,
+      mime_type text,
+      original_mime_type text,
+      size_bytes integer,
+      original_size_bytes integer,
+      quality integer,
+      compression_percent integer,
+      metadata jsonb,
+      created_at timestamptz not null default now()
+    );
+    create index if not exists admin_media_uploads_created_idx on public.admin_media_uploads (created_at desc);
+    create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
+    create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
+  `
+  try {
+    await sql.unsafe(ddl, [], { simple: true })
+    adminMediaUploadsEnsured = true
+  } catch (err) {
+    console.error('[schema] failed to ensure admin_media_uploads table', err)
+  }
+}
+
+async function getAdminProfileName(userId) {
+  if (!userId) return null
+  if (sql) {
+    try {
+      const rows = await sql`select display_name from public.profiles where id = ${userId} limit 1`
+      if (Array.isArray(rows) && rows[0]?.display_name) return rows[0].display_name
+    } catch {}
+  }
+  if (supabaseServiceClient) {
+    try {
+      const { data, error } = await supabaseServiceClient
+        .from('profiles')
+        .select('display_name')
+        .eq('id', userId)
+        .limit(1)
+        .maybeSingle()
+      if (!error && data?.display_name) return data.display_name
+    } catch {}
+  }
+  return null
+}
+
+function extractStorageName(path) {
+  try {
+    if (!path) return null
+    const parts = String(path).split('/').filter(Boolean)
+    if (parts.length === 0) return String(path)
+    return parts[parts.length - 1]
+  } catch {
+    return path || null
+  }
+}
+
+function normalizeAdminMediaRow(row) {
+  if (!row) return null
+  return {
+    id: row.id || null,
+    adminId: row.admin_id || row.adminId || null,
+    adminEmail: row.admin_email || row.adminEmail || null,
+    adminName: row.admin_name || row.adminName || null,
+    bucket: row.bucket || null,
+    path: row.path || null,
+    url: row.public_url || row.publicUrl || null,
+    mimeType: row.mime_type || row.mimeType || null,
+    originalMimeType: row.original_mime_type || row.originalMimeType || null,
+    sizeBytes:
+      typeof row.size_bytes === 'number' ? row.size_bytes : row.sizeBytes ?? null,
+    originalSizeBytes:
+      typeof row.original_size_bytes === 'number'
+        ? row.original_size_bytes
+        : row.originalSizeBytes ?? null,
+    quality: typeof row.quality === 'number' ? row.quality : row.quality ?? null,
+    compressionPercent:
+      typeof row.compression_percent === 'number'
+        ? row.compression_percent
+        : row.compressionPercent ?? null,
+    metadata: row.metadata || null,
+    createdAt: row.created_at || row.createdAt || null,
+  }
+}
+
+async function recordAdminMediaUpload(row) {
+  if (!row) return null
+  try {
+    const createdAt = (() => {
+      try {
+        return row.createdAt ? new Date(row.createdAt).toISOString() : null
+      } catch {
+        return null
+      }
+    })()
+    const createdAtValue = createdAt || new Date().toISOString()
+    const storageName =
+      row.metadata?.storageName ||
+      row.metadata?.displayName ||
+      extractStorageName(row.path)
+    const metadataPayload = (() => {
+      const base =
+        row.metadata && typeof row.metadata === 'object' ? { ...row.metadata } : {}
+      if (base.originalName && !base.originalUploadName) {
+        base.originalUploadName = base.originalName
+      }
+      if (storageName) {
+        base.storageName = storageName
+        if (!base.displayName) base.displayName = storageName
+        base.originalName = storageName
+      } else if (!base.originalName && base.storageName) {
+        base.originalName = base.storageName
+      }
+      return base
+    })()
+
+    if (sql) {
+      const inserted = await sql`
+        insert into public.admin_media_uploads
+          (admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at)
+        values
+          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(metadataPayload || null)}, ${createdAtValue})
+        on conflict (bucket, path) do update set
+          admin_id = excluded.admin_id,
+          admin_email = excluded.admin_email,
+          admin_name = excluded.admin_name,
+          public_url = excluded.public_url,
+          mime_type = excluded.mime_type,
+          original_mime_type = excluded.original_mime_type,
+          size_bytes = excluded.size_bytes,
+          original_size_bytes = excluded.original_size_bytes,
+          quality = excluded.quality,
+          compression_percent = excluded.compression_percent,
+            metadata = excluded.metadata,
+          created_at = excluded.created_at
+        returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at
+      `
+      return Array.isArray(inserted) && inserted.length > 0
+        ? normalizeAdminMediaRow(inserted[0])
+        : null
+    }
+    if (supabaseServiceClient) {
+      const { data, error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .upsert(
+          {
+            admin_id: row.adminId,
+            admin_email: row.adminEmail,
+            admin_name: row.adminName,
+            bucket: row.bucket,
+            path: row.path,
+            public_url: row.publicUrl,
+            mime_type: row.mimeType,
+            original_mime_type: row.originalMimeType,
+            size_bytes: row.sizeBytes,
+            original_size_bytes: row.originalSizeBytes,
+            quality: row.quality,
+            compression_percent: row.compressionPercent,
+            metadata: metadataPayload || null,
+            created_at: createdAtValue,
+          },
+          { onConflict: 'bucket,path' }
+        )
+        .select(
+          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at'
+        )
+        .maybeSingle()
+      if (error) throw error
+      return data ? normalizeAdminMediaRow(data) : null
+    }
+  } catch (err) {
+    console.error('[upload] failed to record admin media upload', err)
+  }
+  return null
+}
+
+async function syncGardenCoverMedia(existingKeys, limit = 200) {
+  if (!gardenCoverUploadBucket) return []
+  const inserted = []
+  let rows = []
+  try {
+    if (sql) {
+      rows = await sql`
+        select
+          g.id::text as id,
+          g.name,
+          g.created_by::text as owner_id,
+          g.cover_image_url,
+          coalesce(g.updated_at, g.created_at, now()) as updated_at,
+          p.display_name as owner_name
+        from public.gardens g
+        left join public.profiles p on p.id = g.created_by
+        where g.cover_image_url is not null
+        order by coalesce(g.updated_at, g.created_at, now()) desc
+        limit ${limit}
+      `
+    } else if (supabaseServiceClient) {
+      const { data, error } = await supabaseServiceClient
+        .from('gardens')
+        .select(
+          'id, name, created_by, cover_image_url, updated_at, created_at, owner:profiles(display_name)'
+        )
+        .not('cover_image_url', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+      if (error) throw error
+      rows = data || []
+    } else {
+      return inserted
+    }
+  } catch (err) {
+    console.error('[media] failed to load garden cover entries', err)
+    return inserted
+  }
+
+  for (const row of rows) {
+    const publicUrl = row.cover_image_url || row.coverImageUrl
+    if (!publicUrl) continue
+    const parsed = parseStoragePublicUrl(publicUrl)
+    if (!parsed) continue
+    if (parsed.bucket !== gardenCoverUploadBucket) continue
+    if (
+      gardenCoverUploadPrefix &&
+      !parsed.path.startsWith(`${gardenCoverUploadPrefix}/`)
+    ) {
+      continue
+    }
+    const key = parsed.bucket && parsed.path ? `${parsed.bucket}/${parsed.path}`.toLowerCase() : null
+    if (!key || existingKeys.has(key)) continue
+    const ownerId =
+      row.owner_id ||
+      row.ownerId ||
+      row.created_by ||
+      row.createdBy ||
+      null
+    const ownerName =
+      row.owner_name ||
+      (row.owner && (row.owner.display_name || row.owner.displayName)) ||
+      null
+    const createdAt =
+      row.updated_at ||
+      row.updatedAt ||
+      row.created_at ||
+      row.createdAt ||
+      null
+    const recorded = await recordAdminMediaUpload({
+      adminId: ownerId,
+      adminEmail: null,
+      adminName: ownerName,
+      bucket: parsed.bucket,
+      path: parsed.path,
+      publicUrl,
+      mimeType: 'image/webp',
+      originalMimeType: 'image/webp',
+      sizeBytes: null,
+      originalSizeBytes: null,
+      quality: gardenCoverWebpQuality,
+      compressionPercent: null,
+      metadata: {
+        source: 'garden_cover',
+        gardenId: row.id || null,
+        gardenName: row.name || null,
+      },
+      createdAt,
+    })
+    if (recorded) {
+      existingKeys.add(key)
+      inserted.push(recorded)
+    }
+  }
+  return inserted
+}
+
+if (sql) {
+  ensureAdminMediaUploadsTable().catch((err) =>
+    console.error('[schema] admin_media_uploads ensure failed', err),
+  )
+}
+
 // Resolve visits table name (default: public.web_visits). Supports alternate names like visit-web.
 const VISITS_TABLE_ENV =
   (process.env.VISITS_TABLE ||
@@ -1044,8 +2454,8 @@ app.use((req, res, next) => {
     } else {
       res.setHeader('Access-Control-Allow-Origin', '*')
     }
-    if (req.path && req.path.startsWith('/api/')) {
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+      if (req.path && req.path.startsWith('/api/')) {
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
       if (req.method === 'OPTIONS') {
         res.status(204).end()
@@ -1058,7 +2468,7 @@ app.use((req, res, next) => {
 
 // Catch-all OPTIONS for any /api/* route (defense-in-depth)
 app.options('/api/*', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.status(204).end()
@@ -1139,6 +2549,36 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
   }
+})
+
+// Admin: AI plant name verification
+app.post('/api/admin/ai/plant-fill/verify-name', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    const result = await verifyPlantNameCandidate(plantName)
+    res.json({ success: true, isPlant: result.isPlant, reason: result.reason })
+  } catch (err) {
+    console.error('[server] AI plant name verification failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to verify plant name' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-fill/verify-name', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
 })
 
 // Admin: AI-assisted plant data fill
@@ -1439,6 +2879,7 @@ app.get(['/api/env.js', '/env.js'], (_req, res) => {
       VITE_ADMIN_STATIC_TOKEN: process.env.VITE_ADMIN_STATIC_TOKEN || process.env.ADMIN_STATIC_TOKEN || '',
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
       VITE_DISABLE_PWA: disablePwaEnv,
+      VITE_VAPID_PUBLIC_KEY: process.env.VITE_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || '',
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -2262,6 +3703,216 @@ async function ensureBroadcastTable() {
   } catch {}
 }
 
+let notificationTablesEnsured = false
+
+// Default timezone for notifications and users - MUST be defined before notification API routes
+const DEFAULT_TIMEZONE = 'Europe/London'
+
+async function ensureNotificationTables() {
+  if (!sql) return
+  if (notificationTablesEnsured) return
+  try {
+    await sql`
+      create table if not exists public.notification_campaigns (
+        id uuid primary key default gen_random_uuid(),
+        title text not null,
+        description text,
+        delivery_mode text not null default 'send_now' check (delivery_mode in ('send_now','planned','scheduled')),
+        state text not null default 'draft' check (state in ('draft','scheduled','processing','paused','completed','cancelled')),
+        audience text not null default 'all' check (audience in ('all','tasks_open','inactive_week','admins','custom')),
+        filters jsonb not null default '{}'::jsonb,
+        message_variants text[] not null default '{}'::text[],
+        randomize boolean not null default true,
+        timezone text default 'Europe/London',
+        planned_for timestamptz,
+        schedule_start_at timestamptz,
+        schedule_interval text check (schedule_interval in ('daily','weekly','monthly')),
+        cta_url text,
+        custom_user_ids uuid[] not null default '{}'::uuid[],
+        run_count integer not null default 0,
+        created_by uuid,
+        updated_by uuid,
+        last_run_at timestamptz,
+        next_run_at timestamptz,
+        last_run_summary jsonb,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        deleted_at timestamptz
+      );
+    `
+    await sql`create index if not exists notification_campaigns_next_run_idx on public.notification_campaigns (next_run_at) where deleted_at is null;`
+    await sql`create index if not exists notification_campaigns_state_idx on public.notification_campaigns (state);`
+
+    await sql`
+      create table if not exists public.user_notifications (
+        id uuid primary key default gen_random_uuid(),
+        campaign_id uuid references public.notification_campaigns(id) on delete set null,
+        iteration integer not null default 1,
+        user_id uuid not null references auth.users(id) on delete cascade,
+        title text,
+        message text not null,
+        payload jsonb not null default '{}'::jsonb,
+        cta_url text,
+        scheduled_for timestamptz not null default now(),
+        delivered_at timestamptz,
+        delivery_status text not null default 'pending' check (delivery_status in ('pending','sent','failed','cancelled')),
+        delivery_attempts integer not null default 0,
+        delivery_error text,
+        seen_at timestamptz,
+        cancelled_at timestamptz,
+        created_at timestamptz not null default now()
+      );
+    `
+    await sql`create index if not exists user_notifications_user_idx on public.user_notifications (user_id, scheduled_for desc);`
+    await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
+    await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
+
+    await sql`
+      create table if not exists public.user_push_subscriptions (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid not null references auth.users(id) on delete cascade,
+        endpoint text not null,
+        auth_key text,
+        p256dh_key text,
+        user_agent text,
+        subscription jsonb not null,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        last_used_at timestamptz
+      );
+    `
+    await sql`create unique index if not exists user_push_subscriptions_endpoint_idx on public.user_push_subscriptions (endpoint);`
+    await sql`create index if not exists user_push_subscriptions_user_idx on public.user_push_subscriptions (user_id);`
+    notificationTablesEnsured = true
+  } catch (err) {
+    console.error('[schema] failed to ensure notification tables', err)
+  }
+}
+
+const notificationAudienceValues = ['all', 'tasks_open', 'inactive_week', 'admins', 'custom']
+const notificationModeValues = ['send_now', 'planned', 'scheduled']
+const notificationIntervalValues = ['daily', 'weekly', 'monthly']
+const notificationInputSchema = z.object({
+  title: z.string().min(3).max(160),
+  description: z
+    .string()
+    .max(2000)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  deliveryMode: z.enum(notificationModeValues),
+  audience: z.enum(notificationAudienceValues),
+  messageVariants: z.array(z.string().min(1).max(400)).min(1),
+  randomize: z.boolean().optional(),
+  timezone: z
+    .string()
+    .max(64)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  plannedFor: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  scheduleStartAt: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  scheduleInterval: z
+    .enum(notificationIntervalValues)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value : null)),
+  ctaUrl: z
+    .string()
+    .url()
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  customUserIds: z.array(z.string().uuid()).optional(),
+})
+const notificationStateSchema = z.object({
+  state: z.enum(['paused', 'scheduled']),
+})
+
+const emailTemplateInputSchema = z.object({
+  title: z.string().trim().min(3).max(120),
+  subject: z.string().trim().min(3).max(240),
+  description: z
+    .string()
+    .trim()
+    .max(600)
+    .optional()
+    .nullable(),
+  previewText: z
+    .string()
+    .trim()
+    .max(240)
+    .optional()
+    .nullable(),
+  bodyHtml: z.string().min(1),
+  bodyJson: JsonValueSchema.optional().nullable(),
+  isActive: z.boolean().optional(),
+})
+
+const emailCampaignInputSchema = z.object({
+  title: z.string().trim().min(3).max(160),
+  description: z
+    .string()
+    .trim()
+    .max(600)
+    .optional()
+    .nullable(),
+  templateId: z.string().uuid(),
+  scheduledFor: z.string().trim().min(6),
+  timezone: z
+    .string()
+    .trim()
+    .max(64)
+    .optional()
+    .nullable(),
+  previewText: z
+    .string()
+    .trim()
+    .max(240)
+    .optional()
+    .nullable(),
+  testMode: z.boolean().optional().default(false),
+  testEmail: z.string().email().optional().nullable(),
+})
+
+const emailCampaignUpdateSchema = z.object({
+  title: z.string().trim().min(3).max(160).optional(),
+  description: z
+    .string()
+    .trim()
+    .max(600)
+    .optional()
+    .nullable(),
+  templateId: z.string().uuid().optional(),
+  scheduledFor: z
+    .string()
+    .trim()
+    .min(6)
+    .optional()
+    .nullable(),
+  timezone: z
+    .string()
+    .trim()
+    .max(64)
+    .optional()
+    .nullable(),
+  previewText: z
+    .string()
+    .trim()
+    .max(240)
+    .optional()
+    .nullable(),
+  refreshTemplate: z.boolean().optional(),
+})
+
+const emailCampaignRunSchema = z
+  .object({
+    recipientLimit: z.number().int().min(1).max(5000).optional(),
+  })
+  .optional()
+
 async function ensureRequestedPlantsSchema() {
   if (!sql) return
   const ddl = `
@@ -2325,18 +3976,9 @@ create table if not exists public.plant_translations (
   plant_id text not null references public.plants(id) on delete cascade,
   language text not null check (language in ('en', 'fr')),
   name text not null,
-  identifiers jsonb,
-  ecology jsonb,
-  usage jsonb,
-  meta jsonb,
-  phenology jsonb,
-  care jsonb,
-  planting jsonb,
-  problems jsonb,
   scientific_name text,
   meaning text,
-  description text,
-  care_soil text,
+    description text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(plant_id, language)
@@ -2344,15 +3986,6 @@ create table if not exists public.plant_translations (
 
 create index if not exists plant_translations_plant_id_idx on public.plant_translations(plant_id);
 create index if not exists plant_translations_language_idx on public.plant_translations(language);
-
-alter table if exists public.plant_translations add column if not exists identifiers jsonb;
-alter table if exists public.plant_translations add column if not exists ecology jsonb;
-alter table if exists public.plant_translations add column if not exists usage jsonb;
-alter table if exists public.plant_translations add column if not exists meta jsonb;
-alter table if exists public.plant_translations add column if not exists phenology jsonb;
-alter table if exists public.plant_translations add column if not exists care jsonb;
-alter table if exists public.plant_translations add column if not exists planting jsonb;
-alter table if exists public.plant_translations add column if not exists problems jsonb;
 
 alter table public.plant_translations enable row level security;
 
@@ -2615,6 +4248,129 @@ app.options('/api/admin/deploy-edge-functions', (_req, res) => {
   res.status(204).end()
 })
 
+app.post('/api/admin/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureAdmin(req, res)
+  if (!adminPrincipal) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch {}
+
+  let adminUser = null
+  try {
+    adminUser = await getUserFromRequest(req)
+  } catch {}
+  let adminDisplayName = null
+  if (adminUser?.id) {
+    adminDisplayName = await getAdminProfileName(adminUser.id)
+  }
+
+  await handleScopedImageUpload(req, res, {
+    actorId: adminPrincipal,
+    auditLabel: 'admin',
+    uploaderInfo: {
+      id: adminUser?.id || null,
+      email: adminUser?.email || null,
+      name: adminDisplayName || null,
+    },
+    prefixBuilder: ({ req }) => {
+      const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
+      return [adminUploadPrefix, folder].filter(Boolean).join('/')
+    },
+  })
+})
+
+app.post('/api/blog/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureAdmin(req, res)
+  if (!adminPrincipal) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch {}
+
+  let adminUser = null
+  try {
+    adminUser = await getUserFromRequest(req)
+  } catch {}
+  let adminDisplayName = null
+  if (adminUser?.id) {
+    adminDisplayName = await getAdminProfileName(adminUser.id)
+  }
+
+  await handleScopedImageUpload(req, res, {
+    actorId: adminPrincipal,
+    auditLabel: 'blog',
+    uploaderInfo: {
+      id: adminUser?.id || null,
+      email: adminUser?.email || null,
+      name: adminDisplayName || null,
+    },
+    prefixBuilder: ({ req }) => {
+      const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
+      return [blogUploadPrefix, folder].filter(Boolean).join('/')
+    },
+  })
+})
+
+app.post('/api/blog/summarize', async (req, res) => {
+  if (!openaiClient) {
+    res.status(503).json({ error: 'OpenAI client not configured' })
+    return
+  }
+  const adminPrincipal = await ensureAdmin(req, res)
+  if (!adminPrincipal) return
+
+  const html = typeof req.body?.html === 'string' ? req.body.html : ''
+  const title = typeof req.body?.title === 'string' ? req.body.title : ''
+
+  if (!html.trim()) {
+    res.status(400).json({ error: 'Missing html content to summarize' })
+    return
+  }
+
+  const bodyText = extractPlainText(html, 6000)
+  if (!bodyText) {
+    res.json({ summary: '' })
+    return
+  }
+
+  const instructions = [
+    'Summarize the provided Aphylia blog article into a single compelling sentence under 240 characters.',
+    'Write in active voice and avoid emojis or hashtags.',
+    'Mention the core outcome or insight so it can be shown on cards.',
+  ].join('\n')
+  const promptSections = [
+    title ? `Title: ${title}` : null,
+    `Body:\n${bodyText}`,
+  ].filter(Boolean)
+
+  try {
+    const response = await openaiClient.responses.create(
+      {
+        model: openaiModel,
+        reasoning: { effort: 'low' },
+        instructions,
+        input: promptSections.join('\n\n'),
+        max_output_tokens: 150,
+      },
+      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+    )
+    const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+    res.json({ summary })
+  } catch (err) {
+    console.error('[blog] summary generation failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to generate summary' })
+  }
+})
+
 app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
   const caller = await ensureAdmin(req, res)
   if (!caller) return
@@ -2631,6 +4387,1321 @@ app.options('/api/admin/plant-translations/ensure-schema', (_req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
+
+app.get('/api/admin/media', async (req, res) => {
+  const admin = await ensureAdmin(req, res)
+  if (!admin) return
+
+  const limitParam = Number.parseInt(String(req.query?.limit || ''), 10)
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 50
+  const bucketParamRaw =
+    typeof req.query?.bucket === 'string'
+      ? String(req.query.bucket).trim().toLowerCase()
+      : null
+  const gardenBucketName = gardenCoverUploadBucket
+    ? gardenCoverUploadBucket.toLowerCase()
+    : null
+  const includeGardenCovers =
+    !bucketParamRaw || (gardenBucketName && bucketParamRaw === gardenBucketName)
+
+  try {
+    let rows = []
+    if (sql) {
+      rows =
+        await sql`select id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at from public.admin_media_uploads order by created_at desc limit ${limit}`
+    } else if (supabaseServiceClient) {
+      const { data, error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .select(
+          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at',
+        )
+        .order('created_at', { ascending: false })
+        .limit(limit)
+      if (error) throw error
+      rows = data || []
+    } else {
+      res.status(500).json({ error: 'Storage backend not configured' })
+      return
+    }
+
+    let media = (rows || [])
+      .map((row) => normalizeAdminMediaRow(row))
+      .filter(Boolean)
+    if (bucketParamRaw) {
+      media = media.filter(
+        (item) => (item?.bucket || '').toLowerCase() === bucketParamRaw,
+      )
+    }
+
+    const seenKeys = new Set(
+      media
+        .filter((item) => item?.bucket && item?.path)
+        .map((item) => `${item.bucket}/${item.path}`.toLowerCase()),
+    )
+
+    let combined = [...media]
+    if (includeGardenCovers) {
+      try {
+        const gardenMedia = await syncGardenCoverMedia(seenKeys, limit)
+        combined = combined.concat(gardenMedia.filter(Boolean))
+      } catch (coverErr) {
+        console.error('[media] failed to sync garden cover uploads', coverErr)
+      }
+    }
+    combined = combined.filter(Boolean)
+
+    combined.sort((a, b) => {
+      const aTime = a?.createdAt ? Date.parse(a.createdAt) : 0
+      const bTime = b?.createdAt ? Date.parse(b.createdAt) : 0
+      if (!Number.isFinite(aTime) && !Number.isFinite(bTime)) return 0
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0)
+    })
+
+    res.json({ ok: true, media: combined.slice(0, limit) })
+  } catch (err) {
+    console.error('[media] failed to load admin media uploads', err)
+    res.status(500).json({ error: 'Failed to load media uploads' })
+  }
+})
+app.options('/api/admin/media', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.delete('/api/admin/media/:id', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for media deletion' })
+    return
+  }
+  const admin = await ensureAdmin(req, res)
+  if (!admin) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch {}
+
+  const mediaId = String(req.params?.id || '').trim()
+  if (!mediaId) {
+    res.status(400).json({ error: 'Missing media id' })
+    return
+  }
+
+  let mediaRow = null
+  try {
+    if (sql) {
+      const rows =
+        await sql`select id, bucket, path from public.admin_media_uploads where id = ${mediaId} limit 1`
+      mediaRow = rows?.[0] || null
+    } else {
+      const { data, error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .select('id, bucket, path')
+        .eq('id', mediaId)
+        .maybeSingle()
+      if (error) {
+        res.status(500).json({ error: error.message || 'Failed to load media record' })
+        return
+      }
+      mediaRow = data || null
+    }
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to load media record' })
+    return
+  }
+
+  if (!mediaRow) {
+    res.status(404).json({ error: 'Media not found' })
+    return
+  }
+
+  let storageWarning = null
+  try {
+    const { error } = await supabaseServiceClient
+      .storage
+      .from(mediaRow.bucket)
+      .remove([mediaRow.path])
+    if (error) storageWarning = error.message || 'Failed to delete storage object'
+  } catch (err) {
+    storageWarning = err?.message || 'Failed to delete storage object'
+  }
+
+  try {
+    if (sql) {
+      await sql`delete from public.admin_media_uploads where id = ${mediaId}`
+    } else {
+      const { error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .delete()
+        .eq('id', mediaId)
+      if (error) throw error
+    }
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to delete media record', storageWarning })
+    return
+  }
+
+  res.json({ ok: true, id: mediaId, storageWarning })
+})
+app.options('/api/admin/media/:id', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.get('/api/admin/notifications', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  try {
+    const rows = await sql`
+      select n.*, stats.total_recipients, stats.sent_count, stats.failed_count, stats.pending_count,
+             creator.display_name as created_by_name
+      from public.notification_campaigns n
+      left join lateral (
+        select
+          count(*)::bigint as total_recipients,
+          count(*) filter (where delivery_status = 'sent')::bigint as sent_count,
+          count(*) filter (where delivery_status = 'failed')::bigint as failed_count,
+          count(*) filter (where delivery_status = 'pending')::bigint as pending_count
+        from public.user_notifications un
+        where un.campaign_id = n.id
+      ) stats on true
+      left join public.profiles creator on creator.id = n.created_by
+      where n.deleted_at is null
+      order by coalesce(n.next_run_at, n.created_at) desc
+      limit 200
+    `
+    const notifications = (rows || [])
+      .map((row) => normalizeNotificationCampaign(row))
+      .filter(Boolean)
+    res.json({ notifications, pushConfigured: pushNotificationsEnabled })
+  } catch (err) {
+    console.error('[notifications] failed to load campaigns', err)
+    res.status(500).json({ error: err?.message || 'Failed to load notifications' })
+  }
+})
+
+app.post('/api/admin/notifications', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  let parsed
+  try {
+    parsed = notificationInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const messageVariants = (parsed.messageVariants || [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+  if (!messageVariants.length) {
+    res.status(400).json({ error: 'At least one message variant is required' })
+    return
+  }
+  const deliveryMode = parsed.deliveryMode
+  const campaignTimezone = parsed.timezone || DEFAULT_TIMEZONE
+  
+  // Convert datetime-local input to UTC timestamp in campaign timezone
+  const convertDatetimeLocalToUTC = (datetimeLocal, tz) => {
+    if (!datetimeLocal || !datetimeLocal.length) return null
+    try {
+      const match = datetimeLocal.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+      if (!match) {
+        const fallback = new Date(datetimeLocal)
+        return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
+      }
+      
+      const [, year, month, day, hour, minute] = match
+      const y = parseInt(year)
+      const m = parseInt(month) - 1
+      const d = parseInt(day)
+      const h = parseInt(hour)
+      const min = parseInt(minute)
+      
+      let candidateUtc = new Date(Date.UTC(y, m, d, h, min, 0))
+      
+      for (let iteration = 0; iteration < 10; iteration++) {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        })
+        
+        const parts = formatter.formatToParts(candidateUtc)
+        const getPart = (type) => parseInt(parts.find(p => p.type === type)?.value || '0')
+        
+        const tzYear = getPart('year')
+        const tzMonth = getPart('month') - 1
+        const tzDay = getPart('day')
+        const tzHour = getPart('hour')
+        const tzMinute = getPart('minute')
+        const tzSecond = getPart('second')
+        
+        if (tzYear === y && tzMonth === m && tzDay === d && 
+            tzHour === h && tzMinute === min && tzSecond === 0) {
+          return candidateUtc.toISOString()
+        }
+        
+        const desiredLocal = new Date(y, m, d, h, min, 0)
+        const actualLocal = new Date(tzYear, tzMonth, tzDay, tzHour, tzMinute, tzSecond)
+        const diffMs = desiredLocal.getTime() - actualLocal.getTime()
+        
+        if (Math.abs(diffMs) < 1000) {
+          return candidateUtc.toISOString()
+        }
+        
+        candidateUtc = new Date(candidateUtc.getTime() + diffMs)
+      }
+      
+      return candidateUtc.toISOString()
+    } catch (err) {
+      console.error('[notifications] Error converting datetime-local:', err)
+      const fallback = new Date(datetimeLocal)
+      return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
+    }
+  }
+  
+  const plannedFor = deliveryMode === 'planned' && parsed.plannedFor 
+    ? convertDatetimeLocalToUTC(parsed.plannedFor, campaignTimezone)
+    : null
+  const scheduleStartAt = deliveryMode === 'scheduled' && parsed.scheduleStartAt
+    ? convertDatetimeLocalToUTC(parsed.scheduleStartAt, campaignTimezone)
+    : null
+  const nextRunAt = determineInitialNextRunAt({
+    deliveryMode,
+    plannedFor,
+    scheduleStartAt,
+  })
+  const audience = parsed.audience
+  const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
+  const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
+  const timezone = campaignTimezone
+  const state = deliveryMode === 'scheduled' ? 'scheduled' : 'draft'
+  try {
+    const rows = await sql`
+      insert into public.notification_campaigns (
+        title, description, delivery_mode, state, audience, filters, message_variants,
+        randomize, timezone, planned_for, schedule_start_at, schedule_interval, cta_url,
+        custom_user_ids, run_count, created_by, updated_by, next_run_at, created_at, updated_at
+      )
+      values (
+        ${parsed.title.trim()},
+        ${parsed.description},
+        ${deliveryMode},
+        ${state},
+        ${audience},
+        '{}'::jsonb,
+        ${sql.array(messageVariants)},
+        ${parsed.randomize !== false},
+        ${timezone},
+        ${deliveryMode === 'planned' ? plannedFor : null},
+        ${deliveryMode === 'scheduled' ? (scheduleStartAt || nextRunAt) : null},
+        ${scheduleInterval},
+        ${parsed.ctaUrl || null},
+        ${customIds.length ? sql.array(customIds) : sql.array([])},
+        0,
+        ${adminId},
+        ${adminId},
+        ${nextRunAt},
+        now(),
+        now()
+      )
+      returning *
+    `
+    const notification = normalizeNotificationCampaign(rows?.[0])
+    res.json({ notification, pushConfigured: pushNotificationsEnabled })
+    runNotificationWorkerTick().catch(() => {})
+  } catch (err) {
+    console.error('[notifications] failed to create campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to create notification' })
+  }
+})
+
+app.put('/api/admin/notifications/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = notificationInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const messageVariants = (parsed.messageVariants || [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+  if (!messageVariants.length) {
+    res.status(400).json({ error: 'At least one message variant is required' })
+    return
+  }
+  const existingRows = await sql`
+    select * from public.notification_campaigns where id = ${notificationId} and deleted_at is null limit 1
+  `
+  if (!existingRows || !existingRows.length) {
+    res.status(404).json({ error: 'Notification not found' })
+    return
+  }
+  const deliveryMode = parsed.deliveryMode
+  const campaignTimezone = parsed.timezone || DEFAULT_TIMEZONE
+  
+  // Convert datetime-local input to UTC timestamp in campaign timezone (same logic as create)
+  const convertDatetimeLocalToUTC = (datetimeLocal, tz) => {
+    if (!datetimeLocal || !datetimeLocal.length) return null
+    try {
+      const match = datetimeLocal.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+      if (!match) {
+        const fallback = new Date(datetimeLocal)
+        return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
+      }
+      
+      const [, year, month, day, hour, minute] = match
+      const y = parseInt(year)
+      const m = parseInt(month) - 1
+      const d = parseInt(day)
+      const h = parseInt(hour)
+      const min = parseInt(minute)
+      
+      let candidateUtc = new Date(Date.UTC(y, m, d, h, min, 0))
+      
+      for (let iteration = 0; iteration < 10; iteration++) {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        })
+        
+        const parts = formatter.formatToParts(candidateUtc)
+        const getPart = (type) => parseInt(parts.find(p => p.type === type)?.value || '0')
+        
+        const tzYear = getPart('year')
+        const tzMonth = getPart('month') - 1
+        const tzDay = getPart('day')
+        const tzHour = getPart('hour')
+        const tzMinute = getPart('minute')
+        const tzSecond = getPart('second')
+        
+        if (tzYear === y && tzMonth === m && tzDay === d && 
+            tzHour === h && tzMinute === min && tzSecond === 0) {
+          return candidateUtc.toISOString()
+        }
+        
+        const desiredLocal = new Date(y, m, d, h, min, 0)
+        const actualLocal = new Date(tzYear, tzMonth, tzDay, tzHour, tzMinute, tzSecond)
+        const diffMs = desiredLocal.getTime() - actualLocal.getTime()
+        
+        if (Math.abs(diffMs) < 1000) {
+          return candidateUtc.toISOString()
+        }
+        
+        candidateUtc = new Date(candidateUtc.getTime() + diffMs)
+      }
+      
+      return candidateUtc.toISOString()
+    } catch (err) {
+      console.error('[notifications] Error converting datetime-local:', err)
+      const fallback = new Date(datetimeLocal)
+      return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
+    }
+  }
+  
+  const plannedFor = deliveryMode === 'planned' && parsed.plannedFor 
+    ? convertDatetimeLocalToUTC(parsed.plannedFor, campaignTimezone)
+    : null
+  const scheduleStartAt = deliveryMode === 'scheduled' && parsed.scheduleStartAt
+    ? convertDatetimeLocalToUTC(parsed.scheduleStartAt, campaignTimezone)
+    : null
+  const nextRunAt = determineInitialNextRunAt({
+    deliveryMode,
+    plannedFor,
+    scheduleStartAt,
+  })
+  const audience = parsed.audience
+  const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
+  const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
+  const timezone = campaignTimezone
+  const nextState = deliveryMode === 'scheduled' ? (existingRows[0].state === 'paused' ? 'paused' : 'scheduled') : 'draft'
+  try {
+    const rows = await sql`
+      update public.notification_campaigns
+      set title = ${parsed.title.trim()},
+          description = ${parsed.description},
+          delivery_mode = ${deliveryMode},
+          state = ${nextState},
+          audience = ${audience},
+          message_variants = ${sql.array(messageVariants)},
+          randomize = ${parsed.randomize !== false},
+          timezone = ${timezone},
+          planned_for = ${deliveryMode === 'planned' ? plannedFor : null},
+          schedule_start_at = ${deliveryMode === 'scheduled' ? (scheduleStartAt || nextRunAt) : null},
+          schedule_interval = ${scheduleInterval},
+          cta_url = ${parsed.ctaUrl || null},
+          custom_user_ids = ${customIds.length ? sql.array(customIds) : sql.array([])},
+          updated_by = ${adminId},
+          next_run_at = ${nextRunAt},
+          updated_at = now()
+      where id = ${notificationId}
+      returning *
+    `
+    const notification = normalizeNotificationCampaign(rows?.[0])
+    res.json({ notification })
+  } catch (err) {
+    console.error('[notifications] failed to update campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to update notification' })
+  }
+})
+
+app.delete('/api/admin/notifications/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      update public.notification_campaigns
+      set deleted_at = now(),
+          state = 'cancelled',
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${notificationId}
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Notification not found' })
+      return
+    }
+    const notification = normalizeNotificationCampaign(rows[0])
+    res.json({ notification })
+  } catch (err) {
+    console.error('[notifications] failed to delete campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete notification' })
+  }
+})
+
+app.post('/api/admin/notifications/:id/trigger', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      update public.notification_campaigns
+      set next_run_at = now(),
+          state = case when delivery_mode = 'scheduled' then 'scheduled' else 'draft' end,
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${notificationId} and deleted_at is null
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Notification not found' })
+      return
+    }
+    const notification = normalizeNotificationCampaign(rows[0])
+    res.json({ notification })
+    runNotificationWorkerTick().catch(() => {})
+  } catch (err) {
+    console.error('[notifications] failed to trigger campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to trigger notification' })
+  }
+})
+
+app.post('/api/admin/notifications/:id/state', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = notificationStateSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  try {
+    const rows = await sql`
+      update public.notification_campaigns
+      set state = ${parsed.state},
+          next_run_at = case when ${parsed.state} = 'scheduled' and next_run_at is null then now() else next_run_at end,
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${notificationId} and deleted_at is null
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Notification not found' })
+      return
+    }
+    const notification = normalizeNotificationCampaign(rows[0])
+    res.json({ notification })
+  } catch (err) {
+    console.error('[notifications] failed to update state', err)
+    res.status(500).json({ error: err?.message || 'Failed to update notification state' })
+  }
+})
+
+// ---- Admin email templates ----
+app.get('/api/admin/email-templates', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const limitParam = Number(req.query?.limit) || 100
+  const limit = Math.min(Math.max(limitParam, 1), 200)
+  try {
+    const rows = await sql`
+      select t.*, stats.campaign_count, stats.last_campaign_at
+      from public.admin_email_templates t
+      left join lateral (
+        select count(*)::bigint as campaign_count,
+               max(created_at) as last_campaign_at
+        from public.admin_email_campaigns c
+        where c.template_id = t.id
+      ) stats on true
+      order by t.updated_at desc
+      limit ${limit}
+    `
+    const templates = (rows || []).map((row) => normalizeEmailTemplateRow(row)).filter(Boolean)
+    res.json({ templates })
+  } catch (err) {
+    console.error('[email-templates] failed to load templates', err)
+    res.status(500).json({ error: err?.message || 'Failed to load templates' })
+  }
+})
+
+app.get('/api/admin/email-templates/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select t.*, stats.campaign_count, stats.last_campaign_at
+      from public.admin_email_templates t
+      left join lateral (
+        select count(*)::bigint as campaign_count,
+               max(created_at) as last_campaign_at
+        from public.admin_email_campaigns c
+        where c.template_id = t.id
+      ) stats on true
+      where t.id = ${templateId}
+      limit 1
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    const template = normalizeEmailTemplateRow(rows[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[email-templates] failed to load template', err)
+    res.status(500).json({ error: err?.message || 'Failed to load template' })
+  }
+})
+
+app.post('/api/admin/email-templates', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  let parsed
+  try {
+    parsed = emailTemplateInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const description = parsed.description && parsed.description.length ? parsed.description : null
+  const previewText = resolvePreviewText(parsed.previewText, parsed.bodyHtml)
+  const bodyJsonFragment =
+    parsed.bodyJson === null || parsed.bodyJson === undefined ? null : sql.json(parsed.bodyJson)
+  const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
+  const isActive = parsed.isActive !== false
+  try {
+    const rows = await sql`
+      insert into public.admin_email_templates (
+        title, subject, description, preview_text, body_html, body_json, variables,
+        is_active, created_by, updated_by, created_at, updated_at
+      )
+      values (
+        ${parsed.title},
+        ${parsed.subject},
+        ${description},
+        ${previewText},
+        ${parsed.bodyHtml},
+        ${bodyJsonFragment},
+        ${variables},
+        ${isActive},
+        ${adminId},
+        ${adminId},
+        now(),
+        now()
+      )
+      returning *
+    `
+    const template = normalizeEmailTemplateRow(rows?.[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[email-templates] failed to create template', err)
+    res.status(500).json({ error: err?.message || 'Failed to create template' })
+  }
+})
+
+app.put('/api/admin/email-templates/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = emailTemplateInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  try {
+    const existing = await sql`
+      select * from public.admin_email_templates
+      where id = ${templateId}
+      limit 1
+    `
+    if (!existing || !existing.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    const current = existing[0]
+    const description = parsed.description && parsed.description.length ? parsed.description : null
+    const previewText = resolvePreviewText(parsed.previewText, parsed.bodyHtml)
+    const bodyJsonFragment =
+      parsed.bodyJson === null || parsed.bodyJson === undefined ? null : sql.json(parsed.bodyJson)
+    const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
+    const isActive =
+      parsed.isActive === undefined ? current.is_active !== false : parsed.isActive
+
+    const rows = await sql`
+      update public.admin_email_templates
+      set title = ${parsed.title},
+          subject = ${parsed.subject},
+          description = ${description},
+          preview_text = ${previewText},
+          body_html = ${parsed.bodyHtml},
+          body_json = ${bodyJsonFragment},
+          variables = ${variables},
+          is_active = ${isActive},
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${templateId}
+      returning *
+    `
+    const template = normalizeEmailTemplateRow(rows?.[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[email-templates] failed to update template', err)
+    res.status(500).json({ error: err?.message || 'Failed to update template' })
+  }
+})
+
+app.delete('/api/admin/email-templates/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  try {
+    const usage = await sql`
+      select count(*)::bigint as cnt
+      from public.admin_email_campaigns
+      where template_id = ${templateId}
+        and status in ('draft','scheduled','running')
+    `
+    const activeCount = usage && usage[0] ? Number(usage[0].cnt) : 0
+    if (activeCount > 0) {
+      res.status(409).json({ error: 'Template is used by active campaigns' })
+      return
+    }
+    const rows = await sql`
+      delete from public.admin_email_templates
+      where id = ${templateId}
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    const template = normalizeEmailTemplateRow(rows[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[email-templates] failed to delete template', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete template' })
+  }
+})
+
+// ---- Admin email campaigns ----
+app.get('/api/admin/email-campaigns', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const limitParam = Number(req.query?.limit) || 100
+  const limit = Math.min(Math.max(limitParam, 1), 200)
+  try {
+    const rows = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      order by coalesce(c.scheduled_for, c.created_at) desc
+      limit ${limit}
+    `
+    const campaigns = (rows || []).map((row) => normalizeEmailCampaignRow(row)).filter(Boolean)
+    res.json({ campaigns })
+  } catch (err) {
+    console.error('[email-campaigns] failed to load campaigns', err)
+    res.status(500).json({ error: err?.message || 'Failed to load campaigns' })
+  }
+})
+
+app.get('/api/admin/email-campaigns/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      where c.id = ${campaignId}
+      limit 1
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+    const campaign = normalizeEmailCampaignRow(rows[0])
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to load campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to load campaign' })
+  }
+})
+
+app.post('/api/admin/email-campaigns', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  let parsed
+  try {
+    parsed = emailCampaignInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const scheduledFor = normalizeScheduledDate(parsed.scheduledFor)
+  if (!scheduledFor) {
+    res.status(400).json({ error: 'scheduledFor must be a valid ISO date' })
+    return
+  }
+  try {
+    const templateRows = await sql`
+      select * from public.admin_email_templates
+      where id = ${parsed.templateId}
+      limit 1
+    `
+    if (!templateRows || !templateRows.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    const template = templateRows[0]
+    if (!template.body_html || !template.subject) {
+      res.status(400).json({ error: 'Template is missing subject or body' })
+      return
+    }
+    const description = parsed.description && parsed.description.length ? parsed.description : null
+    const previewText = resolvePreviewText(parsed.previewText || template.preview_text, template.body_html)
+    const bodyJsonSnapshot = coerceJsonValue(template.body_json, null)
+    const bodyJsonFragment = bodyJsonSnapshot == null ? null : sql.json(bodyJsonSnapshot)
+    const variables = extractEmailTemplateVariables(template.subject, template.body_html)
+    const timezone = parsed.timezone && parsed.timezone.length ? parsed.timezone : 'UTC'
+
+    const testMode = parsed.testMode === true
+    const testEmail = testMode && parsed.testEmail ? parsed.testEmail : null
+
+    const rows = await sql`
+      insert into public.admin_email_campaigns (
+        template_id,
+        template_version,
+        title,
+        description,
+        subject,
+        preview_text,
+        body_html,
+        body_json,
+        variables,
+        timezone,
+        scheduled_for,
+        status,
+        total_recipients,
+        sent_count,
+        failed_count,
+        test_mode,
+        test_email,
+        created_by,
+        updated_by,
+        created_at,
+        updated_at
+      )
+      values (
+        ${template.id},
+        ${template.version || 1},
+        ${parsed.title},
+        ${description},
+        ${template.subject},
+        ${previewText},
+        ${template.body_html},
+        ${bodyJsonFragment},
+        ${variables},
+        ${timezone || 'UTC'},
+        ${scheduledFor},
+        'scheduled',
+        ${testMode ? 1 : 0},
+        0,
+        0,
+        ${testMode},
+        ${testEmail},
+        ${adminId},
+        ${adminId},
+        now(),
+        now()
+      )
+      returning *
+    `
+    const campaign = normalizeEmailCampaignRow({ ...rows[0], template_title: template.title })
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to create campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to create campaign' })
+  }
+})
+
+app.put('/api/admin/email-campaigns/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = emailCampaignUpdateSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  if (!parsed || Object.keys(parsed).length === 0) {
+    res.status(400).json({ error: 'No changes provided' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      where c.id = ${campaignId}
+      limit 1
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+    const current = rows[0]
+    if (!['draft', 'scheduled', 'cancelled'].includes(current.status)) {
+      res.status(400).json({ error: 'Campaign can no longer be edited' })
+      return
+    }
+    let templateId = current.template_id
+    let templateVersion = current.template_version || 1
+    let subject = current.subject
+    let bodyHtml = current.body_html || ''
+    let bodyJsonSnapshot = coerceJsonValue(current.body_json, null)
+    let variablesSnapshot = coerceVariableArray(current.variables)
+    let previewText = current.preview_text || resolvePreviewText(null, bodyHtml)
+    let templateTitle = current.template_title || null
+
+    const wantsRefresh =
+      parsed.refreshTemplate === true ||
+      (parsed.templateId && parsed.templateId !== current.template_id)
+
+    if (wantsRefresh) {
+      templateId = parsed.templateId || current.template_id
+      const templateRows = await sql`
+        select * from public.admin_email_templates
+        where id = ${templateId}
+        limit 1
+      `
+      if (!templateRows || !templateRows.length) {
+        res.status(404).json({ error: 'Template not found' })
+        return
+      }
+      const template = templateRows[0]
+      if (!template.body_html || !template.subject) {
+        res.status(400).json({ error: 'Template is missing subject or body' })
+        return
+      }
+      subject = template.subject
+      bodyHtml = template.body_html
+      bodyJsonSnapshot = coerceJsonValue(template.body_json, null)
+      variablesSnapshot = extractEmailTemplateVariables(subject, bodyHtml)
+      previewText = resolvePreviewText(parsed.previewText || template.preview_text, bodyHtml)
+      templateVersion = template.version || 1
+      templateTitle = template.title || null
+    } else if (parsed.previewText !== undefined) {
+      previewText = resolvePreviewText(parsed.previewText, bodyHtml)
+    }
+
+    const description =
+      parsed.description === undefined
+        ? current.description
+        : parsed.description && parsed.description.length
+          ? parsed.description
+          : null
+    const title = parsed.title || current.title
+    const scheduledFor =
+      parsed.scheduledFor === undefined || parsed.scheduledFor === null
+        ? current.scheduled_for
+        : normalizeScheduledDate(parsed.scheduledFor)
+    if (!scheduledFor) {
+      res.status(400).json({ error: 'scheduledFor must be a valid ISO date' })
+      return
+    }
+    const timezone =
+      parsed.timezone === undefined || parsed.timezone === null
+        ? current.timezone || 'UTC'
+        : parsed.timezone.length
+          ? parsed.timezone
+          : 'UTC'
+    let status = current.status
+    if (['draft', 'cancelled'].includes(status)) {
+      status = 'scheduled'
+    }
+    const bodyJsonFragment = bodyJsonSnapshot == null ? null : sql.json(bodyJsonSnapshot)
+
+    const updated = await sql`
+      update public.admin_email_campaigns
+      set title = ${title},
+          description = ${description},
+          subject = ${subject},
+          preview_text = ${previewText},
+          body_html = ${bodyHtml},
+          body_json = ${bodyJsonFragment},
+          variables = ${variablesSnapshot},
+          template_id = ${templateId},
+          template_version = ${templateVersion},
+          timezone = ${timezone},
+          scheduled_for = ${scheduledFor},
+          status = ${status},
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${campaignId}
+      returning *
+    `
+    const campaign = normalizeEmailCampaignRow({
+      ...updated[0],
+      template_title: templateTitle,
+    })
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to update campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to update campaign' })
+  }
+})
+
+app.delete('/api/admin/email-campaigns/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  try {
+    // First, delete any campaign sends records (in case cascade doesn't work)
+    await sql`delete from public.admin_campaign_sends where campaign_id = ${campaignId}`
+    
+    // Allow deletion of campaigns in any status (including sent, partial, failed, running)
+    const rows = await sql`
+      delete from public.admin_email_campaigns
+      where id = ${campaignId}
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+    const campaign = normalizeEmailCampaignRow(rows[0])
+    console.log('[email-campaigns] deleted campaign:', campaign.id, campaign.title, 'status:', campaign.status)
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to delete campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete campaign' })
+  }
+})
+
+app.post('/api/admin/email-campaigns/:id/cancel', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      update public.admin_email_campaigns
+      set status = 'cancelled',
+          send_error = 'Cancelled by admin',
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${campaignId}
+        and status in ('draft','scheduled')
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found or already in progress' })
+      return
+    }
+    const campaign = normalizeEmailCampaignRow(rows[0])
+    res.json({ campaign })
+  } catch (err) {
+    console.error('[email-campaigns] failed to cancel campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to cancel campaign' })
+  }
+})
+
+app.post('/api/admin/email-campaigns/:id/run', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service client not configured' })
+    return
+  }
+  const campaignId = String(req.params?.id || '').trim()
+  if (!campaignId) {
+    res.status(400).json({ error: 'Missing campaign id' })
+    return
+  }
+  let params
+  try {
+    params = emailCampaignRunSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  try {
+    const existing = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      where c.id = ${campaignId}
+      limit 1
+    `
+    if (!existing || !existing.length) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+    const invokePayload = {
+      campaignId,
+      ...(params?.recipientLimit ? { recipientLimit: params.recipientLimit } : {}),
+    }
+    const invocation = await supabaseServiceClient.functions.invoke('email-campaign-runner', {
+      body: invokePayload,
+    })
+    if (invocation.error) {
+      throw new Error(invocation.error.message || 'Edge function failed')
+    }
+    if (invocation.data) {
+      console.log('[email-campaigns] runner completed:', JSON.stringify(invocation.data))
+    }
+    const refreshed = await sql`
+      select c.*, t.title as template_title
+      from public.admin_email_campaigns c
+      left join public.admin_email_templates t on t.id = c.template_id
+      where c.id = ${campaignId}
+      limit 1
+    `
+    const campaign = refreshed && refreshed.length ? normalizeEmailCampaignRow(refreshed[0]) : null
+    res.json({ campaign, runner: invocation.data })
+  } catch (err) {
+    console.error('[email-campaigns] failed to trigger run', err)
+    res.status(500).json({ error: err?.message || 'Failed to trigger campaign run' })
+  }
+})
+
+function normalizeEmailTemplateRow(row) {
+  if (!row) return null
+  const bodyJson = coerceJsonValue(row.body_json, null)
+  const variables = coerceVariableArray(row.variables)
+  const campaignCount =
+    row && Object.prototype.hasOwnProperty.call(row, 'campaign_count')
+      ? Number(row.campaign_count || 0)
+      : 0
+  return {
+    id: row.id,
+    title: row.title,
+    subject: row.subject,
+    description: row.description || null,
+    previewText: row.preview_text || resolvePreviewText(null, row.body_html),
+    bodyHtml: row.body_html || '',
+    bodyJson,
+    variables,
+    isActive: row.is_active !== false,
+    version: Number(row.version || 1),
+    lastUsedAt: row.last_used_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    campaignCount: Number.isFinite(campaignCount) ? campaignCount : 0,
+    lastCampaignAt: row.last_campaign_at || null,
+  }
+}
+
+function normalizeEmailCampaignRow(row) {
+  if (!row) return null
+  const bodyJson = coerceJsonValue(row.body_json, null)
+  const variables = coerceVariableArray(row.variables)
+  const sendSummary = coerceJsonValue(row.send_summary, null)
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || null,
+    status: row.status,
+    templateId: row.template_id,
+    templateTitle: row.template_title || null,
+    templateVersion: Number(row.template_version || 1),
+    subject: row.subject,
+    previewText: row.preview_text || resolvePreviewText(null, row.body_html),
+    bodyHtml: row.body_html || '',
+    bodyJson,
+    variables,
+    timezone: row.timezone || 'UTC',
+    scheduledFor: row.scheduled_for,
+    totalRecipients: Number(row.total_recipients || 0),
+    sentCount: Number(row.sent_count || 0),
+    failedCount: Number(row.failed_count || 0),
+    sendSummary,
+    sendError: row.send_error || null,
+    sendStartedAt: row.send_started_at || null,
+    sendCompletedAt: row.send_completed_at || null,
+    testMode: row.test_mode === true,
+    testEmail: row.test_email || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
 
   // Admin: global stats (bypass RLS via server connection)
   app.get('/api/admin/stats', async (req, res) => {
@@ -4105,6 +7176,90 @@ app.get('/api/banned/check', async (req, res) => {
   }
 })
 
+// reCAPTCHA Enterprise v3 verification endpoint
+// Uses GOOGLE_API_KEY for authentication with Google Cloud
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || ''
+const RECAPTCHA_SITE_KEY = '6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd'
+
+app.post('/api/recaptcha/verify', async (req, res) => {
+  try {
+    const { token, action } = req.body || {}
+    
+    if (!token) {
+      res.status(400).json({ success: false, error: 'Missing reCAPTCHA token' })
+      return
+    }
+    
+    if (!GOOGLE_API_KEY) {
+      // If no API key configured, log warning and allow request
+      // This enables development without reCAPTCHA verification
+      console.warn('[recaptcha] No GOOGLE_API_KEY configured, skipping verification')
+      res.json({ success: true, score: 1.0, warning: 'verification_skipped' })
+      return
+    }
+
+    // Call Google reCAPTCHA Enterprise verification API
+    // POST https://recaptchaenterprise.googleapis.com/v1/projects/PROJECT_ID/assessments?key=API_KEY
+    const verifyUrl = `https://recaptchaenterprise.googleapis.com/v1/projects/aphylia/assessments?key=${GOOGLE_API_KEY}`
+
+    const requestBody = {
+      event: {
+        token: token,
+        expectedAction: action || 'submit',
+        siteKey: RECAPTCHA_SITE_KEY
+      }
+    }
+
+    const verifyResponse = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    })
+
+    const verifyData = await verifyResponse.json()
+
+    if (!verifyResponse.ok) {
+      console.error('[recaptcha] Verification API error:', verifyData)
+      res.status(400).json({ success: false, error: 'Verification failed', details: verifyData.error?.message })
+      return
+    }
+
+    // Check the token properties
+    const tokenProperties = verifyData.tokenProperties
+    const riskAnalysis = verifyData.riskAnalysis
+    
+    if (!tokenProperties?.valid) {
+      console.warn('[recaptcha] Invalid token:', tokenProperties?.invalidReason)
+      res.status(400).json({ success: false, error: 'Invalid token', reason: tokenProperties?.invalidReason })
+      return
+    }
+
+    // Check if action matches (important for security)
+    if (action && tokenProperties.action !== action) {
+      console.warn('[recaptcha] Action mismatch:', { expected: action, got: tokenProperties.action })
+      res.status(400).json({ success: false, error: 'Action mismatch' })
+      return
+    }
+
+    // Get the risk score (0.0 = likely bot, 1.0 = likely human)
+    const score = riskAnalysis?.score ?? 0.5
+    
+    // Threshold: scores below 0.3 are likely bots
+    if (score < 0.3) {
+      console.warn('[recaptcha] Low score, likely bot:', score)
+      res.status(400).json({ success: false, error: 'Suspicious activity detected', score })
+      return
+    }
+
+    console.log('[recaptcha] Verification success, score:', score)
+    res.json({ success: true, score })
+  } catch (e) {
+    console.error('[recaptcha] Verification error:', e)
+    // On error, we still allow the request but log the issue
+    res.json({ success: true, score: 0.5, warning: 'verification_error' })
+  }
+})
+
 // Admin: ban a user by email, record IPs, and attempt account deletion
 app.post('/api/admin/ban', async (req, res) => {
   try {
@@ -4183,11 +7338,11 @@ app.post('/api/admin/ban', async (req, res) => {
 // Helper: load plants via Supabase anon client when SQL is unavailable
 async function loadPlantsViaSupabase() {
   if (!supabaseServer) return null
-  try {
+    try {
       const { data, error } = await supabaseServer
         .from('plants')
-        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
-      .order('name', { ascending: true })
+        .select('*')
+        .order('name', { ascending: true })
     if (error) return null
       return (Array.isArray(data) ? data : []).map((r) => {
         const photos = Array.isArray(r.photos) ? r.photos : undefined
@@ -4203,17 +7358,12 @@ async function loadPlantsViaSupabase() {
           photos,
           image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
           care: {
-            sunlight: r.care_sunlight,
-            water: r.care_water,
-            soil: r.care_soil,
-            difficulty: r.care_difficulty,
+            sunlight: r.level_sun || null,
+            water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
+            soil: Array.isArray(r.soil) ? r.soil.join(', ') : null,
+            difficulty: r.maintenance_level || null,
           },
           seedsAvailable: r.seeds_available === true,
-          // Optional frequency fields (tolerated by client)
-          waterFreqUnit: r.water_freq_unit ?? undefined,
-          waterFreqValue: r.water_freq_value ?? null,
-          waterFreqPeriod: r.water_freq_period ?? undefined,
-          waterFreqAmount: r.water_freq_amount ?? null,
         }
       })
   } catch {
@@ -4315,6 +7465,11 @@ app.post('/api/translate', async (req, res) => {
 
 app.get('/api/plants', async (_req, res) => {
   try {
+    const setPlantsCache = () => {
+      if (!res.getHeader('Cache-Control')) {
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+      }
+    }
     if (sql) {
       try {
           const rows = await sql`select * from plants order by name asc`
@@ -4332,15 +7487,16 @@ app.get('/api/plants', async (_req, res) => {
               photos,
               image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
               care: {
-                sunlight: r.care_sunlight,
-                water: r.care_water,
-                soil: r.care_soil,
-                difficulty: r.care_difficulty,
+                sunlight: r.level_sun || null,
+                water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
+                soil: Array.isArray(r.soil) ? r.soil.join(', ') : null,
+                difficulty: r.maintenance_level || null,
               },
               seedsAvailable: r.seeds_available === true,
             }
           })
-        res.json(mapped)
+          setPlantsCache()
+          res.json(mapped)
         return
       } catch (e) {
         // Fall through to Supabase fallback on SQL query failure
@@ -4348,6 +7504,7 @@ app.get('/api/plants', async (_req, res) => {
     }
     const fallback = await loadPlantsViaSupabase()
     if (fallback) {
+        setPlantsCache()
       res.json(fallback)
       return
     }
@@ -4840,6 +7997,86 @@ app.post('/api/track-visit', async (req, res) => {
     res.status(204).end()
   } catch (e) {
     res.status(500).json({ error: 'Failed to record visit' })
+  }
+})
+
+app.options('/api/account/delete', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+app.post('/api/account/delete', async (req, res) => {
+  try {
+    if (!supabaseServiceClient) {
+      res.status(503).json({ error: 'Account deletion is not configured on this server' })
+      return
+    }
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    const userId = user.id
+
+    let deletedGardens = 0
+    let deletedGardenIds = []
+    try {
+      const { data: ownerMemberships, error: ownerErr } = await supabaseServiceClient
+        .from('garden_members')
+        .select('garden_id')
+        .eq('user_id', userId)
+        .eq('role', 'owner')
+      if (ownerErr) throw ownerErr
+      const gardenIds = Array.from(
+        new Set(
+          (ownerMemberships || [])
+            .map((row) => row?.garden_id)
+            .filter((gid) => typeof gid === 'string' && gid.length > 0),
+        ),
+      )
+      if (gardenIds.length > 0) {
+        const { data: deletedRows, error: deleteGardensErr } = await supabaseServiceClient
+          .from('gardens')
+          .delete()
+          .in('id', gardenIds)
+          .select('id')
+        if (deleteGardensErr) throw deleteGardensErr
+        deletedGardenIds = (deletedRows || []).map((row) => row?.id).filter(Boolean)
+        deletedGardens = deletedGardenIds.length
+      }
+    } catch (gardenErr) {
+      console.error('[account-delete] Failed to delete owned gardens', gardenErr)
+      res.status(500).json({ error: 'Failed to delete owned gardens' })
+      return
+    }
+
+    try {
+      if (sql) {
+        await sql`delete from public.user_task_daily_cache where user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('user_task_daily_cache').delete().eq('user_id', userId)
+      }
+    } catch (cacheErr) {
+      console.warn('[account-delete] Failed to clear task cache for user', cacheErr?.message || cacheErr)
+    }
+
+    const { error: deleteUserError } = await supabaseServiceClient.auth.admin.deleteUser(userId)
+    if (deleteUserError) {
+      console.error('[account-delete] Failed to delete auth user', deleteUserError)
+      res.status(500).json({ error: 'Failed to delete account' })
+      return
+    }
+
+    res.json({
+      ok: true,
+      deletedGardens,
+      deletedGardenIds,
+      deletedUser: true,
+    })
+  } catch (err) {
+    console.error('[account-delete] Unexpected failure', err)
+    res.status(500).json({ error: 'Failed to delete account' })
   }
 })
 
@@ -5609,6 +8846,303 @@ async function isGardenMember(req, gardenId, userIdOverride = null) {
   }
 }
 
+async function isGardenOwner(req, gardenId, userIdOverride = null) {
+  try {
+    const user = userIdOverride ? { id: userIdOverride } : await getUserFromRequest(req)
+    if (!user?.id) return false
+    try { if (await isAdminFromRequest(req)) return true } catch {}
+    if (sql) {
+      const rows = await sql`
+        select role from public.garden_members
+        where garden_id = ${gardenId} and user_id = ${user.id}
+        limit 1
+      `
+      if (Array.isArray(rows) && rows.length > 0) {
+        return String(rows[0].role || '').toLowerCase() === 'owner'
+      }
+    }
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getBearerTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`
+      const r = await fetch(url, { headers })
+      if (r.ok) {
+        const arr = await r.json().catch(() => [])
+        if (Array.isArray(arr) && arr.length > 0) {
+          return String(arr[0].role || '').toLowerCase() === 'owner'
+        }
+      }
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+async function getGardenCoverRow(gardenId) {
+  if (sql) {
+    const rows = await sql`
+      select id::text as id, cover_image_url, name, created_by::text as owner_id
+      from public.gardens
+      where id = ${gardenId}
+      limit 1
+    `
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null
+  }
+  if (supabaseServiceClient) {
+    const { data, error } = await supabaseServiceClient
+      .from('gardens')
+      .select('id, cover_image_url, name, created_by')
+      .eq('id', gardenId)
+      .maybeSingle()
+    if (error) throw error
+    return data ? { ...data, owner_id: data.created_by } : null
+  }
+  return null
+}
+
+async function updateGardenCoverImage(gardenId, publicUrl) {
+  if (sql) {
+    await sql`
+      update public.gardens
+      set cover_image_url = ${publicUrl}
+      where id = ${gardenId}
+    `
+    return
+  }
+  if (supabaseServiceClient) {
+    const { error } = await supabaseServiceClient
+      .from('gardens')
+      .update({ cover_image_url: publicUrl })
+      .eq('id', gardenId)
+    if (error) throw error
+    return
+  }
+  throw new Error('Database connection not configured')
+}
+
+app.post('/api/garden/:id/upload-cover', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const gardenId = String(req.params.id || '').trim()
+  if (!gardenId) {
+    res.status(400).json({ error: 'Garden id is required' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const canEdit = await isGardenOwner(req, gardenId, user.id)
+  if (!canEdit) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
+  }
+
+  singleGardenCoverUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(gardenCoverMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const gardenRow = await getGardenCoverRow(gardenId)
+      if (!gardenRow) {
+        res.status(404).json({ error: 'Garden not found' })
+        return
+      }
+        let uploaderDisplayName = null
+        try {
+          uploaderDisplayName = await getAdminProfileName(user.id)
+        } catch {}
+      const previousUrl = gardenRow.cover_image_url || null
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      try {
+        optimizedBuffer = await sharp(file.buffer)
+          .rotate()
+          .resize({
+            width: gardenCoverMaxDimension,
+            height: gardenCoverMaxDimension,
+            fit: 'inside',
+            withoutEnlargement: true,
+            fastShrinkOnLoad: true,
+          })
+          .webp({
+            quality: gardenCoverWebpQuality,
+            effort: 5,
+            smartSubsample: true,
+          })
+          .toBuffer()
+      } catch (sharpErr) {
+        console.error('[garden-cover] failed to convert image to webp', sharpErr)
+        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+        return
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const gardenSegment = sanitizePathSegment(`garden-${gardenId}`, 'garden')
+      const typeSegment = gardenSegment ? `cover-${gardenSegment}` : 'cover'
+      const objectPath = buildUploadObjectPath(baseName, typeSegment, gardenCoverUploadPrefix)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(gardenCoverUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: 'image/webp',
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[garden-cover] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(gardenCoverUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      if (!publicUrl) {
+        res.status(500).json({ error: 'Failed to generate public URL for cover image' })
+        return
+      }
+
+      try {
+        await updateGardenCoverImage(gardenId, publicUrl)
+      } catch (dbErr) {
+        console.error('[garden-cover] failed to update garden cover', dbErr)
+        res.status(500).json({ error: dbErr?.message || 'Failed to update garden cover' })
+        return
+      }
+
+      let deletedPrevious = false
+      if (previousUrl && previousUrl !== publicUrl) {
+        try {
+          const result = await deleteGardenCoverObject(previousUrl)
+          deletedPrevious = Boolean(result.deleted)
+        } catch {}
+      }
+
+      const compressionPercent =
+        file.size > 0
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+        try {
+          await recordAdminMediaUpload({
+            adminId: user.id,
+            adminEmail: user.email || null,
+            adminName: uploaderDisplayName,
+            bucket: gardenCoverUploadBucket,
+            path: objectPath,
+            publicUrl,
+            mimeType: 'image/webp',
+            originalMimeType: mime,
+            sizeBytes: optimizedBuffer.length,
+            originalSizeBytes: file.size,
+            quality: gardenCoverWebpQuality,
+            compressionPercent,
+            metadata: {
+              source: 'garden_cover',
+              gardenId,
+              gardenName: gardenRow.name || null,
+              originalName: file.originalname,
+              previousUrl,
+            },
+            createdAt: new Date().toISOString(),
+          })
+        } catch (recordErr) {
+          console.error('[garden-cover] failed to record media upload', recordErr)
+        }
+
+      res.json({
+        ok: true,
+        gardenId,
+        bucket: gardenCoverUploadBucket,
+        path: objectPath,
+        url: publicUrl,
+        mimeType: 'image/webp',
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        quality: gardenCoverWebpQuality,
+        maxDimension: gardenCoverMaxDimension,
+        compressionPercent,
+        deletedPrevious,
+      })
+    })().catch((uploadErr) => {
+      console.error('[garden-cover] unexpected failure', uploadErr)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
+      }
+    })
+  })
+})
+
+app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for storage cleanup' })
+    return
+  }
+  const gardenId = String(req.params.id || '').trim()
+  if (!gardenId) {
+    res.status(400).json({ error: 'Garden id is required' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const canEdit = await isGardenOwner(req, gardenId, user.id)
+  if (!canEdit) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
+  }
+  const targetUrl = String(req.body?.url || '').trim()
+  if (!targetUrl) {
+    res.status(400).json({ error: 'url is required' })
+    return
+  }
+  try {
+    const result = await deleteGardenCoverObject(targetUrl)
+    res.json({ ok: true, deleted: Boolean(result.deleted), reason: result.reason })
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to delete cover image' })
+  }
+})
+
 app.get('/api/garden/:id/activity', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
@@ -5848,43 +9382,39 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       `
       garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
 
-      const gpRows = await sql`
+        const gpRows = await sql`
           select
-          gp.id::text as id,
-          gp.garden_id::text as garden_id,
-          gp.plant_id::text as plant_id,
-          gp.nickname,
-          gp.seeds_planted::int as seeds_planted,
-          gp.planted_at,
-          gp.expected_bloom_date,
-          gp.override_water_freq_unit,
-          gp.override_water_freq_value::int as override_water_freq_value,
-          gp.plants_on_hand::int as plants_on_hand,
-          gp.sort_index::int as sort_index,
-          p.id as p_id,
-          p.name as p_name,
-          p.scientific_name as p_scientific_name,
-          p.colors as p_colors,
-          p.seasons as p_seasons,
-          p.rarity as p_rarity,
-          p.meaning as p_meaning,
-          p.description as p_description,
-          p.image_url as p_image_url,
-          p.photos as p_photos,
-          p.care_sunlight as p_care_sunlight,
-          p.care_water as p_care_water,
-          p.care_soil as p_care_soil,
-          p.care_difficulty as p_care_difficulty,
-          p.seeds_available as p_seeds_available,
-          p.water_freq_unit as p_water_freq_unit,
-          p.water_freq_value as p_water_freq_value,
-          p.water_freq_period as p_water_freq_period,
-          p.water_freq_amount as p_water_freq_amount
-        from public.garden_plants gp
-        left join public.plants p on p.id = gp.plant_id
-        where gp.garden_id = ${gardenId}
-        order by gp.sort_index asc nulls last
-      `
+            gp.id::text as id,
+            gp.garden_id::text as garden_id,
+            gp.plant_id::text as plant_id,
+            gp.nickname,
+            gp.seeds_planted::int as seeds_planted,
+            gp.planted_at,
+            gp.expected_bloom_date,
+            gp.override_water_freq_unit,
+            gp.override_water_freq_value::int as override_water_freq_value,
+            gp.plants_on_hand::int as plants_on_hand,
+            gp.sort_index::int as sort_index,
+            p.id as p_id,
+            p.name as p_name,
+            p.scientific_name as p_scientific_name,
+            p.colors as p_colors,
+            p.seasons as p_seasons,
+            p.rarity as p_rarity,
+            p.meaning as p_meaning,
+            p.description as p_description,
+            p.image_url as p_image_url,
+            p.photos as p_photos,
+            p.level_sun as p_level_sun,
+            p.watering_type as p_watering_type,
+            p.soil as p_soil,
+            p.maintenance_level as p_maintenance_level,
+            p.seeds_available as p_seeds_available
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.garden_id = ${gardenId}
+          order by gp.sort_index asc nulls last
+        `
         plants = (gpRows || []).map((r) => {
           const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
           const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
@@ -5911,12 +9441,13 @@ app.get('/api/garden/:id/overview', async (req, res) => {
               description: r.p_description || '',
               photos: plantPhotos,
               image: plantImage,
-              care: { sunlight: r.p_care_sunlight || 'Low', water: r.p_care_water || 'Low', soil: r.p_care_soil || '', difficulty: r.p_care_difficulty || 'Easy' },
+                care: {
+                  sunlight: r.p_level_sun || null,
+                  water: Array.isArray(r.p_watering_type) ? r.p_watering_type.join(', ') : null,
+                  soil: Array.isArray(r.p_soil) ? r.p_soil.join(', ') : null,
+                  difficulty: r.p_maintenance_level || null,
+                },
               seedsAvailable: Boolean(r.p_seeds_available ?? false),
-              waterFreqUnit: r.p_water_freq_unit || undefined,
-              waterFreqValue: r.p_water_freq_value ?? null,
-              waterFreqPeriod: r.p_water_freq_period || undefined,
-              waterFreqAmount: r.p_water_freq_amount ?? null,
             } : null,
           }
         })
@@ -5962,7 +9493,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       let plantsMap = {}
       if (plantIds.length > 0) {
         const inParam = plantIds.map((id) => encodeURIComponent(String(id))).join(',')
-      const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=id,name,scientific_name,colors,seasons,rarity,meaning,description,image_url,photos,care_sunlight,care_water,care_soil,care_difficulty,seeds_available,water_freq_unit,water_freq_value,water_freq_period,water_freq_amount`
+        const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=*`
         const pResp = await fetch(pUrl, { headers })
         const pRows = pResp.ok ? (await pResp.json().catch(() => [])) : []
         for (const p of pRows) {
@@ -5976,14 +9507,15 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             rarity: p.rarity,
             meaning: p.meaning || '',
             description: p.description || '',
-              photos: plantPhotos,
-              image: pickPrimaryPhotoUrlFromArray(plantPhotos, p.image_url || ''),
-            care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
+            photos: plantPhotos,
+            image: pickPrimaryPhotoUrlFromArray(plantPhotos, p.image_url || ''),
+            care: {
+              sunlight: p.level_sun || null,
+              water: Array.isArray(p.watering_type) ? p.watering_type.join(', ') : null,
+              soil: Array.isArray(p.soil) ? p.soil.join(', ') : null,
+              difficulty: p.maintenance_level || null,
+            },
             seedsAvailable: Boolean(p.seeds_available ?? false),
-            waterFreqUnit: p.water_freq_unit || undefined,
-            waterFreqValue: p.water_freq_value ?? null,
-            waterFreqPeriod: p.water_freq_period || undefined,
-            waterFreqAmount: p.water_freq_amount ?? null,
           }
         }
       }
@@ -6389,9 +9921,1076 @@ app.delete('/api/admin/broadcast', async (req, res) => {
   }
 })
 
+app.get('/api/notifications', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  try {
+    const rows = await sql`
+      select id::text as id, title, message, delivery_status, delivered_at, scheduled_for, seen_at, cta_url, payload
+      from public.user_notifications
+      where user_id = ${user.id}
+      order by coalesce(delivered_at, scheduled_for) desc
+      limit 50
+    `
+    const notifications = (rows || []).map((row) => ({
+      id: row.id,
+      title: row.title || null,
+      message: row.message || null,
+      status: row.delivery_status || 'pending',
+      deliveredAt: isoOrNull(row.delivered_at),
+      scheduledFor: isoOrNull(row.scheduled_for),
+      seenAt: isoOrNull(row.seen_at),
+      ctaUrl: row.cta_url || null,
+      payload: row.payload && typeof row.payload === 'object' ? row.payload : {},
+    }))
+    res.json({ notifications })
+  } catch (err) {
+    console.error('[notifications] failed to load user notifications', err)
+    res.status(500).json({ error: err?.message || 'Failed to load notifications' })
+  }
+})
+
+app.post('/api/notifications/:id/read', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  try {
+    await sql`
+      update public.user_notifications
+      set seen_at = now()
+      where id = ${notificationId} and user_id = ${user.id}
+    `
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] failed to update notification', err)
+    res.status(500).json({ error: err?.message || 'Failed to update notification' })
+  }
+})
+
+app.post('/api/push/subscribe', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const subscription = req.body?.subscription
+  if (!subscription || typeof subscription !== 'object' || !subscription.endpoint) {
+    res.status(400).json({ error: 'Invalid subscription payload' })
+    return
+  }
+  const authKey = subscription.keys?.auth || subscription.auth_key || null
+  const p256dhKey = subscription.keys?.p256dh || subscription.p256dh_key || null
+  const userAgent = req.get('user-agent') || null
+  try {
+    await sql`
+      insert into public.user_push_subscriptions (user_id, endpoint, auth_key, p256dh_key, user_agent, subscription, updated_at, last_used_at)
+      values (${user.id}, ${subscription.endpoint}, ${authKey}, ${p256dhKey}, ${userAgent}, ${subscription}, now(), now())
+      on conflict (endpoint) do update
+      set user_id = excluded.user_id,
+          auth_key = excluded.auth_key,
+          p256dh_key = excluded.p256dh_key,
+          user_agent = excluded.user_agent,
+          subscription = excluded.subscription,
+          updated_at = now(),
+          last_used_at = now()
+    `
+    res.json({ ok: true, pushConfigured: pushNotificationsEnabled })
+  } catch (err) {
+    console.error('[notifications] failed to store push subscription', err)
+    res.status(500).json({ error: err?.message || 'Failed to store subscription' })
+  }
+})
+
+app.delete('/api/push/subscribe', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const endpoint =
+    (req.body?.endpoint || req.query?.endpoint || req.body?.subscription?.endpoint || '')
+      .toString()
+      .trim()
+  if (!endpoint) {
+    res.status(400).json({ error: 'Missing endpoint' })
+    return
+  }
+  try {
+    await sql`
+      delete from public.user_push_subscriptions
+      where endpoint = ${endpoint} or (user_id = ${user.id} and endpoint = ${endpoint})
+    `
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] failed to remove subscription', err)
+    res.status(500).json({ error: err?.message || 'Failed to remove subscription' })
+  }
+})
+
+const notificationWorkerIntervalMs = Math.max(15000, Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS || 60000))
+const notificationDeliveryBatchSize = Math.min(
+  Math.max(Number(process.env.NOTIFICATION_DELIVERY_BATCH_SIZE || 200), 25),
+  500,
+)
+let notificationWorkerTimer = null
+let notificationWorkerBusy = false
+
+function isoOrNull(value) {
+  if (!value) return null
+  try {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+    return date.toISOString()
+  } catch {
+    return null
+  }
+}
+
+function toStringArray(value) {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (entry == null ? null : String(entry)))
+      .filter((entry) => entry && entry.trim().length > 0)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed ? [trimmed] : []
+  }
+  return []
+}
+
+function toUuidArray(value) {
+  return toStringArray(value)
+}
+
+function normalizeNotificationCampaign(row) {
+  if (!row) return null
+  const stats = {
+    total: Number(row.total_recipients || 0),
+    sent: Number(row.sent_count || 0),
+    pending: Number(row.pending_count || 0),
+    failed: Number(row.failed_count || 0),
+  }
+  const filters =
+    row.filters && typeof row.filters === 'object' && !Array.isArray(row.filters)
+      ? row.filters
+      : {}
+  return {
+    id: row.id || null,
+    title: row.title || '',
+    description: row.description || null,
+    audience: row.audience || 'all',
+    deliveryMode: row.delivery_mode || 'send_now',
+    state: row.state || 'draft',
+    filters,
+    messageVariants: toStringArray(row.message_variants),
+    randomize: row.randomize !== false,
+    timezone: row.timezone || DEFAULT_TIMEZONE,
+    plannedFor: isoOrNull(row.planned_for),
+    scheduleStartAt: isoOrNull(row.schedule_start_at),
+    scheduleInterval: row.schedule_interval || null,
+    ctaUrl: row.cta_url || null,
+    customUserIds: toUuidArray(row.custom_user_ids),
+    runCount: Number(row.run_count || 0),
+    createdBy: row.created_by || null,
+    createdByName: row.created_by_name || null,
+    updatedBy: row.updated_by || null,
+    lastRunAt: isoOrNull(row.last_run_at),
+    nextRunAt: isoOrNull(row.next_run_at),
+    lastRunSummary: row.last_run_summary || null,
+    createdAt: isoOrNull(row.created_at),
+    updatedAt: isoOrNull(row.updated_at),
+    stats,
+  }
+}
+
+function determineInitialNextRunAt(payload) {
+  const now = new Date()
+  if (!payload || !payload.deliveryMode) return now.toISOString()
+  if (payload.deliveryMode === 'send_now') return now.toISOString()
+  if (payload.deliveryMode === 'planned' && payload.plannedFor) {
+    const date = new Date(payload.plannedFor)
+    if (!Number.isNaN(date.getTime())) return date.toISOString()
+  }
+  if (payload.deliveryMode === 'scheduled' && payload.scheduleStartAt) {
+    const date = new Date(payload.scheduleStartAt)
+    if (!Number.isNaN(date.getTime())) return date.toISOString()
+  }
+  return now.toISOString()
+}
+
+function computeNextScheduledRun(campaign) {
+  const interval = campaign.scheduleInterval || 'daily'
+  const baseIso = campaign.nextRunAt || campaign.scheduleStartAt || new Date().toISOString()
+  const base = new Date(baseIso)
+  if (Number.isNaN(base.getTime())) return new Date(Date.now() + 24 * 3600 * 1000).toISOString()
+  const next = new Date(base.getTime())
+  if (interval === 'weekly') {
+    next.setUTCDate(next.getUTCDate() + 7)
+  } else if (interval === 'monthly') {
+    const originalDay = base.getUTCDate()
+    next.setUTCDate(1)
+    next.setUTCMonth(next.getUTCMonth() + 1)
+    const daysInMonth = new Date(next.getUTCFullYear(), next.getUTCMonth() + 1, 0).getUTCDate()
+    next.setUTCDate(Math.min(originalDay, daysInMonth))
+  } else {
+    next.setUTCDate(next.getUTCDate() + 1)
+  }
+  return next.toISOString()
+}
+
+function pickNotificationMessage(campaign, index) {
+  const variants =
+    campaign.messageVariants && campaign.messageVariants.length > 0
+      ? campaign.messageVariants
+      : [campaign.description || 'You have a new update waiting in Aphylia.']
+  if (variants.length === 1) return variants[0]
+  if (campaign.randomize) {
+    const randomIndex = Math.floor(Math.random() * variants.length)
+    return variants[randomIndex]
+  }
+  const idx = index % variants.length
+  return variants[idx]
+}
+
+function chunkArray(list, size) {
+  const chunks = []
+  for (let i = 0; i < list.length; i += size) {
+    chunks.push(list.slice(i, i + size))
+  }
+  return chunks
+}
+
+async function resolveNotificationAudience(campaign) {
+  if (!sql) return []
+  const recipients = new Set()
+  const addRows = (rows, field = 'id') => {
+    for (const row of rows || []) {
+      const value = row?.[field]
+      if (value) recipients.add(String(value))
+    }
+  }
+  // Only include users who have NOT explicitly disabled push notifications (notify_push defaults to true)
+  if (campaign.audience === 'all') {
+    const rows = await sql`select id::text as id from public.profiles where id is not null and (notify_push is null or notify_push = true)`
+    addRows(rows, 'id')
+  } else if (campaign.audience === 'tasks_open') {
+    const today = new Date().toISOString().slice(0, 10)
+    const rows = await sql`
+      select distinct c.user_id::text as user_id
+      from public.user_task_daily_cache c
+      join public.profiles p on p.id = c.user_id
+      where c.cache_date = ${today} and c.gardens_with_remaining_tasks > 0 and c.user_id is not null
+        and (p.notify_push is null or p.notify_push = true)
+    `
+    addRows(rows, 'user_id')
+  } else if (campaign.audience === 'inactive_week') {
+    const rows = await sql`
+      select v.user_id::text as user_id
+      from public.web_visits v
+      join public.profiles p on p.id = v.user_id
+      where v.user_id is not null
+        and (p.notify_push is null or p.notify_push = true)
+      group by v.user_id
+      having max(v.occurred_at) < now() - interval '7 days'
+    `
+    addRows(rows, 'user_id')
+  } else if (campaign.audience === 'admins') {
+    const rows = await sql`select id::text as id from public.profiles where is_admin = true and (notify_push is null or notify_push = true)`
+    addRows(rows, 'id')
+  } else if (campaign.audience === 'custom') {
+    // For custom audience, still filter by notify_push preference
+    const customIds = (campaign.customUserIds || []).filter(Boolean)
+    if (customIds.length > 0) {
+      const rows = await sql`
+        select id::text as id from public.profiles 
+        where id = any(${sql.array(customIds)}::uuid[]) 
+          and (notify_push is null or notify_push = true)
+      `
+      addRows(rows, 'id')
+    }
+  } else {
+    const rows = await sql`select id::text as id from public.profiles where id is not null and (notify_push is null or notify_push = true)`
+    addRows(rows, 'id')
+  }
+  return Array.from(recipients)
+}
+
+// Helper function to translate text using DeepL API
+async function translateNotificationText(text, targetLang, sourceLang = 'EN') {
+  if (!text || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return text
+  }
+  
+  const deeplApiKey = process.env.DEEPL_API_KEY
+  if (!deeplApiKey) {
+    console.warn('[notifications] DeepL API key not configured, skipping translation')
+    return text
+  }
+  
+  try {
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        source_lang: sourceLang.toUpperCase(),
+        target_lang: targetLang.toUpperCase(),
+      }),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[notifications] DeepL translation failed:', response.status, errorText)
+      return text // Return original text on translation failure
+    }
+    
+    const data = await response.json()
+    return data.translations?.[0]?.text || text
+  } catch (err) {
+    console.error('[notifications] Translation error:', err)
+    return text // Return original text on error
+  }
+}
+
+// Get user language preferences for multiple users (batch fetch)
+async function getUserLanguages(userIds) {
+  if (!sql || !userIds.length) return new Map()
+  
+  const languageMap = new Map()
+  
+  try {
+    // Try to get from profiles table (if preferred_language column exists)
+    // This will fail gracefully if the column doesn't exist
+    try {
+      const profileLangs = await sql`
+        select id::text as id, preferred_language
+        from public.profiles
+        where id = any(${sql.array(userIds)}::uuid[])
+          and preferred_language is not null
+      `
+      for (const row of profileLangs || []) {
+        const lang = String(row.preferred_language).toLowerCase()
+        if (lang === 'fr' || lang === 'en') {
+          languageMap.set(row.id, lang)
+        }
+      }
+    } catch (err) {
+      // Column doesn't exist or other error - continue to fallback
+    }
+    
+    // Fallback: get most recent language from web visits for users we don't have yet
+    const missingIds = userIds.filter(id => !languageMap.has(String(id)))
+    if (missingIds.length > 0) {
+      const visitLangs = await sql`
+        select distinct on (user_id) user_id::text as user_id, language
+        from public.web_visits
+        where user_id = any(${sql.array(missingIds)}::uuid[])
+          and language is not null
+        order by user_id, occurred_at desc
+      `.catch(() => null)
+      
+      for (const row of visitLangs || []) {
+        if (!languageMap.has(row.user_id)) {
+          const lang = String(row.language).toLowerCase()
+          if (lang.startsWith('fr')) {
+            languageMap.set(row.user_id, 'fr')
+          } else if (lang.startsWith('en')) {
+            languageMap.set(row.user_id, 'en')
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[notifications] Error getting user languages:', err)
+  }
+  
+  return languageMap
+}
+
+// Get user timezones for multiple users (batch fetch)
+// Falls back to most recent timezone from web visits if not in profile
+// Final fallback is Europe/London
+async function getUserTimezones(userIds) {
+  if (!sql || !userIds.length) return new Map()
+  
+  const timezoneMap = new Map()
+  
+  try {
+    // First, get timezones from profiles
+    const profiles = await sql`
+      select id::text as id, timezone
+      from public.profiles
+      where id = any(${sql.array(userIds)}::uuid[])
+        and timezone is not null
+    `.catch(() => null)
+    
+    for (const row of profiles || []) {
+      const tz = String(row.timezone).trim()
+      if (tz) {
+        timezoneMap.set(row.id, tz)
+      }
+    }
+    
+    // For users without timezone in profile, try to get from web visits
+    const missingIds = userIds.filter(id => !timezoneMap.has(String(id)))
+    if (missingIds.length > 0) {
+      // Extract timezone from web visits extra JSONB field
+      const visitTimezones = await sql`
+        select distinct on (user_id) 
+          user_id::text as user_id,
+          (extra->>'timezone')::text as timezone
+        from public.web_visits
+        where user_id = any(${sql.array(missingIds)}::uuid[])
+          and extra->>'timezone' is not null
+          and (extra->>'timezone')::text != ''
+        order by user_id, occurred_at desc
+      `.catch(() => null)
+      
+      for (const row of visitTimezones || []) {
+        if (!timezoneMap.has(row.user_id)) {
+          const tz = String(row.timezone).trim()
+          if (tz && tz !== 'null') {
+            timezoneMap.set(row.user_id, tz)
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[notifications] Error getting user timezones:', err)
+  }
+  
+  return timezoneMap
+}
+
+// Convert a UTC timestamp to represent the same local time in user's timezone
+// Example: Admin schedules "2024-01-15 09:00:00" in America/New_York timezone (stored as UTC)
+//          User in Europe/Paris should receive it at "2024-01-15 09:00:00" Paris time
+// Strategy: 
+//   1. Extract the local time components (year, month, day, hour, minute) from the campaign timezone
+//   2. Find the UTC timestamp that represents those same components in the user's timezone
+function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) {
+  try {
+    const targetDate = new Date(targetLocalTime)
+    if (Number.isNaN(targetDate.getTime())) {
+      return targetLocalTime
+    }
+    
+    // If same timezone, return as-is
+    if (userTimezone === campaignTimezone || !userTimezone) {
+      return targetLocalTime
+    }
+    
+    // Extract local time components when displayed in campaign timezone
+    const campaignFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: campaignTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+    
+    const campaignParts = campaignFormatter.formatToParts(targetDate)
+    const getPart = (type) => parseInt(campaignParts.find(p => p.type === type)?.value || '0')
+    
+    const year = getPart('year')
+    const month = getPart('month') - 1 // JavaScript months are 0-indexed
+    const day = getPart('day')
+    const hour = getPart('hour')
+    const minute = getPart('minute')
+    const second = getPart('second')
+    
+    // Now find the UTC timestamp that represents this same local time in user's timezone
+    // We'll use a binary search-like approach: start with a reasonable guess and refine
+    
+    // Create an ISO string with the desired local time components
+    // Format: "YYYY-MM-DDTHH:mm:ss"
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
+    
+    // Start with a guess: assume the date string represents UTC
+    let candidateUtc = new Date(dateStr + 'Z') // 'Z' means UTC
+    
+    // Refine the guess by checking what local time this UTC represents in user's timezone
+    // and adjusting until we get the right local time
+    for (let iteration = 0; iteration < 10; iteration++) {
+      const userFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: userTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      })
+      
+      const userParts = userFormatter.formatToParts(candidateUtc)
+      const getUserPart = (type) => parseInt(userParts.find(p => p.type === type)?.value || '0')
+      
+      const userYear = getUserPart('year')
+      const userMonth = getUserPart('month') - 1
+      const userDay = getUserPart('day')
+      const userHour = getUserPart('hour')
+      const userMinute = getUserPart('minute')
+      const userSecond = getUserPart('second')
+      
+      // Check if we've found the exact match
+      if (userYear === year && userMonth === month && userDay === day && 
+          userHour === hour && userMinute === minute && Math.abs(userSecond - second) <= 1) {
+        return candidateUtc.toISOString()
+      }
+      
+      // Calculate how far off we are
+      // Create Date objects in local time for comparison
+      const desiredLocal = new Date(year, month, day, hour, minute, second)
+      const actualLocal = new Date(userYear, userMonth, userDay, userHour, userMinute, userSecond)
+      const diffMs = desiredLocal.getTime() - actualLocal.getTime()
+      
+      // If difference is very small, we're close enough
+      if (Math.abs(diffMs) < 1000) {
+        return candidateUtc.toISOString()
+      }
+      
+      // Adjust candidate UTC by the difference
+      candidateUtc = new Date(candidateUtc.getTime() + diffMs)
+    }
+    
+    // Return the best guess we found
+    return candidateUtc.toISOString()
+  } catch (err) {
+    console.error('[notifications] Error converting timezone:', err)
+    return targetLocalTime
+  }
+}
+
+// Calculate scheduled time for a user based on campaign and user timezone
+function calculateUserScheduledTime(campaign, userTimezone) {
+  const now = new Date()
+  
+  // For instant notifications, send immediately
+  if (campaign.deliveryMode === 'send_now') {
+    return now.toISOString()
+  }
+  
+  // For planned notifications, convert planned time to user's timezone
+  if (campaign.deliveryMode === 'planned' && campaign.plannedFor) {
+    const plannedDate = new Date(campaign.plannedFor)
+    if (Number.isNaN(plannedDate.getTime())) {
+      return now.toISOString()
+    }
+    
+    const campaignTz = campaign.timezone || DEFAULT_TIMEZONE
+    return convertToUserTimezone(campaign.plannedFor, campaignTz, userTimezone || DEFAULT_TIMEZONE)
+  }
+  
+  // For scheduled notifications, convert scheduled time to user's timezone
+  if (campaign.deliveryMode === 'scheduled') {
+    // Use next_run_at if available, otherwise schedule_start_at
+    const baseTime = campaign.nextRunAt || campaign.scheduleStartAt
+    if (!baseTime) {
+      return now.toISOString()
+    }
+    
+    const baseDate = new Date(baseTime)
+    if (Number.isNaN(baseDate.getTime())) {
+      return now.toISOString()
+    }
+    
+    const campaignTz = campaign.timezone || DEFAULT_TIMEZONE
+    return convertToUserTimezone(baseTime, campaignTz, userTimezone || DEFAULT_TIMEZONE)
+  }
+  
+  return now.toISOString()
+}
+
+async function insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor) {
+  if (!sql || !recipients.length) return []
+  const insertedRows = []
+  let processedCount = 0
+  const chunks = chunkArray(recipients, 200)
+  
+  // Detect source language from campaign title/message (assume English if not specified)
+  const sourceLang = 'EN'
+  
+  for (const chunk of chunks) {
+    // Fetch user display names, language preferences, and timezones for this chunk
+    const userProfiles = await sql`
+      select id::text as id, display_name, username, email, timezone
+      from public.profiles
+      where id = any(${sql.array(chunk)}::uuid[])
+    `
+    const userDisplayNames = new Map()
+    const userLanguages = new Map()
+    const userTimezones = new Map()
+    
+    // Get display names and timezones
+    for (const profile of userProfiles || []) {
+      const displayName = profile.display_name || profile.username || profile.email || 'User'
+      userDisplayNames.set(profile.id, displayName)
+      if (profile.timezone) {
+        userTimezones.set(profile.id, String(profile.timezone))
+      }
+    }
+    
+    // Get language preferences for all users in this chunk (batch fetch)
+    const chunkLanguageMap = await getUserLanguages(chunk)
+    for (const userId of chunk) {
+      const lang = chunkLanguageMap.get(String(userId)) || 'en'
+      userLanguages.set(String(userId), lang)
+    }
+    
+    // Prepare payloads with personalized, translated messages, and timezone-adjusted scheduled times
+    const payloadPromises = chunk.map(async (userId, index) => {
+      const baseMessage = pickNotificationMessage(campaign, processedCount + index)
+      const userDisplayName = userDisplayNames.get(String(userId)) || 'User'
+      // Replace {{user}} with the actual user display name
+      let personalizedMessage = baseMessage.replace(/\{\{user\}\}/g, userDisplayName)
+      
+      // Translate message based on user's language preference
+      const userLang = userLanguages.get(String(userId)) || 'en'
+      const targetLang = userLang === 'fr' ? 'FR' : 'EN'
+      
+      if (targetLang !== sourceLang) {
+        personalizedMessage = await translateNotificationText(personalizedMessage, targetLang, sourceLang)
+      }
+      
+      // Translate title if needed
+      let translatedTitle = campaign.title
+      if (targetLang !== sourceLang) {
+        translatedTitle = await translateNotificationText(campaign.title, targetLang, sourceLang)
+      }
+      
+      // Calculate scheduled time based on user's timezone
+      // For instant notifications, use provided scheduledFor (current time)
+      // For planned/scheduled, calculate per-user timezone
+      const userTimezone = userTimezones.get(String(userId)) || DEFAULT_TIMEZONE
+      const userScheduledTime = campaign.deliveryMode === 'send_now' 
+        ? scheduledFor 
+        : calculateUserScheduledTime(campaign, userTimezone)
+      
+      return {
+        campaign_id: campaign.id,
+        iteration,
+        user_id: userId,
+        title: translatedTitle,
+        message: personalizedMessage,
+        payload: { ctaUrl: campaign.ctaUrl || null },
+        cta_url: campaign.ctaUrl || null,
+        scheduled_for: userScheduledTime,
+        delivery_status: 'pending',
+        delivery_attempts: 0,
+        delivery_error: null,
+      }
+    })
+    
+    const payload = await Promise.all(payloadPromises)
+    const inserted = await sql`
+      insert into public.user_notifications ${sql(
+        payload,
+        'campaign_id',
+        'iteration',
+        'user_id',
+        'title',
+        'message',
+        'payload',
+        'cta_url',
+        'scheduled_for',
+        'delivery_status',
+        'delivery_attempts',
+        'delivery_error',
+      )}
+      on conflict (campaign_id, iteration, user_id)
+      do update set
+        title = excluded.title,
+        message = excluded.message,
+        payload = excluded.payload,
+        cta_url = excluded.cta_url,
+        scheduled_for = excluded.scheduled_for,
+        delivery_status = 'pending',
+        delivery_attempts = 0,
+        delivery_error = null,
+        delivered_at = null,
+        seen_at = null,
+        cancelled_at = null
+      returning id::text as id, user_id::text as user_id, title, message, payload, cta_url
+    `
+    insertedRows.push(...inserted)
+    processedCount += chunk.length
+  }
+  return insertedRows
+}
+
+async function deliverPushNotifications(notifications, campaign) {
+  if (!sql || !notifications.length) return { sent: 0, failed: 0 }
+  if (!pushNotificationsEnabled) {
+    const ids = notifications.map((row) => row.id)
+    await sql`
+      update public.user_notifications
+      set delivery_status = 'failed',
+          delivered_at = now(),
+          delivery_attempts = delivery_attempts + 1,
+          delivery_error = 'PUSH_DISABLED'
+      where id = any(${ids}::uuid[])
+    `
+    return { sent: 0, failed: notifications.length }
+  }
+  const userIds = Array.from(new Set(notifications.map((row) => row.user_id).filter(Boolean)))
+  if (!userIds.length) return { sent: 0, failed: notifications.length }
+  const subscriptions = await sql`
+    select id::text as id, user_id::text as user_id, endpoint, subscription
+    from public.user_push_subscriptions
+    where user_id = any(${userIds})
+  `
+  const subsByUser = new Map()
+  for (const sub of subscriptions || []) {
+    const list = subsByUser.get(sub.user_id) || []
+    list.push(sub)
+    subsByUser.set(sub.user_id, list)
+  }
+  const deliveredIds = []
+  const failedIds = []
+  const staleSubscriptionIds = new Set()
+  const usedSubscriptionIds = new Set()
+  for (const notification of notifications) {
+    const subs = subsByUser.get(notification.user_id) || []
+    if (subs.length === 0) {
+      failedIds.push(notification.id)
+      continue
+    }
+    let delivered = false
+    for (const sub of subs) {
+      try {
+        const payload =
+          sub.subscription && typeof sub.subscription === 'string'
+            ? JSON.parse(sub.subscription)
+            : sub.subscription
+        await webpush.sendNotification(
+          payload,
+          JSON.stringify({
+            title: notification.title || campaign.title || 'Aphylia',
+            body: notification.message,
+            tag: campaign.id,
+            data: {
+              campaignId: campaign.id,
+              notificationId: notification.id,
+              ctaUrl: notification.cta_url || null,
+            },
+          }),
+        )
+        delivered = true
+        usedSubscriptionIds.add(sub.id)
+      } catch (err) {
+        const statusCode = err?.statusCode || err?.statuscode
+        if (statusCode === 404 || statusCode === 410) {
+          staleSubscriptionIds.add(sub.id)
+        }
+        console.warn('[notifications] push delivery failed', err?.message || err)
+      }
+    }
+    if (delivered) {
+      deliveredIds.push(notification.id)
+    } else {
+      failedIds.push(notification.id)
+    }
+  }
+  if (staleSubscriptionIds.size) {
+    await sql`
+      delete from public.user_push_subscriptions
+      where id = any(${Array.from(staleSubscriptionIds)}::uuid[])
+    `
+  }
+  if (usedSubscriptionIds.size) {
+    await sql`
+      update public.user_push_subscriptions
+      set last_used_at = now()
+      where id = any(${Array.from(usedSubscriptionIds)}::uuid[])
+    `
+  }
+  if (deliveredIds.length) {
+    await sql`
+      update public.user_notifications
+      set delivery_status = 'sent',
+          delivered_at = now(),
+          delivery_attempts = delivery_attempts + 1,
+          delivery_error = null
+      where id = any(${deliveredIds}::uuid[])
+    `
+  }
+  if (failedIds.length) {
+    await sql`
+      update public.user_notifications
+      set delivery_status = 'failed',
+          delivered_at = now(),
+          delivery_attempts = delivery_attempts + 1,
+          delivery_error = coalesce(delivery_error, 'FAILED')
+      where id = any(${failedIds}::uuid[])
+    `
+  }
+  return { sent: deliveredIds.length, failed: failedIds.length }
+}
+
+async function processDueUserNotifications() {
+  if (!sql) return
+  await ensureNotificationTables()
+  while (true) {
+    const pending = await sql`
+      select
+        un.id::text as id,
+        un.user_id::text as user_id,
+        un.title,
+        un.message,
+        un.payload,
+        un.cta_url,
+        un.campaign_id::text as campaign_id
+      from public.user_notifications un
+      where un.delivery_status = 'pending'
+        and un.cancelled_at is null
+        and un.scheduled_for <= now()
+      order by un.scheduled_for asc
+      limit ${notificationDeliveryBatchSize}
+    `
+    if (!pending || !pending.length) break
+
+    const campaignIds = Array.from(
+      new Set(pending.map((row) => row.campaign_id).filter((value) => value && value.length)),
+    )
+    const campaignMap = new Map()
+    if (campaignIds.length) {
+      const campaignRows = await sql`
+        select *
+        from public.notification_campaigns
+        where id = any(${sql.array(campaignIds)}::uuid[])
+      `
+      for (const row of campaignRows || []) {
+        const normalized = normalizeNotificationCampaign(row)
+        if (normalized?.id) {
+          campaignMap.set(normalized.id, normalized)
+        }
+      }
+    }
+
+    const grouped = new Map()
+    for (const row of pending) {
+      const key = row.campaign_id || '__adhoc__'
+      const list = grouped.get(key) || []
+      list.push(row)
+      grouped.set(key, list)
+    }
+
+    for (const [campaignId, notifications] of grouped.entries()) {
+      const fallbackCampaign =
+        campaignMap.get(campaignId) || {
+          id: campaignId === '__adhoc__' ? null : campaignId,
+          title: notifications[0]?.title || 'Aphylia',
+          ctaUrl: notifications[0]?.cta_url || null,
+        }
+      await deliverPushNotifications(notifications, fallbackCampaign)
+    }
+
+    if (pending.length < notificationDeliveryBatchSize) break
+  }
+}
+
+async function runNotificationCampaign(row) {
+  if (!sql) return
+  const claimed = await sql`
+    update public.notification_campaigns
+    set state = 'processing', updated_at = now()
+    where id = ${row.id}
+      and deleted_at is null
+      and state <> 'cancelled'
+    returning *
+  `
+  if (!claimed || !claimed.length) return
+  const campaign = normalizeNotificationCampaign(claimed[0])
+  if (!campaign) return
+  const iteration = (campaign.runCount || 0) + 1
+  const recipients = await resolveNotificationAudience(campaign)
+  const scheduledFor = new Date().toISOString()
+  const inserted = await insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor)
+  const summary = {
+    recipients: recipients.length,
+    queued: inserted.length,
+    queuedAt: new Date().toISOString(),
+  }
+  let nextState = 'completed'
+  let nextRunAt = null
+  if (campaign.deliveryMode === 'scheduled') {
+    nextRunAt = computeNextScheduledRun(campaign)
+    nextState = campaign.state === 'paused' ? 'paused' : 'scheduled'
+  }
+  await sql`
+    update public.notification_campaigns
+    set state = ${nextState},
+        run_count = run_count + 1,
+        last_run_at = now(),
+        next_run_at = ${nextRunAt},
+        last_run_summary = ${summary},
+        updated_at = now()
+    where id = ${campaign.id}
+  `
+}
+
+async function processDueNotificationCampaigns() {
+  if (!sql) return
+  await ensureNotificationTables()
+  const due = await sql`
+    select *
+    from public.notification_campaigns
+    where deleted_at is null
+      and state not in ('cancelled','completed','paused')
+      and next_run_at is not null
+      and next_run_at <= now()
+    order by next_run_at asc
+    limit 5
+  `
+  for (const row of due || []) {
+    try {
+      await runNotificationCampaign(row)
+    } catch (err) {
+      console.error('[notifications] campaign run failed', err)
+    }
+  }
+}
+
+async function runNotificationWorkerTick() {
+  if (notificationWorkerBusy) return
+  notificationWorkerBusy = true
+  try {
+    await processDueNotificationCampaigns()
+    await processDueUserNotifications()
+  } catch (err) {
+    console.error('[notifications] worker tick error', err)
+  } finally {
+    notificationWorkerBusy = false
+  }
+}
+
+function scheduleNotificationWorker() {
+  if (!sql) return
+  if (notificationWorkerTimer) return
+  const tick = () => {
+    runNotificationWorkerTick().catch(() => {})
+    notificationWorkerTimer = setTimeout(tick, notificationWorkerIntervalMs)
+  }
+  notificationWorkerTimer = setTimeout(tick, 2000)
+}
+
+// Serve sitemap.xml with correct Content-Type
+const publicDir = path.resolve(__dirname, 'public')
+app.get('/sitemap.xml', async (req, res) => {
+  // Try dist first (production), then public (development)
+  const distDir = path.resolve(__dirname, 'dist')
+  const distPath = path.join(distDir, 'sitemap.xml')
+  const publicPath = path.join(publicDir, 'sitemap.xml')
+  
+  let sitemapPath = null
+  try {
+    await fs.access(distPath)
+    sitemapPath = distPath
+  } catch {
+    try {
+      await fs.access(publicPath)
+      sitemapPath = publicPath
+    } catch {
+      // If sitemap doesn't exist, return 404
+      res.status(404).send('Sitemap not found')
+      return
+    }
+  }
+  
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  res.sendFile(sitemapPath)
+})
+
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
-app.use(express.static(distDir))
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365
+const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7
+const ONE_DAY_SECONDS = 60 * 60 * 24
+const DEFAULT_STALE_WHILE_REVALIDATE = ONE_WEEK_SECONDS
+const EXTENDED_STALE_WHILE_REVALIDATE = ONE_WEEK_SECONDS * 4
+const hashedAssetPattern =
+  /assets\/.+[-.]([a-z0-9_\-]{8,})\.(?:js|mjs|cjs|css|json|png|jpe?g|webp|avif|svg|ttf|woff2?)$/i
+app.use(
+  express.static(distDir, {
+      setHeaders: (res, filePath) => {
+        const relativePath = path.relative(distDir, filePath).replace(/\\+/g, '/')
+        if (relativePath === 'index.html') {
+          res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+          return
+        }
+        if (hashedAssetPattern.test(relativePath)) {
+          res.setHeader('Cache-Control', `public, max-age=${ONE_YEAR_SECONDS}, immutable`)
+          return
+        }
+        if (relativePath.startsWith('assets/')) {
+          res.setHeader(
+            'Cache-Control',
+            `public, max-age=${ONE_WEEK_SECONDS}, stale-while-revalidate=${EXTENDED_STALE_WHILE_REVALIDATE}`,
+          )
+          return
+        }
+        if (
+          relativePath.startsWith('locales/') ||
+          relativePath.startsWith('icons/') ||
+          relativePath === 'offline.html' ||
+          relativePath === 'robots.txt' ||
+          relativePath === 'env-loader.js' ||
+          relativePath === 'env.js'
+        ) {
+          res.setHeader(
+            'Cache-Control',
+            `public, max-age=${ONE_WEEK_SECONDS}, stale-while-revalidate=${EXTENDED_STALE_WHILE_REVALIDATE}`,
+          )
+          return
+        }
+        res.setHeader(
+          'Cache-Control',
+          `public, max-age=${ONE_DAY_SECONDS}, stale-while-revalidate=${DEFAULT_STALE_WHILE_REVALIDATE}`,
+        )
+      },
+  }),
+)
 app.get('*', (req, res) => {
   // Record initial page load visit for SPA routes
   try {
@@ -6407,8 +11006,9 @@ app.get('*', (req, res) => {
         .then((uid) => insertWebVisit({ sessionId, userId: uid || null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' }, language: acceptLanguage }, req))
         .catch(() => {}))
       .catch(() => {})
-  } catch {}
-  res.sendFile(path.join(distDir, 'index.html'))
+    } catch {}
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+    res.sendFile(path.join(distDir, 'index.html'))
 })
 
 const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase() !== 'true'
@@ -6420,7 +11020,12 @@ if (shouldListen) {
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => {})
     ensureBroadcastTable().catch(() => {})
+    ensureNotificationTables().catch(() => {})
+    scheduleNotificationWorker()
   })
+} else {
+  ensureNotificationTables().catch(() => {})
+  scheduleNotificationWorker()
 }
 
 // Export app for testing and tooling

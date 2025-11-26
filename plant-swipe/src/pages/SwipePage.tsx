@@ -28,9 +28,10 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { Link } from "@/components/i18n/Link"
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
-import { getVerticalPhotoUrl } from "@/lib/photos"
+import { getDiscoveryPageImageUrl } from "@/lib/photos"
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils"
 import { resolveColorValue, DEFAULT_PLANT_COLOR } from "@/lib/colors"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 interface SwipePageProps {
   current: Plant | undefined
@@ -44,6 +45,7 @@ interface SwipePageProps {
   handlePrevious: () => void
   liked?: boolean
   onToggleLike?: () => void
+  boostImagePriority?: boolean
 }
 
 export const SwipePage: React.FC<SwipePageProps> = ({
@@ -58,8 +60,14 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   handlePrevious,
   liked = false,
   onToggleLike,
-  }) => {
-    const { t } = useTranslation("common")
+  boostImagePriority = false,
+}) => {
+      const { t } = useTranslation("common")
+    const seoTitle = t("seo.home.title", { defaultValue: "Aphylia" })
+      const seoDescription = t("seo.home.description", {
+        defaultValue: "Swipe through curated species, unlock their lore, and save favorites in Aphylia's living encyclopedia.",
+      })
+      usePageMetadata({ title: seoTitle, description: seoDescription })
     const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
 
     React.useEffect(() => {
@@ -103,14 +111,12 @@ export const SwipePage: React.FC<SwipePageProps> = ({
 
   const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
   const mobileCardHeight = "calc(100vh - 13rem)"
+  const prefersCoarsePointer = usePrefersCoarsePointer()
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
   const seasons = (current?.seasons ?? []) as PlantSeason[]
-  const displayImage = React.useMemo(() => {
-    if (!current) return ""
-    const vertical = getVerticalPhotoUrl(current.photos ?? [])
-    return vertical || current.image || ""
-  }, [current])
+  const displayImage = React.useMemo(() => getDiscoveryPageImageUrl(current), [current])
+  const shouldPrioritizeImage = Boolean(boostImagePriority && displayImage)
   const highlightBadges = React.useMemo(() => {
     if (!current) return []
     const badges: Array<{ key: string; label: string; icon: React.ReactNode; className: string }> = []
@@ -152,8 +158,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         transition={{ duration: 0.5, ease: "easeOut" }}
           className="relative overflow-visible md:overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-white via-emerald-50/60 to-stone-100 dark:from-[#1e1e1e] dark:via-[#252526] dark:to-[#171717] shadow-[0_30px_80px_-40px_rgba(16,185,129,0.45)]"
       >
-        <div className="absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
-        <div className="absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="relative p-2 sm:p-6 md:p-12 space-y-6">
             <div
               className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px]"
@@ -164,10 +170,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                   <motion.div
                     key={`${current.id}-${index}`}
                     drag
-                    dragElastic={0.28}
+                    dragElastic={{ left: 0.28, right: 0.28, top: 0.18, bottom: 0.08 }}
                     dragMomentum={false}
                     style={{ x, y }}
-                    dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
+                    dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
                     onDragEnd={onDragEnd}
                     initial={{ scale: 0.94, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -175,12 +181,22 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     transition={{ duration: 0.2, ease: "easeOut" }}
                     className="relative h-full w-full cursor-grab active:cursor-grabbing select-none"
                   >
-                      <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
-                        {displayImage ? (
-                          <div className="absolute inset-0 z-0 bg-cover bg-center" style={{ backgroundImage: `url(${displayImage})` }} />
-                      ) : (
-                        <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
-                      )}
+                        <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
+                          {displayImage ? (
+                            <img
+                              src={displayImage}
+                              alt={current?.name ? `${current.name} preview` : 'Plant preview'}
+                              className="absolute inset-0 z-0 h-full w-full object-cover"
+                              loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
+                              fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
+                              decoding="async"
+                              width={960}
+                              height={1280}
+                              sizes="(max-width: 768px) 100vw, 70vw"
+                            />
+                        ) : (
+                          <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
+                        )}
                       <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
                       <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
                       {highlightBadges.length > 0 && (
@@ -211,13 +227,14 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                           <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
                         </button>
                       </div>
-                        {isDesktop && <PlantMetaRail plant={current} variant="sidebar" />}
+                        {current && (
+                          <PlantMetaRail
+                            plant={current}
+                            variant="sidebar"
+                            disableHoverActivation={prefersCoarsePointer}
+                          />
+                        )}
                       <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
-                          {!isDesktop && (
-                            <div className="mb-3 -mx-1">
-                              <PlantMetaRail plant={current} variant="inline" />
-                            </div>
-                          )}
                         <div className="mb-3 flex flex-wrap items-center gap-2">
                           <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
                           {seasons.map((s) => {
@@ -348,10 +365,87 @@ const EmptyState = ({ onReset }: { onReset: () => void }) => {
   )
 }
 
-const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> = ({ plant, variant }) => {
+const useSupportsHover = () => {
+  const [supportsHover, setSupportsHover] = React.useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return true
+    }
+    return window.matchMedia("(hover: hover) and (pointer: fine)").matches
+  })
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return
+    }
+
+    const mediaQuery = window.matchMedia("(hover: hover) and (pointer: fine)")
+    const handleChange = (event: MediaQueryListEvent) => {
+      setSupportsHover(event.matches)
+    }
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange)
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(handleChange)
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange)
+      } else if (typeof mediaQuery.removeListener === "function") {
+        mediaQuery.removeListener(handleChange)
+      }
+    }
+  }, [])
+
+  return supportsHover
+}
+
+const usePrefersCoarsePointer = () => {
+  const [isCoarse, setIsCoarse] = React.useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return false
+    }
+    return window.matchMedia("(pointer: coarse)").matches
+  })
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return undefined
+    }
+
+    const mediaQuery = window.matchMedia("(pointer: coarse)")
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsCoarse(event.matches)
+    }
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange)
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(handleChange)
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange)
+      } else if (typeof mediaQuery.removeListener === "function") {
+        mediaQuery.removeListener(handleChange)
+      }
+    }
+  }, [])
+
+  return isCoarse
+}
+
+const PlantMetaRail: React.FC<{
+  plant: Plant
+  variant: "sidebar" | "inline"
+  disableHoverActivation?: boolean
+}> = ({ plant, variant, disableHoverActivation = false }) => {
   const { t } = useTranslation("common")
   const [activeKey, setActiveKey] = React.useState<string | null>(null)
   const items = React.useMemo(() => buildIndicatorItems(plant, t), [plant, t])
+  const supportsHover = useSupportsHover()
 
   React.useEffect(() => {
     setActiveKey(null)
@@ -361,9 +455,18 @@ const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> =
 
   if (variant === "inline") {
     return (
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col items-end gap-2">
         {items.map((item) => (
-          <InlineIndicatorCard key={item.key} item={item} />
+          <IndicatorPill
+            key={item.key}
+            item={item}
+            active={activeKey === item.key}
+            onActivate={() => setActiveKey(item.key)}
+            onDeactivate={() => setActiveKey((prev) => (prev === item.key ? null : prev))}
+            supportsHover={supportsHover}
+            variant="inline"
+            disableHoverActivation={disableHoverActivation}
+          />
         ))}
       </div>
     )
@@ -378,6 +481,9 @@ const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> =
           active={activeKey === item.key}
           onActivate={() => setActiveKey(item.key)}
           onDeactivate={() => setActiveKey((prev) => (prev === item.key ? null : prev))}
+          supportsHover={supportsHover}
+          variant="sidebar"
+          disableHoverActivation={disableHoverActivation}
         />
       ))}
     </div>
@@ -407,64 +513,56 @@ interface IndicatorPillProps {
   active: boolean
   onActivate: () => void
   onDeactivate: () => void
+  supportsHover: boolean
+  variant: "sidebar" | "inline"
+  disableHoverActivation?: boolean
 }
 
-const InlineIndicatorCard: React.FC<{ item: IndicatorItem }> = ({ item }) => {
-  const isColorVariant = item.variant === "color" && (item.colors?.length ?? 0) > 0
-
-  return (
-    <div className="flex min-w-[160px] flex-1 basis-[calc(50%-0.25rem)] items-start gap-3 rounded-2xl border border-white/15 bg-black/65 px-3 py-2 text-white shadow-lg shadow-black/15 backdrop-blur">
-      <span
-        className={cn(
-          "flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/40",
-          item.accentClass,
-          isColorVariant && "p-0",
-        )}
-        aria-hidden="true"
-      >
-        {isColorVariant ? (
-          <div className="flex items-center gap-1">
-            {item.colors!.slice(0, 3).map((color) => (
-              <span
-                key={color.id}
-                className="h-3.5 w-3.5 rounded-full border border-white/40"
-                style={{ backgroundColor: color.tone }}
-              />
-            ))}
-          </div>
-        ) : (
-          item.icon
-        )}
-      </span>
-      <div className="flex-1 space-y-1 text-left">
-        {item.description && (
-          <p className="text-[9px] uppercase tracking-[0.25em] text-white/55">{item.description}</p>
-        )}
-        <p className="text-sm font-semibold leading-tight">{item.label}</p>
-        {item.detailList?.length ? (
-          <p className="text-[11px] leading-tight text-white/80">{item.detailList.join(", ")}</p>
-        ) : null}
-        {isColorVariant && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {item.colors!.map((color) => (
-              <span
-                key={color.id}
-                className="h-3.5 w-3.5 rounded-full border border-white/35"
-                style={{ backgroundColor: color.tone }}
-                aria-label={color.label}
-                title={color.label}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate, onDeactivate }) => {
+const IndicatorPill: React.FC<IndicatorPillProps> = ({
+  item,
+  active,
+  onActivate,
+  onDeactivate,
+  supportsHover,
+  variant,
+  disableHoverActivation = false,
+}) => {
   const isColorVariant = item.variant === "color" && (item.colors?.length ?? 0) > 0
   const ariaLabel = `${item.description ?? ""}${item.description ? ": " : ""}${item.ariaValue ?? item.label}`.trim()
+  const isSidebarVariant = variant === "sidebar"
+  const allowHover = supportsHover && !disableHoverActivation
+  const keyboardFocusRef = React.useRef(false)
+
+  const handleFocus = React.useCallback(
+    (event: React.FocusEvent<HTMLButtonElement>) => {
+      if (disableHoverActivation) {
+        let isKeyboardFocus = true
+        if (typeof event.currentTarget.matches === "function") {
+          try {
+            isKeyboardFocus = event.currentTarget.matches(":focus-visible")
+          } catch {
+            isKeyboardFocus = true
+          }
+        }
+        keyboardFocusRef.current = isKeyboardFocus
+        if (!isKeyboardFocus) return
+      }
+      onActivate()
+    },
+    [disableHoverActivation, onActivate],
+  )
+
+  const handleBlur = React.useCallback(() => {
+      if (disableHoverActivation) {
+        if (!keyboardFocusRef.current) {
+          return
+        }
+      }
+      keyboardFocusRef.current = false
+      onDeactivate()
+    },
+    [disableHoverActivation, onDeactivate],
+  )
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -475,32 +573,40 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate,
     }
   }
 
+  const detailBaseClass = cn(
+    "rounded-2xl border border-white/15 bg-black/70 px-3 py-2 text-left shadow-xl backdrop-blur-md",
+    isSidebarVariant ? "mr-3" : "mr-2",
+  )
+
+  const detailWidthClass = isSidebarVariant
+    ? isColorVariant
+      ? "max-w-[240px]"
+      : "max-w-[220px]"
+    : "max-w-[min(260px,calc(100vw-5rem))]"
+
+  const detailMotionProps = { initial: { opacity: 0, x: 16 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, x: 16 } }
+
   return (
-    <div className="pointer-events-auto">
+    <div className={cn("pointer-events-auto", !isSidebarVariant && "basis-auto")}>
       <button
         type="button"
         aria-label={ariaLabel || undefined}
         aria-expanded={active}
         aria-pressed={active}
-        onMouseEnter={onActivate}
-        onMouseLeave={onDeactivate}
-        onFocus={onActivate}
-        onBlur={onDeactivate}
+        onMouseEnter={allowHover ? onActivate : undefined}
+        onMouseLeave={allowHover ? onDeactivate : undefined}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         onClick={handleClick}
         onPointerDown={(event) => event.stopPropagation()}
-        className="group relative flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/80 focus-visible:ring-offset-transparent"
+        className={cn(
+          "group relative flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/80 focus-visible:ring-offset-transparent",
+          !isSidebarVariant && "justify-end",
+        )}
       >
         <AnimatePresence>
           {active && (
-            <motion.div
-              className={cn(
-                "mr-3 rounded-2xl border border-white/15 bg-black/70 px-3 py-2 text-left shadow-xl backdrop-blur-md",
-                isColorVariant ? "max-w-[240px]" : "max-w-[220px]",
-              )}
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 16 }}
-            >
+            <motion.div className={cn(detailBaseClass, detailWidthClass)} {...detailMotionProps}>
               {isColorVariant ? (
                 <div className="flex flex-wrap gap-1.5">
                   {item.colors!.map((color) => (
@@ -541,15 +647,15 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate,
             isColorVariant && "p-0",
           )}
         >
-            {isColorVariant ? (
-              <span
-                className="flex h-5 w-5 items-center justify-center rounded-full border border-white/35"
-                style={{ backgroundColor: item.colors?.[0]?.tone ?? DEFAULT_PLANT_COLOR }}
-                aria-hidden="true"
-              />
-            ) : (
-              item.icon
-            )}
+          {isColorVariant ? (
+            <span
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-white/35"
+              style={{ backgroundColor: item.colors?.[0]?.tone ?? DEFAULT_PLANT_COLOR }}
+              aria-hidden="true"
+            />
+          ) : (
+            item.icon
+          )}
         </span>
       </button>
     </div>
@@ -572,8 +678,8 @@ const WATER_ACCENTS: Record<IndicatorLevel, string> = {
 
 const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorItem[] => {
   const items: IndicatorItem[] = []
-  const sunSource = plant.environment?.sunExposure || plant.care?.sunlight
-  const sunLevel = resolveSunLevel(sunSource)
+  const sunSource = (plant.environment?.sunExposure || plant.care?.sunlight || plant.plantCare?.sunlight) ?? undefined
+  const sunLevel = resolveSunLevel(typeof sunSource === 'string' ? sunSource : undefined)
   if (sunSource && sunLevel) {
     items.push({
       key: "sun",
@@ -588,8 +694,8 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === "number" ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as "day" | "week" | "month" | "year" | undefined
-  const derivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || plant.care?.water
-  const waterLevel = resolveWaterLevel(derivedWater)
+  const derivedWater = (deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || plant.care?.water || plant.plantCare?.water) ?? undefined
+  const waterLevel = resolveWaterLevel(typeof derivedWater === 'string' ? derivedWater : undefined)
   if (derivedWater && waterLevel) {
     items.push({
       key: "water",
@@ -631,13 +737,15 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  const activitySet = new Set(
-    (plant.classification?.activities ?? [])
-      .map((activity) => (typeof activity === "string" ? activity.toLowerCase() : null))
-      .filter((entry): entry is string => Boolean(entry)),
-  )
-
-  if (activitySet.has("comestible")) {
+  // Check utility field for usage indicators - normalize to lowercase for comparison
+  const utilityArray = (plant.utility ?? [])
+    .map((util) => String(util))
+    .filter((util) => util.trim().length > 0)
+  const utilitySet = new Set(utilityArray.map((util) => util.toLowerCase().trim()))
+  
+  // Edible: Only show if utility explicitly has "comestible"
+  // The utility field is the source of truth - comestiblePart is just data, not a display indicator
+  if (utilitySet.has("comestible")) {
     items.push({
       key: "edible",
       label: t("discoveryPage.indicators.edible", { defaultValue: "Edible" }),
@@ -647,7 +755,11 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  if (activitySet.has("medicinal")) {
+  // Medicinal: Only show if utility explicitly has "medicinal" OR adviceMedicinal has meaningful content
+  const hasMedicinalAdvice = plant.usage?.adviceMedicinal && 
+    typeof plant.usage.adviceMedicinal === "string" && 
+    plant.usage.adviceMedicinal.trim().length > 0
+  if (utilitySet.has("medicinal") || hasMedicinalAdvice) {
     items.push({
       key: "medicinal",
       label: t("discoveryPage.indicators.medicinal", { defaultValue: "Medicinal" }),
@@ -657,7 +769,10 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  if (activitySet.has("aromatic")) {
+  // Aromatic: Only show if utility explicitly has "aromatic" OR aromatherapy is true OR scent is true
+  const hasAromatherapy = plant.usage?.aromatherapy === true
+  const hasScent = plant.identity?.scent === true
+  if (utilitySet.has("aromatic") || hasAromatherapy || hasScent) {
     items.push({
       key: "aromatic",
       label: t("discoveryPage.indicators.aromatic", { defaultValue: "Aromatic" }),
@@ -834,34 +949,63 @@ const formatIndicatorValue = (value?: string | null): string => {
 }
 
 const buildColorSwatches = (plant: Plant): ColorSwatchDescriptor[] => {
-  const directColors = Array.isArray(plant.colors) ? plant.colors : []
-  const normalizedDirect = directColors.filter((color): color is string => typeof color === "string" && color.trim().length > 0)
-
-  const fallbackColors: string[] = []
-  if (!normalizedDirect.length) {
-    plant.phenology?.flowerColors?.forEach((color) => {
-      if (color?.hex) {
-        fallbackColors.push(color.hex)
-      } else if (color?.name) {
-        fallbackColors.push(color.name)
-      }
-    })
-    plant.phenology?.leafColors?.forEach((color) => {
-      if (color?.hex) {
-        fallbackColors.push(color.hex)
-      } else if (color?.name) {
-        fallbackColors.push(color.name)
+  // Primary source: plant.identity?.colors (array of PlantColor objects)
+  const identityColors: string[] = []
+  if (plant.identity?.colors && Array.isArray(plant.identity.colors)) {
+    plant.identity.colors.forEach((color) => {
+      if (!color || typeof color !== "object") return
+      
+      // Handle PlantColor object with name and hexCode
+      const plantColor = color as { name?: string; hexCode?: string }
+      if (plantColor.hexCode && typeof plantColor.hexCode === "string" && plantColor.hexCode.trim().length > 0) {
+        identityColors.push(plantColor.hexCode.trim())
+      } else if (plantColor.name && typeof plantColor.name === "string" && plantColor.name.trim().length > 0) {
+        identityColors.push(plantColor.name.trim())
       }
     })
   }
 
-  const palette = normalizedDirect.length ? normalizedDirect : fallbackColors
+  // Secondary source: plant.colors (legacy array of strings)
+  const legacyColors: string[] = []
+  if (Array.isArray(plant.colors)) {
+    plant.colors.forEach((color) => {
+      if (typeof color === "string" && color.trim().length > 0) {
+        legacyColors.push(color.trim())
+      }
+    })
+  }
+
+  // Tertiary source: phenology colors (fallback)
+  const fallbackColors: string[] = []
+  if (identityColors.length === 0 && legacyColors.length === 0) {
+    plant.phenology?.flowerColors?.forEach((color) => {
+      if (color?.hex && typeof color.hex === "string" && color.hex.trim().length > 0) {
+        fallbackColors.push(color.hex.trim())
+      } else if (color?.name && typeof color.name === "string" && color.name.trim().length > 0) {
+        fallbackColors.push(color.name.trim())
+      }
+    })
+    plant.phenology?.leafColors?.forEach((color) => {
+      if (color?.hex && typeof color.hex === "string" && color.hex.trim().length > 0) {
+        fallbackColors.push(color.hex.trim())
+      } else if (color?.name && typeof color.name === "string" && color.name.trim().length > 0) {
+        fallbackColors.push(color.name.trim())
+      }
+    })
+  }
+
+  // Use identity colors first, then legacy colors, then fallback
+  const palette = identityColors.length > 0 ? identityColors : (legacyColors.length > 0 ? legacyColors : fallbackColors)
 
   return palette
-    .map((color, index) => ({
-      id: `${color}-${index}`,
-      label: formatIndicatorValue(color),
-      tone: resolveColorValue(color),
-    }))
-    .filter((entry) => entry.label.length > 0 || Boolean(entry.tone))
+    .map((color, index) => {
+      const resolvedTone = resolveColorValue(color)
+      const label = formatIndicatorValue(color)
+      return {
+        id: `${color}-${index}`,
+        label: label || resolvedTone,
+        tone: resolvedTone,
+      }
+    })
+    .filter((entry) => entry.tone && entry.tone.length > 0)
 }

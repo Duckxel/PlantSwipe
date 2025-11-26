@@ -1,6 +1,7 @@
 import React from 'react'
-import PlantSwipe from "@/PlantSwipe"
-import { AuthProvider, useAuth } from '@/context/AuthContext'
+const PlantSwipe = React.lazy(() => import("@/PlantSwipe"))
+import ServiceWorkerToast from '@/components/pwa/ServiceWorkerToast'
+import { AuthProvider } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
@@ -8,7 +9,6 @@ import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/i18n'
 import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage, addLanguagePrefix } from '@/lib/i18nRouting'
 
 function AppShell() {
-  const { loading } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   
@@ -42,12 +42,14 @@ function AppShell() {
     }
   }, [location.pathname, navigate])
   
-  if (loading) {
-    return (
-      <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 md:p-8" aria-busy="true" aria-live="polite" />
-    )
-  }
-  return <PlantSwipe />
+  // Non-blocking rendering: PlantSwipe handles user=null (guest mode)
+  // if (loading) { ... } removed to allow immediate LCP
+  
+  return (
+    <React.Suspense fallback={<div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 md:p-8" />}>
+      <PlantSwipe />
+    </React.Suspense>
+  )
 }
 
 // Language-aware route wrapper
@@ -87,8 +89,9 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <BrowserRouter basename={routerBase}>
-              <LanguageRoutes />
+            <LanguageRoutes />
           </BrowserRouter>
+          <ServiceWorkerToast />
         </AuthProvider>
       </ThemeProvider>
     </I18nextProvider>

@@ -5,6 +5,7 @@ import { Link } from "@/components/i18n/Link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 type PillarCard = { eyebrow: string; title: string; description: string | string[] }
 type MemberCard = {
@@ -41,6 +42,12 @@ const memberProfiles: Record<
 
 export default function AboutPage() {
   const { t } = useTranslation("About")
+  const { t: tCommon } = useTranslation("common")
+  const seoTitle = tCommon("seo.about.title", { defaultValue: "About Aphylia" })
+  const seoDescription = tCommon("seo.about.description", {
+    defaultValue: "Meet the founders, rituals, and creative ambition behind Aphylia's augmented plant lab.",
+  })
+  usePageMetadata({ title: seoTitle, description: seoDescription })
   const featureItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
   const pillars = t("pillars", { returnObjects: true }) as {
     title: string
@@ -63,6 +70,27 @@ export default function AboutPage() {
       <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717]">
         <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <div className="absolute -left-16 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
+          className="absolute -right-2 -bottom-8 md:-right-4 md:-bottom-12 z-0"
+        >
+          <style>{`
+            .about-logo {
+              filter: brightness(0) saturate(100%);
+              transform: scaleX(-1);
+            }
+            .dark .about-logo {
+              filter: brightness(0) saturate(100%) invert(100%);
+            }
+          `}</style>
+          <img 
+            src="/icons/plant-swipe-icon.svg" 
+            alt="Aphylia Logo" 
+            className="about-logo relative h-64 w-64 md:h-96 md:w-96 opacity-60 dark:opacity-50"
+          />
+        </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}

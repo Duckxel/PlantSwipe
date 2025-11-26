@@ -7,6 +7,58 @@ import { getPrimaryPhotoUrl } from '@/lib/photos'
 import type { SupportedLanguage } from './i18n'
 import { mergePlantWithTranslation } from './plantTranslationLoader'
 
+type PlantCareShape = NonNullable<Plant['plantCare']>
+
+const LEVEL_SUN_MAP: Record<string, PlantCareShape['levelSun']> = {
+  'low light': 'Low Light',
+  shade: 'Shade',
+  'partial sun': 'Partial Sun',
+  'full sun': 'Full Sun',
+}
+
+const WATERING_TYPE_VALUES = ['surface', 'buried', 'hose', 'drop', 'drench'] as const
+type WateringTypeValue = (typeof WATERING_TYPE_VALUES)[number]
+
+const SOIL_TYPE_VALUES = [
+  'Vermiculite',
+  'Perlite',
+  'Sphagnum moss',
+  'rock wool',
+  'Sand',
+  'Gravel',
+  'Potting Soil',
+  'Peat',
+  'Clay pebbles',
+  'coconut fiber',
+  'Bark',
+  'Wood Chips',
+] as const
+type SoilTypeValue = (typeof SOIL_TYPE_VALUES)[number]
+
+function normalizeLevelSun(value: unknown): PlantCareShape['levelSun'] | undefined {
+  if (typeof value !== 'string') return undefined
+  const mapped = LEVEL_SUN_MAP[value.toLowerCase()]
+  return mapped
+}
+
+function normalizeWateringTypes(value: unknown): PlantCareShape['wateringType'] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const filtered = value.filter(
+    (entry): entry is WateringTypeValue =>
+      typeof entry === 'string' && WATERING_TYPE_VALUES.includes(entry as WateringTypeValue),
+  )
+  return filtered.length ? filtered : undefined
+}
+
+function normalizeSoilTypes(value: unknown): PlantCareShape['soil'] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const filtered = value.filter(
+    (entry): entry is SoilTypeValue =>
+      typeof entry === 'string' && SOIL_TYPE_VALUES.includes(entry as SoilTypeValue),
+  )
+  return filtered.length ? filtered : undefined
+}
+
 const missingSupabaseRpcs = new Set<string>()
 const missingSupabaseTablesOrViews = new Set<string>()
 let taskCachesDisabled = false
@@ -232,6 +284,93 @@ function isMissingTableOrView(error: any, tableName: string): boolean {
   return false
 }
 
+export async function getGardenMemberCountsBatch(gardenIds: string[]): Promise<Record<string, number>> {
+  const { valid: safeIds } = normalizeGardenIdList(gardenIds)
+  if (safeIds.length === 0) return {}
+
+  // Try RPC first
+  const rpcName = 'get_garden_member_counts'
+  if (!missingSupabaseRpcs.has(rpcName)) {
+    try {
+      const { data, error } = await supabase.rpc(rpcName, { _garden_ids: safeIds })
+      if (!error && data && Array.isArray(data)) {
+        const result: Record<string, number> = {}
+        for (const row of data) {
+          result[String(row.garden_id)] = Number(row.count ?? 0)
+        }
+        return result
+      }
+      if (error) {
+        if (!(isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName))) {
+          console.warn('[gardens] get_garden_member_counts RPC failed, falling back to client query:', error)
+        }
+      }
+    } catch (err: any) {
+      if (!(isMissingRpcFunction(err, rpcName) || isRpcDependencyUnavailable(err, rpcName))) {
+        console.warn('[gardens] get_garden_member_counts RPC failed, falling back to client query:', err)
+      }
+    }
+  }
+
+  // Fallback: client query
+  // Note: This fetches ALL member rows, which is inefficient for large gardens,
+  // but we have to do it if RPC is unavailable.
+  const { data: memberRows } = await supabase
+    .from('garden_members')
+    .select('garden_id')
+    .in('garden_id', safeIds)
+  
+  const counts: Record<string, number> = {}
+  if (memberRows) {
+    for (const row of memberRows) {
+      const gid = String(row.garden_id)
+      counts[gid] = (counts[gid] || 0) + 1
+    }
+  }
+  return counts
+}
+
+export async function listTasksForMultipleGardensMinimal(gardenIds: string[], _limitPerGarden: number = 500): Promise<Record<string, Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>>> {
+  const { valid: safeIds } = normalizeGardenIdList(gardenIds)
+  if (safeIds.length === 0) return {}
+
+  const base = supabase.from('garden_plant_tasks')
+  const selectMinimal = 'id, garden_id, type, emoji, garden_plant_id'
+  const selectMinimalNoEmoji = 'id, garden_id, type, garden_plant_id'
+  
+  let { data, error } = await base
+    .select(selectMinimal)
+    .in('garden_id', safeIds)
+    .order('created_at', { ascending: true })
+    // .limit(...) // Can't limit per garden easily in one query without RPC, so fetch all (should be okay for minimal fields)
+  
+  if (error) {
+    const msg = String(error.message || '')
+    if (/column .*emoji.* does not exist/i.test(msg)) {
+      const res = await base
+        .select(selectMinimalNoEmoji)
+        .in('garden_id', safeIds)
+        .order('created_at', { ascending: true })
+      data = res.data as any
+      error = res.error as any
+    }
+  }
+  if (error) throw new Error(error.message)
+
+  const result: Record<string, Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>> = {}
+  for (const r of (data || []) as any[]) {
+    const gid = String(r.garden_id)
+    if (!result[gid]) result[gid] = []
+    result[gid].push({
+      id: String(r.id),
+      type: r.type,
+      emoji: (r as any).emoji || null,
+      gardenPlantId: String(r.garden_plant_id),
+    })
+  }
+  return result
+}
+
 export async function getUserGardens(userId: string): Promise<Garden[]> {
   // Fetch garden ids where user is a member, then fetch gardens
   const { data: memberRows, error: memberErr } = await supabase
@@ -322,8 +461,8 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
     const { data: plantRows } = await supabase
       .from('plants')
-      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta')
-    .in('id', plantIds)
+      .select('*, plant_images (id,link,use)')
+      .in('id', plantIds)
   
   // Always load translations for the specified language (including English)
   // This ensures plants created in one language display correctly in another
@@ -343,25 +482,50 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   }
   
   const idToPlant: Record<string, Plant> = {}
-  for (const p of plantRows || []) {
-    const translation = translationMap.get(p.id) || null
-    const mergedPlant = mergePlantWithTranslation(p, translation)
-    idToPlant[String(p.id)] = mergedPlant
+  if (plantRows && plantRows.length > 0) {
+    for (const p of plantRows) {
+      if (!p || !p.id) continue
+      try {
+        const translation = translationMap.get(p.id) || null
+        // Convert plant_images to photos format expected by mergePlantWithTranslation
+        const images = Array.isArray(p.plant_images) ? p.plant_images : []
+        const photos = images.map((img: any) => ({
+          url: img.link || '',
+          isPrimary: img.use === 'primary',
+          isVertical: false
+        }))
+        // Find primary image or use first image as fallback
+        const primaryImageUrl = images.find((img: any) => img.use === 'primary')?.link 
+          || images.find((img: any) => img.use === 'discovery')?.link 
+          || images[0]?.link 
+          || p.image_url 
+          || p.image
+        const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl }
+        const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation)
+        idToPlant[String(p.id)] = mergedPlant
+      } catch (err) {
+        console.error(`Error processing plant ${p.id}:`, err)
+        // Continue processing other plants even if one fails
+      }
+    }
   }
-  return rows.map(r => ({
-    id: String(r.id),
-    gardenId: String(r.garden_id),
-    plantId: String(r.plant_id),
-    nickname: r.nickname,
-    seedsPlanted: Number(r.seeds_planted ?? 0),
-    plantedAt: r.planted_at,
-    expectedBloomDate: r.expected_bloom_date,
-    overrideWaterFreqUnit: r.override_water_freq_unit || null,
-    overrideWaterFreqValue: r.override_water_freq_value ?? null,
-    plantsOnHand: Number(r.plants_on_hand ?? 0),
-    plant: idToPlant[String(r.plant_id)] || null,
-    sortIndex: (r as any).sort_index ?? null,
-  }))
+  return rows.map(r => {
+    const plantId = String(r.plant_id)
+    return {
+      id: String(r.id),
+      gardenId: String(r.garden_id),
+      plantId,
+      nickname: r.nickname,
+      seedsPlanted: Number(r.seeds_planted ?? 0),
+      plantedAt: r.planted_at,
+      expectedBloomDate: r.expected_bloom_date,
+      overrideWaterFreqUnit: r.override_water_freq_unit || null,
+      overrideWaterFreqValue: r.override_water_freq_value ?? null,
+      plantsOnHand: Number(r.plants_on_hand ?? 0),
+      plant: idToPlant[plantId] || null,
+      sortIndex: (r as any).sort_index ?? null,
+    }
+  })
 }
 
 export async function addPlantToGarden(params: { gardenId: string; plantId: string; nickname?: string | null; seedsPlanted?: number; plantedAt?: string | null; expectedBloomDate?: string | null }): Promise<GardenPlant> {
@@ -880,24 +1044,37 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
   const plantIds = rows.map(r => String(r.plant_id))
   const { data: plantRows } = await supabase
     .from('plants')
-    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, classification')
+    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, seeds_available, level_sun, watering_type, soil, maintenance_level, classification')
     .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
+    const levelSun = normalizeLevelSun(p.level_sun)
+    const wateringTypes = normalizeWateringTypes(p.watering_type)
+    const soilTypes = normalizeSoilTypes(p.soil)
+    const maintenanceLevel = typeof p.maintenance_level === 'string' ? p.maintenance_level : undefined
+
     idToPlant[String(p.id)] = {
       id: String(p.id),
-      name: String(p.name),
+      name: String(p.name || ''),
       scientificName: String(p.scientific_name || ''),
       colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-      seasons: Array.isArray(p.seasons) ? p.seasons.map(String) as any : [],
-      rarity: p.rarity,
+      seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
+      rarity: p.rarity || undefined,
       meaning: p.meaning || '',
       description: p.description || '',
       photos: Array.isArray(p.photos) ? p.photos : undefined,
       image: getPrimaryPhotoUrl(Array.isArray(p.photos) ? p.photos : []) || p.image_url || '',
-      care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
+      care: {
+        levelSun,
+        wateringType: wateringTypes,
+        soil: soilTypes,
+        maintenanceLevel,
+        difficulty: maintenanceLevel,
+      },
       seedsAvailable: Boolean(p.seeds_available ?? false),
-      classification: typeof p.classification === 'string' ? JSON.parse(p.classification) : p.classification || undefined,
+      classification: typeof p.classification === 'string'
+        ? JSON.parse(p.classification)
+        : (p.classification as Plant['classification']) || undefined,
     }
   }
   return rows.map(r => ({
@@ -1533,6 +1710,38 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
       .from('garden_plant_task_occurrences')
       .update({ required_count: upd.requiredCount })
       .eq('id', upd.id)
+  }
+}
+
+export async function resyncMultipleGardensTasks(gardenIds: string[], startIso: string, endIso: string): Promise<void> {
+  if (gardenIds.length === 0) return
+
+  // Try RPC first (fast path)
+  const rpcName = 'ensure_gardens_tasks_occurrences'
+  if (!missingSupabaseRpcs.has(rpcName)) {
+    try {
+      const { error } = await supabase.rpc(rpcName, {
+        _garden_ids: gardenIds,
+        _start_iso: startIso,
+        _end_iso: endIso,
+      })
+      if (!error) return
+
+      if (error && !(isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName))) {
+        console.warn('[gardens] ensure_gardens_tasks_occurrences RPC failed, falling back to parallel JS:', error)
+      }
+    } catch (err: any) {
+      if (!(isMissingRpcFunction(err, rpcName) || isRpcDependencyUnavailable(err, rpcName))) {
+        console.warn('[gardens] ensure_gardens_tasks_occurrences RPC failed, falling back to parallel JS:', err)
+      }
+    }
+  }
+
+  // Fallback to parallel JS calls (batch in chunks of 5 to avoid connection limits)
+  const chunkSize = 5
+  for (let i = 0; i < gardenIds.length; i += chunkSize) {
+    const chunk = gardenIds.slice(i, i + chunkSize)
+    await Promise.all(chunk.map(gid => resyncTaskOccurrencesForGarden(gid, startIso, endIso)))
   }
 }
 

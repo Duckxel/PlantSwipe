@@ -1,88 +1,129 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Select } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Loader2, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
+import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
-import type {
-  Plant,
-  PlantIdentifiers,
-  PlantTraits,
-  PlantDimensions,
-  PlantPhenology,
-  PlantEnvironment,
-  PlantCare,
-  PlantPropagation,
-  PlantUsage,
-  PlantEcology,
-  PlantCommerce,
-  PlantProblems,
-  PlantPlanting,
-  PlantMeta,
-  PlantClassification,
-  PlantPhoto,
-} from "@/types/plant"
-import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
-import { translatePlantToAllLanguages } from "@/lib/deepl"
-import { savePlantTranslations, type PlantTranslation } from "@/lib/plantTranslations"
-import { Languages, Sparkles, Loader2, CheckCircle2, AlertCircle, Circle } from "lucide-react"
-import { useTranslation } from "react-i18next"
-import { CompleteAdvancedForm } from "@/components/plant/CompleteAdvancedForm"
-import { PlantPhotoListEditor } from "@/components/plant/PlantPhotoListEditor"
+import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
+import { useTranslation } from "react-i18next"
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
+import { translateArray, translateText } from "@/lib/deepl"
+import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
+import { useNavigate, useParams } from "react-router-dom"
+import { plantSchema } from "@/lib/plantSchema"
+import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
 import {
-  REQUIRED_FIELD_CONFIG,
-  REQUIRED_FIELD_TO_SCHEMA_KEY,
-  AI_FIELD_STATUS_TEXT,
-  createInitialStatuses,
-  normalizeColorList,
-  normalizeSeasonList,
-  isFieldFilledFromData,
-  isFieldFilledFromState,
-  isDescriptionValid,
-  isFunFactValid,
-  countWords,
-  countSentences,
-  type AiFieldStatus,
-  type RequiredFieldId,
-  type AiFieldStateSnapshot,
-} from "@/lib/aiFieldProgress"
-import { hasClassificationData } from "@/constants/classification"
-import {
-  createEmptyPhoto,
-  ensureAtLeastOnePhoto,
-  getPrimaryPhotoUrl,
-  normalizePlantPhotos,
-  sanitizePlantPhotos,
-  upsertPrimaryPhoto,
-} from "@/lib/photos"
+  expandCompositionFromDb,
+  normalizeCompositionForDb,
+  expandFoliagePersistanceFromDb,
+  normalizeFoliagePersistanceForDb,
+  plantTypeEnum,
+  utilityEnum,
+  comestiblePartEnum,
+  fruitTypeEnum,
+  seasonEnum,
+  lifeCycleEnum,
+  livingSpaceEnum,
+  maintenanceLevelEnum,
+  toxicityEnum,
+  habitatEnum,
+  levelSunEnum,
+  wateringTypeEnum,
+  divisionEnum,
+  soilEnum,
+  mulchingEnum,
+  nutritionNeedEnum,
+  fertilizerEnum,
+  sowTypeEnum,
+  polenizerEnum,
+  conservationStatusEnum,
+} from "@/lib/composition"
 
-const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
-  pending: { text: "text-muted-foreground" },
-  working: { text: "text-purple-600 dark:text-purple-300" },
-  filled: { text: "text-green-600 dark:text-green-400" },
-  missing: { text: "text-red-600 dark:text-red-400" },
+type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
+type PlantCareData = NonNullable<Plant["plantCare"]>
+type PlantGrowthData = NonNullable<Plant["growth"]>
+type PlantEcologyData = NonNullable<Plant["ecology"]>
+
+const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
+const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
+const SECTION_LOG_LIMIT = 12
+const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
+
+const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
+  const map: Record<string, PlantMeta['status']> = {
+    'in progres': 'In Progres',
+    rework: 'Rework',
+    review: 'Review',
+    approved: 'Approved',
+  }
+  if (!value) return IN_PROGRESS_STATUS
+  const lower = value.toLowerCase()
+  return map[lower] || IN_PROGRESS_STATUS
 }
 
-const MAX_AI_RETRY_ROUNDS = 2
+const getFieldValueForKey = (plant: Plant, fieldKey: string): unknown => {
+  switch (fieldKey) {
+    case 'plantType':
+      return plant.plantType
+    case 'utility':
+      return plant.utility
+    case 'comestiblePart':
+      return plant.comestiblePart
+    case 'fruitType':
+      return plant.fruitType
+    case 'images':
+      return plant.images
+    case 'identity':
+      return plant.identity
+    case 'plantCare':
+      return plant.plantCare
+    case 'growth':
+      return plant.growth
+    case 'usage':
+      return plant.usage
+    case 'ecology':
+      return plant.ecology
+    case 'danger':
+      return plant.danger
+    case 'miscellaneous':
+      return plant.miscellaneous
+    case 'meta':
+      return plant.meta
+    case 'seasons':
+      return plant.seasons
+    case 'description':
+      return plant.description
+    default:
+      return (plant as any)[fieldKey]
+  }
+}
+
+const hasMeaningfulContent = (value: unknown): boolean => {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (typeof value === 'number') return true
+  if (typeof value === 'boolean') return value === true
+  if (Array.isArray(value)) return value.some((entry) => hasMeaningfulContent(entry))
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((entry) => hasMeaningfulContent(entry))
+  }
+  return false
+}
+
+const requiresFieldCompletion = (fieldKey: string) => !OPTIONAL_FIELD_EXCEPTIONS.has(fieldKey)
+
+const isFieldMissingForPlant = (plant: Plant, fieldKey: string): boolean => {
+  if (!requiresFieldCompletion(fieldKey)) return false
+  return !hasMeaningfulContent(getFieldValueForKey(plant, fieldKey))
+}
 
 function generateUUIDv4(): string {
   try {
-    const anyCrypto = (typeof crypto !== 'undefined') ? (crypto as any) : undefined
-    if (anyCrypto && typeof anyCrypto.randomUUID === 'function') {
-      return anyCrypto.randomUUID()
-    }
-    if (anyCrypto && typeof anyCrypto.getRandomValues === 'function') {
-      const bytes = new Uint8Array(16)
-      anyCrypto.getRandomValues(bytes)
-      bytes[6] = (bytes[6] & 0x0f) | 0x40
-      bytes[8] = (bytes[8] & 0x3f) | 0x80
-      const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0'))
-      return `${hex[0]}${hex[1]}${hex[2]}${hex[3]}-${hex[4]}${hex[5]}-${hex[6]}${hex[7]}-${hex[8]}${hex[9]}-${hex[10]}${hex[11]}${hex[12]}${hex[13]}${hex[14]}${hex[15]}`
-    }
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID()
   } catch {}
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = Math.random() * 16 | 0
@@ -91,1126 +132,1339 @@ function generateUUIDv4(): string {
   })
 }
 
-interface CreatePlantPageProps {
-  onCancel: () => void
-  onSaved?: (plantId: string) => void
-  initialName?: string
+const emptyPlant: Plant = {
+  id: generateUUIDv4(),
+  name: "",
+  utility: [],
+  comestiblePart: [],
+  fruitType: [],
+  images: [],
+  identity: { givenNames: [], colors: [], multicolor: false, bicolor: false },
+  plantCare: { watering: { schedules: [] } },
+  growth: {},
+  usage: {},
+  ecology: {},
+  danger: {},
+  miscellaneous: { sources: [] },
+  meta: {},
+  seasons: [],
+  colors: [],
 }
 
-export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSaved, initialName }) => {
+const normalizeSeasonSlug = (value?: string | null): string | null => {
+  if (!value) return null
+  const slug = seasonEnum.toDb(value)
+  return slug || null
+}
+
+function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSchedule[] {
+  if (!entries?.length) return []
+  return entries
+    .map((entry) => {
+      const qty = entry.quantity
+      const parsedQuantity = typeof qty === 'string' ? parseInt(qty, 10) : qty
+      return {
+        ...entry,
+        quantity: Number.isFinite(parsedQuantity as number) ? Number(parsedQuantity) : undefined,
+        season: entry.season?.trim() || undefined,
+      }
+    })
+    .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
+}
+
+function coerceBoolean(value: unknown, fallback: boolean | null = false): boolean | null {
+  if (value === null || value === undefined) return fallback
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return fallback
+    return value !== 0
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (!normalized) return fallback
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false
+    return fallback
+  }
+  return fallback
+}
+
+async function upsertColors(colors: PlantColor[]) {
+  if (!colors?.length) return [] as string[]
+  const normalized = colors
+    .map((c) => {
+      const name = c.name?.trim()
+      if (!name) return null
+      const hex = c.hexCode?.trim()
+      return {
+        name,
+        hex_code: hex && hex.length ? (hex.startsWith("#") ? hex : `#${hex}`) : null,
+      }
+    })
+    .filter((entry): entry is { name: string; hex_code: string | null } => Boolean(entry?.name))
+  if (!normalized.length) return [] as string[]
+  const deduped = Array.from(
+    new Map(normalized.map((entry) => [entry.name.toLowerCase(), entry])).values(),
+  )
+  const { data, error } = await supabase
+    .from('colors')
+    .upsert(deduped, { onConflict: 'name' })
+    .select('id,name')
+  if (error) throw new Error(error.message)
+  return (data || []).map((row) => row.id as string)
+}
+
+async function linkColors(plantId: string, colorIds: string[]) {
+  if (!colorIds.length) return
+  await supabase.from('plant_colors').delete().eq('plant_id', plantId)
+  const inserts = colorIds.map((id) => ({ plant_id: plantId, color_id: id }))
+  const { error } = await supabase.from('plant_colors').insert(inserts)
+  if (error) throw new Error(error.message)
+}
+
+async function upsertImages(plantId: string, images: Plant["images"]) {
+  const normalized = (() => {
+    const list = images && images.length ? images : []
+    let primaryUsed = false
+    let discoveryUsed = false
+    
+    // First pass: normalize the use values, ensuring only one primary and one discovery
+    const mapped = list.map((img, idx) => {
+      let use = img.use || (idx === 0 ? 'primary' : 'other')
+      
+      // Handle primary: only allow the first one
+      if (use === 'primary') {
+        if (primaryUsed) {
+          use = 'other' // Convert subsequent primary images to other
+        } else {
+          primaryUsed = true
+        }
+      }
+      
+      // Handle discovery: only allow the first one
+      if (use === 'discovery') {
+        if (discoveryUsed) {
+          use = 'other' // Convert subsequent discovery images to other
+        } else {
+          discoveryUsed = true
+        }
+      }
+      
+      // Ensure other images stay as 'other'
+      if (use !== 'primary' && use !== 'discovery') {
+        use = 'other'
+      }
+      
+      return { ...img, use }
+    })
+    
+    // If no primary or discovery was set and we have images, set the first one as primary
+    // This ensures at least one image has a special role, but allows multiple "other" photos
+    if (!primaryUsed && !discoveryUsed && mapped.length > 0) {
+      mapped[0] = { ...mapped[0], use: 'primary' }
+      primaryUsed = true
+    }
+    
+    return mapped
+  })()
+  
+  // Delete all existing images for this plant
+  await supabase.from('plant_images').delete().eq('plant_id', plantId)
+  
+  if (!normalized?.length) return
+  
+  // Filter out images without links and ensure use is always set
+  const inserts = normalized
+    .filter((img) => img.link && img.link.trim())
+    .map((img) => ({ 
+      plant_id: plantId, 
+      link: img.link!.trim(), 
+      use: (img.use === 'primary' || img.use === 'discovery') ? img.use : 'other' 
+    }))
+  
+  if (inserts.length === 0) return
+  
+  // Verify we only have one primary and one discovery before inserting
+  const primaryCount = inserts.filter(i => i.use === 'primary').length
+  const discoveryCount = inserts.filter(i => i.use === 'discovery').length
+  
+  if (primaryCount > 1) {
+    // Keep only the first primary, convert rest to other
+    let foundPrimary = false
+    for (let i = 0; i < inserts.length; i++) {
+      if (inserts[i].use === 'primary') {
+        if (foundPrimary) {
+          inserts[i].use = 'other'
+        } else {
+          foundPrimary = true
+        }
+      }
+    }
+  }
+  
+  if (discoveryCount > 1) {
+    // Keep only the first discovery, convert rest to other
+    let foundDiscovery = false
+    for (let i = 0; i < inserts.length; i++) {
+      if (inserts[i].use === 'discovery') {
+        if (foundDiscovery) {
+          inserts[i].use = 'other'
+        } else {
+          foundDiscovery = true
+        }
+      }
+    }
+  }
+  
+  const { error } = await supabase.from('plant_images').insert(inserts)
+  if (error) throw new Error(error.message)
+}
+
+async function upsertWateringSchedules(plantId: string, schedules: Plant["plantCare"] | undefined) {
+  await supabase.from('plant_watering_schedules').delete().eq('plant_id', plantId)
+  const entries = normalizeSchedules(schedules?.watering?.schedules)
+  const rows = entries.map((entry) => ({
+    plant_id: plantId,
+      season: normalizeSeasonSlug(entry.season),
+    quantity: entry.quantity ?? null,
+    time_period: entry.timePeriod || null,
+  }))
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_watering_schedules').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
+async function upsertSources(plantId: string, sources?: PlantSource[]) {
+  await supabase.from('plant_sources').delete().eq('plant_id', plantId)
+  if (!sources?.length) return
+  const rows = sources
+    .filter((s) => s.name?.trim())
+    .map((s) => ({ plant_id: plantId, name: s.name.trim(), url: s.url?.trim() || null }))
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_sources').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
+function mapInfusionMixRows(rows?: Array<{ mix_name?: string | null; benefit?: string | null }> | null) {
+  const result: Record<string, string> = {}
+  if (!rows) return result
+  for (const row of rows) {
+    const key = row?.mix_name?.trim()
+    if (!key) continue
+    const value = row?.benefit?.trim()
+    result[key] = value || ''
+  }
+  return result
+}
+
+async function fetchInfusionMixes(plantId: string) {
+  const { data, error } = await supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', plantId)
+  if (error) throw new Error(error.message)
+  return mapInfusionMixRows(data || [])
+}
+
+async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string, string | undefined>) {
+  await supabase.from('plant_infusion_mixes').delete().eq('plant_id', plantId)
+  if (!infusionMix) return
+  const rows = Object.entries(infusionMix)
+    .map(([mix, benefit]) => {
+      const trimmedName = mix?.trim()
+      if (!trimmedName) return null
+      const trimmedBenefit = benefit?.trim()
+      return {
+        plant_id: plantId,
+        mix_name: trimmedName,
+        benefit: trimmedBenefit || null,
+      }
+    })
+    .filter((row): row is { plant_id: string; mix_name: string; benefit: string | null } => Boolean(row))
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_infusion_mixes').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
+async function loadPlant(id: string, language?: string): Promise<Plant | null> {
+  const { data, error } = await supabase.from('plants').select('*').eq('id', id).maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  
+  // Load translation if language is provided
+  // For English, also check if there's a translation entry to ensure consistency
+  let translation: any = null
+  if (language) {
+    const { data: translationData } = await supabase
+      .from('plant_translations')
+      .select('*')
+      .eq('plant_id', id)
+      .eq('language', language)
+      .maybeSingle()
+    translation = translationData || null
+  }
+  
+  const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
+  const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
+  const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
+  const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
+  const infusionMix = await fetchInfusionMixes(id)
+  const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
+  const sourceList = (sources || []).map((s) => ({ id: s.id, name: s.name, url: s.url }))
+  if (!sourceList.length && ((translation?.source_name || data.source_name) || (translation?.source_url || data.source_url))) {
+    sourceList.push({
+      id: `${data.id}-legacy-source`,
+      name: translation?.source_name || data.source_name || 'Source',
+      url: translation?.source_url || data.source_url || undefined,
+    })
+  }
+    const plant: Plant = {
+      id: data.id,
+      name: translation?.name || data.name,
+      plantType: (plantTypeEnum.toUi(data.plant_type) as Plant["plantType"]) || undefined,
+      utility: utilityEnum.toUiArray(data.utility) as Plant["utility"],
+      comestiblePart: comestiblePartEnum.toUiArray(data.comestible_part) as Plant["comestiblePart"],
+      fruitType: fruitTypeEnum.toUiArray(data.fruit_type) as Plant["fruitType"],
+    identity: {
+      givenNames: translation?.given_names || data.given_names || [],
+      scientificName: translation?.scientific_name || data.scientific_name || undefined,
+      family: translation?.family || data.family || undefined,
+        overview: translation?.overview || data.overview || undefined,
+        promotionMonth: monthSlugToNumber(translation?.promotion_month || data.promotion_month) ?? undefined,
+        lifeCycle: (lifeCycleEnum.toUi(translation?.life_cycle || data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
+        season: seasonEnum.toUiArray(translation?.season || data.season) as NonNullable<Plant["identity"]>["season"],
+        foliagePersistance: expandFoliagePersistanceFromDb(translation?.foliage_persistance || data.foliage_persistance),
+        spiked: data.spiked || false,
+        toxicityHuman: (toxicityEnum.toUi(translation?.toxicity_human || data.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
+        toxicityPets: (toxicityEnum.toUi(translation?.toxicity_pets || data.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
+        allergens: translation?.allergens || data.allergens || [],
+        scent: data.scent || false,
+        symbolism: translation?.symbolism || data.symbolism || [],
+        livingSpace: (livingSpaceEnum.toUi(translation?.living_space || data.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
+        composition: expandCompositionFromDb(translation?.composition || data.composition) as IdentityComposition,
+        maintenanceLevel: (maintenanceLevelEnum.toUi(translation?.maintenance_level || data.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
+        multicolor: data.multicolor || false,
+        bicolor: data.bicolor || false,
+        colors,
+      },
+      plantCare: {
+        origin: translation?.origin || data.origin || [],
+        habitat: habitatEnum.toUiArray(translation?.habitat || data.habitat) as PlantCareData["habitat"],
+        temperatureMax: data.temperature_max || undefined,
+        temperatureMin: data.temperature_min || undefined,
+        temperatureIdeal: data.temperature_ideal || undefined,
+        levelSun: (levelSunEnum.toUi(translation?.level_sun || data.level_sun) as PlantCareData["levelSun"]) || undefined,
+        hygrometry: data.hygrometry || undefined,
+        wateringType: wateringTypeEnum.toUiArray(data.watering_type) as PlantCareData["wateringType"],
+        division: divisionEnum.toUiArray(data.division) as PlantCareData["division"],
+        soil: soilEnum.toUiArray(data.soil) as PlantCareData["soil"],
+        adviceSoil: translation?.advice_soil || data.advice_soil || undefined,
+        mulching: mulchingEnum.toUiArray(data.mulching) as PlantCareData["mulching"],
+        adviceMulching: translation?.advice_mulching || data.advice_mulching || undefined,
+        nutritionNeed: nutritionNeedEnum.toUiArray(data.nutrition_need) as PlantCareData["nutritionNeed"],
+        fertilizer: fertilizerEnum.toUiArray(data.fertilizer) as PlantCareData["fertilizer"],
+        adviceFertilizer: translation?.advice_fertilizer || data.advice_fertilizer || undefined,
+      watering: {
+        schedules: normalizeSchedules(
+          (schedules || []).map((row: any) => ({
+            season: row.season || undefined,
+            quantity: row.quantity ?? undefined,
+            timePeriod: row.time_period || undefined,
+          })),
+        ),
+      },
+    },
+      growth: {
+        sowingMonth: monthSlugsToNumbers(data.sowing_month),
+        floweringMonth: monthSlugsToNumbers(data.flowering_month),
+        fruitingMonth: monthSlugsToNumbers(data.fruiting_month),
+        height: data.height_cm || undefined,
+        wingspan: data.wingspan_cm || undefined,
+        tutoring: data.tutoring || false,
+        adviceTutoring: translation?.advice_tutoring || data.advice_tutoring || undefined,
+        sowType: sowTypeEnum.toUiArray(data.sow_type) as PlantGrowthData["sowType"],
+        separation: data.separation_cm || undefined,
+        transplanting: data.transplanting || undefined,
+        adviceSowing: translation?.advice_sowing || data.advice_sowing || undefined,
+        cut: translation?.cut || data.cut || undefined,
+      },
+    usage: {
+      adviceMedicinal: translation?.advice_medicinal || data.advice_medicinal || undefined,
+      nutritionalIntake: translation?.nutritional_intake || data.nutritional_intake || [],
+      infusion: data.infusion || false,
+      adviceInfusion: translation?.advice_infusion || data.advice_infusion || undefined,
+      infusionMix,
+      recipesIdeas: translation?.recipes_ideas || data.recipes_ideas || [],
+      aromatherapy: data.aromatherapy || false,
+      spiceMixes: data.spice_mixes || [],
+    },
+      ecology: {
+        melliferous: data.melliferous || false,
+        polenizer: polenizerEnum.toUiArray(data.polenizer) as PlantEcologyData["polenizer"],
+        beFertilizer: data.be_fertilizer || false,
+        groundEffect: translation?.ground_effect || data.ground_effect || undefined,
+        conservationStatus: (conservationStatusEnum.toUi(data.conservation_status) as PlantEcologyData["conservationStatus"]) || undefined,
+      },
+    danger: { pests: data.pests || [], diseases: data.diseases || [] },
+    miscellaneous: {
+      companions: data.companions || [],
+      tags: translation?.tags || data.tags || [],
+      sources: sourceList,
+    },
+    meta: {
+      status: formatStatusForUi(data.status),
+      adminCommentary: data.admin_commentary || undefined,
+      createdBy: data.created_by || undefined,
+      createdAt: data.created_time || undefined,
+      updatedBy: data.updated_by || undefined,
+      updatedAt: data.updated_time || undefined,
+    },
+    multicolor: data.multicolor || false,
+    bicolor: data.bicolor || false,
+      seasons: seasonEnum.toUiArray(data.season) as Plant["seasons"],
+    description: data.overview || undefined,
+    images: (images as PlantImage[]) || [],
+  }
+  if (colors.length || data.multicolor || data.bicolor) plant.identity = { ...(plant.identity || {}), colors, multicolor: data.multicolor, bicolor: data.bicolor }
+  return plant
+}
+
+export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: string) => void; initialName?: string }> = ({ onCancel, onSaved, initialName }) => {
   const { t } = useTranslation('common')
-  const { user, profile } = useAuth()
-  const [name, setName] = React.useState(initialName || "")
+  const { id } = useParams<{ id?: string }>()
+  const navigate = useNavigate()
+  const languageNavigate = useLanguageNavigate()
+  const { profile } = useAuth()
+  const initialLanguage: SupportedLanguage = 'en'
+  const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
+  const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
+  const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
+  const [loading, setLoading] = React.useState<boolean>(!!id)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const [ok, setOk] = React.useState<string | null>(null)
-    const [advanced, setAdvanced] = React.useState(false)
-  const [everAdvanced, setEverAdvanced] = React.useState(false)
-  // Language selection (only in Advanced mode, defaults to English)
-  const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
-  const [translateToAll, setTranslateToAll] = React.useState(true) // Default to true in Advanced mode
+  const [aiWorking, setAiWorking] = React.useState(false)
+  const [aiCompleted, setAiCompleted] = React.useState(false)
   const [translating, setTranslating] = React.useState(false)
-  const [aiFilling, setAiFilling] = React.useState(false)
-  const [aiFillProgress, setAiFillProgress] = React.useState<{ completed: number; total: number; field?: string }>({ completed: 0, total: 0, field: undefined })
-  const [aiFieldStatuses, setAiFieldStatuses] = React.useState<Record<RequiredFieldId, AiFieldStatus>>(() => createInitialStatuses())
-  const [aiMissingFields, setAiMissingFields] = React.useState<RequiredFieldId[]>([])
-  const [aiStatusVisible, setAiStatusVisible] = React.useState(false)
-  const abortControllerRef = React.useRef<AbortController | null>(null)
-  const resetAiTracking = () => {
-    setAiFieldStatuses(createInitialStatuses())
-    setAiMissingFields([])
-  }
-  const markFieldWorking = (fieldKey: string) => {
-    if (!fieldKey || fieldKey === 'init' || fieldKey === 'complete') return
-    setAiFieldStatuses((prev) => {
-      let updated: Record<RequiredFieldId, AiFieldStatus> | null = null
-      for (const config of REQUIRED_FIELD_CONFIG) {
-        if (config.sourceKeys.includes(fieldKey) && prev[config.id] !== 'filled') {
-          if (!updated) updated = { ...prev }
-          updated[config.id] = 'working'
-        }
-      }
-      return updated ?? prev
-    })
-  }
-  const markFieldResult = (fieldKey: string, fieldData: unknown) => {
-    if (!fieldKey || fieldKey === 'init' || fieldKey === 'complete') return
-    setAiFieldStatuses((prev) => {
-      let updated: Record<RequiredFieldId, AiFieldStatus> | null = null
-      for (const config of REQUIRED_FIELD_CONFIG) {
-        if (!config.sourceKeys.includes(fieldKey)) continue
-        let filled = isFieldFilledFromData(config.id, fieldKey, fieldData)
-        if (config.id === 'description' && typeof fieldData === 'string') {
-          filled = isDescriptionValid(fieldData)
-        }
-        if (config.id === 'funFact') {
-          const funFactValue =
-            typeof fieldData === 'string'
-              ? fieldData
-              : (fieldData && typeof fieldData === 'object' ? (fieldData as any).funFact : '')
-          filled = isFunFactValid(typeof funFactValue === 'string' ? funFactValue : '')
-        }
-        if (filled && prev[config.id] !== 'filled') {
-          if (!updated) updated = { ...prev }
-          updated[config.id] = 'filled'
-        } else if (!filled && prev[config.id] !== 'filled') {
-          if (!updated) updated = { ...prev }
-          updated[config.id] = 'missing'
-        }
-      }
-      return updated ?? prev
-    })
-  }
-  const finalizeAiStatuses = (snapshot: AiFieldStateSnapshot) => {
-    const next = createInitialStatuses()
-    const missing: RequiredFieldId[] = []
-    for (const config of REQUIRED_FIELD_CONFIG) {
-      const filled = isFieldFilledFromState(config.id, snapshot)
-      next[config.id] = filled ? 'filled' : 'missing'
-      if (!filled) missing.push(config.id)
-    }
-    setAiFieldStatuses(next)
-    setAiMissingFields(missing)
-    return missing
-  }
-  const renderStatusIcon = (status: AiFieldStatus) => {
-    switch (status) {
-      case 'filled':
-        return <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-      case 'missing':
-        return <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-      case 'working':
-        return <Loader2 className="h-4 w-4 text-purple-600 dark:text-purple-300 animate-spin" />
-      default:
-        return <Circle className="h-4 w-4 text-muted-foreground" />
-    }
-  }
-    // New JSONB structure state
-    const [classification, setClassification] = React.useState<Partial<PlantClassification>>({})
-    const [classificationTabSignal, setClassificationTabSignal] = React.useState(0)
-  const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
-  const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
-  const [dimensions, setDimensions] = React.useState<Partial<PlantDimensions>>({})
-  const [phenology, setPhenology] = React.useState<Partial<PlantPhenology>>({})
-  const [environment, setEnvironment] = React.useState<Partial<PlantEnvironment>>({})
-  const [care, setCare] = React.useState<Partial<PlantCare>>({})
-  const [propagation, setPropagation] = React.useState<Partial<PlantPropagation>>({})
-  const [usage, setUsage] = React.useState<Partial<PlantUsage>>({})
-  const [ecology, setEcology] = React.useState<Partial<PlantEcology>>({})
-  const [commerce, setCommerce] = React.useState<Partial<PlantCommerce>>({})
-  const [problems, setProblems] = React.useState<Partial<PlantProblems>>({})
-  const [planting, setPlanting] = React.useState<Partial<PlantPlanting>>({})
-  const [meta, setMeta] = React.useState<Partial<PlantMeta>>({})
-  
-  // Legacy fields for backward compatibility (simplified mode)
-  const [scientificName, setScientificName] = React.useState("")
-  const [colors, setColors] = React.useState<string>("")
-  const [seasons, setSeasons] = React.useState<string[]>([])
-  const [rarity, setRarity] = React.useState<Plant["rarity"]>("Common")
-  const [meaning, setMeaning] = React.useState("")
-  const [description, setDescription] = React.useState("")
-  const [photos, setPhotos] = React.useState<PlantPhoto[]>([createEmptyPhoto(true)])
-  const [careSoil] = React.useState("")
-  const [careDifficulty] = React.useState<NonNullable<Plant["care"]>["difficulty"]>("Easy")
-  const [seedsAvailable] = React.useState(false)
-  const [waterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
-  const [waterFreqAmount] = React.useState<number>(1)
-
-  const funFact = React.useMemo(() => (meta?.funFact ?? '').trim(), [meta?.funFact])
-
-  const handlePhotosChange = React.useCallback((next: PlantPhoto[]) => {
-    setPhotos(ensureAtLeastOnePhoto(next))
-  }, [])
-
-  React.useEffect(() => {
-    if (aiFilling) return
-    const hasStarted = Object.values(aiFieldStatuses).some((status) => status !== 'pending')
-    if (!hasStarted) return
-      const snapshot: AiFieldStateSnapshot = {
-        scientificName,
-        colors,
-        seasons,
-        description,
-        funFact,
-        classificationType: classification?.type ?? '',
-      }
-    const nextStatuses: Record<RequiredFieldId, AiFieldStatus> = { ...aiFieldStatuses }
-    let statusChanged = false
-    const missing: RequiredFieldId[] = []
-    for (const config of REQUIRED_FIELD_CONFIG) {
-      const filled = isFieldFilledFromState(config.id, snapshot)
-      const desired: AiFieldStatus = filled ? 'filled' : 'missing'
-      if (nextStatuses[config.id] !== desired) {
-        nextStatuses[config.id] = desired
-        statusChanged = true
-      }
-      if (!filled) missing.push(config.id)
-    }
-    if (statusChanged) {
-      setAiFieldStatuses(nextStatuses)
-    }
-    setAiMissingFields((current) => {
-      if (current.length === missing.length && current.every((id) => missing.includes(id))) {
-        return current
-      }
-      return missing
-    })
-    }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFact, classification?.type])
-
-  const toggleSeason = (s: Plant["seasons"][number]) => {
-    setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
-  }
-
-  // Update name when initialName changes
-  React.useEffect(() => {
-    if (initialName) {
-      setName(initialName)
-    }
-  }, [initialName])
+  const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
+  const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
+  const [existingLoaded, setExistingLoaded] = React.useState(false)
+  const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
+  const targetFields = React.useMemo(
+    () =>
+      [
+        'plantType',
+        'utility',
+        'comestiblePart',
+        'fruitType',
+        'seasons',
+        'description',
+        'identity',
+        'plantCare',
+        'growth',
+        'usage',
+        'ecology',
+        'danger',
+        'miscellaneous',
+      ].filter((key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase())),
+    [],
+  )
+  const basicFieldOrder = React.useMemo(
+    () => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description', 'identity'],
+    [],
+  )
+  const aiFieldOrder = React.useMemo(() => {
+    const prioritized = basicFieldOrder.filter((key) => targetFields.includes(key))
+    const remaining = targetFields.filter((key) => !prioritized.includes(key))
+    return [...prioritized, ...remaining]
+  }, [basicFieldOrder, targetFields])
+    const mandatoryFieldOrder = aiFieldOrder
+    const categoryLabels = React.useMemo(() => ({
+      basics: t('plantAdmin.categories.basics', 'Basics'),
+      identity: t('plantAdmin.categories.identity', 'Identity'),
+      plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
+      growth: t('plantAdmin.categories.growth', 'Growth'),
+      usage: t('plantAdmin.categories.usage', 'Usage'),
+      ecology: t('plantAdmin.categories.ecology', 'Ecology'),
+      danger: t('plantAdmin.categories.danger', 'Danger'),
+      miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
+      meta: t('plantAdmin.categories.meta', 'Meta'),
+    }), [t])
 
     React.useEffect(() => {
-      return () => {
-        abortControllerRef.current?.abort()
-        abortControllerRef.current = null
-      }
-    }, [])
+      languageRef.current = language
+    }, [language])
 
-  // Load schema for AI fill
-  const loadSchema = async () => {
-    try {
-      // Try to load from public folder first
-      const response = await fetch('/PLANT-INFO-SCHEMA.json')
-      if (response.ok) {
-        return await response.json()
-      }
-      // Fallback: import directly if fetch fails
-      const schemaModule = await import('../../PLANT-INFO-SCHEMA.json')
-      return schemaModule.default || schemaModule
-    } catch (error) {
-      console.error('Failed to load schema:', error)
-      // Return a minimal schema structure as fallback
-      return {
-        identifiers: {},
-        traits: {},
-        dimensions: {},
-        phenology: {},
-        environment: {},
-        care: {},
-        propagation: {},
-        usage: {},
-        ecology: {},
-        commerce: {},
-        problems: {},
-        planting: {},
-        meta: {}
-      }
-    }
-  }
-
-  // AI Fill function
-  const handleAiFill = async () => {
-    if (!name.trim()) {
-      setError("Please enter a plant name first")
-      return
-    }
-
-    setAiStatusVisible(true)
-    resetAiTracking()
-    setAiFilling(true)
-    setAiFillProgress({ completed: 0, total: 0, field: undefined })
-    abortControllerRef.current?.abort()
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-    setError(null)
-    setOk(null)
-
-    try {
-      const schema = await loadSchema()
-      if (!schema) {
-        setError("Failed to load schema")
-        return
-      }
-
-      const schemaWithMandatory: Record<string, unknown> = { ...(schema as Record<string, unknown>) }
-      if (!('colors' in schemaWithMandatory)) {
-        schemaWithMandatory.colors = {
-          type: 'array',
-          items: 'string',
-          description: 'List of primary flower or foliage colors (simple color names).',
-        }
-      }
-      if (!('seasons' in schemaWithMandatory)) {
-        schemaWithMandatory.seasons = {
-          type: 'array',
-          items: 'string',
-          description: 'Seasons when the plant is most active or in bloom (Spring, Summer, Autumn, Winter).',
-        }
-      }
-        if (!('description' in schemaWithMandatory)) {
-          schemaWithMandatory.description = {
-            type: 'string',
-            description: 'A concise botanical overview covering appearance, notable traits, and growth habits.',
-          }
-        }
-        if (!('classification' in schemaWithMandatory)) {
-          const classificationSchema = (schema as any)?.classification ?? {
-            type: 'object',
-            description: 'Structured plant classification. Provide at least the primary type such as plant, shrub, tree, etc.',
-            properties: {
-              type: {
-                type: 'string',
-                description: 'Primary plant type, e.g., plant, shrub, tree, bambu, other',
-              },
-              subclass: {
-                type: 'string',
-                description: 'Optional subclass when type is plant (flower, vegetable, cereal, spice)',
-              },
-              subSubclass: {
-                type: 'string',
-                description: 'Optional extra subclass for vegetables (fruit, seed, root, leaf, flower)',
-              },
-              activities: {
-                type: 'array',
-                items: 'string',
-                description: 'Optional list of activities/uses such as ornemental, comestible, aromatic, medicinal.',
-              },
-            },
-          }
-          schemaWithMandatory.classification = classificationSchema
-        }
-
-        let latestClassification: Partial<PlantClassification> = { ...(classification ?? {}) }
-        let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
-      let latestScientificName = scientificName
-        let latestColors = colors
-      let latestSeasons = [...seasons]
-        let latestDescription = description
-        let latestMeaning = meaning
-        let latestMeta: Partial<PlantMeta> = { ...(meta ?? {}) }
-        let latestFunFact = (latestMeta?.funFact ?? '').trim()
-        let latestPhotos: PlantPhoto[] = [...photos]
-
-        const updateFunFactSnapshot = () => {
-          latestFunFact = (latestMeta?.funFact ?? '').trim()
-        }
-
-        const applyAiResult = (aiData: any) => {
-        if (!aiData || typeof aiData !== 'object') return
-
-          if (aiData.classification && typeof aiData.classification === 'object') {
-            latestClassification = {
-              ...(latestClassification ?? {}),
-              ...aiData.classification,
-            }
-            setClassification(latestClassification)
-          }
-
-        if (aiData.identifiers) {
-          const { externalIds: _ignoredExternalIds, ...restIdentifiers } = aiData.identifiers
-          const previousExternalIds = (latestIdentifiers as any)?.externalIds
-          const mergedIdentifiers: Partial<PlantIdentifiers> = {
-            ...(latestIdentifiers ?? {}),
-            ...restIdentifiers,
-            ...(previousExternalIds ? { externalIds: previousExternalIds } : {}),
-          }
-          latestIdentifiers = mergedIdentifiers
-          setIdentifiers(mergedIdentifiers)
-          const aiScientificName = typeof restIdentifiers.scientificName === 'string'
-            ? restIdentifiers.scientificName.trim()
-            : ''
-          if (aiScientificName) {
-            latestScientificName = aiScientificName
-            setScientificName(aiScientificName)
-          }
-        }
-
-        if (aiData.traits) setTraits(aiData.traits)
-        if (aiData.dimensions) setDimensions(aiData.dimensions)
-
-        const directColors = normalizeColorList((aiData as any).colors)
-        if (directColors.length > 0) {
-          latestColors = directColors.join(', ')
-          setColors(latestColors)
-        }
-
-        const directSeasons = normalizeSeasonList((aiData as any).seasons)
-        if (directSeasons.length > 0) {
-          latestSeasons = [...directSeasons]
-          setSeasons(directSeasons)
-        }
-
-        if (typeof (aiData as any).description === 'string' && (aiData as any).description.trim()) {
-          latestDescription = (aiData as any).description.trim()
-          setDescription(latestDescription)
-        }
-
-        if (typeof (aiData as any).meaning === 'string' && (aiData as any).meaning.trim()) {
-          latestMeaning = (aiData as any).meaning.trim()
-          setMeaning(latestMeaning)
-        }
-
-        if (aiData.phenology) {
-          setPhenology(aiData.phenology)
-          if (normalizeColorList(latestColors).length === 0) {
-            const phenologyColors = normalizeColorList(aiData.phenology.flowerColors)
-            if (phenologyColors.length > 0) {
-              latestColors = phenologyColors.join(', ')
-              setColors(latestColors)
-            }
-          }
-          if (latestSeasons.length === 0 && Array.isArray(aiData.phenology.floweringMonths)) {
-            const derivedSeasons = normalizeSeasonList(aiData.phenology.floweringMonths)
-            if (derivedSeasons.length > 0) {
-              latestSeasons = [...derivedSeasons]
-              setSeasons(derivedSeasons)
-            }
-          }
-        }
-
-        if (aiData.environment) setEnvironment(aiData.environment)
-        if (aiData.care) setCare(aiData.care)
-        if (aiData.propagation) setPropagation(aiData.propagation)
-        if (aiData.usage) setUsage(aiData.usage)
-        if (aiData.ecology) setEcology(aiData.ecology)
-        if (aiData.commerce) setCommerce(aiData.commerce)
-        if (aiData.problems) setProblems(aiData.problems)
-        if (aiData.planting) setPlanting(aiData.planting)
-
-        if (aiData.meta) {
-          const mergedMeta: Partial<PlantMeta> = { ...(latestMeta ?? {}) }
-          for (const [key, value] of Object.entries(aiData.meta)) {
-            (mergedMeta as any)[key] = value
-          }
-          if (typeof mergedMeta.funFact === 'string') {
-            mergedMeta.funFact = mergedMeta.funFact.trim()
-          }
-          latestMeta = mergedMeta
-          setMeta(mergedMeta)
-          if (mergedMeta.rarity) {
-            const rarityMap: Record<string, Plant['rarity']> = {
-              'common': 'Common',
-              'uncommon': 'Uncommon',
-              'rare': 'Rare',
-              'very rare': 'Legendary',
-            }
-            setRarity(rarityMap[mergedMeta.rarity] || 'Common')
-          }
-          const metaDescription = typeof (mergedMeta as any).description === 'string' ? (mergedMeta as any).description.trim() : ''
-          if (metaDescription && !latestDescription.trim()) {
-            latestDescription = metaDescription
-            setDescription(metaDescription)
-          }
-        }
-
-        if (Array.isArray(aiData.photos)) {
-          latestPhotos = ensureAtLeastOnePhoto(
-            normalizePlantPhotos(aiData.photos, getPrimaryPhotoUrl(latestPhotos)),
-          )
-          setPhotos(latestPhotos)
-        } else if (typeof aiData.image === 'string' && aiData.image.trim()) {
-          latestPhotos = ensureAtLeastOnePhoto(upsertPrimaryPhoto(latestPhotos, aiData.image))
-          setPhotos(latestPhotos)
-        }
-
-        updateFunFactSnapshot()
-      }
-
-      const buildExistingData = () => {
-          const normalizedColors = normalizeColorList(latestColors)
-          const sanitizedPhotos = sanitizePlantPhotos(latestPhotos)
-          return {
-          identifiers: {
-            ...(latestIdentifiers ?? {}),
-            ...(latestScientificName.trim() ? { scientificName: latestScientificName.trim() } : {}),
-          },
-            classification: hasClassificationData(latestClassification) ? latestClassification : undefined,
-          traits: { ...(traits ?? {}) },
-          dimensions: { ...(dimensions ?? {}) },
-          phenology: { ...(phenology ?? {}) },
-          environment: { ...(environment ?? {}) },
-          care: { ...(care ?? {}) },
-          propagation: { ...(propagation ?? {}) },
-          usage: { ...(usage ?? {}) },
-          ecology: { ...(ecology ?? {}) },
-          commerce: { ...(commerce ?? {}) },
-          problems: { ...(problems ?? {}) },
-          planting: { ...(planting ?? {}) },
-            meta: {
-            ...(latestMeta ?? {}),
-              ...(latestFunFact ? { funFact: latestFunFact } : {}),
-          },
-            photos: sanitizedPhotos.length > 0 ? sanitizedPhotos : undefined,
-          colors: normalizedColors.length > 0 ? normalizedColors : undefined,
-          seasons: latestSeasons.length > 0 ? latestSeasons : undefined,
-          description: latestDescription.trim() || undefined,
-            meaning: latestMeaning.trim() || undefined,
-        }
-      }
-
-        const finalizeSnapshot = (): AiFieldStateSnapshot => ({
-          scientificName: latestScientificName,
-          colors: latestColors,
-          seasons: latestSeasons,
-          description: latestDescription,
-          funFact: latestFunFact,
-          classificationType: latestClassification?.type ?? '',
-        })
-
-      const runFullFill = async () => {
-        const aiData = await fetchAiPlantFill({
-          plantName: name.trim(),
-          schema: schemaWithMandatory,
-          existingData: buildExistingData(),
-          signal: controller.signal,
-          onProgress: ({ completed, total, field }) => {
-            setAiFillProgress({ completed, total, field })
-            if (field) markFieldWorking(field)
-          },
-          onFieldComplete: ({ field, data }) => {
-            markFieldResult(field, data)
-          },
-        })
-        applyAiResult(aiData)
-        return finalizeAiStatuses(finalizeSnapshot())
-      }
-
-      const retryMissingFields = async (missingFields: RequiredFieldId[]) => {
-        let currentMissing = missingFields
-        let round = 0
-        while (currentMissing.length > 0 && round < MAX_AI_RETRY_ROUNDS && !controller.signal.aborted) {
-          round += 1
-          for (const requiredId of currentMissing) {
-            const fieldKey = REQUIRED_FIELD_TO_SCHEMA_KEY[requiredId]
-            if (!fieldKey) continue
-            if (controller.signal.aborted) throw new Error('AI fill was cancelled')
-            markFieldWorking(fieldKey)
-            setAiFillProgress((prev) => ({ completed: prev.completed, total: prev.total, field: fieldKey }))
-            try {
-              const existingFieldData = buildExistingData()[fieldKey as keyof ReturnType<typeof buildExistingData>]
-              const data = await fetchAiPlantFillField({
-                plantName: name.trim(),
-                schema: schemaWithMandatory,
-                fieldKey,
-                existingField: existingFieldData,
-                signal: controller.signal,
-                onFieldComplete: ({ field, data }) => {
-                  markFieldResult(field, data)
-                },
-              })
-              if (data !== undefined && data !== null) {
-                applyAiResult({ [fieldKey]: data })
-              }
-            } catch (err) {
-              console.error(`AI retry failed for ${fieldKey}:`, err)
-            }
-          }
-          currentMissing = finalizeAiStatuses(finalizeSnapshot())
-        }
-        return currentMissing
-      }
-
-      let missing = await runFullFill()
-      if (missing.length > 0) {
-        missing = await retryMissingFields(missing)
-      }
-
-      if (missing.length === 0) {
-        setOk("AI data loaded successfully! Please review and edit before saving.")
-      } else {
-        const missingLabels = REQUIRED_FIELD_CONFIG
-          .filter(({ id }) => missing.includes(id))
-          .map(({ label }) => label)
-        let message = `AI could not fill the following required fields after retrying: ${missingLabels.join(', ')}. Please complete them manually.`
-        if (missing.includes('description')) {
-          const wordCount = countWords(latestDescription)
-          message += ` The overview must be between 100 and 400 words (currently ${wordCount}).`
-        }
-        if (missing.includes('funFact')) {
-          const sentenceCount = countSentences(latestFunFact)
-          message += ` The fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`
-        }
-        setError(message)
-      }
-    } catch (err: any) {
-      console.error('AI fill error:', err)
-      if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.') {
-        setError('AI fill cancelled.')
-      } else {
-        setError(err?.message || 'Failed to fill data with AI. Please try again.')
-      }
-    } finally {
-      setAiFilling(false)
-      setAiFillProgress({ completed: 0, total: 0, field: undefined })
-      abortControllerRef.current = null
-    }
-  }
-
-    const focusClassificationTab = React.useCallback(() => {
-      setClassificationTabSignal((prev) => prev + 1)
-      if (!advanced) {
-        setAdvanced(true)
-      }
-      setEverAdvanced(true)
-    }, [advanced])
-
-    const ensureClassificationValid = () => {
-      if (!classification?.type) {
-        setError("Please choose a plant type in the Classification tab.")
-        focusClassificationTab()
-        return false
-      }
-      if (classification.type === 'plant' && !classification.subclass) {
-        setError("Please select a subclass for plant type in the Classification tab.")
-        focusClassificationTab()
-        return false
-      }
-      if (classification.subclass === 'vegetable' && !classification.subSubclass) {
-        setError("Please select a sub-subclass when subclass is Vegetable.")
-        focusClassificationTab()
-        return false
-      }
-      return true
-    }
-
-    const save = async () => {
-    setError(null)
-    setOk(null)
-    if (!name.trim()) { setError("Name is required"); return }
-    const trimmedScientificName = scientificName.trim()
-    if (!trimmedScientificName) { setError("Scientific name is required"); return }
-    const normalizedColors = normalizeColorList(colors)
-    if (normalizedColors.length === 0) { setError("At least one color is required"); return }
-    if (seasons.length === 0) { setError("Select at least one season"); return }
-    if (!description.trim()) { setError("Overview is required"); return }
-    const descriptionWordCount = countWords(description)
-    if (descriptionWordCount < 10 || descriptionWordCount > 400) {
-      setError(`Overview must be between 10 and 400 words (currently ${descriptionWordCount}).`)
-      return
-    }
-    const sanitizedPhotos = sanitizePlantPhotos(photos)
-    if (sanitizedPhotos.length === 0) {
-      setError("Please add at least one photo URL.")
-      return
-    }
-    const primaryImageUrl = getPrimaryPhotoUrl(sanitizedPhotos)
-    setPhotos(ensureAtLeastOnePhoto(sanitizedPhotos))
-      if (!ensureClassificationValid()) return
-    // Validate frequency constraints
-    const periodMax: Record<'week'|'month'|'year', number> = { week: 7, month: 4, year: 12 }
-    const maxAllowed = periodMax[waterFreqPeriod]
-    let normalizedAmount = Math.max(1, Math.min(Number(waterFreqAmount || 1), maxAllowed))
-    if (advanced && Number(waterFreqAmount || 1) > maxAllowed) {
-      // Provide gentle guidance rather than blocking (only show in Advanced)
-      setOk(`Capped to ${maxAllowed} per ${waterFreqPeriod}. For more, use a shorter period.`)
-    }
-    setSaving(true)
-    try {
-      const careSunlightValue = environment?.sunExposure
-        ? (() => {
-            const exposure = String(environment.sunExposure).toLowerCase()
-            if (exposure.includes('full')) return 'High'
-            if (exposure.includes('partial sun')) return 'Medium'
-            return 'Low'
-          })()
-        : 'Low'
-
-      const id = generateUUIDv4()
-      const nameNorm = name.trim()
-    const sciNorm = trimmedScientificName
-    const actorLabel = profile?.display_name?.trim() || user?.email?.trim() || user?.id || 'Unknown admin'
-    const nowIso = new Date().toISOString()
-        const metaBase = meta ?? {}
-        const meaningValue = meaning.trim()
-        const baseFunFact = typeof metaBase.funFact === 'string' ? metaBase.funFact.trim() : ''
-        const funFactText = baseFunFact
-      if (funFactText && !isFunFactValid(funFactText)) {
-        const sentenceCount = countSentences(funFactText)
-        setError(`Fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`)
-        return
-      }
-    const createdAtValue = typeof metaBase.createdAt === 'string' && metaBase.createdAt.trim().length > 0
-      ? metaBase.createdAt.trim()
-      : nowIso
-    const createdByValue = typeof metaBase.createdBy === 'string' && metaBase.createdBy.trim().length > 0
-      ? metaBase.createdBy.trim()
-      : actorLabel
-      const metaForInsert: Partial<PlantMeta> = {
-      ...metaBase,
-        funFact: funFactText || undefined,
-      createdAt: createdAtValue,
-      updatedAt: nowIso,
-      createdBy: createdByValue,
-      updatedBy: actorLabel,
-    }
-    setMeta(metaForInsert)
-    const shouldPersistMeta = Object.values(metaForInsert).some((value) => {
-      if (value === undefined || value === null) return false
-      if (typeof value === 'string') return value.trim().length > 0
-      if (Array.isArray(value)) return value.length > 0
-      return true
-    })
-        const shouldPersistClassification = hasClassificationData(classification)
-      // If the user has ever switched to Advanced, keep those values even
-      // when saving from Simplified so they persist across toggles.
-      const includeAdvanced = advanced || everAdvanced
-
-      // Duplicate check: name (case-insensitive)
-      const byName = await supabase.from('plants').select('id').ilike('name', nameNorm).limit(1).maybeSingle()
-      if (byName.error) { setError(byName.error.message); return }
-      if (byName.data?.id) { setError('A plant with the same name already exists'); return }
-
-        const { error: insErr } = await supabase.from('plants').insert({
-        id,
-        name: nameNorm,
-          // New JSONB structure
-          classification: shouldPersistClassification ? classification : null,
-        identifiers: includeAdvanced && Object.keys(identifiers).length > 0 ? identifiers : null,
-        traits: includeAdvanced && Object.keys(traits).length > 0 ? traits : null,
-        dimensions: includeAdvanced && Object.keys(dimensions).length > 0 ? dimensions : null,
-        phenology: includeAdvanced && Object.keys(phenology).length > 0 ? phenology : null,
-        environment: includeAdvanced && Object.keys(environment).length > 0 ? environment : null,
-        care: includeAdvanced && Object.keys(care).length > 0 ? care : null,
-        propagation: includeAdvanced && Object.keys(propagation).length > 0 ? propagation : null,
-        usage: includeAdvanced && Object.keys(usage).length > 0 ? usage : null,
-        ecology: includeAdvanced && Object.keys(ecology).length > 0 ? ecology : null,
-        commerce: includeAdvanced && Object.keys(commerce).length > 0 ? commerce : null,
-        problems: includeAdvanced && Object.keys(problems).length > 0 ? problems : null,
-          planting: includeAdvanced && Object.keys(planting).length > 0 ? planting : null,
-            meta: shouldPersistMeta ? metaForInsert : null,
-          photos: sanitizedPhotos,
-        // Legacy fields for backward compatibility
-        scientific_name: sciNorm || identifiers?.scientificName || null,
-          colors: normalizedColors,
-          seasons,
-          rarity: metaForInsert?.rarity === 'common' ? 'Common' : metaForInsert?.rarity === 'uncommon' ? 'Uncommon' : metaForInsert?.rarity === 'rare' ? 'Rare' : metaForInsert?.rarity === 'very rare' ? 'Legendary' : rarity,
-            meaning: meaningValue || null,
-        image_url: primaryImageUrl || null,
-        care_sunlight: careSunlightValue,
-        care_water: 'Low',
-        care_soil: environment?.soil?.texture?.join(', ') || careSoil || null,
-        care_difficulty: care?.difficulty === 'easy' ? 'Easy' : care?.difficulty === 'moderate' ? 'Moderate' : care?.difficulty === 'advanced' ? 'Hard' : careDifficulty,
-        seeds_available: commerce?.seedsAvailable ?? seedsAvailable,
-        water_freq_period: waterFreqPeriod,
-        water_freq_amount: normalizedAmount,
-        water_freq_unit: waterFreqPeriod,
-        water_freq_value: normalizedAmount,
-      })
-      if (insErr) { setError(insErr.message); return }
-      
-        // Prepare partial sections for translation persistence
-        const translationPhenology = phenology?.scentNotes && phenology.scentNotes.length > 0
-          ? { scentNotes: phenology.scentNotes }
-          : undefined
-        const translationCarePayload = (() => {
-          const hasFrequency = !!care?.watering?.frequency && Object.values(care.watering.frequency!).some(Boolean)
-          const hasSchedule = !!care?.fertilizing?.schedule
-          const hasMulch = !!care?.mulching?.material
-          if (!hasFrequency && !hasSchedule && !hasMulch) return undefined
-          return {
-            watering: hasFrequency ? { frequency: care?.watering?.frequency } : undefined,
-            fertilizing: hasSchedule ? { schedule: care?.fertilizing?.schedule } : undefined,
-            mulching: hasMulch ? { material: care?.mulching?.material } : undefined,
-          }
-        })()
-        const translationPlanting = (() => {
-          const sitePrep = planting?.sitePrep?.length ? planting.sitePrep : undefined
-          const companionPlants = planting?.companionPlants?.length ? planting.companionPlants : undefined
-          const avoidNear = planting?.avoidNear?.length ? planting.avoidNear : undefined
-          if (!sitePrep && !companionPlants && !avoidNear) return undefined
-          return { sitePrep, companionPlants, avoidNear }
-        })()
-        const translationProblems = (() => {
-          const pests = problems?.pests?.length ? problems.pests : undefined
-          const diseases = problems?.diseases?.length ? problems.diseases : undefined
-          const hazards = problems?.hazards?.length ? problems.hazards : undefined
-          if (!pests && !diseases && !hazards) return undefined
-          return { pests, diseases, hazards }
-        })()
-
-        // Always save translation for the input language (defaults to English in simplified mode)
-        const translation: PlantTranslation = {
-        plant_id: id,
-        language: inputLanguage,
-        name: nameNorm,
-        // Translatable JSONB fields
-        identifiers: includeAdvanced && identifiers ? {
-          ...identifiers,
-          scientificName: identifiers.scientificName || sciNorm || undefined,
-          commonNames: identifiers.commonNames || undefined,
-        } : undefined,
-          ecology: includeAdvanced && ecology ? ecology : undefined,
-        usage: includeAdvanced && usage ? {
-          culinaryUses: usage.culinaryUses,
-          medicinalUses: usage.medicinalUses,
-        } : undefined,
-          meta: includeAdvanced && metaForInsert ? {
-            funFact: metaForInsert.funFact,
-            authorNotes: metaForInsert.authorNotes,
-            sourceReferences: metaForInsert.sourceReferences,
-        } : undefined,
-          phenology: includeAdvanced ? translationPhenology : undefined,
-          care: includeAdvanced ? translationCarePayload : undefined,
-          planting: includeAdvanced ? translationPlanting : undefined,
-          problems: includeAdvanced ? translationProblems : undefined,
-        // Legacy fields for backward compatibility
-            scientific_name: sciNorm || identifiers?.scientificName || null,
-            meaning: meaningValue || null,
-        description: description || null,
-        care_soil: environment?.soil?.texture?.join(', ') || careSoil || null,
-      }
-      
-        const translationsToSave: PlantTranslation[] = [translation]
-      
-      // In simplified mode, automatically translate to all languages
-      // In advanced mode, only translate if checkbox is enabled
-      const shouldTranslate = !advanced || translateToAll
-      
-      if (shouldTranslate) {
-        setTranslating(true)
+    React.useEffect(() => {
+      if (!id) { setLoading(false); return }
+      let ignore = false
+      const requestedLanguage = language
+      setLoading(true)
+      const fetchPlant = async () => {
         try {
-          const allTranslations = await translatePlantToAllLanguages({
-            name: nameNorm,
-            scientificName: sciNorm || identifiers?.scientificName || undefined,
-            meaning: meaningValue || undefined,
-            description: description || undefined,
-            careSoil: environment?.soil?.texture?.join(', ') || careSoil || undefined,
-            identifiers: includeAdvanced && identifiers ? {
-              scientificName: identifiers.scientificName || sciNorm || undefined,
-              commonNames: identifiers.commonNames,
-            } : undefined,
-            ecology: includeAdvanced && ecology ? {
-              wildlifeValue: ecology.wildlifeValue,
-            } : undefined,
-            usage: includeAdvanced && usage ? {
-              culinaryUses: usage.culinaryUses,
-              medicinalUses: usage.medicinalUses,
-            } : undefined,
-              meta: includeAdvanced && metaForInsert ? {
-                funFact: metaForInsert.funFact,
-                authorNotes: metaForInsert.authorNotes,
-                sourceReferences: metaForInsert.sourceReferences,
-            } : undefined,
-              phenology: includeAdvanced ? translationPhenology : undefined,
-              care: includeAdvanced ? translationCarePayload : undefined,
-              planting: includeAdvanced ? translationPlanting : undefined,
-              problems: includeAdvanced ? translationProblems : undefined,
-            }, inputLanguage)
-          
-          // Convert translations to the format needed for saving
-          for (const [lang, translated] of Object.entries(allTranslations)) {
-            if (lang !== inputLanguage) {
-                translationsToSave.push({
-                plant_id: id,
-                language: lang as SupportedLanguage,
-                name: translated.name || nameNorm,
-                identifiers: translated.identifiers || undefined,
-                ecology: translated.ecology || undefined,
-                usage: translated.usage || undefined,
-                  meta: translated.meta || undefined,
-                  phenology: translated.phenology || undefined,
-                  care: translated.care || undefined,
-                  planting: translated.planting || undefined,
-                  problems: translated.problems || undefined,
-                scientific_name: translated.scientificName || sciNorm || identifiers?.scientificName || null,
-                  meaning: translated.meaning || null,
-                description: translated.description || null,
-                care_soil: translated.careSoil || null,
-              })
-            }
+          // Load plant with translations for the current language (for viewing)
+          // When editing, users edit the base language, but can view translations
+          const loaded = await loadPlant(id, requestedLanguage)
+          if (!ignore && loaded && languageRef.current === requestedLanguage) {
+            setPlant(loaded)
+            setExistingLoaded(true)
           }
-        } catch (transErr: any) {
-          console.error('Translation error:', transErr)
-          setOk('Plant saved, but translation failed. You can translate later when editing.')
+        } catch (e: any) {
+          if (!ignore && languageRef.current === requestedLanguage) {
+            setError(e?.message || t('plantAdmin.errors.loadPlant', 'Failed to load plant'))
+          }
         } finally {
-          setTranslating(false)
+          if (!ignore && languageRef.current === requestedLanguage) {
+            setLoading(false)
+          }
         }
       }
-      
-      // Save all translations
-      if (translationsToSave.length > 0) {
-        const { error: transErr } = await savePlantTranslations(translationsToSave)
-        if (transErr) {
-          console.error('Failed to save translations:', transErr)
-          // Don't fail the whole save if translations fail
+      fetchPlant()
+      return () => { ignore = true }
+    }, [id, language, t])
+
+    const captureColorSuggestions = (data: unknown) => {
+    if (!data) return
+    const parsed: PlantColor[] = []
+    if (Array.isArray(data)) {
+      data.forEach((entry) => {
+        if (typeof entry === 'string') {
+          parsed.push({ name: entry })
+        } else if (entry && typeof entry === 'object') {
+          const name = (entry as any).name || (entry as any).label || (entry as any).hex || (entry as any).hexCode
+          const hexCode = (entry as any).hexCode || (entry as any).hex
+          parsed.push({ name: name || 'Color', hexCode })
         }
+      })
+    }
+    if (parsed.length) setColorSuggestions(parsed)
+  }
+  const normalizePlantWatering = (candidate: Plant): Plant => ({
+    ...candidate,
+    plantCare: {
+      ...(candidate.plantCare || {}),
+      watering: { ...(candidate.plantCare?.watering || {}), schedules: normalizeSchedules(candidate.plantCare?.watering?.schedules) },
+    },
+  })
+    const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
+    const showAiProgressCard = aiWorking || (!aiCompleted && hasAiProgress)
+  const recentSectionLog = React.useMemo(() => aiSectionLog.slice(-5).reverse(), [aiSectionLog])
+  const initializeCategoryProgress = () => {
+    const progress = buildCategoryProgress(targetFields)
+    setAiProgress(progress)
+    setAiSectionLog([])
+    return progress
+  }
+  const markFieldComplete = (fieldKey: string) => {
+    const category = getCategoryForField(fieldKey)
+    setAiProgress((prev) => {
+      const current = prev[category] || { total: 0, completed: 0, status: 'idle' }
+      const total = current.total || 1
+      const completed = Math.min((current.completed || 0) + 1, total)
+      const nextStatus = completed >= total ? 'done' : 'filling'
+      if (nextStatus === 'done' && current.status !== 'done') {
+        const typedCategory = category as PlantFormCategory
+        const entry = {
+          category: typedCategory,
+          label: categoryLabels[typedCategory] || typedCategory,
+          timestamp: Date.now(),
+        }
+        setAiSectionLog((log) => {
+          const nextLog = [...log, entry]
+          return nextLog.length > SECTION_LOG_LIMIT ? nextLog.slice(nextLog.length - SECTION_LOG_LIMIT) : nextLog
+        })
       }
-      
-      setOk(t('createPlant.saved'))
-      onSaved && onSaved(id)
-      // Notify app to refresh plant lists without full reload
+      return {
+        ...prev,
+        [category]: {
+          total,
+          completed,
+          status: nextStatus,
+        },
+      }
+    })
+  }
+
+    const savePlant = async (plantOverride?: Plant) => {
+      const saveLanguage = language
+      let plantToSave = plantOverride || plant
+      const trimmedName = plantToSave.name.trim()
+      if (!trimmedName) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
+      const isEnglish = saveLanguage === 'en'
+      const existingPlantId = plantToSave.id || id
+      if (!isEnglish && !existingPlantId) {
+        setError(t('plantAdmin.translationRequiresBase', 'Save the English version before editing translations.'))
+        return
+      }
+      setSaving(true)
+      setError(null)
       try {
-        if (typeof window !== 'undefined')
-          window.dispatchEvent(new CustomEvent('plants:refresh'))
-      } catch {}
+        const plantId = existingPlantId || generateUUIDv4()
+        // For new plants: set creator to current user's display name, preserve existing if already set
+        // For existing plants: preserve the original creator
+        const createdByValue = existingLoaded 
+          ? (plantToSave.meta?.createdBy || null)
+          : (plantToSave.meta?.createdBy || profile?.display_name || null)
+        const createdTimeValue = existingLoaded 
+          ? (plantToSave.meta?.createdAt || null)
+          : (plantToSave.meta?.createdAt || new Date().toISOString())
+        // Always set the updater to the current user when saving
+        const updatedByValue = profile?.display_name || plantToSave.meta?.updatedBy || null
+        const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
+        const sources = plantToSave.miscellaneous?.sources || []
+        const primarySource = sources[0]
+        const normalizedPlantType = plantTypeEnum.toDb(plantToSave.plantType)
+        const normalizedUtility = utilityEnum.toDbArray(plantToSave.utility)
+        const normalizedComestible = comestiblePartEnum.toDbArray(plantToSave.comestiblePart)
+        const normalizedFruit = fruitTypeEnum.toDbArray(plantToSave.fruitType)
+        const normalizedIdentitySeasons = seasonEnum.toDbArray(plantToSave.identity?.season)
+        const normalizedLifeCycle = lifeCycleEnum.toDb(plantToSave.identity?.lifeCycle)
+        const normalizedLivingSpace = livingSpaceEnum.toDb(plantToSave.identity?.livingSpace)
+        const normalizedMaintenance = maintenanceLevelEnum.toDb(plantToSave.identity?.maintenanceLevel)
+        const normalizedToxicityHuman = toxicityEnum.toDb(plantToSave.identity?.toxicityHuman)
+        const normalizedToxicityPets = toxicityEnum.toDb(plantToSave.identity?.toxicityPets)
+        const normalizedHabitat = habitatEnum.toDbArray(plantToSave.plantCare?.habitat)
+        const normalizedLevelSun = levelSunEnum.toDb(plantToSave.plantCare?.levelSun)
+        const normalizedWateringType = wateringTypeEnum.toDbArray(plantToSave.plantCare?.wateringType)
+        const normalizedDivision = divisionEnum.toDbArray(plantToSave.plantCare?.division)
+        const normalizedSoil = soilEnum.toDbArray(plantToSave.plantCare?.soil)
+        const normalizedMulching = mulchingEnum.toDbArray(plantToSave.plantCare?.mulching)
+        const normalizedNutritionNeed = nutritionNeedEnum.toDbArray(plantToSave.plantCare?.nutritionNeed)
+        const normalizedFertilizer = fertilizerEnum.toDbArray(plantToSave.plantCare?.fertilizer)
+        const normalizedSowType = sowTypeEnum.toDbArray(plantToSave.growth?.sowType)
+        const normalizedPolenizer = polenizerEnum.toDbArray(plantToSave.ecology?.polenizer)
+        const normalizedConservationStatus = conservationStatusEnum.toDb(plantToSave.ecology?.conservationStatus)
+        const normalizedPromotionMonth = monthNumberToSlug(plantToSave.identity?.promotionMonth)
+        let savedId = plantId
+        let payloadUpdatedTime: string | null = null
+        const normalizedStatus = (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase()
+
+        if (isEnglish) {
+          const payload = {
+            id: plantId,
+            name: trimmedName,
+            plant_type: normalizedPlantType || null,
+            utility: normalizedUtility,
+            comestible_part: normalizedComestible,
+            fruit_type: normalizedFruit,
+            given_names: plantToSave.identity?.givenNames || [],
+            scientific_name: plantToSave.identity?.scientificName || null,
+            family: plantToSave.identity?.family || null,
+            overview: plantToSave.identity?.overview || null,
+            promotion_month: normalizedPromotionMonth,
+            life_cycle: normalizedLifeCycle || null,
+            season: normalizedIdentitySeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
+            spiked: coerceBoolean(plantToSave.identity?.spiked, false),
+            toxicity_human: normalizedToxicityHuman || null,
+            toxicity_pets: normalizedToxicityPets || null,
+            allergens: plantToSave.identity?.allergens || [],
+            scent: coerceBoolean(plantToSave.identity?.scent, false),
+            symbolism: plantToSave.identity?.symbolism || [],
+            living_space: normalizedLivingSpace || null,
+            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+            maintenance_level: normalizedMaintenance || null,
+            multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
+            bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
+            origin: plantToSave.plantCare?.origin || [],
+            habitat: normalizedHabitat,
+            temperature_max: plantToSave.plantCare?.temperatureMax || null,
+            temperature_min: plantToSave.plantCare?.temperatureMin || null,
+            temperature_ideal: plantToSave.plantCare?.temperatureIdeal || null,
+            level_sun: normalizedLevelSun || null,
+            hygrometry: plantToSave.plantCare?.hygrometry || null,
+            watering_type: normalizedWateringType,
+            division: normalizedDivision,
+            soil: normalizedSoil,
+            advice_soil: plantToSave.plantCare?.adviceSoil || null,
+            mulching: normalizedMulching,
+            advice_mulching: plantToSave.plantCare?.adviceMulching || null,
+            nutrition_need: normalizedNutritionNeed,
+            fertilizer: normalizedFertilizer,
+            advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
+            sowing_month: monthNumbersToSlugs(plantToSave.growth?.sowingMonth),
+            flowering_month: monthNumbersToSlugs(plantToSave.growth?.floweringMonth),
+            fruiting_month: monthNumbersToSlugs(plantToSave.growth?.fruitingMonth),
+            height_cm: plantToSave.growth?.height || null,
+            wingspan_cm: plantToSave.growth?.wingspan || null,
+            tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
+            advice_tutoring: plantToSave.growth?.adviceTutoring || null,
+            sow_type: normalizedSowType,
+            separation_cm: plantToSave.growth?.separation || null,
+            transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
+            advice_sowing: plantToSave.growth?.adviceSowing || null,
+            cut: plantToSave.growth?.cut || null,
+            advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+            nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
+            infusion: coerceBoolean(plantToSave.usage?.infusion, false),
+            advice_infusion: plantToSave.usage?.adviceInfusion || null,
+            recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+            aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
+            spice_mixes: plantToSave.usage?.spiceMixes || [],
+            melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
+            polenizer: normalizedPolenizer,
+            be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
+            ground_effect: plantToSave.ecology?.groundEffect || null,
+            conservation_status: normalizedConservationStatus || null,
+            pests: plantToSave.danger?.pests || [],
+            diseases: plantToSave.danger?.diseases || [],
+            companions: plantToSave.miscellaneous?.companions || [],
+            tags: plantToSave.miscellaneous?.tags || [],
+            source_name: primarySource?.name || null,
+            source_url: primarySource?.url || null,
+            status: normalizedStatus,
+            admin_commentary: plantToSave.meta?.adminCommentary || null,
+            created_by: createdByValue,
+            created_time: createdTimeValue,
+            updated_by: updatedByValue,
+            updated_time: new Date().toISOString(),
+          }
+          payloadUpdatedTime = payload.updated_time
+          const { data, error: insertError } = await supabase
+            .from('plants')
+            .upsert(payload)
+            .select('id')
+            .maybeSingle()
+          if (insertError) throw new Error(insertError.message)
+          savedId = data?.id || plantId
+          const colorIds = await upsertColors(plantToSave.identity?.colors || [])
+          await linkColors(savedId, colorIds)
+          await upsertImages(savedId, plantToSave.images || [])
+          await upsertWateringSchedules(savedId, {
+            ...(plantToSave.plantCare || {}),
+            watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules },
+          })
+          await upsertSources(savedId, sources)
+          await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
+          
+          // Also update the English translation entry to keep it in sync with the base name
+          const englishTranslationPayload = {
+            plant_id: savedId,
+            language: 'en',
+            name: trimmedName,
+            given_names: plantToSave.identity?.givenNames || [],
+            scientific_name: plantToSave.identity?.scientificName || null,
+            family: plantToSave.identity?.family || null,
+            overview: plantToSave.identity?.overview || null,
+            promotion_month: normalizedPromotionMonth,
+            life_cycle: normalizedLifeCycle || null,
+            season: normalizedIdentitySeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
+            toxicity_human: normalizedToxicityHuman || null,
+            toxicity_pets: normalizedToxicityPets || null,
+            allergens: plantToSave.identity?.allergens || [],
+            symbolism: plantToSave.identity?.symbolism || [],
+            living_space: normalizedLivingSpace || null,
+            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+            maintenance_level: normalizedMaintenance || null,
+            origin: plantToSave.plantCare?.origin || [],
+            habitat: normalizedHabitat,
+            advice_soil: plantToSave.plantCare?.adviceSoil || null,
+            advice_mulching: plantToSave.plantCare?.adviceMulching || null,
+            advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
+            advice_tutoring: plantToSave.growth?.adviceTutoring || null,
+            advice_sowing: plantToSave.growth?.adviceSowing || null,
+            cut: plantToSave.growth?.cut || null,
+            advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+            nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
+            recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+            advice_infusion: plantToSave.usage?.adviceInfusion || null,
+            ground_effect: plantToSave.ecology?.groundEffect || null,
+            source_name: primarySource?.name || null,
+            source_url: primarySource?.url || null,
+            tags: plantToSave.miscellaneous?.tags || [],
+          }
+          const { error: englishTranslationError } = await supabase
+            .from('plant_translations')
+            .upsert(englishTranslationPayload, { onConflict: 'plant_id,language' })
+          if (englishTranslationError) {
+            throw new Error(englishTranslationError.message)
+          }
+        }
+
+        if (!isEnglish) {
+          const translationPayload = {
+            plant_id: savedId,
+            language: saveLanguage,
+            name: trimmedName,
+            given_names: plantToSave.identity?.givenNames || [],
+            scientific_name: plantToSave.identity?.scientificName || null,
+            family: plantToSave.identity?.family || null,
+            overview: plantToSave.identity?.overview || null,
+            promotion_month: normalizedPromotionMonth,
+            life_cycle: normalizedLifeCycle || null,
+            season: normalizedIdentitySeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
+            toxicity_human: normalizedToxicityHuman || null,
+            toxicity_pets: normalizedToxicityPets || null,
+            allergens: plantToSave.identity?.allergens || [],
+            symbolism: plantToSave.identity?.symbolism || [],
+            living_space: normalizedLivingSpace || null,
+            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+            maintenance_level: normalizedMaintenance || null,
+            origin: plantToSave.plantCare?.origin || [],
+            habitat: normalizedHabitat,
+            advice_soil: plantToSave.plantCare?.adviceSoil || null,
+            advice_mulching: plantToSave.plantCare?.adviceMulching || null,
+            advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
+            advice_tutoring: plantToSave.growth?.adviceTutoring || null,
+            advice_sowing: plantToSave.growth?.adviceSowing || null,
+            cut: plantToSave.growth?.cut || null,
+            advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+            nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
+            recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+            advice_infusion: plantToSave.usage?.adviceInfusion || null,
+            ground_effect: plantToSave.ecology?.groundEffect || null,
+            source_name: primarySource?.name || null,
+            source_url: primarySource?.url || null,
+            tags: plantToSave.miscellaneous?.tags || [],
+          }
+          const { error: translationError } = await supabase
+            .from('plant_translations')
+            .upsert(translationPayload, { onConflict: 'plant_id,language' })
+          if (translationError) {
+            throw new Error(translationError.message)
+          }
+            const metaUpdatePayload = {
+              status: normalizedStatus,
+              admin_commentary: plantToSave.meta?.adminCommentary || null,
+              updated_by: updatedByValue,
+              updated_time: new Date().toISOString(),
+            }
+            const { error: metaUpdateError } = await supabase
+              .from('plants')
+              .update(metaUpdatePayload)
+              .eq('id', savedId)
+            if (metaUpdateError) {
+              throw new Error(metaUpdateError.message)
+            }
+            payloadUpdatedTime = metaUpdatePayload.updated_time
+        }
+
+          if (languageRef.current === saveLanguage) {
+            setPlant({
+              ...plantToSave,
+              plantCare: { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } },
+              miscellaneous: { ...(plantToSave.miscellaneous || {}), sources },
+              id: savedId,
+              meta: {
+                ...plantToSave.meta,
+                createdBy: createdByValue || undefined,
+                createdAt: createdTimeValue || undefined,
+                  updatedBy: payloadUpdatedTime
+                    ? (updatedByValue || plantToSave.meta?.updatedBy)
+                    : plantToSave.meta?.updatedBy,
+                  updatedAt: payloadUpdatedTime || plantToSave.meta?.updatedAt,
+              },
+            })
+          }
+        if (isEnglish && !existingLoaded) setExistingLoaded(true)
+        onSaved?.(savedId)
+        } catch (e: any) {
+          setError(e?.message || t('plantAdmin.errors.savePlant', 'Failed to save plant'))
+      } finally {
+        setSaving(false)
+      }
+    }
+
+  const runAiFill = async () => {
+    const trimmedName = plant.name.trim()
+    if (!trimmedName) {
+      setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.'))
+      return
+    }
+
+    initializeCategoryProgress()
+    setAiCompleted(false)
+    setAiWorking(true)
+    setColorSuggestions([])
+    setError(null)
+
+    let aiSucceeded = false
+    let finalPlant: Plant | null = null
+    // Capture current images at the start to preserve them throughout AI fill
+    const currentImages = plant.images || []
+    const plantNameForAi = trimmedName
+    const applyWithStatus = (candidate: Plant): Plant => ({
+      ...candidate,
+      // Always preserve images from the current state
+      images: candidate.images && candidate.images.length > 0 ? candidate.images : currentImages,
+      meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
+    })
+    const needsMonths = (p: Plant) =>
+      !((p.growth?.sowingMonth || []).length && (p.growth?.floweringMonth || []).length && (p.growth?.fruitingMonth || []).length)
+    const needsOriginOrWater = (p: Plant) => {
+      const hasOrigin = (p.plantCare?.origin || []).length > 0
+      const hasSchedule = (p.plantCare?.watering?.schedules || []).length > 0
+      return !(hasOrigin && hasSchedule)
+    }
+
+    const fillFieldWithRetries = async (fieldKey: string, existingField?: unknown) => {
+      let lastError: Error | null = null
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          const fieldData = await fetchAiPlantFillField({
+            plantName: plantNameForAi,
+            schema: plantSchema,
+            fieldKey,
+            existingField,
+            language,
+          })
+          setPlant((prev) => {
+            const applied = applyAiFieldToPlant(prev, fieldKey, fieldData)
+            const normalized = normalizePlantWatering(applied)
+            const withStatus = applyWithStatus(normalized)
+            // Ensure images are always preserved from the most recent state
+            const withImages = {
+              ...withStatus,
+              images: prev.images && prev.images.length > 0 ? prev.images : (withStatus.images || currentImages),
+            }
+            finalPlant = withImages
+            markFieldComplete(fieldKey)
+            return withImages
+          })
+          return true
+        } catch (err: any) {
+            lastError = err instanceof Error ? err : new Error(String(err || 'AI field fill failed'))
+            if (attempt >= 3) {
+              setError(lastError?.message || t('plantAdmin.errors.aiFill', 'AI fill failed'))
+          }
+        }
+      }
+      if (lastError) console.error(`AI fill failed for ${fieldKey} after 3 attempts`, lastError)
+      return false
+    }
+
+    const ensureMandatoryFields = async () => {
+      for (const fieldKey of mandatoryFieldOrder) {
+        if (!requiresFieldCompletion(fieldKey)) continue
+        const latestSnapshot = finalPlant || plant
+        if (!latestSnapshot) break
+        if (!isFieldMissingForPlant(latestSnapshot, fieldKey)) continue
+        await fillFieldWithRetries(fieldKey, getFieldValueForKey(latestSnapshot, fieldKey))
+      }
+    }
+
+    try {
+      let aiData: Record<string, unknown> | null = null
+      let lastError: Error | null = null
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          aiData = await fetchAiPlantFill({
+            plantName: plantNameForAi,
+            schema: plantSchema,
+            existingData: plant,
+            fields: aiFieldOrder,
+            language,
+            onFieldComplete: ({ field, data }) => {
+              if (field === 'complete') return
+              if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
+              if (field === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
+              setPlant((prev) => {
+                const applied = applyAiFieldToPlant(prev, field, data)
+                const normalized = normalizePlantWatering(applied)
+                const withStatus = applyWithStatus(normalized)
+                // Ensure images are always preserved from the most recent state
+                const withImages = {
+                  ...withStatus,
+                  images: prev.images && prev.images.length > 0 ? prev.images : (withStatus.images || currentImages),
+                }
+                finalPlant = withImages
+                return withImages
+              })
+              markFieldComplete(field)
+            },
+          })
+          lastError = null
+          break
+        } catch (err: any) {
+          lastError = err instanceof Error ? err : new Error(String(err || 'AI fill failed'))
+          if (attempt >= 3) throw lastError
+        }
+      }
+
+      if (aiData && typeof aiData === 'object') {
+        setPlant((prev) => {
+          let updated = { ...prev }
+          // Preserve images before processing AI data
+          const preservedImages = prev.images && prev.images.length > 0 ? prev.images : currentImages
+          for (const [fieldKey, data] of Object.entries(aiData as Record<string, unknown>)) {
+            if (fieldKey.toLowerCase().includes('color')) captureColorSuggestions(data)
+            if (fieldKey === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
+            updated = applyAiFieldToPlant(updated, fieldKey, data)
+            markFieldComplete(fieldKey)
+          }
+          const withId = { ...updated, id: updated.id || generateUUIDv4() }
+          const normalized = normalizePlantWatering(withId)
+          const withStatus = applyWithStatus(normalized)
+          // Always restore preserved images
+          const withImages = {
+            ...withStatus,
+            images: preservedImages,
+          }
+          finalPlant = withImages
+          return withImages
+        })
+      }
+
+      const snapshot: Plant = finalPlant || plant
+      if (needsOriginOrWater(snapshot)) {
+        await fillFieldWithRetries('plantCare', snapshot.plantCare)
+      }
+      if (needsMonths(snapshot)) {
+        await fillFieldWithRetries('growth', snapshot.growth)
+      }
+
+      setPlant((prev) => {
+        const target = normalizePlantWatering(finalPlant || prev)
+        // Preserve images from current state
+        const preservedImages = prev.images && prev.images.length > 0 ? prev.images : currentImages
+        const ensuredWater = (target.plantCare?.watering?.schedules || []).length
+          ? normalizeSchedules(target.plantCare?.watering?.schedules)
+          : [{ season: undefined, quantity: 1, timePeriod: 'week' as const }]
+        const ensuredGrowth = {
+          sowingMonth: target.growth?.sowingMonth?.length ? target.growth.sowingMonth : [3],
+          floweringMonth: target.growth?.floweringMonth?.length ? target.growth.floweringMonth : [6],
+          fruitingMonth: target.growth?.fruitingMonth?.length ? target.growth.fruitingMonth : [9],
+        }
+        const next = {
+          ...target,
+          images: preservedImages,
+          plantCare: {
+            ...(target.plantCare || {}),
+            origin: (target.plantCare?.origin || []).length ? target.plantCare?.origin : ['Unknown'],
+            watering: { ...(target.plantCare?.watering || {}), schedules: ensuredWater },
+          },
+          growth: { ...(target.growth || {}), ...ensuredGrowth },
+          meta: { ...(target.meta || {}), status: IN_PROGRESS_STATUS },
+        }
+        finalPlant = next
+        return next
+      })
+
+      await ensureMandatoryFields()
+      aiSucceeded = true
+      } catch (e: any) {
+        setError(e?.message || t('plantAdmin.errors.aiFill', 'AI fill failed'))
     } finally {
-      setSaving(false)
+      setAiWorking(false)
+      if (aiSucceeded) {
+        setAiCompleted(true)
+        setAiProgress(createEmptyCategoryProgress())
+        setAiSectionLog([])
+      }
+      const targetPlant = finalPlant || plant
+      if (targetPlant) await savePlant(targetPlant)
     }
   }
+
+  const translatePlant = async () => {
+    const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language)
+    if (!targets.length) {
+      setError(t('plantAdmin.translationNoTargets', 'No other languages configured for translation.'))
+      return
+    }
+    if (!plant.name.trim()) {
+      setError(t('plantAdmin.nameRequired', 'Name is required'))
+      return
+    }
+    await savePlant()
+    setTranslating(true)
+    setError(null)
+    try {
+      const sourceLang = language
+      const translatedRows = [] as any[]
+      const primarySource = (plant.miscellaneous?.sources || [])[0]
+        for (const target of targets) {
+        const translatedName = await translateText(plant.name || '', target, sourceLang)
+        const translatedGivenNames = await translateArray(plant.identity?.givenNames || [], target, sourceLang)
+        const translateArraySafe = (arr?: string[]) => translateArray(arr || [], target, sourceLang)
+        const translatedSourceName = primarySource?.name
+          ? await translateText(primarySource.name, target, sourceLang)
+          : undefined
+        const translatedSource: Record<string, string> = {}
+        if (translatedSourceName) translatedSource.name = translatedSourceName
+        if (primarySource?.url) translatedSource.url = primarySource.url
+
+          const dbLifeCycle = lifeCycleEnum.toDb(plant.identity?.lifeCycle)
+          const dbSeasons = seasonEnum.toDbArray(plant.identity?.season)
+          const dbLivingSpace = livingSpaceEnum.toDb(plant.identity?.livingSpace)
+          const dbMaintenance = maintenanceLevelEnum.toDb(plant.identity?.maintenanceLevel)
+          const dbToxicityHuman = toxicityEnum.toDb(plant.identity?.toxicityHuman)
+          const dbToxicityPets = toxicityEnum.toDb(plant.identity?.toxicityPets)
+          const dbHabitat = habitatEnum.toDbArray(plant.plantCare?.habitat)
+
+          translatedRows.push({
+          plant_id: plant.id,
+          language: target,
+          name: translatedName,
+          given_names: translatedGivenNames,
+          scientific_name: plant.identity?.scientificName || null,
+          family: plant.identity?.family || null,
+          overview: plant.identity?.overview
+            ? await translateText(plant.identity.overview, target, sourceLang)
+            : plant.identity?.overview || null,
+            promotion_month: monthNumberToSlug(plant.identity?.promotionMonth),
+            life_cycle: dbLifeCycle || null,
+            season: dbSeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plant.identity?.foliagePersistance),
+            toxicity_human: dbToxicityHuman || null,
+            toxicity_pets: dbToxicityPets || null,
+            allergens: await translateArraySafe(plant.identity?.allergens),
+            symbolism: await translateArraySafe(plant.identity?.symbolism),
+            living_space: dbLivingSpace || null,
+            composition: normalizeCompositionForDb(plant.identity?.composition),
+            maintenance_level: dbMaintenance || null,
+          origin: await translateArraySafe(plant.plantCare?.origin),
+            habitat: dbHabitat,
+          advice_soil: plant.plantCare?.adviceSoil
+            ? await translateText(plant.plantCare.adviceSoil, target, sourceLang)
+            : plant.plantCare?.adviceSoil || null,
+          advice_mulching: plant.plantCare?.adviceMulching
+            ? await translateText(plant.plantCare.adviceMulching, target, sourceLang)
+            : plant.plantCare?.adviceMulching || null,
+          advice_fertilizer: plant.plantCare?.adviceFertilizer
+            ? await translateText(plant.plantCare.adviceFertilizer, target, sourceLang)
+            : plant.plantCare?.adviceFertilizer || null,
+          advice_tutoring: plant.growth?.adviceTutoring
+            ? await translateText(plant.growth.adviceTutoring, target, sourceLang)
+            : plant.growth?.adviceTutoring || null,
+          advice_sowing: plant.growth?.adviceSowing
+            ? await translateText(plant.growth.adviceSowing, target, sourceLang)
+            : plant.growth?.adviceSowing || null,
+          cut: plant.growth?.cut
+            ? await translateText(plant.growth.cut, target, sourceLang)
+            : plant.growth?.cut || null,
+          advice_medicinal: plant.usage?.adviceMedicinal
+            ? await translateText(plant.usage.adviceMedicinal, target, sourceLang)
+            : plant.usage?.adviceMedicinal || null,
+          nutritional_intake: await translateArraySafe(plant.usage?.nutritionalIntake),
+          recipes_ideas: await translateArraySafe(plant.usage?.recipesIdeas),
+          advice_infusion: plant.usage?.adviceInfusion
+            ? await translateText(plant.usage.adviceInfusion, target, sourceLang)
+            : plant.usage?.adviceInfusion || null,
+            ground_effect: plant.ecology?.groundEffect
+              ? await translateText(plant.ecology.groundEffect, target, sourceLang)
+              : plant.ecology?.groundEffect || null,
+          source_name: translatedSource.name || null,
+          source_url: translatedSource.url || null,
+          tags: await translateArraySafe(plant.miscellaneous?.tags),
+        })
+      }
+
+      if (translatedRows.length) {
+        const { error: translateError } = await supabase
+          .from('plant_translations')
+          .upsert(translatedRows, { onConflict: 'plant_id,language' })
+        if (translateError) throw new Error(translateError.message)
+      }
+
+      setPlant((prev) => ({
+        ...prev,
+        meta: { ...(prev.meta || {}), status: IN_PROGRESS_STATUS },
+      }))
+      await savePlant()
+      } catch (e: any) {
+        setError(e?.message || t('plantAdmin.errors.translation', 'Translation failed'))
+    } finally {
+      setTranslating(false)
+    }
+  }
+
+  const handleBackClick = React.useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    onCancel()
+  }, [navigate, onCancel])
+
+  const handleViewPlantInfo = React.useCallback(() => {
+    if (!id) return
+    languageNavigate(`/plants/${id}`)
+  }, [id, languageNavigate])
 
   return (
-    <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
-      <Card className="rounded-3xl">
-        <CardContent className="p-6 md:p-8 space-y-4">
-          <form autoComplete="off" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-semibold">{t('createPlant.title')}</div>
-              <div className="flex items-center gap-2">
-                {/* Language Selector */}
-                <div className="flex items-center gap-1.5">
-                  <Languages className="h-4 w-4 opacity-70" />
-                    <Select
-                      id="plant-language"
-                      className="h-7 min-w-[64px] w-auto rounded-lg px-2 py-0 text-xs font-semibold uppercase tracking-wide focus-visible:ring-1"
-                      value={inputLanguage}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInputLanguage(e.target.value as SupportedLanguage)}
-                    >
-                    {SUPPORTED_LANGUAGES.map((lang) => (
-                      <option key={lang} value={lang}>
-                        {lang === 'en' ? 'EN' : 'FR'}
-                      </option>
-                    ))}
-                    </Select>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
-                  aria-pressed={advanced}
-                  className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]'}`}
-                >
-                  {advanced ? t('createPlant.advanced') : t('createPlant.simplified')}
-                </button>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="plant-name">{t('createPlant.name')} <span className="text-red-500">*</span></Label>
-              <Input id="plant-name" autoComplete="off" placeholder={t('createPlant.namePlaceholder')} value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} required />
-              <div className="text-xs opacity-60">{t('createPlant.nameRequired')}</div>
-            </div>
-                <PlantPhotoListEditor
-                  photos={photos}
-                  onChange={handlePhotosChange}
-                  label={
-                    <>
-                      {t('createPlant.imageUrl')} <span className="text-red-500">*</span>
-                    </>
-                  }
-                  helperText={t(
-                    'createPlant.photosHelper',
-                    'Add at least one image URL. Mark one as primary for cards and flag vertical-friendly shots for portrait layouts.'
-                  )}
-                />
-            {advanced && (
-              <>
-                <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 mb-1">
-                      <Sparkles className="h-5 w-5" />
-                      AI Assistant
-                    </div>
-                    <p className="text-sm text-purple-700 dark:text-purple-300">
-                      Let AI fill in all the advanced fields based on the plant name
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={handleAiFill}
-                    disabled={aiFilling || !name.trim() || saving || translating}
-                    className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
-                    >
-                    {aiFilling ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Filling{aiFillProgress.total > 0 ? ` ${Math.round((Math.min(aiFillProgress.completed, aiFillProgress.total) / aiFillProgress.total) * 100)}%` : '...'}
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Fill with AI
-                      </>
-                    )}
-                  </Button>
-                </div>
-                {aiStatusVisible && (
-                  <div className="mb-4 rounded-xl border border-purple-100 bg-purple-50/70 p-4 dark:border-purple-900/40 dark:bg-purple-950/20">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
-                      Required by AI
-                    </div>
-                    <div className="mt-2 space-y-2">
-                      {REQUIRED_FIELD_CONFIG.map(({ id, label }) => {
-                        const status = aiFieldStatuses[id]
-                        return (
-                          <div key={id} className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
-                              {renderStatusIcon(status)}
-                              <span className="text-muted-foreground dark:text-stone-300">{label}</span>
-                            </div>
-                            <span className={`font-medium ${AI_STATUS_STYLES[status].text}`}>
-                              {AI_FIELD_STATUS_TEXT[status]}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    {aiMissingFields.length > 0 && (
-                      <div className="mt-3 text-xs text-red-600 dark:text-red-400">
-                        Missing:{" "}
-                        {REQUIRED_FIELD_CONFIG.filter(({ id }) => aiMissingFields.includes(id))
-                          .map(({ label }) => label)
-                          .join(", ")}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="grid gap-2">
-                  <Label htmlFor="plant-scientific">{t('createPlant.scientificName')}</Label>
-                  <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="plant-colors">{t('createPlant.colors')}</Label>
-                  <Input id="plant-colors" autoComplete="off" placeholder={t('createPlant.colorsPlaceholder')} value={colors} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setColors(e.target.value)} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>{t('createPlant.seasons')}</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
-                      <button type="button" key={s} onClick={() => toggleSeason(s)} className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasons.includes(s) ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`} aria-pressed={seasons.includes(s)}>
-                        {t(`plant.${s.toLowerCase()}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="plant-meaning">{t('createPlant.meaning')}</Label>
-                    <Textarea
-                      id="plant-meaning"
-                      autoComplete="off"
-                      placeholder={t('createPlant.meaningPlaceholder', 'Describe what this plant represents in rituals, folklore, or symbolism.')}
-                      value={meaning}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMeaning(e.target.value)}
-                    />
-                    <p className="text-xs opacity-70">
-                      {t('createPlant.meaningHelper', 'Highlight cultural symbolism across regions or traditions.')}
-                    </p>
-                  </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="plant-description">{t('createPlant.description')}</Label>
-                  <Textarea id="plant-description" autoComplete="off" placeholder={t('createPlant.descriptionPlaceholder')} value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} />
-                </div>
-                  <CompleteAdvancedForm
-                    classification={classification}
-                    setClassification={setClassification}
-                    focusClassificationTabSignal={classificationTabSignal}
-                  identifiers={identifiers}
-                  setIdentifiers={setIdentifiers}
-                  traits={traits}
-                  setTraits={setTraits}
-                  dimensions={dimensions}
-                  setDimensions={setDimensions}
-                  phenology={phenology}
-                  setPhenology={setPhenology}
-                  environment={environment}
-                  setEnvironment={setEnvironment}
-                  care={care}
-                  setCare={setCare}
-                  propagation={propagation}
-                  setPropagation={setPropagation}
-                  usage={usage}
-                  setUsage={setUsage}
-                  ecology={ecology}
-                  setEcology={setEcology}
-                  commerce={commerce}
-                  setCommerce={setCommerce}
-                  problems={problems}
-                  setProblems={setProblems}
-                  planting={planting}
-                  setPlanting={setPlanting}
-                  meta={meta}
-                  setMeta={setMeta}
-                />
-              </>
-            )}
-            
-            {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
-            {ok && <div className="text-sm text-green-600 dark:text-green-400">{ok}</div>}
-            {translating && <div className="text-sm text-blue-600 dark:text-blue-400">{t('createPlant.translatingToAll')}</div>}
-            {aiFilling && (
-              <div className="flex flex-col gap-2 text-sm text-purple-600 dark:text-purple-400">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  AI is filling in the plant data...
-                </div>
-                {aiFillProgress.field && !['init', 'complete'].includes(aiFillProgress.field) && (
-                  <div className="text-xs font-medium">
-                    Working on: <span className="font-semibold">{aiFillProgress.field}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <div className="h-2 flex-1 rounded-full bg-purple-200 dark:bg-purple-950">
-                    <div
-                      className="h-full rounded-full bg-purple-500 transition-all"
-                      style={{
-                        width: `${aiFillProgress.total > 0 ? Math.round((aiFillProgress.completed / aiFillProgress.total) * 100) : 0}%`,
-                      }}
-                    />
-                  </div>
-                  <span className="text-xs font-medium min-w-[4rem] text-right">
-                    {aiFillProgress.total > 0
-                      ? `${Math.min(aiFillProgress.completed, aiFillProgress.total)} / ${aiFillProgress.total}`
-                      : '...'}
-                  </span>
-                </div>
+    <div className="max-w-6xl mx-auto px-4 pb-12 space-y-6">
+      <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b2a21] dark:via-[#101712] dark:to-[#0c120e] shadow-[0_24px_80px_-40px_rgba(16,185,129,0.45)] dark:shadow-[0_28px_90px_-50px_rgba(34,197,94,0.35)]">
+        <div className="absolute -left-20 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/15 blur-3xl" aria-hidden="true" />
+        <div className="absolute -right-12 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/40 dark:bg-emerald-600/10 blur-3xl" aria-hidden="true" />
+        <div className="relative p-6 sm:p-8 flex flex-col gap-6">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  className="self-start rounded-2xl"
-                  onClick={() => {
-                    abortControllerRef.current?.abort()
-                    abortControllerRef.current = null
-                    setAiFilling(false)
-                    setAiFillProgress({ completed: 0, total: 0, field: undefined })
-                    setOk(null)
-                    setError('AI fill cancelled.')
-                    resetAiTracking()
-                  }}
+                  variant="ghost"
+                  className="rounded-full px-3"
+                  onClick={handleBackClick}
                 >
-                  Stop AI fill
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  {t('plantAdmin.backToPrevious', 'Back to previous page')}
+                </Button>
+                {id ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="rounded-full px-3"
+                    onClick={handleViewPlantInfo}
+                  >
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
+                    {t('plantAdmin.viewPlantInfo', 'Open plant page')}
+                  </Button>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+              <h1 className="text-3xl font-semibold tracking-tight">
+                {id ? t('plantAdmin.editTitle', 'Edit Plant') : t('plantAdmin.createTitle', 'Create Plant')}
+              </h1>
+              <p className="text-sm text-muted-foreground max-w-2xl">
+                {t('plantAdmin.createSubtitle', 'Fill every field with the supplied descriptions or let AI help.')}
+              </p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-2 rounded-full bg-white/80 dark:bg-[#151b15]/80 border border-stone-200/70 dark:border-stone-700/60 px-3 py-1.5 shadow-inner shadow-emerald-100/40 dark:shadow-[inset_0_1px_0_rgba(16,185,129,0.25)]">
+                <label className="text-sm font-medium" htmlFor="create-language">{t('plantAdmin.languageLabel', 'Language')}</label>
+                <select
+                  id="create-language"
+                  className="border rounded px-2 py-1 text-sm bg-background"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
+                >
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <option key={lang} value={lang}>{lang.toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button type="button" onClick={translatePlant} disabled={translating} className="rounded-2xl shadow-md">
+                  {translating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {t('plantAdmin.deeplTranslate', 'DeepL Translation')}
                 </Button>
               </div>
-            )}
-            
-            {/* Translation Option - Only shown in Advanced mode, at the bottom before save */}
-            {advanced && (
-              <div className="flex items-start gap-2 p-4 rounded-xl border bg-stone-50 dark:bg-[#252526] dark:border-[#3e3e42]">
-                <input 
-                  id="translate-to-all" 
-                  type="checkbox" 
-                  checked={translateToAll} 
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTranslateToAll(e.target.checked)}
-                  disabled={translating || aiFilling}
-                  className="mt-1"
-                />
-                <div className="flex-1">
-                  <Label htmlFor="translate-to-all" className="font-medium cursor-pointer">
-                    {t('createPlant.translateToAll')}
-                  </Label>
-                  <p className="text-xs opacity-70 mt-1">
-                    {t('createPlant.translateToAllDescription')}
-                  </p>
+              <div className="flex gap-2">
+                  <Button variant="secondary" onClick={onCancel} className="rounded-2xl">{t('common.cancel', 'Cancel')}</Button>
+                <Button onClick={() => savePlant()} disabled={saving || aiWorking} className="rounded-2xl shadow-md">
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {t('plantAdmin.savePlant', 'Save Plant')}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {error && (
+        <Card className="border-red-500">
+          <CardContent className="flex gap-2 items-center text-red-700 py-3">
+            <AlertCircle className="h-4 w-4" />
+            <span>{error}</span>
+          </CardContent>
+        </Card>
+      )}
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-3 flex-col sm:flex-row sm:items-center sm:justify-between">
+          {language === 'en' && (
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                onClick={aiCompleted ? undefined : runAiFill}
+                disabled={aiWorking || !plant.name.trim() || aiCompleted}
+              >
+                {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                {aiCompleted ? t('plantAdmin.aiFilled', 'AI Filled') : t('plantAdmin.aiFill', 'AI fill all fields')}
+              </Button>
+              {!plant.name.trim() && (
+                <span className="text-xs text-muted-foreground self-center">{t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')}</span>
+              )}
+            </div>
+          )}
+        </div>
+          {showAiProgressCard && (
+          <Card>
+            <CardContent className="space-y-4 pt-4">
+              <div className="flex items-center justify-between text-sm font-medium">
+                <span>
+                  {aiWorking
+                    ? t('plantAdmin.categoryProgressTitle', 'Category fill progress')
+                    : t('plantAdmin.categoryProgressSummary', 'Latest AI fill summary')}
+                </span>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  {aiWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="h-4 w-4 text-emerald-500" /> : null}
                 </div>
               </div>
-            )}
-            
-            <div className="flex gap-2 pt-2">
-              <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating || aiFilling}>{t('common.cancel')}</Button>
-              <Button type="button" className="rounded-2xl" onClick={save} disabled={saving || translating || aiFilling}>
-                {saving ? t('editPlant.saving') : translating ? t('createPlant.translating') : aiFilling ? 'Please wait...' : t('common.save')}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              <div className="grid gap-2">
+                {plantFormCategoryOrder.map((cat) => {
+                  const info = aiProgress[cat]
+                  if (!info?.total) return null
+                  const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0
+                  return (
+                    <div key={cat} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <span>{categoryLabels[cat]}</span>
+                          <span
+                            className={`text-xs font-medium ${
+                              info.status === 'done' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300'
+                            }`}
+                          >
+                            {info.status === 'done'
+                              ? t('plantAdmin.sectionFilled', 'Filled')
+                              : t('plantAdmin.sectionInProgress', 'Filling')}
+                          </span>
+                        </div>
+                        <span className="text-muted-foreground">{info.completed}/{info.total}</span>
+                      </div>
+                      <div className="h-2 w-full rounded bg-muted overflow-hidden">
+                        <div
+                          className={`h-2 transition-all ${info.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                          style={{ width: `${Math.min(100, Math.max(percent, info.status === 'done' ? 100 : percent))}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {recentSectionLog.length > 0 && (
+                <div className="border-t border-dashed pt-3 space-y-2">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {t('plantAdmin.sectionLogTitle', 'Sections completed')}
+                  </div>
+                  <div className="space-y-1.5">
+                    {recentSectionLog.map((entry) => (
+                      <div
+                        key={`${entry.category}-${entry.timestamp}`}
+                        className="flex items-center justify-between rounded-xl bg-emerald-50/80 dark:bg-emerald-500/10 px-3 py-2 text-sm"
+                      >
+                        <span className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-200">
+                          <Check className="h-4 w-4" />
+                          {entry.label}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+      {loading ? (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t('plantAdmin.loadingPlant', 'Loading plant...')}
+          </CardContent>
+        </Card>
+        ) : (
+          <PlantProfileForm
+            value={plant}
+            onChange={setPlant}
+            colorSuggestions={colorSuggestions}
+            categoryProgress={hasAiProgress ? aiProgress : undefined}
+          />
+        )}
     </div>
   )
 }
 
+export default CreatePlantPage

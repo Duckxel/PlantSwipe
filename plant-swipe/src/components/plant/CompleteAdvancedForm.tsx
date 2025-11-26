@@ -1,7 +1,7 @@
 /**
  * Complete Advanced Plant Form - All Fields
- * This is a comprehensive form component for the new PLANT-INFO-SCHEMA.json structure
- * 
+ * Comprehensive form component for the structured plant schema.
+ *
  * Due to the extensive nature of this form, it's organized into collapsible sections
  * for better UX. All fields are optional and can be empty.
  */
@@ -29,7 +29,6 @@ import type {
   PlantClassification,
   PlantActivityValue,
   PlantSubActivityValue,
-  ColorInfo,
 } from "@/types/plant"
 import {
   PLANT_ACTIVITY_OPTIONS,
@@ -369,10 +368,10 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
         delete draft.activities
       }
       if (draft.subActivities) {
-        const cleaned: typeof draft.subActivities = {}
+        const cleaned: Partial<Record<PlantActivityValue, PlantSubActivityValue[]>> = {}
         for (const [activity, entries] of Object.entries(draft.subActivities)) {
           if (typedValues.includes(activity as PlantActivityValue)) {
-            cleaned[activity as PlantActivityValue] = entries
+            cleaned[activity as PlantActivityValue] = entries as PlantSubActivityValue[]
           }
         }
         draft.subActivities = Object.keys(cleaned).length > 0 ? cleaned : undefined
@@ -383,7 +382,7 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
   const handleSubActivitiesChange = (activity: PlantActivityValue, values: string[]) => {
     const typedValues = values.filter(Boolean)
     updateClassification((draft) => {
-      const existing = draft.subActivities ? { ...draft.subActivities } : {}
+      const existing: Partial<Record<PlantActivityValue, PlantSubActivityValue[]>> = draft.subActivities ? { ...draft.subActivities } : {}
       if (typedValues.length === 0) {
         delete existing[activity]
       } else {
@@ -494,7 +493,7 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             <MultiSelectButtons
               key={activity}
               label={`Subactivity — ${formatClassificationLabel(activity)}`}
-              values={selectedSubActivities[activity] || []}
+              values={(selectedSubActivities[activity] as PlantSubActivityValue[] | undefined) || []}
               options={options}
               onChange={(values) => handleSubActivitiesChange(activity, values)}
             />
@@ -578,27 +577,63 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
           <div className="grid gap-2">
             <Label>External IDs</Label>
             <div className="grid grid-cols-2 gap-2">
-              <Input placeholder="GBIF" value={identifiers?.externalIds?.gbif || ''} onChange={(e) => setIdentifiers({ ...identifiers, externalIds: { ...identifiers?.externalIds, gbif: e.target.value || undefined } })} />
-              <Input placeholder="POWO" value={identifiers?.externalIds?.powo || ''} onChange={(e) => setIdentifiers({ ...identifiers, externalIds: { ...identifiers?.externalIds, powo: e.target.value || undefined } })} />
-              <Input placeholder="IPNI" value={identifiers?.externalIds?.ipni || ''} onChange={(e) => setIdentifiers({ ...identifiers, externalIds: { ...identifiers?.externalIds, ipni: e.target.value || undefined } })} />
-              <Input placeholder="ITIS" value={identifiers?.externalIds?.itis || ''} onChange={(e) => setIdentifiers({ ...identifiers, externalIds: { ...identifiers?.externalIds, itis: e.target.value || undefined } })} />
-              <Input placeholder="Wikipedia URL" value={identifiers?.externalIds?.wiki || ''} onChange={(e) => setIdentifiers({ ...identifiers, externalIds: { ...identifiers?.externalIds, wiki: e.target.value || undefined } })} />
-              <Input placeholder="Kindwise" value={identifiers?.externalIds?.kindwise || ''} onChange={(e) => setIdentifiers({ ...identifiers, externalIds: { ...identifiers?.externalIds, kindwise: e.target.value || undefined } })} />
+              <Input placeholder="GBIF" value={typeof identifiers?.externalIds?.gbif === 'string' ? identifiers.externalIds.gbif : ''} onChange={(e) => {
+                const next = { ...(identifiers?.externalIds || {}) }
+                const val = e.target.value
+                if (val) next.gbif = val
+                else delete next.gbif
+                setIdentifiers({ ...identifiers, externalIds: Object.keys(next).length ? next : undefined })
+              }} />
+              <Input placeholder="POWO" value={typeof identifiers?.externalIds?.powo === 'string' ? identifiers.externalIds.powo : ''} onChange={(e) => {
+                const next = { ...(identifiers?.externalIds || {}) }
+                const val = e.target.value
+                if (val) next.powo = val
+                else delete next.powo
+                setIdentifiers({ ...identifiers, externalIds: Object.keys(next).length ? next : undefined })
+              }} />
+              <Input placeholder="IPNI" value={typeof identifiers?.externalIds?.ipni === 'string' ? identifiers.externalIds.ipni : ''} onChange={(e) => {
+                const next = { ...(identifiers?.externalIds || {}) }
+                const val = e.target.value
+                if (val) next.ipni = val
+                else delete next.ipni
+                setIdentifiers({ ...identifiers, externalIds: Object.keys(next).length ? next : undefined })
+              }} />
+              <Input placeholder="ITIS" value={typeof identifiers?.externalIds?.itis === 'string' ? identifiers.externalIds.itis : ''} onChange={(e) => {
+                const next = { ...(identifiers?.externalIds || {}) }
+                const val = e.target.value
+                if (val) next.itis = val
+                else delete next.itis
+                setIdentifiers({ ...identifiers, externalIds: Object.keys(next).length ? next : undefined })
+              }} />
+              <Input placeholder="Wikipedia URL" value={typeof identifiers?.externalIds?.wiki === 'string' ? identifiers.externalIds.wiki : ''} onChange={(e) => {
+                const next = { ...(identifiers?.externalIds || {}) }
+                const val = e.target.value
+                if (val) next.wiki = val
+                else delete next.wiki
+                setIdentifiers({ ...identifiers, externalIds: Object.keys(next).length ? next : undefined })
+              }} />
+              <Input placeholder="Kindwise" value={typeof identifiers?.externalIds?.kindwise === 'string' ? identifiers.externalIds.kindwise : ''} onChange={(e) => {
+                const next = { ...(identifiers?.externalIds || {}) }
+                const val = e.target.value
+                if (val) next.kindwise = val
+                else delete next.kindwise
+                setIdentifiers({ ...identifiers, externalIds: Object.keys(next).length ? next : undefined })
+              }} />
               </div>
               <KeyValueList
                 label="Other IDs"
                 keyPlaceholder="Provider"
                 valuePlaceholder="Reference"
-                entries={identifiers?.externalIds?.other}
-                onChange={(other) =>
-                  setIdentifiers({
-                    ...identifiers,
-                    externalIds: {
-                      ...identifiers?.externalIds,
-                      other,
-                    },
-                  })
-                }
+                entries={identifiers?.externalIds?.other as Record<string, string> | undefined}
+                onChange={(other) => {
+                  const next = { ...(identifiers?.externalIds || {}) }
+                  if (other && Object.keys(other).length > 0) {
+                    next.other = other
+                  } else {
+                    delete next.other
+                  }
+                  setIdentifiers({ ...identifiers, externalIds: Object.keys(next).length ? next : undefined })
+                }}
               />
           </div>
         </div>
@@ -773,43 +808,61 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
           <div className="grid gap-2">
             <Label>Flower Colors</Label>
             <div className="space-y-2">
-              {((phenology?.flowerColors ?? []) as ColorInfo[]).map((color, idx) => (
+              {(phenology?.flowerColors ?? []).map((color, idx) => (
                 <div key={idx} className="flex gap-2">
-                  <Input value={color.name} onChange={(e) => {
-                    const newColors = [...((phenology?.flowerColors ?? []) as ColorInfo[])]
-                    newColors[idx] = { ...color, name: e.target.value }
-                    setPhenology({ ...phenology, flowerColors: newColors })
-                  }} placeholder="Color name" />
-                  <Input value={color.hex || ''} onChange={(e) => {
-                    const newColors = [...((phenology?.flowerColors ?? []) as ColorInfo[])]
-                    newColors[idx] = { ...color, hex: e.target.value || undefined }
-                    setPhenology({ ...phenology, flowerColors: newColors })
-                  }} placeholder="#FFFFFF" className="w-24" />
-                  <Button type="button" onClick={() => setPhenology({ ...phenology, flowerColors: ((phenology?.flowerColors ?? []) as ColorInfo[]).filter((_color, i) => i !== idx) })}>Remove</Button>
+                  <Input
+                    value={color.name}
+                    onChange={(e) => {
+                      const newColors = [...(phenology?.flowerColors ?? [])]
+                      newColors[idx] = { ...color, name: e.target.value }
+                      setPhenology({ ...phenology, flowerColors: newColors })
+                    }}
+                    placeholder="Color name"
+                  />
+                  <Input
+                    value={color.hex || ''}
+                    onChange={(e) => {
+                      const newColors = [...(phenology?.flowerColors ?? [])]
+                      newColors[idx] = { ...color, hex: e.target.value || undefined }
+                      setPhenology({ ...phenology, flowerColors: newColors })
+                    }}
+                    placeholder="#FFFFFF"
+                    className="w-24"
+                  />
+                  <Button type="button" onClick={() => setPhenology({ ...phenology, flowerColors: (phenology?.flowerColors ?? []).filter((_color, i) => i !== idx) })}>Remove</Button>
                 </div>
               ))}
-              <Button type="button" onClick={() => setPhenology({ ...phenology, flowerColors: [...((phenology?.flowerColors ?? []) as ColorInfo[]), { name: '' }] })}>Add Color</Button>
+              <Button type="button" onClick={() => setPhenology({ ...phenology, flowerColors: [...(phenology?.flowerColors ?? []), { name: '' }] })}>Add Color</Button>
             </div>
           </div>
           <div className="grid gap-2">
             <Label>Leaf Colors</Label>
             <div className="space-y-2">
-              {((phenology?.leafColors ?? []) as ColorInfo[]).map((color, idx) => (
+              {(phenology?.leafColors ?? []).map((color, idx) => (
                 <div key={idx} className="flex gap-2">
-                  <Input value={color.name} onChange={(e) => {
-                    const newColors = [...((phenology?.leafColors ?? []) as ColorInfo[])]
-                    newColors[idx] = { ...color, name: e.target.value }
-                    setPhenology({ ...phenology, leafColors: newColors })
-                  }} placeholder="Color name" />
-                  <Input value={color.hex || ''} onChange={(e) => {
-                    const newColors = [...((phenology?.leafColors ?? []) as ColorInfo[])]
-                    newColors[idx] = { ...color, hex: e.target.value || undefined }
-                    setPhenology({ ...phenology, leafColors: newColors })
-                  }} placeholder="#FFFFFF" className="w-24" />
-                  <Button type="button" onClick={() => setPhenology({ ...phenology, leafColors: ((phenology?.leafColors ?? []) as ColorInfo[]).filter((_color, i) => i !== idx) })}>Remove</Button>
+                  <Input
+                    value={color.name}
+                    onChange={(e) => {
+                      const newColors = [...(phenology?.leafColors ?? [])]
+                      newColors[idx] = { ...color, name: e.target.value }
+                      setPhenology({ ...phenology, leafColors: newColors })
+                    }}
+                    placeholder="Color name"
+                  />
+                  <Input
+                    value={color.hex || ''}
+                    onChange={(e) => {
+                      const newColors = [...(phenology?.leafColors ?? [])]
+                      newColors[idx] = { ...color, hex: e.target.value || undefined }
+                      setPhenology({ ...phenology, leafColors: newColors })
+                    }}
+                    placeholder="#FFFFFF"
+                    className="w-24"
+                  />
+                  <Button type="button" onClick={() => setPhenology({ ...phenology, leafColors: (phenology?.leafColors ?? []).filter((_color, i) => i !== idx) })}>Remove</Button>
                 </div>
               ))}
-              <Button type="button" onClick={() => setPhenology({ ...phenology, leafColors: [...((phenology?.leafColors ?? []) as ColorInfo[]), { name: '' }] })}>Add Color</Button>
+              <Button type="button" onClick={() => setPhenology({ ...phenology, leafColors: [...(phenology?.leafColors ?? []), { name: '' }] })}>Add Color</Button>
             </div>
           </div>
           <MonthSelectorField
@@ -996,10 +1049,17 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             <Label>Watering</Label>
             <div className="grid gap-2">
               <div className="grid grid-cols-2 gap-2">
-                <Input placeholder="Winter frequency" value={care?.watering?.frequency?.winter || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...care?.watering?.frequency, winter: e.target.value || undefined } } })} />
-                <Input placeholder="Spring frequency" value={care?.watering?.frequency?.spring || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...care?.watering?.frequency, spring: e.target.value || undefined } } })} />
-                <Input placeholder="Summer frequency" value={care?.watering?.frequency?.summer || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...care?.watering?.frequency, summer: e.target.value || undefined } } })} />
-                <Input placeholder="Autumn frequency" value={care?.watering?.frequency?.autumn || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...care?.watering?.frequency, autumn: e.target.value || undefined } } })} />
+                {(() => {
+                  const freq = typeof care?.watering?.frequency === 'object' && care?.watering?.frequency !== null ? care.watering.frequency : {}
+                  return (
+                    <>
+                      <Input placeholder="Winter frequency" value={(freq as any).winter || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...(freq as any), winter: e.target.value || undefined } } })}/>
+                      <Input placeholder="Spring frequency" value={(freq as any).spring || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...(freq as any), spring: e.target.value || undefined } } })}/>
+                      <Input placeholder="Summer frequency" value={(freq as any).summer || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...(freq as any), summer: e.target.value || undefined } } })}/>
+                      <Input placeholder="Autumn frequency" value={(freq as any).autumn || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...(freq as any), autumn: e.target.value || undefined } } })}/>
+                    </>
+                  )
+                })()}
               </div>
                 <Select
                   className={selectBaseClass}
