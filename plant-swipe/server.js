@@ -63,6 +63,54 @@ try {
   aiFieldPromptsTemplate = {}
 }
 
+// --- Email Compatibility Sanitizer ---
+/**
+ * Sanitizes HTML content to make it email-client compatible
+ * Replaces CSS properties that email clients don't support with compatible alternatives
+ */
+function sanitizeHtmlForEmail(html) {
+  if (!html) return html
+  
+  let result = html
+  
+  // 1. Replace linear-gradient backgrounds with solid colors
+  // Extract the last color from gradients as fallback
+  result = result.replace(/background:\s*linear-gradient\([^)]+\)/gi, (match) => {
+    // Try to extract a solid color from the gradient
+    const colorMatch = match.match(/#[a-fA-F0-9]{6}|#[a-fA-F0-9]{3}|rgb\([^)]+\)/)
+    if (colorMatch) {
+      return `background-color: ${colorMatch[0]}`
+    }
+    // Fallback to white if no color found
+    return 'background-color: #ffffff'
+  })
+  
+  // 2. Remove box-shadow properties entirely
+  result = result.replace(/box-shadow:\s*[^;"}]+[;]?/gi, '')
+  
+  // 3. Replace rgba() colors with solid hex approximations
+  result = result.replace(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/gi, (match, r, g, b) => {
+    // Convert to hex
+    const toHex = (n) => {
+      const hex = parseInt(n).toString(16)
+      return hex.length === 1 ? '0' + hex : hex
+    }
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+  })
+  
+  // 4. Replace display: flex with text-align: center for centering (simplified)
+  result = result.replace(/display:\s*flex\s*;?\s*flex-direction:\s*column\s*;?\s*align-items:\s*center\s*;?/gi, 'text-align: center;')
+  result = result.replace(/display:\s*flex\s*;?\s*align-items:\s*center\s*;?\s*justify-content:\s*center\s*;?/gi, 'text-align: center;')
+  
+  // 5. Remove transition properties (not supported in email)
+  result = result.replace(/transition:\s*[^;"}]+[;]?/gi, '')
+  
+  // 6. Fix gap property (not supported in email) - remove it
+  result = result.replace(/gap:\s*[^;"}]+[;]?/gi, '')
+  
+  return result
+}
+
 // --- Email Wrapper ---
 // Localized strings for email wrapper
 const EMAIL_WRAPPER_STRINGS = {
@@ -490,8 +538,10 @@ async function processEmailCampaigns() {
            const rawSubject = translation?.subject || campaign.subject
            const rawBodyHtml = translation?.bodyHtml || campaign.body_html
            
-           const bodyHtml = replaceVars(rawBodyHtml)
+           const bodyHtmlRaw = replaceVars(rawBodyHtml)
            const subject = replaceVars(rawSubject)
+           // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
+           const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
            // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
            const html = wrapEmailHtml(bodyHtml, subject, userLang)
            const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()

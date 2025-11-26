@@ -829,8 +829,10 @@ async function sendBatch(
     const rawSubject = translation?.subject || campaign.subject
     const rawBodyHtml = translation?.body_html || campaign.body_html
     
-    const bodyHtml = renderTemplate(rawBodyHtml, context)
+    const bodyHtmlRaw = renderTemplate(rawBodyHtml, context)
     const subject = renderTemplate(rawSubject, context)
+    // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
+    const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
     // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
     const html = wrapEmailHtml(bodyHtml, subject, userLang)
     const text = stripHtml(bodyHtml || rawBodyHtml)
@@ -931,6 +933,50 @@ function stripHtml(input: string): string {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{2,}/g, "\n\n")
     .trim()
+}
+
+/**
+ * Sanitizes HTML content to make it email-client compatible
+ * Replaces CSS properties that email clients don't support with compatible alternatives
+ */
+function sanitizeHtmlForEmail(html: string): string {
+  if (!html) return html
+  
+  let result = html
+  
+  // 1. Replace linear-gradient backgrounds with solid colors
+  result = result.replace(/background:\s*linear-gradient\([^)]+\)/gi, (match) => {
+    // Try to extract a solid color from the gradient
+    const colorMatch = match.match(/#[a-fA-F0-9]{6}|#[a-fA-F0-9]{3}|rgb\([^)]+\)/)
+    if (colorMatch) {
+      return `background-color: ${colorMatch[0]}`
+    }
+    return "background-color: #ffffff"
+  })
+  
+  // 2. Remove box-shadow properties entirely
+  result = result.replace(/box-shadow:\s*[^;"}]+[;]?/gi, "")
+  
+  // 3. Replace rgba() colors with solid hex approximations
+  result = result.replace(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/gi, (_match, r, g, b) => {
+    const toHex = (n: string) => {
+      const hex = parseInt(n).toString(16)
+      return hex.length === 1 ? "0" + hex : hex
+    }
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+  })
+  
+  // 4. Replace display: flex with text-align: center for centering
+  result = result.replace(/display:\s*flex\s*;?\s*flex-direction:\s*column\s*;?\s*align-items:\s*center\s*;?/gi, "text-align: center;")
+  result = result.replace(/display:\s*flex\s*;?\s*align-items:\s*center\s*;?\s*justify-content:\s*center\s*;?/gi, "text-align: center;")
+  
+  // 5. Remove transition properties (not supported in email)
+  result = result.replace(/transition:\s*[^;"}]+[;]?/gi, "")
+  
+  // 6. Fix gap property (not supported in email) - remove it
+  result = result.replace(/gap:\s*[^;"}]+[;]?/gi, "")
+  
+  return result
 }
 
 function jsonResponse(status: number, body: unknown) {
