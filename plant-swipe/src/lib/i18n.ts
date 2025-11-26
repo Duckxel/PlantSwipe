@@ -44,7 +44,7 @@ i18n
     supportedLngs: SUPPORTED_LANGUAGES,
     lng: detectInitialLanguage(), // Set initial language
     defaultNS: 'common',
-    ns: ['common', 'About'],
+    ns: ['common', 'About', 'email'],
     backend: {
       loadPath: '/locales/{{lng}}/{{ns}}.json',
     },

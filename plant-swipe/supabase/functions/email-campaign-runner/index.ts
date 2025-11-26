@@ -24,6 +24,47 @@ type Recipient = {
   email: string
   displayName: string
   timezone: string | null
+  language: string
+}
+
+type EmailTranslation = {
+  language: string
+  subject: string
+  preview_text: string | null
+  body_html: string
+  body_json: Record<string, unknown> | null
+}
+
+// Supported languages - should match frontend i18n config
+const SUPPORTED_LANGUAGES = ['en', 'fr'] as const
+type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]
+const DEFAULT_LANGUAGE: SupportedLanguage = 'en'
+
+// Email wrapper localized strings
+const EMAIL_WRAPPER_STRINGS: Record<SupportedLanguage, {
+  teamName: string
+  tagline: string
+  exploreButton: string
+  aboutLink: string
+  contactLink: string
+  copyright: string
+}> = {
+  en: {
+    teamName: "The Aphylia Team",
+    tagline: "Helping you grow your plant knowledge 🌱",
+    exploreButton: "Explore Aphylia →",
+    aboutLink: "About",
+    contactLink: "Contact",
+    copyright: "© {{year}} Aphylia. Made with 💚 for plant enthusiasts everywhere.",
+  },
+  fr: {
+    teamName: "L'équipe Aphylia",
+    tagline: "Vous aider à développer vos connaissances botaniques 🌱",
+    exploreButton: "Explorer Aphylia →",
+    aboutLink: "À propos",
+    contactLink: "Contact",
+    copyright: "© {{year}} Aphylia. Fait avec 💚 pour les passionnés de plantes partout.",
+  },
 }
 
 type CampaignSummary = {
@@ -278,6 +319,9 @@ async function processCampaign(
 
     const unsentRecipients = recipients.filter((recipient) => !alreadySentSet.has(recipient.userId))
 
+    // Fetch email template translations for multi-language support
+    const emailTranslations = await fetchEmailTemplateTranslations(client, campaign.template_id)
+
     if (!unsentRecipients.length) {
       summary.status = "sent"
       summary.reason = "All recipients already delivered previously"
@@ -330,7 +374,7 @@ async function processCampaign(
 
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i]
-      const batchResult = await sendBatch(claimed, batch, i)
+      const batchResult = await sendBatch(claimed, batch, i, emailTranslations)
       summary.batches.push(batchResult)
       if (batchResult.status === "sent") {
         successfulRecipients.push(...batch)
@@ -457,12 +501,14 @@ async function collectRecipients(
         profile?.timezone ||
         (typeof user.user_metadata?.timezone === "string" ? user.user_metadata.timezone : null) ||
         null
+      const language = profile?.language || DEFAULT_LANGUAGE
 
       recipients.push({
         userId: user.id,
         email: user.email,
         displayName,
         timezone,
+        language,
       })
 
       if (limit && recipients.length >= limit) {
@@ -480,6 +526,7 @@ async function collectRecipients(
 type ProfileMeta = {
   displayName: string | null
   timezone: string | null
+  language: string
 }
 
 async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<Map<string, ProfileMeta>> {
@@ -487,7 +534,7 @@ async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<
   if (!ids.length) return map
   const { data, error } = await client
     .from("profiles")
-    .select("id, display_name, timezone")
+    .select("id, display_name, timezone, language")
     .in("id", ids)
   if (error) {
     console.warn("[email-campaign-runner] failed to load profile metadata", error)
@@ -498,6 +545,7 @@ async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<
       map.set(row.id, {
         displayName: typeof row.display_name === "string" ? row.display_name : null,
         timezone: typeof row.timezone === "string" && row.timezone.trim().length ? row.timezone : null,
+        language: typeof row.language === "string" && row.language.trim().length ? row.language : DEFAULT_LANGUAGE,
       })
     }
   }
@@ -655,6 +703,38 @@ function convertCampaignTimeToUserUtc(scheduledUtc: string, campaignTimezone: st
   }
 }
 
+async function fetchEmailTemplateTranslations(
+  client: SupabaseClient,
+  templateId: string | null,
+): Promise<Map<string, EmailTranslation>> {
+  const map = new Map<string, EmailTranslation>()
+  if (!templateId) return map
+  
+  const { data, error } = await client
+    .from("admin_email_template_translations")
+    .select("language, subject, preview_text, body_html, body_json")
+    .eq("template_id", templateId)
+  
+  if (error) {
+    console.warn("[email-campaign-runner] failed to load email translations", error)
+    return map
+  }
+  
+  for (const row of data ?? []) {
+    if (row?.language) {
+      map.set(row.language, {
+        language: row.language,
+        subject: row.subject,
+        preview_text: row.preview_text,
+        body_html: row.body_html,
+        body_json: row.body_json,
+      })
+    }
+  }
+  
+  return map
+}
+
 async function fetchSentUserIds(client: SupabaseClient, campaignId: string): Promise<Set<string>> {
   const sent = new Set<string>()
   const { data, error } = await client
@@ -718,6 +798,7 @@ async function sendBatch(
   campaign: CampaignRow,
   recipients: Recipient[],
   batchIndex: number,
+  translations: Map<string, EmailTranslation>,
 ): Promise<{ index: number; size: number; status: "sent" | "failed"; error?: string }> {
   if (!recipients.length) {
     return { index: batchIndex, size: 0, status: "sent" }
@@ -727,11 +808,20 @@ async function sendBatch(
     const userRaw = recipient.displayName
     const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
     const context = { user: userCap }
-    const bodyHtml = renderTemplate(campaign.body_html, context)
-    const subject = renderTemplate(campaign.subject, context)
-    // Wrap the body HTML with our beautiful styled email template
-    const html = wrapEmailHtml(bodyHtml, subject)
-    const text = stripHtml(bodyHtml || campaign.body_html)
+    
+    // Get user's language and find appropriate translation
+    const userLang = recipient.language as SupportedLanguage
+    const translation = translations.get(userLang)
+    
+    // Use translated content if available, otherwise fall back to default campaign content
+    const rawSubject = translation?.subject || campaign.subject
+    const rawBodyHtml = translation?.body_html || campaign.body_html
+    
+    const bodyHtml = renderTemplate(rawBodyHtml, context)
+    const subject = renderTemplate(rawSubject, context)
+    // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
+    const html = wrapEmailHtml(bodyHtml, subject, userLang)
+    const text = stripHtml(bodyHtml || rawBodyHtml)
 
     const base: Record<string, unknown> = {
       from: fromEmail,
@@ -860,16 +950,23 @@ function formatFromAddress(raw: string, defaultName = "Plant Swipe"): string {
 /**
  * Wraps email body content with a beautiful styled template
  * Matches the Aphylia website aesthetic with gradients and rounded corners
+ * @param bodyHtml - The email body content
+ * @param subject - The email subject line
+ * @param language - The user's preferred language for localized wrapper strings
  */
-function wrapEmailHtml(bodyHtml: string, subject: string): string {
+function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLanguage = DEFAULT_LANGUAGE): string {
   const currentYear = new Date().getFullYear()
   const websiteUrl = Deno.env.get("WEBSITE_URL") ?? "https://aphylia.app"
+  
+  // Get localized strings for the wrapper (fallback to English if language not found)
+  const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS[DEFAULT_LANGUAGE]
+  const copyrightText = strings.copyright.replace("{{year}}", String(currentYear))
 
   // Simplified Aphylia logo as inline SVG for emails
   const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32"><path fill="#ffffff" d="M50 5c-2.5 8-8 15-15 20 5 3 8 10 8 18 0 12-8 22-18 25 3 5 10 12 20 17 10-5 17-12 20-17-10-3-18-13-18-25 0-8 3-15 8-18-7-5-12.5-12-15-20z"/><circle cx="35" cy="58" r="5" fill="#ffffff"/><circle cx="65" cy="58" r="5" fill="#ffffff"/></svg>`
 
   return `<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="${language}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1006,10 +1103,10 @@ function wrapEmailHtml(bodyHtml: string, subject: string): string {
                         </td>
                         <td style="vertical-align:middle;">
                           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">
-                            The Aphylia Team
+                            ${strings.teamName}
                           </p>
                           <p style="margin:0;font-size:14px;color:#6b7280;">
-                            Helping you grow your plant knowledge 🌱
+                            ${strings.tagline}
                           </p>
                         </td>
                       </tr>
@@ -1028,7 +1125,7 @@ function wrapEmailHtml(bodyHtml: string, subject: string): string {
                       <tr>
                         <td>
                           <a href="${websiteUrl}" style="display:inline-block;background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:50px;text-decoration:none;box-shadow:0 8px 24px -6px rgba(16, 185, 129, 0.4);">
-                            Explore Aphylia →
+                            ${strings.exploreButton}
                           </a>
                         </td>
                       </tr>
@@ -1036,12 +1133,12 @@ function wrapEmailHtml(bodyHtml: string, subject: string): string {
                     <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;">
                       <a href="${websiteUrl}" style="color:#059669;text-decoration:none;font-weight:500;">aphylia.app</a>
                       <span style="color:#d1d5db;margin:0 8px;">•</span>
-                      <a href="${websiteUrl}/about" style="color:#9ca3af;text-decoration:none;">About</a>
+                      <a href="${websiteUrl}/about" style="color:#9ca3af;text-decoration:none;">${strings.aboutLink}</a>
                       <span style="color:#d1d5db;margin:0 8px;">•</span>
-                      <a href="${websiteUrl}/contact" style="color:#9ca3af;text-decoration:none;">Contact</a>
+                      <a href="${websiteUrl}/contact" style="color:#9ca3af;text-decoration:none;">${strings.contactLink}</a>
                     </p>
                     <p style="margin:0;font-size:12px;color:#d1d5db;">
-                      © ${currentYear} Aphylia. Made with 💚 for plant enthusiasts everywhere.
+                      ${copyrightText}
                     </p>
                   </td>
                 </tr>

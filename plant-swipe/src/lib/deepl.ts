@@ -329,3 +329,111 @@ export async function translatePlantToAllLanguages(
 
   return translations
 }
+
+// ========== Email Template Translation Functions ==========
+
+export interface EmailTranslationFields {
+  subject: string
+  previewText?: string | null
+  bodyHtml: string
+}
+
+export interface TranslatedEmailFields extends EmailTranslationFields {}
+
+/**
+ * Translate email template fields to target language
+ */
+export async function translateEmailFields(
+  fields: EmailTranslationFields,
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<TranslatedEmailFields> {
+  if (sourceLang === targetLang) {
+    return fields
+  }
+
+  const translated: TranslatedEmailFields = {
+    subject: fields.subject,
+    previewText: fields.previewText,
+    bodyHtml: fields.bodyHtml,
+  }
+
+  // Translate subject
+  if (fields.subject) {
+    translated.subject = await translateText(fields.subject, targetLang, sourceLang)
+  }
+
+  // Translate preview text
+  if (fields.previewText) {
+    translated.previewText = await translateText(fields.previewText, targetLang, sourceLang)
+  }
+
+  // Translate body HTML content (preserving HTML structure)
+  if (fields.bodyHtml) {
+    translated.bodyHtml = await translateHtmlContent(fields.bodyHtml, targetLang, sourceLang)
+  }
+
+  return translated
+}
+
+/**
+ * Translate HTML content while preserving tags
+ * This extracts text content, translates it, and reconstructs the HTML
+ */
+async function translateHtmlContent(
+  html: string,
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage
+): Promise<string> {
+  if (!html || html.trim() === '') return html
+  if (sourceLang === targetLang) return html
+
+  try {
+    // For TipTap/rich text content, we translate the full HTML
+    // DeepL preserves HTML tags when translating
+    const response = await fetch('/api/translate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text: html,
+        source_lang: sourceLang.toUpperCase(),
+        target_lang: targetLang.toUpperCase(),
+        // Tell DeepL to preserve formatting
+        tag_handling: 'html',
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('Translation API error:', response.statusText)
+      return html
+    }
+
+    const data = await response.json()
+    return data.translatedText || html
+  } catch (error) {
+    console.error('HTML translation error:', error)
+    return html
+  }
+}
+
+/**
+ * Translate email template to all supported languages
+ */
+export async function translateEmailToAllLanguages(
+  fields: EmailTranslationFields,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<Record<SupportedLanguage, TranslatedEmailFields>> {
+  const translations: Record<SupportedLanguage, TranslatedEmailFields> = {} as Record<SupportedLanguage, TranslatedEmailFields>
+
+  for (const lang of SUPPORTED_LANGUAGES) {
+    if (lang === sourceLang) {
+      translations[lang] = fields
+    } else {
+      translations[lang] = await translateEmailFields(fields, lang, sourceLang)
+    }
+  }
+
+  return translations
+}
