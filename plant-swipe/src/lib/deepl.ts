@@ -42,6 +42,37 @@ export interface TranslationFields {
 export interface TranslatedFields extends TranslationFields {}
 
 /**
+ * Extract template variables (e.g., {{user}}) and replace with placeholders
+ * Returns the modified text and a map to restore variables later
+ */
+function protectTemplateVariables(text: string): { text: string; variableMap: Map<string, string> } {
+  const variableMap = new Map<string, string>()
+  let counter = 0
+  
+  // Match {{variable}} patterns
+  const protectedText = text.replace(/\{\{(\w+)\}\}/g, (match) => {
+    const placeholder = `__VAR_${counter}__`
+    variableMap.set(placeholder, match)
+    counter++
+    return placeholder
+  })
+  
+  return { text: protectedText, variableMap }
+}
+
+/**
+ * Restore template variables from placeholders
+ */
+function restoreTemplateVariables(text: string, variableMap: Map<string, string>): string {
+  let result = text
+  for (const [placeholder, original] of variableMap) {
+    // Use global replace in case the placeholder appears multiple times
+    result = result.split(placeholder).join(original)
+  }
+  return result
+}
+
+/**
  * Translate text using DeepL API via backend endpoint
  */
 export async function translateText(
@@ -54,6 +85,9 @@ export async function translateText(
   // If source and target are the same, return original
   if (sourceLang === targetLang) return text
 
+  // Protect template variables before translation
+  const { text: protectedText, variableMap } = protectTemplateVariables(text)
+
   try {
     // Call backend endpoint that has the DeepL API key
     const response = await fetch('/api/translate', {
@@ -62,7 +96,7 @@ export async function translateText(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        text: text.trim(),
+        text: protectedText.trim(),
         source_lang: sourceLang.toUpperCase(),
         target_lang: targetLang.toUpperCase(),
       }),
@@ -74,7 +108,10 @@ export async function translateText(
     }
 
     const data = await response.json()
-    return data.translatedText || text
+    const translatedText = data.translatedText || protectedText
+    
+    // Restore template variables after translation
+    return restoreTemplateVariables(translatedText, variableMap)
   } catch (error) {
     console.error('Translation error:', error)
     // Throw error so caller can handle it
@@ -377,7 +414,7 @@ export async function translateEmailFields(
 }
 
 /**
- * Translate HTML content while preserving tags
+ * Translate HTML content while preserving tags and template variables
  * This extracts text content, translates it, and reconstructs the HTML
  */
 async function translateHtmlContent(
@@ -388,6 +425,9 @@ async function translateHtmlContent(
   if (!html || html.trim() === '') return html
   if (sourceLang === targetLang) return html
 
+  // Protect template variables before translation
+  const { text: protectedHtml, variableMap } = protectTemplateVariables(html)
+
   try {
     // For TipTap/rich text content, we translate the full HTML
     // DeepL preserves HTML tags when translating
@@ -397,7 +437,7 @@ async function translateHtmlContent(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        text: html,
+        text: protectedHtml,
         source_lang: sourceLang.toUpperCase(),
         target_lang: targetLang.toUpperCase(),
         // Tell DeepL to preserve formatting
@@ -411,7 +451,10 @@ async function translateHtmlContent(
     }
 
     const data = await response.json()
-    return data.translatedText || html
+    const translatedHtml = data.translatedText || protectedHtml
+    
+    // Restore template variables after translation
+    return restoreTemplateVariables(translatedHtml, variableMap)
   } catch (error) {
     console.error('HTML translation error:', error)
     return html
