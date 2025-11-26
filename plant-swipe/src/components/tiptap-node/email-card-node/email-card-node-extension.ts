@@ -149,48 +149,51 @@ export const EmailCardNode = Node.create<EmailCardNodeOptions>({
 })
 
 function getCardStyles(style: CardStyle): Record<string, string> {
+  // Email-compatible styles - using solid colors instead of gradients
+  // Many email clients don't support: linear-gradient, box-shadow, rgba() colors
   const baseContainer = `
-    border-radius: 20px;
-    padding: 24px;
+    border-radius: 16px;
+    padding: 20px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   `.replace(/\s+/g, " ").trim()
 
-  const styleMap: Record<CardStyle, { bg: string; border: string; shadow: string; titleColor: string }> = {
+  // Use solid, web-safe colors for maximum email client compatibility
+  const styleMap: Record<CardStyle, { bg: string; border: string; titleColor: string; iconBg: string }> = {
     default: {
-      bg: "linear-gradient(145deg, rgba(16, 185, 129, 0.12) 0%, #ffffff 40%, rgba(16, 185, 129, 0.06) 100%)",
-      border: "2px solid rgba(16, 185, 129, 0.25)",
-      shadow: "0 8px 32px rgba(16, 185, 129, 0.15), 0 2px 8px rgba(0, 0, 0, 0.04)",
+      bg: "#ecfdf5", // Light emerald
+      border: "2px solid #10b981",
       titleColor: "#065f46",
+      iconBg: "#d1fae5",
     },
     highlight: {
-      bg: "linear-gradient(145deg, rgba(251, 191, 36, 0.15) 0%, #ffffff 40%, rgba(251, 191, 36, 0.08) 100%)",
-      border: "2px solid rgba(251, 191, 36, 0.35)",
-      shadow: "0 8px 32px rgba(251, 191, 36, 0.18), 0 2px 8px rgba(0, 0, 0, 0.04)",
+      bg: "#fffbeb", // Light amber
+      border: "2px solid #f59e0b",
       titleColor: "#92400e",
+      iconBg: "#fef3c7",
     },
     code: {
-      bg: "linear-gradient(145deg, rgba(55, 65, 81, 0.08) 0%, #ffffff 40%, rgba(55, 65, 81, 0.04) 100%)",
-      border: "2px solid rgba(55, 65, 81, 0.2)",
-      shadow: "0 8px 32px rgba(55, 65, 81, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04)",
+      bg: "#f9fafb", // Light gray
+      border: "2px solid #6b7280",
       titleColor: "#1f2937",
+      iconBg: "#e5e7eb",
     },
     warning: {
-      bg: "linear-gradient(145deg, rgba(239, 68, 68, 0.1) 0%, #ffffff 40%, rgba(239, 68, 68, 0.05) 100%)",
-      border: "2px solid rgba(239, 68, 68, 0.25)",
-      shadow: "0 8px 32px rgba(239, 68, 68, 0.15), 0 2px 8px rgba(0, 0, 0, 0.04)",
+      bg: "#fef2f2", // Light red
+      border: "2px solid #ef4444",
       titleColor: "#b91c1c",
+      iconBg: "#fee2e2",
     },
     success: {
-      bg: "linear-gradient(145deg, rgba(16, 185, 129, 0.15) 0%, #ffffff 40%, rgba(16, 185, 129, 0.08) 100%)",
-      border: "2px solid rgba(16, 185, 129, 0.3)",
-      shadow: "0 8px 32px rgba(16, 185, 129, 0.18), 0 2px 8px rgba(0, 0, 0, 0.04)",
+      bg: "#ecfdf5", // Light green
+      border: "2px solid #22c55e",
       titleColor: "#047857",
+      iconBg: "#dcfce7",
     },
     info: {
-      bg: "linear-gradient(145deg, rgba(59, 130, 246, 0.1) 0%, #ffffff 40%, rgba(59, 130, 246, 0.05) 100%)",
-      border: "2px solid rgba(59, 130, 246, 0.25)",
-      shadow: "0 8px 32px rgba(59, 130, 246, 0.15), 0 2px 8px rgba(0, 0, 0, 0.04)",
+      bg: "#eff6ff", // Light blue
+      border: "2px solid #3b82f6",
       titleColor: "#1d4ed8",
+      iconBg: "#dbeafe",
     },
   }
 
@@ -198,24 +201,20 @@ function getCardStyles(style: CardStyle): Record<string, string> {
   const s = styleMap[style] ?? styleMap.default
 
   return {
-    container: `${baseContainer} background: ${s.bg}; border: ${s.border}; box-shadow: ${s.shadow};`,
+    container: `${baseContainer} background-color: ${s.bg}; border: ${s.border};`,
     table: "width: 100%; border-collapse: collapse;",
-    iconCell: `
-      width: 56px;
-      vertical-align: top;
-      padding-right: 16px;
-    `.replace(/\s+/g, " ").trim(),
+    iconCell: "width: 56px; vertical-align: top; padding-right: 16px; font-size: 28px;",
     iconBox: `
       width: 48px;
       height: 48px;
       border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      text-align: center;
+      line-height: 48px;
       font-size: 28px;
+      background-color: ${s.iconBg};
     `.replace(/\s+/g, " ").trim(),
     contentCell: "vertical-align: top;",
-    title: `display: block; font-size: 17px; font-weight: 700; color: ${s.titleColor}; margin-bottom: 6px; letter-spacing: -0.3px;`,
+    title: `display: block; font-size: 17px; font-weight: 700; color: ${s.titleColor}; margin-bottom: 6px;`,
     content: "font-size: 15px; color: #374151; line-height: 1.6;",
   }
 }

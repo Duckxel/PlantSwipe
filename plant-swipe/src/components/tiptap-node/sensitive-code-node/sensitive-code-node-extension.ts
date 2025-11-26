@@ -187,40 +187,41 @@ function getTypeIcon(type: CodeType): string {
 }
 
 function getCodeStyles(type: CodeType): Record<string, string> {
-  // Styles matching the editor component (sensitive-code-node.tsx)
-  const styleMap: Record<CodeType, { bgGradient: string; borderColor: string; accentColor: string; iconBg: string }> = {
+  // Email-compatible styles - no flexbox, no gradients, no box-shadow
+  // Many email clients don't support these CSS features
+  const styleMap: Record<CodeType, { bg: string; borderColor: string; accentColor: string; iconBg: string }> = {
     otp: {
-      bgGradient: "linear-gradient(to bottom right, #fef3c7, #fefce8)",
+      bg: "#fef3c7", // Solid amber background
       borderColor: "#fbbf24",
       accentColor: "#b45309",
       iconBg: "#fde68a",
     },
     verification: {
-      bgGradient: "linear-gradient(to bottom right, #d1fae5, #ecfdf5)",
+      bg: "#d1fae5", // Solid green background
       borderColor: "#34d399",
       accentColor: "#047857",
       iconBg: "#a7f3d0",
     },
     password: {
-      bgGradient: "linear-gradient(to bottom right, #ede9fe, #f5f3ff)",
+      bg: "#ede9fe", // Solid purple background
       borderColor: "#a78bfa",
       accentColor: "#6d28d9",
       iconBg: "#ddd6fe",
     },
     link: {
-      bgGradient: "linear-gradient(to bottom right, #dbeafe, #eff6ff)",
+      bg: "#dbeafe", // Solid blue background
       borderColor: "#60a5fa",
       accentColor: "#1d4ed8",
       iconBg: "#bfdbfe",
     },
     email: {
-      bgGradient: "linear-gradient(to bottom right, #fce7f3, #fdf2f8)",
+      bg: "#fce7f3", // Solid pink background
       borderColor: "#f472b6",
       accentColor: "#be185d",
       iconBg: "#fbcfe8",
     },
     code: {
-      bgGradient: "linear-gradient(to bottom right, #f3f4f6, #f9fafb)",
+      bg: "#f3f4f6", // Solid gray background
       borderColor: "#9ca3af",
       accentColor: "#374151",
       iconBg: "#e5e7eb",
@@ -231,29 +232,24 @@ function getCodeStyles(type: CodeType): Record<string, string> {
 
   return {
     container: `
-      border-radius: 24px;
-      padding: 32px;
+      border-radius: 16px;
+      padding: 28px;
       text-align: center;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: ${s.bgGradient};
+      background-color: ${s.bg};
       border: 3px dashed ${s.borderColor};
     `.replace(/\s+/g, " ").trim(),
-    innerWrapper: `
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-    `.replace(/\s+/g, " ").trim(),
+    // Use table-based centering instead of flexbox for email compatibility
+    innerWrapper: "text-align: center;",
     iconWrapper: `
-      width: 64px;
-      height: 64px;
-      border-radius: 16px;
-      background: ${s.iconBg};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 32px;
-      line-height: 1;
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      background-color: ${s.iconBg};
+      font-size: 28px;
+      line-height: 56px;
+      text-align: center;
+      margin: 0 auto 12px auto;
     `.replace(/\s+/g, " ").trim(),
     label: `
       font-size: 12px;
@@ -261,30 +257,31 @@ function getCodeStyles(type: CodeType): Record<string, string> {
       color: ${s.accentColor};
       text-transform: uppercase;
       letter-spacing: 2px;
+      margin-bottom: 12px;
     `.replace(/\s+/g, " ").trim(),
     codeBox: `
       font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-      font-size: 28px;
+      font-size: 24px;
       font-weight: 700;
-      letter-spacing: 0.3em;
+      letter-spacing: 0.2em;
       color: #111827;
-      background: rgba(255, 255, 255, 0.9);
-      padding: 16px 32px;
-      border-radius: 16px;
+      background-color: #ffffff;
+      padding: 14px 28px;
+      border-radius: 12px;
       border: 2px solid #e5e7eb;
-      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+      display: inline-block;
       margin: 8px 0;
     `.replace(/\s+/g, " ").trim(),
     copyHint: `
       font-size: 12px;
       color: #9ca3af;
-      margin-top: 4px;
+      margin-top: 8px;
     `.replace(/\s+/g, " ").trim(),
     expiry: `
       font-size: 13px;
       color: #ef4444;
       font-weight: 500;
-      margin-top: 8px;
+      margin-top: 12px;
     `.replace(/\s+/g, " ").trim(),
   }
 }

@@ -814,7 +814,12 @@ async function sendBatch(
   const payload = recipients.map((recipient) => {
     const userRaw = recipient.displayName
     const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
-    const context = { user: userCap }
+    // Variables available for replacement in email templates
+    // Note: {{code}} is typically for verification emails, but we provide a placeholder for campaigns
+    const context: Record<string, string> = { 
+      user: userCap,
+      code: "XXXXXX" // Placeholder for campaign emails (real codes are for transactional emails)
+    }
     
     // Get user's language and find appropriate translation
     const userLang = recipient.language as SupportedLanguage
@@ -969,8 +974,8 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS[DEFAULT_LANGUAGE]
   const copyrightText = strings.copyright.replace("{{year}}", String(currentYear))
 
-  // Aphylia logo URL for emails
-  const logoUrl = "https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/plant-swipe-icon.svg"
+  // Aphylia logo URL for emails - using PNG for better email client compatibility (SVG not widely supported)
+  const logoUrl = `${websiteUrl}/icons/icon-192x192.png`
   const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
   const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;" />`
 

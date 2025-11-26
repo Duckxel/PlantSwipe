@@ -99,8 +99,8 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS['en']
   const copyrightText = strings.copyright.replace('{{year}}', String(currentYear))
 
-  // Aphylia logo URL for emails
-  const logoUrl = 'https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
+  // Aphylia logo URL for emails - using PNG for better email client compatibility (SVG not widely supported)
+  const logoUrl = `${websiteUrl}/icons/icon-192x192.png`
   const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
   const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
@@ -477,8 +477,13 @@ async function processEmailCampaigns() {
            const userRaw = r.display_name || 'User'
            const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
            const userLang = r.user_language || 'en'
-           const context = { user: userCap }
-           const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] || `{{${k}}}`)
+           // Variables available for replacement in email templates
+           // Note: {{code}} is typically for verification emails, but we provide a placeholder for campaigns
+           const context = { 
+             user: userCap,
+             code: 'XXXXXX' // Placeholder for campaign emails (real codes are for transactional emails)
+           }
+           const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
            
            // Get user's language-specific content (fallback to campaign's default content)
            const translation = emailTranslations.get(userLang)

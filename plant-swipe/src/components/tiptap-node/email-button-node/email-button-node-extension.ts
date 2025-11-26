@@ -141,13 +141,14 @@ export const EmailButtonNode = Node.create<EmailButtonNodeOptions>({
 })
 
 function getButtonInlineStyles(style: ButtonStyle, size: ButtonSize): string {
+  // Email-compatible styles - no gradients, no box-shadow, no transitions
+  // Using solid colors for maximum email client compatibility
   const baseStyles = `
     display: inline-block;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-weight: 600;
     text-decoration: none;
     border-radius: 50px;
-    transition: all 0.2s;
   `.replace(/\s+/g, " ").trim()
 
   const sizeStyles: Record<ButtonSize, string> = {
@@ -156,24 +157,23 @@ function getButtonInlineStyles(style: ButtonStyle, size: ButtonSize): string {
     lg: "padding: 18px 44px; font-size: 18px;",
   }
 
+  // Using solid colors instead of gradients for email compatibility
   const styleVariants: Record<ButtonStyle, string> = {
     primary: `
-      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+      background-color: #10b981;
       color: #ffffff;
-      box-shadow: 0 10px 30px -5px rgba(16, 185, 129, 0.4);
     `,
     secondary: `
-      background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+      background-color: #4b5563;
       color: #ffffff;
-      box-shadow: 0 10px 30px -5px rgba(55, 65, 81, 0.3);
     `,
     outline: `
-      background: transparent;
+      background-color: transparent;
       color: #059669;
       border: 2px solid #059669;
     `,
     ghost: `
-      background: rgba(16, 185, 129, 0.1);
+      background-color: #ecfdf5;
       color: #059669;
     `,
   }
