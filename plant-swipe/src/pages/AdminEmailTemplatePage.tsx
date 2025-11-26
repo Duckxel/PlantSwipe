@@ -76,6 +76,7 @@ type TemplateVersion = {
 
 const VARIABLE_CATALOG = [
   { token: "{{user}}", description: "Replaced with the user's display name" },
+  { token: "{{code}}", description: "Replaced with verification code, OTP, or sensitive data" },
 ]
 
 async function buildAdminHeaders() {
@@ -119,6 +120,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
   const [templateEditorKey, setTemplateEditorKey] = React.useState("initial")
   const [existingTemplate, setExistingTemplate] = React.useState<EmailTemplate | null>(null)
   const [previewOpen, setPreviewOpen] = React.useState(false)
+  const previewBodyRef = React.useRef<HTMLDivElement>(null)
+  const [copyNotification, setCopyNotification] = React.useState<{ text: string; x: number; y: number } | null>(null)
   
   // Language/Translation state
   const [currentLanguage, setCurrentLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
@@ -556,6 +559,63 @@ export const AdminEmailTemplatePage: React.FC = () => {
       loadVersionHistory()
     }
   }, [versionHistoryOpen, existingTemplate?.id, loadVersionHistory])
+
+  // Set up click-to-copy handlers in preview mode
+  React.useEffect(() => {
+    if (!previewOpen || !previewBodyRef.current) return
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      
+      // Find clickable elements: sensitive code boxes, buttons, cards
+      const codeBox = target.closest('[data-code]') as HTMLElement
+      const sensitiveCodeContainer = target.closest('[data-type="sensitive-code"]') as HTMLElement
+      const buttonLink = target.closest('[data-type="email-button"] a') as HTMLAnchorElement
+      const emailCard = target.closest('[data-type="email-card"]') as HTMLElement
+      
+      let textToCopy = ''
+      let elementRect: DOMRect | null = null
+      
+      if (codeBox) {
+        textToCopy = codeBox.textContent || ''
+        elementRect = codeBox.getBoundingClientRect()
+      } else if (sensitiveCodeContainer) {
+        const codeEl = sensitiveCodeContainer.querySelector('[data-code]')
+        textToCopy = codeEl?.textContent || ''
+        elementRect = sensitiveCodeContainer.getBoundingClientRect()
+      } else if (buttonLink) {
+        e.preventDefault()
+        textToCopy = buttonLink.href || buttonLink.textContent || ''
+        elementRect = buttonLink.getBoundingClientRect()
+      } else if (emailCard) {
+        // Copy card content
+        const titleEl = emailCard.querySelector('strong')
+        const contentEl = emailCard.querySelector('td:last-child > div > div')
+        const title = titleEl?.textContent || ''
+        const content = contentEl?.textContent || ''
+        textToCopy = title ? `${title}: ${content}` : content
+        elementRect = emailCard.getBoundingClientRect()
+      }
+      
+      if (textToCopy && elementRect) {
+        navigator.clipboard?.writeText(textToCopy).then(() => {
+          setCopyNotification({
+            text: textToCopy.length > 30 ? textToCopy.slice(0, 30) + '...' : textToCopy,
+            x: elementRect!.left + elementRect!.width / 2,
+            y: elementRect!.top - 10,
+          })
+          setTimeout(() => setCopyNotification(null), 2000)
+        })
+      }
+    }
+
+    const container = previewBodyRef.current
+    container.addEventListener('click', handleClick)
+    
+    return () => {
+      container.removeEventListener('click', handleClick)
+    }
+  }, [previewOpen, templateForm.bodyHtml])
 
   const handleSave = async () => {
     if (!templateForm.title.trim() || !templateForm.subject.trim() || !templateForm.bodyHtml.trim()) {
@@ -1290,6 +1350,47 @@ export const AdminEmailTemplatePage: React.FC = () => {
               font-weight: 600 !important;
               color: #111827 !important;
             }
+            @keyframes fadeInUp {
+              from {
+                opacity: 0;
+                transform: translate(-50%, -80%);
+              }
+              to {
+                opacity: 1;
+                transform: translate(-50%, -100%);
+              }
+            }
+            /* Interactive element styles for preview */
+            .email-preview-body [data-type="sensitive-code"] {
+              cursor: pointer;
+              transition: transform 0.2s ease, box-shadow 0.2s ease;
+            }
+            .email-preview-body [data-type="sensitive-code"]:hover {
+              transform: scale(1.02);
+              box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+            }
+            .email-preview-body [data-type="sensitive-code"] [data-code] {
+              transition: background 0.2s ease, border-color 0.2s ease;
+            }
+            .email-preview-body [data-type="sensitive-code"]:hover [data-code] {
+              background: #ffffff !important;
+              border-color: #10b981 !important;
+            }
+            .email-preview-body [data-type="email-button"] a {
+              cursor: pointer;
+              transition: transform 0.2s ease, box-shadow 0.2s ease;
+            }
+            .email-preview-body [data-type="email-button"] a:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 12px 32px rgba(16, 185, 129, 0.5) !important;
+            }
+            .email-preview-body [data-type="email-card"] {
+              cursor: pointer;
+              transition: transform 0.2s ease;
+            }
+            .email-preview-body [data-type="email-card"]:hover {
+              transform: scale(1.01);
+            }
           `}</style>
           {/* Floating Controls */}
           <div 
@@ -1305,7 +1406,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
               <span style={{ color: '#9ca3af' }}>Subject:</span>
               <span style={{ fontWeight: 500, color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {templateForm.subject.replace(/\{\{user\}\}/gi, "John") || "(No subject)"}
+                {templateForm.subject.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{code\}\}/gi, "50L57IC3") || "(No subject)"}
               </span>
             </div>
 
@@ -1385,6 +1486,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
                 {/* Email Body */}
                 <div 
+                  ref={previewBodyRef}
                   className="email-preview-body"
                   style={{ 
                     padding: '48px', 
@@ -1394,7 +1496,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
                   }}
                   dangerouslySetInnerHTML={{ 
-                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "John") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
+                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{code\}\}/gi, "50L57IC3") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
                   }}
                 />
 
@@ -1481,6 +1583,34 @@ export const AdminEmailTemplatePage: React.FC = () => {
             </div>
           </div>
 
+          {/* Copy notification popup */}
+          {copyNotification && (
+            <div
+              className="fixed z-[100] pointer-events-none"
+              style={{
+                left: copyNotification.x,
+                top: copyNotification.y,
+                transform: 'translate(-50%, -100%)',
+                animation: 'fadeInUp 0.2s ease-out',
+              }}
+            >
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '12px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                ✓ Copied: {copyNotification.text}
+              </div>
+            </div>
+          )}
+
           {/* Bottom hint */}
           <div 
             className="fixed bottom-6 left-1/2 z-50"
@@ -1498,7 +1628,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 margin: 0,
               }}
             >
-              Variables like <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{user}}"}</code> are replaced with sample data
+              Variables like <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{user}}"}</code> → "Five" and <code style={{ padding: '2px 6px', background: '#f3f4f6', borderRadius: '4px', color: '#059669', fontSize: '10px' }}>{"{{code}}"}</code> → "50L57IC3" · Click elements to copy
             </p>
           </div>
         </div>

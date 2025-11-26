@@ -44,15 +44,33 @@ export const EmailCardNode = Node.create<EmailCardNodeOptions>({
     return {
       title: {
         default: "",
+        parseHTML: (element: HTMLElement) => {
+          // Extract title from the <strong> element inside
+          const strong = element.querySelector("strong")
+          return strong?.textContent || ""
+        },
       },
       content: {
         default: "",
+        parseHTML: (element: HTMLElement) => {
+          // Extract content from the nested div (second child of the content wrapper)
+          const contentDiv = element.querySelector("td:last-child > div > div")
+          return contentDiv?.textContent || ""
+        },
       },
       style: {
         default: "default" as CardStyle,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-card-style") as CardStyle) || "default"
+        },
       },
       icon: {
         default: "📌",
+        parseHTML: (element: HTMLElement) => {
+          // Extract icon from the first <td> element
+          const iconCell = element.querySelector("td:first-child")
+          return iconCell?.textContent?.trim() || "📌"
+        },
       },
     }
   },
@@ -70,6 +88,7 @@ export const EmailCardNode = Node.create<EmailCardNodeOptions>({
       mergeAttributes(
         { 
           "data-type": "email-card",
+          "data-card-style": style || "default",
           style: `${styles.container} margin: 24px 0;`,
         },
         this.options.HTMLAttributes
@@ -175,7 +194,8 @@ function getCardStyles(style: CardStyle): Record<string, string> {
     },
   }
 
-  const s = styleMap[style]
+  // Fallback to 'default' if style is undefined or not in the map
+  const s = styleMap[style] ?? styleMap.default
 
   return {
     container: `${baseContainer} background: ${s.bg}; border: ${s.border}; box-shadow: ${s.shadow};`,

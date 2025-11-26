@@ -3662,6 +3662,8 @@ alter table public.admin_email_campaigns add column if not exists body_html text
 alter table public.admin_email_campaigns add column if not exists body_json jsonb;
 alter table public.admin_email_campaigns add column if not exists created_by uuid references public.profiles(id) on delete set null;
 alter table public.admin_email_campaigns add column if not exists updated_by uuid references public.profiles(id) on delete set null;
+alter table public.admin_email_campaigns add column if not exists test_mode boolean default false;
+alter table public.admin_email_campaigns add column if not exists test_email text;
 
 alter table public.admin_email_campaigns enable row level security;
 
