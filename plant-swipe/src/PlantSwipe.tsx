@@ -26,6 +26,7 @@ import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
+import { executeRecaptcha, isRecaptchaEnabled } from "@/lib/recaptcha";
 
 import { SwipePage } from "@/pages/SwipePage"
 
@@ -712,6 +713,20 @@ export default function PlantSwipe() {
     setAuthSubmitting(true)
     try {
       console.log('[auth] submit start', { mode: authMode })
+      
+      // Execute reCAPTCHA v3 if enabled
+      const recaptchaAction = authMode === 'signup' ? 'signup' : 'login'
+      let recaptchaToken: string | null = null
+      if (isRecaptchaEnabled()) {
+        recaptchaToken = await executeRecaptcha(recaptchaAction)
+        if (!recaptchaToken) {
+          console.warn('[auth] reCAPTCHA verification failed')
+          // Continue without token - backend should decide whether to accept
+        } else {
+          console.log('[auth] reCAPTCHA token obtained for action:', recaptchaAction)
+        }
+      }
+      
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
           console.warn('[auth] password mismatch')
@@ -725,7 +740,7 @@ export default function PlantSwipe() {
           setAuthSubmitting(false)
           return
         }
-        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, recaptchaToken: recaptchaToken ?? undefined })
         if (error) {
           console.error('[auth] signup error', error)
           setAuthError(error)
@@ -734,7 +749,7 @@ export default function PlantSwipe() {
         }
         console.log('[auth] signup ok')
       } else {
-        const { error } = await signIn({ email: authEmail, password: authPassword })
+        const { error } = await signIn({ email: authEmail, password: authPassword, recaptchaToken: recaptchaToken ?? undefined })
         if (error) {
           console.error('[auth] login error', error)
           setAuthError(error)

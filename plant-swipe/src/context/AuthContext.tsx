@@ -14,8 +14,8 @@ type AuthContextValue = {
   user: AuthUser | null
   profile: ProfileRow | null
   loading: boolean
-  signUp: (opts: { email: string; password: string; displayName: string }) => Promise<{ error?: string }>
-  signIn: (opts: { email: string; password: string }) => Promise<{ error?: string }>
+  signUp: (opts: { email: string; password: string; displayName: string; recaptchaToken?: string }) => Promise<{ error?: string }>
+  signIn: (opts: { email: string; password: string; recaptchaToken?: string }) => Promise<{ error?: string }>
   signOut: () => Promise<void>
   deleteAccount: () => Promise<{ error?: string }>
   refreshProfile: () => Promise<void>
@@ -109,7 +109,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { sub.subscription.unsubscribe() }
   }, [loadSession, refreshProfile])
 
-  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName }) => {
+  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken }) => {
+    // Verify reCAPTCHA token if provided
+    if (recaptchaToken) {
+      try {
+        const verifyRes = await fetch('/api/recaptcha/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: recaptchaToken, action: 'signup' }),
+          credentials: 'same-origin',
+        })
+        const verifyData = await verifyRes.json().catch(() => ({}))
+        if (!verifyRes.ok || verifyData?.success === false) {
+          console.warn('[auth] reCAPTCHA verification failed:', verifyData)
+          // Optionally block signup if reCAPTCHA fails
+          // return { error: 'reCAPTCHA verification failed. Please try again.' }
+        }
+      } catch (err) {
+        console.warn('[auth] reCAPTCHA verification error:', err)
+      }
+    }
+    
     // Check ban by email and IP before attempting signup
     try {
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
@@ -146,7 +166,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return {}
   }
 
-  const signIn: AuthContextValue['signIn'] = async ({ email, password }) => {
+  const signIn: AuthContextValue['signIn'] = async ({ email, password, recaptchaToken }) => {
+    // Verify reCAPTCHA token if provided
+    if (recaptchaToken) {
+      try {
+        const verifyRes = await fetch('/api/recaptcha/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: recaptchaToken, action: 'login' }),
+          credentials: 'same-origin',
+        })
+        const verifyData = await verifyRes.json().catch(() => ({}))
+        if (!verifyRes.ok || verifyData?.success === false) {
+          console.warn('[auth] reCAPTCHA verification failed:', verifyData)
+          // Optionally block login if reCAPTCHA fails
+          // return { error: 'reCAPTCHA verification failed. Please try again.' }
+        }
+      } catch (err) {
+        console.warn('[auth] reCAPTCHA verification error:', err)
+      }
+    }
+    
     // Gate sign-in if email/IP banned, and show a clear message
     try {
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
