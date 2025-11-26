@@ -154,7 +154,11 @@ function getButtonInlineStyles(style: ButtonStyle, size: ButtonSize): string {
     `,
   }
 
-  return `${baseStyles} ${sizeStyles[size]} ${styleVariants[style]}`.replace(/\s+/g, " ").trim()
+  // Fallback to defaults if size or style is undefined or not in the map
+  const sizeStyle = sizeStyles[size] ?? sizeStyles.md
+  const styleVariant = styleVariants[style] ?? styleVariants.primary
+
+  return `${baseStyles} ${sizeStyle} ${styleVariant}`.replace(/\s+/g, " ").trim()
 }
 
 export default EmailButtonNode

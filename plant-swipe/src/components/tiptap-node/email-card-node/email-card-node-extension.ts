@@ -175,7 +175,8 @@ function getCardStyles(style: CardStyle): Record<string, string> {
     },
   }
 
-  const s = styleMap[style]
+  // Fallback to 'default' if style is undefined or not in the map
+  const s = styleMap[style] ?? styleMap.default
 
   return {
     container: `${baseContainer} background: ${s.bg}; border: ${s.border}; box-shadow: ${s.shadow};`,
