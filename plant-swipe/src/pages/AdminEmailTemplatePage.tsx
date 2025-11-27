@@ -1377,13 +1377,33 @@ export const AdminEmailTemplatePage: React.FC = () => {
               border-radius: 16px !important;
               border-collapse: separate !important;
               border-spacing: 0 !important;
-              border: none !important;
-              cursor: pointer;
-              transition: transform 0.2s ease, box-shadow 0.2s ease;
+              padding: 28px !important;
+              text-align: center !important;
             }
-            .email-preview-body table[data-type="sensitive-code"]:hover {
-              transform: scale(1.02);
-              box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+            /* Dashed border colors based on code type */
+            .email-preview-body table[data-code-type="otp"] {
+              background-color: #fef3c7 !important;
+              border: 3px dashed #fbbf24 !important;
+            }
+            .email-preview-body table[data-code-type="verification"] {
+              background-color: #d1fae5 !important;
+              border: 3px dashed #34d399 !important;
+            }
+            .email-preview-body table[data-code-type="password"] {
+              background-color: #ede9fe !important;
+              border: 3px dashed #a78bfa !important;
+            }
+            .email-preview-body table[data-code-type="link"] {
+              background-color: #dbeafe !important;
+              border: 3px dashed #60a5fa !important;
+            }
+            .email-preview-body table[data-code-type="email"] {
+              background-color: #fce7f3 !important;
+              border: 3px dashed #f472b6 !important;
+            }
+            .email-preview-body table[data-code-type="code"] {
+              background-color: #f3f4f6 !important;
+              border: 3px dashed #9ca3af !important;
             }
             .email-preview-body table[data-type="sensitive-code"] td {
               padding: 0 !important;
@@ -1391,7 +1411,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               background: transparent !important;
             }
             .email-preview-body table[data-type="sensitive-code"] > tbody > tr > td {
-              padding: 28px !important;
+              padding: 0 !important;
               border: none !important;
             }
             .email-preview-body table[data-type="sensitive-code"] table {
@@ -1402,28 +1422,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
             .email-preview-body table[data-type="sensitive-code"] table td {
               padding: 0 !important;
               border: none !important;
-            }
-            .email-preview-body [data-type="sensitive-code"] [data-code] {
-              transition: background 0.2s ease, border-color 0.2s ease;
-            }
-            .email-preview-body [data-type="sensitive-code"]:hover [data-code] {
-              background: #ffffff !important;
-              border-color: #10b981 !important;
-            }
-            .email-preview-body [data-type="email-button"] a {
-              cursor: pointer;
-              transition: transform 0.2s ease, box-shadow 0.2s ease;
-            }
-            .email-preview-body [data-type="email-button"] a:hover {
-              transform: translateY(-2px);
-              box-shadow: 0 12px 32px rgba(16, 185, 129, 0.5) !important;
-            }
-            .email-preview-body [data-type="email-card"] {
-              cursor: pointer;
-              transition: transform 0.2s ease;
-            }
-            .email-preview-body [data-type="email-card"]:hover {
-              transform: scale(1.01);
             }
           `}</style>
           {/* Floating Controls */}
