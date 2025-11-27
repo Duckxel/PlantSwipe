@@ -1288,7 +1288,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               height: auto !important;
               border-radius: 12px !important;
             }
-            /* Email Card Styles */
+            /* Email Card Styles - Override general table styles */
             .email-preview-body [data-type="email-card"] {
               margin: 28px 0 !important;
               padding: 0 !important;
@@ -1299,16 +1299,21 @@ export const AdminEmailTemplatePage: React.FC = () => {
               overflow: hidden !important;
             }
             .email-preview-body [data-type="email-card"] table {
+              width: 100% !important;
               margin: 0 !important;
               border: none !important;
+              border-collapse: collapse !important;
             }
             .email-preview-body [data-type="email-card"] td {
               padding: 24px !important;
               border: none !important;
+              vertical-align: middle !important;
             }
             .email-preview-body [data-type="email-card"] td:first-child {
+              width: 60px !important;
               padding-right: 8px !important;
               font-size: 32px !important;
+              text-align: center !important;
             }
             .email-preview-body [data-type="email-card"] strong {
               display: block !important;
@@ -1337,18 +1342,19 @@ export const AdminEmailTemplatePage: React.FC = () => {
               box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35) !important;
               transition: all 0.2s ease !important;
             }
-            /* Table styling */
-            .email-preview-body table {
+            /* Table styling - exclude special components */
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) {
               width: 100% !important;
               border-collapse: collapse !important;
               margin: 20px 0 !important;
             }
-            .email-preview-body th, .email-preview-body td {
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th,
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) td {
               padding: 12px 16px !important;
               border: 1px solid #e5e7eb !important;
               text-align: left !important;
             }
-            .email-preview-body th {
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th {
               background: #f9fafb !important;
               font-weight: 600 !important;
               color: #111827 !important;
@@ -1363,14 +1369,39 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 transform: translate(-50%, -100%);
               }
             }
-            /* Interactive element styles for preview */
-            .email-preview-body [data-type="sensitive-code"] {
+            /* Sensitive Code Block Styles - Override general table styles */
+            .email-preview-body table[data-type="sensitive-code"] {
+              width: auto !important;
+              max-width: 420px !important;
+              margin: 32px auto !important;
+              border-radius: 16px !important;
+              border-collapse: separate !important;
+              border-spacing: 0 !important;
+              border: none !important;
               cursor: pointer;
               transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
-            .email-preview-body [data-type="sensitive-code"]:hover {
+            .email-preview-body table[data-type="sensitive-code"]:hover {
               transform: scale(1.02);
               box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+            }
+            .email-preview-body table[data-type="sensitive-code"] td {
+              padding: 0 !important;
+              border: none !important;
+              background: transparent !important;
+            }
+            .email-preview-body table[data-type="sensitive-code"] > tbody > tr > td {
+              padding: 28px !important;
+              border: none !important;
+            }
+            .email-preview-body table[data-type="sensitive-code"] table {
+              width: auto !important;
+              margin: 0 auto 12px auto !important;
+              border: none !important;
+            }
+            .email-preview-body table[data-type="sensitive-code"] table td {
+              padding: 0 !important;
+              border: none !important;
             }
             .email-preview-body [data-type="sensitive-code"] [data-code] {
               transition: background 0.2s ease, border-color 0.2s ease;
