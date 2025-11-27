@@ -597,18 +597,86 @@ fi
 
 # Install nginx site and admin snippet
 log "Installing nginx config…"
-# Create nginx config - remove SSL listeners if user doesn't want SSL
+
+# Prepare nginx config with dynamic SSL certificate paths and conditional media server block
+prepare_nginx_config() {
+  local src_config="$1"
+  local dst_config="$2"
+  local primary_domain=""
+  local has_media_domain="false"
+  
+  # Get primary domain from domain.json if it exists
+  if [[ -f "$REPO_DIR/domain.json" ]]; then
+    primary_domain="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
+    if [[ -z "$primary_domain" ]]; then
+      # Fallback: try to find any existing certificate
+      for d in /etc/letsencrypt/live/*; do
+        [[ -d "$d" ]] || continue
+        primary_domain="$(basename "$d")"
+        break
+      done
+    fi
+    
+    # Check if media.aphylia.app is in domain.json
+    if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "media.aphylia.app")" == "true" ]]; then
+      has_media_domain="true"
+      log "media.aphylia.app found in domain.json - including media server block"
+    else
+      log "media.aphylia.app not found in domain.json - excluding media server block"
+    fi
+  else
+    # No domain.json - try to find existing certificate
+    for d in /etc/letsencrypt/live/*; do
+      [[ -d "$d" ]] || continue
+      primary_domain="$(basename "$d")"
+      break
+    done
+  fi
+  
+  # If still no primary domain, use a placeholder (will be fixed later by ensure_nginx_ssl_directives)
+  if [[ -z "$primary_domain" ]]; then
+    log "[WARN] No primary domain found. Using placeholder - will be fixed during SSL setup."
+    primary_domain="__PRIMARY_DOMAIN__"
+  else
+    log "Using primary domain for SSL certificates: $primary_domain"
+  fi
+  
+  # Create temporary config file
+  local tmp_config="/tmp/plant-swipe-processed.conf"
+  cp "$src_config" "$tmp_config"
+  
+  # Replace __PRIMARY_DOMAIN__ placeholder with actual domain
+  sed -i "s|__PRIMARY_DOMAIN__|$primary_domain|g" "$tmp_config"
+  
+  # Conditionally include/exclude media server block
+  if [[ "$has_media_domain" != "true" ]]; then
+    log "Removing media server block (media.aphylia.app not in domain.json)"
+    # Remove the media server block between markers
+    sed -i '/# __MEDIA_SERVER_BLOCK_START__/,/# __MEDIA_SERVER_BLOCK_END__/d' "$tmp_config"
+  else
+    # Remove the markers but keep the server block
+    sed -i '/# __MEDIA_SERVER_BLOCK_START__/d' "$tmp_config"
+    sed -i '/# __MEDIA_SERVER_BLOCK_END__/d' "$tmp_config"
+  fi
+  
+  # Remove SSL listeners if user doesn't want SSL
+  if [[ ! "$WANT_SSL" =~ ^[Yy]$ ]]; then
+    log "Removing SSL listeners (user declined SSL setup)"
+    sed -i -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$tmp_config"
+  fi
+  
+  # Install the processed config
+  $SUDO install -D -m 0644 "$tmp_config" "$dst_config"
+  rm -f "$tmp_config"
+}
+
+# Create nginx config with dynamic SSL certificate paths
 if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
-  # User wants SSL - copy config as-is
   log "Installing nginx config with SSL support…"
-  $SUDO install -D -m 0644 "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
+  prepare_nginx_config "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
 else
-  # User doesn't want SSL - remove SSL listeners
   log "Installing nginx config without SSL (removing SSL listeners)…"
-  $SUDO sed -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' \
-    "$REPO_DIR/plant-swipe.conf" > /tmp/plant-swipe-no-ssl.conf
-  $SUDO install -D -m 0644 /tmp/plant-swipe-no-ssl.conf "$NGINX_SITE_AVAIL"
-  $SUDO rm -f /tmp/plant-swipe-no-ssl.conf
+  prepare_nginx_config "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
 fi
 
 $SUDO mkdir -p "/etc/nginx/snippets"
@@ -646,6 +714,34 @@ except Exception:
 PY
 }
 
+# Check if a domain exists in domain.json
+domain_exists_in_domain_json() {
+  local domain_json="$1"
+  local check_domain="$2"
+  [[ -f "$domain_json" ]] || { echo "false"; return 0; }
+  [[ -z "$check_domain" ]] && { echo "false"; return 0; }
+  python3 - "$domain_json" "$check_domain" <<'PY' 2>/dev/null
+import json
+import sys
+path = sys.argv[1]
+check_domain = sys.argv[2]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    domains = []
+    if isinstance(data, dict) and isinstance(data.get("domains"), list):
+        domains = data["domains"]
+    elif isinstance(data, list):
+        domains = data
+    if check_domain in domains:
+        print("true")
+    else:
+        print("false")
+except Exception:
+    print("false")
+PY
+}
+
 ensure_nginx_ssl_directives() {
   local cert_domain="$1"
   [[ -n "$cert_domain" ]] || return 1
@@ -657,7 +753,7 @@ ensure_nginx_ssl_directives() {
     return 1
   fi
 
-  # Ensure SSL listeners exist
+  # Ensure SSL listeners exist in all server blocks
   if ! grep -q "listen 443 ssl" "$NGINX_SITE_AVAIL"; then
     $SUDO sed -i "/listen \[::\]:80/a\\
     listen 443 ssl;\\
@@ -665,10 +761,13 @@ ensure_nginx_ssl_directives() {
 " "$NGINX_SITE_AVAIL"
   fi
 
-  # Ensure ssl_certificate directive points to current certificate
+  # Update ALL ssl_certificate directives (for both main and media server blocks)
+  # Replace any placeholder or incorrect paths with the correct certificate path
   if grep -q "ssl_certificate " "$NGINX_SITE_AVAIL"; then
-    $SUDO sed -i "0,/ssl_certificate /s#^\\([[:space:]]*ssl_certificate[[:space:]]\\+\\).*#\\1$cert_file;#" "$NGINX_SITE_AVAIL"
+    # Replace all occurrences, not just the first one
+    $SUDO sed -i "s#^\\([[:space:]]*ssl_certificate[[:space:]]\\+\\)[^;]*#\\1$cert_file#g" "$NGINX_SITE_AVAIL"
   else
+    # Add SSL directives after server_name in each server block
     $SUDO sed -i "/server_name/a\\
     ssl_certificate $cert_file;\\
     ssl_certificate_key $key_file;\\
@@ -678,8 +777,10 @@ ensure_nginx_ssl_directives() {
 " "$NGINX_SITE_AVAIL"
   fi
 
+  # Update ALL ssl_certificate_key directives
   if grep -q "ssl_certificate_key " "$NGINX_SITE_AVAIL"; then
-    $SUDO sed -i "0,/ssl_certificate_key /s#^\\([[:space:]]*ssl_certificate_key[[:space:]]\\+\\).*#\\1$key_file;#" "$NGINX_SITE_AVAIL"
+    # Replace all occurrences, not just the first one
+    $SUDO sed -i "s#^\\([[:space:]]*ssl_certificate_key[[:space:]]\\+\\)[^;]*#\\1$key_file#g" "$NGINX_SITE_AVAIL"
   fi
 
   $SUDO rm -f "$NGINX_SITE_AVAIL.bak"
