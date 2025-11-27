@@ -481,37 +481,37 @@ export function AdminNotificationsPanel() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900 dark:text-white flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
-              <BellRing className="h-5 w-5 text-white" />
+          <h1 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
+              <BellRing className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
             Push Notifications
           </h1>
-          <p className="text-sm text-stone-500 dark:text-stone-400 mt-2">
+          <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1.5 sm:mt-2">
             Create, schedule, and manage push notifications for your users
           </p>
         </div>
 
         {/* Action Bar */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          {/* Search */}
+        <div className="flex flex-col gap-3">
+          {/* Search - Full width on mobile */}
           {notifications.length > 0 && (
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+            <div className="relative w-full sm:max-w-md">
+              <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
               <Input
                 type="text"
                 placeholder="Search notifications..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-11 pr-10 h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
+                className="pl-9 sm:pl-11 pr-9 sm:pr-10 h-10 sm:h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] text-sm"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d]"
+                  className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d]"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -519,10 +519,10 @@ export function AdminNotificationsPanel() {
             </div>
           )}
           
-          <div className="flex items-center gap-2 sm:ml-auto">
+          <div className="flex items-center">
             <Button 
               onClick={openCreateForm}
-              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+              className="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20 h-10 sm:h-11 text-sm"
             >
               <Plus className="mr-2 h-4 w-4" />
               New Notification
@@ -606,151 +606,154 @@ export function AdminNotificationsPanel() {
                 key={notification.id}
                 className="group relative rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:shadow-amber-500/5"
               >
-                <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-                  {/* Icon */}
-                  <div className={cn(
-                    "flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center",
-                    deliveryConfig.bg
-                  )}>
-                    <DeliveryIcon className={cn("h-5 w-5", deliveryConfig.text)} />
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <h3 className="font-semibold text-stone-900 dark:text-white">
-                        {notification.title}
-                      </h3>
-                      <div className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
-                        statusConfig.bg, statusConfig.text
-                      )}>
-                        <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
-                        {statusConfig.label}
-                      </div>
-                      <div className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
-                        deliveryConfig.bg, deliveryConfig.text
-                      )}>
-                        {deliveryConfig.label}
-                      </div>
+                <div className="flex flex-col gap-4">
+                  {/* Header Row - Icon, Title, Badges */}
+                  <div className="flex items-start gap-3">
+                    {/* Icon */}
+                    <div className={cn(
+                      "flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center",
+                      deliveryConfig.bg
+                    )}>
+                      <DeliveryIcon className={cn("h-4 w-4 sm:h-5 sm:w-5", deliveryConfig.text)} />
                     </div>
 
-                    {notification.description && (
-                      <p className="text-sm text-stone-500 dark:text-stone-400 mb-3">
-                        {notification.description}
-                      </p>
-                    )}
-
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                      <div>
-                        <div className="text-xs font-medium text-stone-400 uppercase tracking-wide flex items-center gap-1.5 mb-1">
-                          <Target className="h-3.5 w-3.5" />
-                          Audience
+                    {/* Title and Badges */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base truncate">
+                        {notification.title}
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        <div className={cn(
+                          "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium",
+                          statusConfig.bg, statusConfig.text
+                        )}>
+                          <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
+                          {statusConfig.label}
                         </div>
-                        <div className="text-sm font-medium text-stone-700 dark:text-stone-300">
-                          {audienceLabels[notification.audience] || notification.audience}
+                        <div className={cn(
+                          "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium",
+                          deliveryConfig.bg, deliveryConfig.text
+                        )}>
+                          {deliveryConfig.label}
                         </div>
                       </div>
-                      
-                      {notification.nextRunAt && (
-                        <div>
-                          <div className="text-xs font-medium text-stone-400 uppercase tracking-wide flex items-center gap-1.5 mb-1">
-                            <Clock className="h-3.5 w-3.5" />
-                            Next Run
-                          </div>
-                          <div className="text-sm font-medium text-stone-700 dark:text-stone-300">
-                            {formatDateTime(notification.nextRunAt)}
-                            {relativeTime && (
-                              <span className="text-emerald-600 dark:text-emerald-400 ml-1">
-                                ({relativeTime})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                    </div>
+                  </div>
 
+                  {notification.description && (
+                    <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 -mt-1">
+                      {notification.description}
+                    </p>
+                  )}
+
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    <div>
+                      <div className="text-[10px] sm:text-xs font-medium text-stone-400 uppercase tracking-wide flex items-center gap-1 mb-0.5 sm:mb-1">
+                        <Target className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                        Audience
+                      </div>
+                      <div className="text-xs sm:text-sm font-medium text-stone-700 dark:text-stone-300 truncate">
+                        {audienceLabels[notification.audience] || notification.audience}
+                      </div>
+                    </div>
+                    
+                    {notification.nextRunAt && (
                       <div>
-                        <div className="text-xs font-medium text-stone-400 uppercase tracking-wide mb-1">
-                          Sent
+                        <div className="text-[10px] sm:text-xs font-medium text-stone-400 uppercase tracking-wide flex items-center gap-1 mb-0.5 sm:mb-1">
+                          <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                          Next Run
                         </div>
-                        <div className="text-sm font-medium">
-                          <span className="text-emerald-600 dark:text-emerald-400">
-                            {notification.stats.sent}
-                          </span>
-                          <span className="text-stone-400"> / {notification.stats.total}</span>
-                          {notification.stats.failed > 0 && (
-                            <span className="text-red-500 ml-2">({notification.stats.failed} failed)</span>
+                        <div className="text-xs sm:text-sm font-medium text-stone-700 dark:text-stone-300">
+                          <span className="block sm:inline">{formatDateTime(notification.nextRunAt)}</span>
+                          {relativeTime && (
+                            <span className="text-emerald-600 dark:text-emerald-400 block sm:inline sm:ml-1 text-[10px] sm:text-xs">
+                              {relativeTime}
+                            </span>
                           )}
                         </div>
                       </div>
+                    )}
 
-                      <div>
-                        <div className="text-xs font-medium text-stone-400 uppercase tracking-wide flex items-center gap-1.5 mb-1">
-                          <MessageSquare className="h-3.5 w-3.5" />
-                          Messages
-                        </div>
-                        <div className="text-sm font-medium text-stone-700 dark:text-stone-300">
-                          {notification.messageVariants.length} variant{notification.messageVariants.length !== 1 ? 's' : ''}
-                        </div>
+                    <div>
+                      <div className="text-[10px] sm:text-xs font-medium text-stone-400 uppercase tracking-wide mb-0.5 sm:mb-1">
+                        Sent
+                      </div>
+                      <div className="text-xs sm:text-sm font-medium">
+                        <span className="text-emerald-600 dark:text-emerald-400">
+                          {notification.stats.sent}
+                        </span>
+                        <span className="text-stone-400"> / {notification.stats.total}</span>
+                        {notification.stats.failed > 0 && (
+                          <span className="text-red-500 ml-1 text-[10px] sm:text-xs">({notification.stats.failed} failed)</span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Message Preview */}
-                    <div className="flex flex-wrap gap-2">
-                      {notification.messageVariants.slice(0, 2).map((msg, idx) => (
-                        <div
-                          key={idx}
-                          className="px-3 py-1.5 rounded-lg bg-stone-100 dark:bg-[#2a2a2d] text-xs text-stone-600 dark:text-stone-400 max-w-xs truncate"
-                        >
-                          {msg}
-                        </div>
-                      ))}
-                      {notification.messageVariants.length > 2 && (
-                        <div className="px-3 py-1.5 rounded-lg bg-stone-100 dark:bg-[#2a2a2d] text-xs text-stone-500">
-                          +{notification.messageVariants.length - 2} more
-                        </div>
-                      )}
+                    <div>
+                      <div className="text-[10px] sm:text-xs font-medium text-stone-400 uppercase tracking-wide flex items-center gap-1 mb-0.5 sm:mb-1">
+                        <MessageSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                        Messages
+                      </div>
+                      <div className="text-xs sm:text-sm font-medium text-stone-700 dark:text-stone-300">
+                        {notification.messageVariants.length} variant{notification.messageVariants.length !== 1 ? 's' : ''}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                  {/* Message Preview */}
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                    {notification.messageVariants.slice(0, 2).map((msg, idx) => (
+                      <div
+                        key={idx}
+                        className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-stone-100 dark:bg-[#2a2a2d] text-[10px] sm:text-xs text-stone-600 dark:text-stone-400 max-w-[140px] sm:max-w-xs truncate"
+                      >
+                        {msg}
+                      </div>
+                    ))}
+                    {notification.messageVariants.length > 2 && (
+                      <div className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-stone-100 dark:bg-[#2a2a2d] text-[10px] sm:text-xs text-stone-500">
+                        +{notification.messageVariants.length - 2} more
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions - Always visible on mobile, hover on desktop */}
+                  <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 pt-2 border-t border-stone-100 dark:border-[#2a2a2d] sm:border-0 sm:pt-0 sm:absolute sm:top-4 sm:right-4 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => openEditForm(notification)}
-                      className="rounded-lg h-9 px-3 text-stone-500 hover:text-stone-700"
+                      className="rounded-lg h-8 sm:h-9 px-2 sm:px-3 text-stone-500 hover:text-stone-700 text-xs sm:text-sm"
                     >
-                      <Edit className="h-4 w-4 mr-1.5" />
-                      Edit
+                      <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                      <span className="hidden sm:inline">Edit</span>
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => triggerNotification(notification)}
-                      className="rounded-lg h-9 px-3 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                      className="rounded-lg h-8 sm:h-9 px-2 sm:px-3 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-xs sm:text-sm"
                     >
-                      <Send className="h-4 w-4 mr-1.5" />
-                      Send
+                      <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                      <span className="hidden sm:inline">Send</span>
                     </Button>
                     {notification.deliveryMode === 'scheduled' && (
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => toggleState(notification)}
-                        className="rounded-lg h-9 px-3"
+                        className="rounded-lg h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm"
                       >
                         {notification.state === 'paused' ? (
                           <>
-                            <Play className="h-4 w-4 mr-1.5" />
-                            Resume
+                            <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                            <span className="hidden sm:inline">Resume</span>
                           </>
                         ) : (
                           <>
-                            <Pause className="h-4 w-4 mr-1.5" />
-                            Pause
+                            <Pause className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                            <span className="hidden sm:inline">Pause</span>
                           </>
                         )}
                       </Button>
@@ -759,9 +762,9 @@ export function AdminNotificationsPanel() {
                       variant="ghost"
                       size="sm"
                       onClick={() => deleteNotification(notification)}
-                      className="rounded-lg h-9 px-3 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="rounded-lg h-8 sm:h-9 px-2 sm:px-3 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </Button>
                   </div>
                 </div>

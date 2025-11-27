@@ -380,70 +380,70 @@ export const AdminEmailsPanel: React.FC = () => {
   )
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Header */}
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900 dark:text-white">Email Center</h1>
-          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">Email Center</h1>
+          <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
             Create templates and schedule campaigns to reach your users
           </p>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-2">
-          <Link
-            to="/admin/emails"
-            className={cn(
-              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all",
-              activeView === "campaigns"
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
-                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
-            )}
-          >
-            <Send className="h-4 w-4" />
-            Campaigns
-            {campaigns.length > 0 && (
-              <span className={cn(
-                "ml-1 px-2 py-0.5 rounded-full text-xs",
-                activeView === "campaigns" 
-                  ? "bg-white/20 text-white" 
-                  : "bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300"
-              )}>
-                {campaigns.length}
-              </span>
-            )}
-          </Link>
-          <Link
-            to="/admin/emails/templates"
-            className={cn(
-              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all",
-              activeView === "templates"
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
-                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
-            )}
-          >
-            <FileText className="h-4 w-4" />
-            Templates
-            {templates.length > 0 && (
-              <span className={cn(
-                "ml-1 px-2 py-0.5 rounded-full text-xs",
-                activeView === "templates" 
-                  ? "bg-white/20 text-white" 
-                  : "bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300"
-              )}>
-                {templates.length}
-              </span>
-            )}
-          </Link>
+        {/* Tab Navigation - Scrollable on mobile */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1 scrollbar-hide">
+            <Link
+              to="/admin/emails"
+              className={cn(
+                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
+                activeView === "campaigns"
+                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+              )}
+            >
+              <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Campaigns
+              {campaigns.length > 0 && (
+                <span className={cn(
+                  "ml-0.5 sm:ml-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs",
+                  activeView === "campaigns" 
+                    ? "bg-white/20 text-white" 
+                    : "bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300"
+                )}>
+                  {campaigns.length}
+                </span>
+              )}
+            </Link>
+            <Link
+              to="/admin/emails/templates"
+              className={cn(
+                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
+                activeView === "templates"
+                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+              )}
+            >
+              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Templates
+              {templates.length > 0 && (
+                <span className={cn(
+                  "ml-0.5 sm:ml-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs",
+                  activeView === "templates" 
+                    ? "bg-white/20 text-white" 
+                    : "bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300"
+                )}>
+                  {templates.length}
+                </span>
+              )}
+            </Link>
+          </div>
 
-          <div className="flex-1" />
-
-          {/* Action Buttons */}
+          {/* Action Buttons - Full width on mobile */}
           {activeView === "campaigns" && (
             <Button 
               onClick={() => setSheetOpen(true)}
-              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+              className="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20 h-10 sm:h-11 text-sm"
             >
               <Plus className="mr-2 h-4 w-4" />
               New Campaign
@@ -452,7 +452,7 @@ export const AdminEmailsPanel: React.FC = () => {
           {activeView === "templates" && (
             <Button 
               onClick={() => navigate("/admin/emails/templates/create")}
-              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+              className="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20 h-10 sm:h-11 text-sm"
             >
               <Plus className="mr-2 h-4 w-4" />
               New Template
@@ -486,7 +486,7 @@ export const AdminEmailsPanel: React.FC = () => {
               </Button>
             </div>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid gap-3 sm:gap-4">
               {campaigns.map((campaign) => {
                 const statusConfig = getStatusConfig(campaign.status)
                 const relativeTime = formatRelativeTime(campaign.scheduledFor)
@@ -494,102 +494,106 @@ export const AdminEmailsPanel: React.FC = () => {
                 return (
                   <div
                     key={campaign.id}
-                    className="group relative rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5"
+                    className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5"
                   >
-                    <div className="flex items-start gap-4">
-                      {/* Icon */}
-                      <div className={cn(
-                        "flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center",
-                        statusConfig.bg
-                      )}>
-                        <Send className={cn("h-5 w-5", statusConfig.text)} />
-                      </div>
+                    <div className="flex flex-col gap-3 sm:gap-4">
+                      {/* Header Row - Icon, Title, Badges */}
+                      <div className="flex items-start gap-3">
+                        {/* Icon */}
+                        <div className={cn(
+                          "flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center",
+                          statusConfig.bg
+                        )}>
+                          <Send className={cn("h-4 w-4 sm:h-5 sm:w-5", statusConfig.text)} />
+                        </div>
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                          <h3 className="font-semibold text-stone-900 dark:text-white truncate">
-                            {campaign.title}
-                          </h3>
-                          {campaign.testMode && (
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
-                              🧪 Test
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                            <h3 className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base truncate max-w-[150px] sm:max-w-none">
+                              {campaign.title}
+                            </h3>
+                            {campaign.testMode && (
+                              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                                🧪 Test
+                              </div>
+                            )}
+                            <div className={cn(
+                              "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium",
+                              statusConfig.bg, statusConfig.text
+                            )}>
+                              <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
+                              {statusConfig.label}
                             </div>
-                          )}
-                          <div className={cn(
-                            "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
-                            statusConfig.bg, statusConfig.text
-                          )}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full", statusConfig.dot)} />
-                            {statusConfig.label}
                           </div>
-                        </div>
-                        
-                        <p className="text-sm text-stone-500 dark:text-stone-400 truncate">
-                          {campaign.templateTitle || "Template removed"} · {campaign.subject}
-                        </p>
-
-                        <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-stone-500 dark:text-stone-400">
-                          <span className="flex items-center gap-1.5">
-                            <Calendar className="h-3.5 w-3.5" />
-                            {formatDateTime(campaign.scheduledFor)}
-                            {relativeTime && (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                                ({relativeTime})
-                              </span>
-                            )}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <Users className="h-3.5 w-3.5" />
-                            {campaign.testMode ? (
-                              <span className="text-amber-600 dark:text-amber-400">
-                                → {campaign.testEmail || "test email"}
-                              </span>
-                            ) : (
-                              <>
-                                {campaign.sentCount} / {campaign.totalRecipients} sent
-                                {campaign.failedCount > 0 && (
-                                  <span className="text-red-500">({campaign.failedCount} failed)</span>
-                                )}
-                              </>
-                            )}
-                          </span>
-                        </div>
-
-                        {campaign.sendError && (
-                          <p className="mt-2 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg">
-                            Error: {campaign.sendError}
+                          
+                          <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate">
+                            {campaign.templateTitle || "Template removed"} · {campaign.subject}
                           </p>
-                        )}
+                        </div>
                       </div>
 
-                      {/* Actions */}
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Stats Row */}
+                      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                          <span>{formatDateTime(campaign.scheduledFor)}</span>
+                          {relativeTime && (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                              ({relativeTime})
+                            </span>
+                          )}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <Users className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                          {campaign.testMode ? (
+                            <span className="text-amber-600 dark:text-amber-400 truncate max-w-[200px]">
+                              → {campaign.testEmail || "test email"}
+                            </span>
+                          ) : (
+                            <>
+                              {campaign.sentCount} / {campaign.totalRecipients} sent
+                              {campaign.failedCount > 0 && (
+                                <span className="text-red-500 ml-1">({campaign.failedCount} failed)</span>
+                              )}
+                            </>
+                          )}
+                        </span>
+                      </div>
+
+                      {campaign.sendError && (
+                        <p className="text-[10px] sm:text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg">
+                          Error: {campaign.sendError}
+                        </p>
+                      )}
+
+                      {/* Actions - Always visible on mobile, hover on desktop */}
+                      <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 pt-2 border-t border-stone-100 dark:border-[#2a2a2d] sm:border-0 sm:pt-0 sm:absolute sm:top-4 sm:right-4 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleRunCampaign(campaign)}
                           disabled={campaign.status === "running"}
-                          className="rounded-lg h-9 px-3 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                          className="rounded-lg h-8 sm:h-9 px-2 sm:px-3 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-xs sm:text-sm"
                         >
-                          <Play className="h-4 w-4 mr-1.5" />
-                          Send
+                          <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                          <span className="hidden sm:inline">Send</span>
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           onClick={() => handleCancelCampaign(campaign)}
-                          className="rounded-lg h-9 px-3 text-stone-500 hover:text-stone-700"
+                          className="rounded-lg h-8 sm:h-9 px-2 sm:px-3 text-stone-500 hover:text-stone-700 text-xs sm:text-sm"
                         >
-                          <Square className="h-4 w-4" />
+                          <Square className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           onClick={() => handleDeleteCampaign(campaign)}
-                          className="rounded-lg h-9 px-3 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          className="rounded-lg h-8 sm:h-9 px-2 sm:px-3 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs sm:text-sm"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </Button>
                       </div>
                     </div>
@@ -603,23 +607,23 @@ export const AdminEmailsPanel: React.FC = () => {
 
       {/* Templates View */}
       {activeView === "templates" && (
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {/* Search Bar */}
           {templates.length > 0 && (
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
               <Input
                 type="text"
-                placeholder="Search templates by name or subject..."
+                placeholder="Search templates..."
                 value={templateSearch}
                 onChange={(e) => setTemplateSearch(e.target.value)}
-                className="pl-11 pr-10 h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                className="pl-9 sm:pl-11 pr-9 sm:pr-10 h-10 sm:h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 text-sm"
               />
               {templateSearch && (
                 <button
                   type="button"
                   onClick={() => setTemplateSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
+                  className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -628,85 +632,85 @@ export const AdminEmailsPanel: React.FC = () => {
           )}
 
           {loadingTemplates ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
+            <div className="flex items-center justify-center py-12 sm:py-16">
+              <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400 text-sm">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <span>Loading templates...</span>
               </div>
             </div>
           ) : templates.length === 0 ? (
-            <div className="rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-12 text-center">
-              <div className="mx-auto w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-4">
-                <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            <div className="rounded-xl sm:rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-8 sm:p-12 text-center">
+              <div className="mx-auto w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-3 sm:mb-4">
+                <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600 dark:text-purple-400" />
               </div>
-              <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">No templates yet</h3>
-              <p className="text-sm text-stone-500 dark:text-stone-400 mb-6 max-w-sm mx-auto">
+              <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white mb-2">No templates yet</h3>
+              <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mb-4 sm:mb-6 max-w-sm mx-auto">
                 Create a template to define the look and content of your email campaigns.
               </p>
-              <Button onClick={() => navigate("/admin/emails/templates/create")} className="rounded-xl">
+              <Button onClick={() => navigate("/admin/emails/templates/create")} className="rounded-xl text-sm h-10">
                 <Plus className="mr-2 h-4 w-4" />
                 Create Template
               </Button>
             </div>
           ) : filteredTemplates.length === 0 ? (
-            <div className="rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-12 text-center">
-              <div className="mx-auto w-12 h-12 rounded-2xl bg-stone-100 dark:bg-[#2a2a2d] flex items-center justify-center mb-4">
-                <Search className="h-6 w-6 text-stone-400" />
+            <div className="rounded-xl sm:rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-8 sm:p-12 text-center">
+              <div className="mx-auto w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-stone-100 dark:bg-[#2a2a2d] flex items-center justify-center mb-3 sm:mb-4">
+                <Search className="h-5 w-5 sm:h-6 sm:w-6 text-stone-400" />
               </div>
-              <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">No results found</h3>
-              <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">
+              <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white mb-2">No results found</h3>
+              <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mb-4">
                 No templates match "<span className="font-medium">{templateSearch}</span>"
               </p>
-              <Button variant="outline" onClick={() => setTemplateSearch("")} className="rounded-xl">
+              <Button variant="outline" onClick={() => setTemplateSearch("")} className="rounded-xl text-sm h-10">
                 Clear search
               </Button>
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {filteredTemplates.map((template) => (
                 <div
                   key={template.id}
                   onClick={() => navigate(`/admin/emails/templates/${template.id}`)}
-                  className="group relative rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 cursor-pointer transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-xl hover:shadow-emerald-500/10 hover:-translate-y-0.5"
+                  className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 cursor-pointer transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-xl hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5"
                 >
                   {/* Preview gradient */}
-                  <div className="absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute inset-x-0 top-0 h-1 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
-                      <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  <div className="flex items-start gap-3 sm:gap-4">
+                    <div className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
+                      <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-stone-900 dark:text-white truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      <h3 className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                         {template.title}
                       </h3>
-                      <p className="text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                      <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5">
                         {template.subject}
                       </p>
                     </div>
 
-                    <ChevronRight className="h-5 w-5 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all" />
+                    <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-stone-100 dark:border-[#2a2a2d]">
-                    <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
+                  <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-stone-100 dark:border-[#2a2a2d]">
+                    <div className="flex items-center justify-between text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">
                       <span>v{template.version}</span>
                       <span>Used {template.campaignCount}×</span>
                     </div>
                     
                     {template.variables?.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-3">
+                      <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-3">
                         {template.variables.slice(0, 3).map((variable) => (
                           <span 
                             key={variable} 
-                            className="px-2 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-xs text-stone-600 dark:text-stone-400 font-mono"
+                            className="px-1.5 sm:px-2 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] sm:text-xs text-stone-600 dark:text-stone-400 font-mono"
                           >
                             {variable}
                           </span>
                         ))}
                         {template.variables.length > 3 && (
-                          <span className="px-2 py-0.5 text-xs text-stone-400">
+                          <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs text-stone-400">
                             +{template.variables.length - 3}
                           </span>
                         )}
@@ -714,18 +718,18 @@ export const AdminEmailsPanel: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Action buttons (stop propagation) */}
-                  <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                  {/* Action buttons - Always visible on mobile, hover on desktop */}
+                  <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-stone-100 dark:border-[#2a2a2d] sm:border-0 sm:mt-0 sm:pt-0 sm:absolute sm:top-3 sm:right-3 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
                         handleDuplicateTemplate(template)
                       }}
-                      className="p-2 rounded-lg text-stone-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all"
+                      className="p-1.5 sm:p-2 rounded-lg text-stone-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all"
                       title="Duplicate template"
                     >
-                      <Copy className="h-4 w-4" />
+                      <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </button>
                     <button
                       type="button"
@@ -733,10 +737,10 @@ export const AdminEmailsPanel: React.FC = () => {
                         e.stopPropagation()
                         handleDeleteTemplate(template)
                       }}
-                      className="p-2 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                      className="p-1.5 sm:p-2 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
                       title="Delete template"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </button>
                   </div>
                 </div>
@@ -748,17 +752,17 @@ export const AdminEmailsPanel: React.FC = () => {
 
       {/* New Campaign Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full max-w-lg border-l border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d]">
-          <SheetHeader className="pb-6 border-b border-stone-100 dark:border-[#2a2a2d]">
-            <SheetTitle className="text-xl font-bold">Create Campaign</SheetTitle>
-            <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+        <SheetContent className="w-full sm:max-w-lg border-l border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] overflow-y-auto">
+          <SheetHeader className="pb-4 sm:pb-6 border-b border-stone-100 dark:border-[#2a2a2d]">
+            <SheetTitle className="text-lg sm:text-xl font-bold">Create Campaign</SheetTitle>
+            <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
               Schedule an email to send to all users
             </p>
           </SheetHeader>
           
-          <div className="mt-6 space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="campaign-title" className="text-sm font-medium">Campaign Name</Label>
+          <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-5">
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="campaign-title" className="text-xs sm:text-sm font-medium">Campaign Name</Label>
               <Input
                 id="campaign-title"
                 value={campaignForm.title}
@@ -766,19 +770,19 @@ export const AdminEmailsPanel: React.FC = () => {
                   setCampaignForm((prev) => ({ ...prev, title: event.target.value }))
                 }
                 placeholder="e.g., Spring Newsletter"
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
               />
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="campaign-template" className="text-sm font-medium">Email Template</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="campaign-template" className="text-xs sm:text-sm font-medium">Email Template</Label>
               <Select
                 id="campaign-template"
                 value={campaignForm.templateId}
                 onChange={(event) =>
                   setCampaignForm((prev) => ({ ...prev, templateId: event.target.value }))
                 }
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
               >
                 <option value="">Select a template...</option>
                 {templates.map((template) => (
@@ -788,14 +792,14 @@ export const AdminEmailsPanel: React.FC = () => {
                 ))}
               </Select>
               {templates.length === 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
+                <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">
                   No templates available. Create one first.
                 </p>
               )}
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="campaign-datetime" className="text-sm font-medium">Schedule For</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="campaign-datetime" className="text-xs sm:text-sm font-medium">Schedule For</Label>
               <Input
                 id="campaign-datetime"
                 type="datetime-local"
@@ -803,24 +807,24 @@ export const AdminEmailsPanel: React.FC = () => {
                 onChange={(event) =>
                   setCampaignForm((prev) => ({ ...prev, scheduledFor: event.target.value }))
                 }
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
               />
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="campaign-timezone" className="text-sm font-medium">Timezone</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="campaign-timezone" className="text-xs sm:text-sm font-medium">Timezone</Label>
               <Input
                 id="campaign-timezone"
                 value={campaignForm.timezone}
                 onChange={(event) =>
                   setCampaignForm((prev) => ({ ...prev, timezone: event.target.value }))
                 }
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
               />
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="campaign-preview" className="text-sm font-medium">
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="campaign-preview" className="text-xs sm:text-sm font-medium">
                 Preview Text <span className="text-stone-400 font-normal">(optional)</span>
               </Label>
               <Input
@@ -830,12 +834,12 @@ export const AdminEmailsPanel: React.FC = () => {
                   setCampaignForm((prev) => ({ ...prev, previewText: event.target.value }))
                 }
                 placeholder="Short preview shown in inbox"
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42]"
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
               />
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="campaign-description" className="text-sm font-medium">
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="campaign-description" className="text-xs sm:text-sm font-medium">
                 Internal Notes <span className="text-stone-400 font-normal">(optional)</span>
               </Label>
               <Textarea
@@ -845,18 +849,18 @@ export const AdminEmailsPanel: React.FC = () => {
                   setCampaignForm((prev) => ({ ...prev, description: event.target.value }))
                 }
                 placeholder="Notes for your team..."
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] min-h-[80px]"
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42] min-h-[60px] sm:min-h-[80px] text-sm"
               />
             </div>
 
             {/* Test Mode Toggle */}
-            <div className="rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium text-amber-800 dark:text-amber-300">
+            <div className="rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 sm:p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <Label className="text-xs sm:text-sm font-medium text-amber-800 dark:text-amber-300">
                     🧪 Test Mode
                   </Label>
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                  <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400 mt-0.5">
                     Send only to a test email instead of all users
                   </p>
                 </div>
@@ -864,7 +868,7 @@ export const AdminEmailsPanel: React.FC = () => {
                   type="button"
                   onClick={() => setCampaignForm((prev) => ({ ...prev, testMode: !prev.testMode }))}
                   className={cn(
-                    "relative h-6 w-11 rounded-full transition-colors",
+                    "relative h-6 w-11 rounded-full transition-colors flex-shrink-0",
                     campaignForm.testMode ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
                   )}
                 >
@@ -878,8 +882,8 @@ export const AdminEmailsPanel: React.FC = () => {
               </div>
               
               {campaignForm.testMode && (
-                <div className="space-y-2">
-                  <Label htmlFor="test-email" className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                <div className="space-y-1.5 sm:space-y-2">
+                  <Label htmlFor="test-email" className="text-[10px] sm:text-xs font-medium text-amber-700 dark:text-amber-400">
                     Test Email Address
                   </Label>
                   <Input
@@ -890,18 +894,18 @@ export const AdminEmailsPanel: React.FC = () => {
                       setCampaignForm((prev) => ({ ...prev, testEmail: event.target.value }))
                     }
                     placeholder="dev@aphylia.app"
-                    className="rounded-lg border-amber-300 dark:border-amber-700 bg-white dark:bg-[#1a1a1d] text-sm"
+                    className="rounded-lg border-amber-300 dark:border-amber-700 bg-white dark:bg-[#1a1a1d] text-sm h-10"
                   />
                 </div>
               )}
             </div>
           </div>
           
-          <div className="mt-8 pt-6 border-t border-stone-100 dark:border-[#2a2a2d] flex gap-3">
+          <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-stone-100 dark:border-[#2a2a2d] flex flex-col sm:flex-row gap-2 sm:gap-3">
             <Button 
               variant="outline" 
               onClick={() => setSheetOpen(false)}
-              className="flex-1 rounded-xl"
+              className="w-full sm:flex-1 rounded-xl h-10 text-sm order-2 sm:order-1"
             >
               Cancel
             </Button>
@@ -909,7 +913,7 @@ export const AdminEmailsPanel: React.FC = () => {
               onClick={handleCreateCampaign} 
               disabled={campaignSaving}
               className={cn(
-                "flex-1 rounded-xl",
+                "w-full sm:flex-1 rounded-xl h-10 text-sm order-1 sm:order-2",
                 campaignForm.testMode 
                   ? "bg-amber-500 hover:bg-amber-600" 
                   : "bg-emerald-600 hover:bg-emerald-700"
