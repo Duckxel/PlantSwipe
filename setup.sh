@@ -1102,15 +1102,48 @@ PY
   local cert_file="$cert_dir/fullchain.pem"
   local key_file="$cert_dir/privkey.pem"
   
+  # Track if we need to expand an existing certificate
+  local need_expand=false
+  
   # Check if certificates already exist
   if [[ -f "$cert_file" && -f "$key_file" ]]; then
     log "SSL certificates already exist at $cert_dir"
-    if ensure_nginx_ssl_directives "$first_domain"; then
-      log "Ensured nginx configuration references existing certificates for $first_domain"
+    
+    # Verify that existing certificate includes all domains from domain.json
+    log "Checking if existing certificate includes all domains: ${all_domains[*]}"
+    local cert_domains_existing
+    cert_domains_existing="$($SUDO openssl x509 -in "$cert_file" -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | grep -oE "DNS:[^, ]+" | sed 's/DNS://' | tr '\n' ' ' || echo '')"
+    if [[ -n "$cert_domains_existing" ]]; then
+      log "Existing certificate includes domains: $cert_domains_existing"
+      local missing_domains_existing=()
+      for dom in "${all_domains[@]}"; do
+        if ! echo "$cert_domains_existing" | grep -qw "$dom"; then
+          missing_domains_existing+=("$dom")
+        fi
+      done
+      if ((${#missing_domains_existing[@]} > 0)); then
+        log "[WARN] Existing certificate is missing some domains: ${missing_domains_existing[*]}"
+        log "[WARN] The certificate will be expanded to include all domains from domain.json"
+        log "[INFO] Continuing to certificate request section to expand certificate with all domains..."
+        need_expand=true
+        # Don't return early - continue to certificate request logic below
+        # This will expand the certificate with all domains
+      else
+        log "Existing certificate includes all domains from domain.json"
+        # Ensure all server blocks use the correct certificate paths
+        if ensure_nginx_ssl_directives "$first_domain"; then
+          log "Ensured nginx configuration references certificates for $first_domain (includes: ${all_domains[*]})"
+        else
+          log "[WARN] Could not reconcile nginx configuration with existing certificates for $first_domain"
+        fi
+        # Certificate is complete, return early
+        return 0
+      fi
     else
-      log "[WARN] Could not reconcile nginx configuration with existing certificates for $first_domain"
+      log "[WARN] Could not verify existing certificate domains (openssl may not be available)"
+      log "[INFO] Continuing to certificate request section..."
+      # Can't verify, so continue to request logic (will handle if cert already exists)
     fi
-    return 0
   fi
   
   # Extract base domain for wildcard certificate logic (e.g., "aphylia.app" from "dev01.aphylia.app")
@@ -1231,6 +1264,8 @@ PY
       --email "$email"
     )
     [[ "$use_staging" == "true" ]] && certbot_args+=(--staging)
+    # Add --expand flag if we need to expand an existing certificate
+    [[ "$need_expand" == "true" ]] && certbot_args+=(--expand)
     for dom in "${all_domains[@]}"; do
       certbot_args+=(-d "$dom")
     done
@@ -1250,6 +1285,29 @@ PY
     fi
     
     log "Verified SSL certificates exist: $cert_file"
+    
+    # Verify that the certificate includes all domains as SANs
+    log "Verifying certificate includes all domains: ${all_domains[*]}"
+    local cert_domains
+    cert_domains="$($SUDO openssl x509 -in "$cert_file" -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | grep -oE "DNS:[^, ]+" | sed 's/DNS://' | tr '\n' ' ' || echo '')"
+    if [[ -n "$cert_domains" ]]; then
+      log "Certificate includes domains: $cert_domains"
+      local missing_domains=()
+      for dom in "${all_domains[@]}"; do
+        if ! echo "$cert_domains" | grep -qw "$dom"; then
+          missing_domains+=("$dom")
+        fi
+      done
+      if ((${#missing_domains[@]} > 0)); then
+        log "[WARN] Certificate is missing some domains: ${missing_domains[*]}"
+        log "[WARN] The certificate may need to be re-issued to include all domains from domain.json"
+        log "[INFO] You can manually re-issue with: sudo certbot --nginx -d ${all_domains[*]} --force-renewal"
+      else
+        log "Certificate includes all domains from domain.json"
+      fi
+    else
+      log "[WARN] Could not verify certificate domains (openssl may not be available)"
+    fi
     
     # Update nginx config with certificate paths
     # For HTTP-01 (--nginx), certbot should have updated config automatically
@@ -1286,7 +1344,8 @@ PY
       fi
     elif [[ "$use_dns" != "true" ]]; then
       # HTTP-01 challenge: certbot with --nginx should have updated config automatically
-      # But if SSL listeners were temporarily removed, certbot might not have added them back
+      # But certbot may only update the first matching server block, so we need to ensure
+      # ALL server blocks (including media.aphylia.app) have the correct certificate paths
       if [[ -f "$NGINX_SITE_AVAIL.bak" ]]; then
         # Certbot should have added SSL listeners, but verify
         if ! grep -q "listen 443 ssl" "$NGINX_SITE_AVAIL"; then
@@ -1311,6 +1370,16 @@ PY
         fi
       else
         log "Certbot with --nginx flag should have updated nginx config automatically"
+      fi
+      
+      # IMPORTANT: Ensure ALL server blocks have the correct certificate paths
+      # Certbot may only update the first matching server block, so we explicitly
+      # update all server blocks to use the certificate that includes all domains
+      log "Ensuring all server blocks use the certificate for all domains: ${all_domains[*]}"
+      if ensure_nginx_ssl_directives "$first_domain"; then
+        log "Updated all server blocks with certificate paths for $first_domain (includes all domains: ${all_domains[*]})"
+      else
+        log "[WARN] Could not update all server blocks with certificate paths"
       fi
     fi
     
