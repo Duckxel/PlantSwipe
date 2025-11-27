@@ -1,6 +1,5 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
-import { useState, useCallback } from "react"
-import { Copy, Check } from "lucide-react"
+import { useState } from "react"
 import type { CodeType } from "./sensitive-code-node-extension"
 
 const CODE_TYPES: { value: CodeType; label: string; icon: string; description: string }[] = [
@@ -21,13 +20,6 @@ export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeView
   }
 
   const [isEditing, setIsEditing] = useState(false)
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = useCallback(() => {
-    navigator.clipboard?.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }, [code])
 
   const getTypeConfig = () => {
     switch (type) {
@@ -181,32 +173,8 @@ export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeView
             </div>
 
             {/* Code display */}
-            <div className="relative group">
-              <div
-                className="rounded-2xl border-2 border-stone-200 bg-white/90 px-8 py-4 font-mono text-3xl font-bold tracking-[0.3em] text-stone-900 shadow-inner dark:border-stone-700 dark:bg-stone-800 dark:text-white"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleCopy()
-                }}
-              >
-                {code || "{{code}}"}
-              </div>
-              
-              {/* Copy button overlay */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleCopy()
-                }}
-                className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-lg border border-stone-200 opacity-0 group-hover:opacity-100 transition-opacity dark:bg-stone-700 dark:border-stone-600"
-              >
-                {copied ? (
-                  <Check className="h-4 w-4 text-emerald-500" />
-                ) : (
-                  <Copy className="h-4 w-4 text-stone-500" />
-                )}
-              </button>
+            <div className="rounded-2xl border-2 border-stone-200 bg-white/90 px-8 py-4 font-mono text-3xl font-bold tracking-[0.3em] text-stone-900 shadow-inner dark:border-stone-700 dark:bg-stone-800 dark:text-white">
+              {code || "{{code}}"}
             </div>
 
             {/* Expiry text */}

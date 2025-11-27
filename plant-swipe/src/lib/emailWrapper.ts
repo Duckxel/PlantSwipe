@@ -214,16 +214,20 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
           <!-- Signature Section -->
           <tr>
             <td style="padding:0 48px 48px 48px;">
-              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
+              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdf4;border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
                 <tr>
                   <td style="padding:28px 32px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
-                        <td width="64" style="vertical-align:top;padding-right:20px;">
-                          <!-- Logo -->
-                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px -8px rgba(16, 185, 129, 0.5);">
-                            ${APHYLIA_LOGO_IMG_LARGE}
-                          </div>
+                        <td width="72" style="vertical-align:middle;padding-right:20px;">
+                          <!-- Logo in green square - using table for centering -->
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#10b981;border-radius:16px;width:56px;height:56px;">
+                            <tr>
+                              <td align="center" valign="middle" style="width:56px;height:56px;">
+                                ${APHYLIA_LOGO_IMG_LARGE}
+                              </td>
+                            </tr>
+                          </table>
                         </td>
                         <td style="vertical-align:middle;">
                           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">
@@ -311,17 +315,23 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
   const strings = getEmailWrapperStrings(lang)
 
   const signature = `
-    <div style="margin-top:32px;padding:24px;background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);">
-      <div style="display:flex;align-items:center;gap:16px;">
-        <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px -8px rgba(16, 185, 129, 0.5);">
-          ${APHYLIA_LOGO_IMG_LARGE}
-        </div>
-        <div>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:32px;padding:24px;background-color:#f0fdf4;border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);">
+      <tr>
+        <td width="72" style="vertical-align:middle;padding-right:16px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#10b981;border-radius:16px;width:56px;height:56px;">
+            <tr>
+              <td align="center" valign="middle" style="width:56px;height:56px;">
+                ${APHYLIA_LOGO_IMG_LARGE}
+              </td>
+            </tr>
+          </table>
+        </td>
+        <td style="vertical-align:middle;">
           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;">${strings.teamName}</p>
           <p style="margin:0;font-size:14px;color:#6b7280;">${strings.tagline}</p>
-        </div>
-      </div>
-    </div>
+        </td>
+      </tr>
+    </table>
   `
 
   const footer = `
