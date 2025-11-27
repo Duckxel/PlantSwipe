@@ -56,8 +56,8 @@ export function getEmailWrapperStrings(language: SupportedLanguage = 'en') {
   return EMAIL_WRAPPER_I18N[language] || EMAIL_WRAPPER_I18N.en
 }
 
-// Aphylia logo URL for emails (using WebP for better email client compatibility - Gmail doesn't support SVG)
-const APHYLIA_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/webp/icon-500-transparent-white-ceea7e70-e569-4efc-87bc-0e1c3bc5f0b9.webp'
+// Aphylia logo URL for emails (using PNG for better email client compatibility - Gmail doesn't support SVG or WebP)
+const APHYLIA_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
 const APHYLIA_LOGO_IMG = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
 const APHYLIA_LOGO_IMG_LARGE = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="48" height="48" style="display:block;border:0;outline:none;text-decoration:none;" />`
 

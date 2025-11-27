@@ -175,8 +175,8 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS['en']
   const copyrightText = strings.copyright.replace('{{year}}', String(currentYear))
 
-  // Aphylia logo URL for emails (using WebP for Gmail compatibility - Gmail doesn't support SVG)
-  const logoUrl = 'https://media.aphylia.app/UTILITY/admin/uploads/webp/icon-500-transparent-white-ceea7e70-e569-4efc-87bc-0e1c3bc5f0b9.webp'
+  // Aphylia logo URL for emails (using PNG for Gmail compatibility - Gmail doesn't support SVG or WebP)
+  const logoUrl = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
   const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
   const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
