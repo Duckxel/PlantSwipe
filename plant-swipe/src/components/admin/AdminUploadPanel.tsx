@@ -16,8 +16,9 @@ type UploadResult = {
   originalMimeType: string
   originalSize: number
   uploadedAt?: string
-  quality?: number
+  quality?: number | null
   compressionPercent?: number | null
+  optimized?: boolean
 }
 
 type RuntimeEnv = {
@@ -221,9 +222,9 @@ export const AdminUploadPanel: React.FC = () => {
         </div>
         
         <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm mx-auto">
-          PNG, JPG, WebP, HEIC, AVIF, GIF. Max {DEFAULT_MAX_MB} MB.
+          PNG, JPG, WebP, HEIC, AVIF, GIF, SVG. Max {DEFAULT_MAX_MB} MB.
           <br />
-          <span className="text-emerald-600 dark:text-emerald-400">Automatically converted to WebP</span>
+          <span className="text-emerald-600 dark:text-emerald-400">PNG, JPG, WebP optimized automatically</span>
         </p>
       </div>
 
@@ -306,33 +307,62 @@ export const AdminUploadPanel: React.FC = () => {
 
           {/* Stats Grid */}
           <div className="grid sm:grid-cols-2 gap-4">
-            {/* Compression Stats */}
+            {/* Compression Stats or File Info */}
             <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="h-4 w-4 text-emerald-600" />
+                {result.optimized !== false ? (
+                  <Sparkles className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  <FileImage className="h-4 w-4 text-blue-600" />
+                )}
                 <span className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">
-                  Optimization
+                  {result.optimized !== false ? "Optimization" : "File Info"}
                 </span>
               </div>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Original</span>
-                  <span className="font-medium text-stone-700 dark:text-stone-300">
-                    {formatBytes(result.originalSize)} · {result.originalMimeType}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Optimized</span>
-                  <span className="font-medium text-stone-700 dark:text-stone-300">
-                    {formatBytes(result.size)} · {result.mimeType}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Saved</span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    {compressionPct}% smaller
-                  </span>
-                </div>
+                {result.optimized !== false ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">Original</span>
+                      <span className="font-medium text-stone-700 dark:text-stone-300">
+                        {formatBytes(result.originalSize)} · {result.originalMimeType}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">Optimized</span>
+                      <span className="font-medium text-stone-700 dark:text-stone-300">
+                        {formatBytes(result.size)} · {result.mimeType}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">Saved</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {compressionPct}% smaller
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">Type</span>
+                      <span className="font-medium text-stone-700 dark:text-stone-300">
+                        {result.mimeType}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">Size</span>
+                      <span className="font-medium text-stone-700 dark:text-stone-300">
+                        {formatBytes(result.size)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-stone-500">Status</span>
+                      <span className="font-medium text-blue-600 dark:text-blue-400">
+                        Uploaded as-is
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

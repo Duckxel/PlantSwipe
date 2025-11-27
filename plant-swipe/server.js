@@ -905,6 +905,13 @@ const gardenCoverMulter = multer({
 })
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
 
+// Mime types that should be optimized and converted to WebP
+const optimizableMimeTypes = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+])
+
 async function handleScopedImageUpload(req, res, options = {}) {
   const { prefixBuilder, auditLabel = 'admin', actorId = null, uploaderInfo = null } = options
 
@@ -937,42 +944,75 @@ async function handleScopedImageUpload(req, res, options = {}) {
         return
       }
 
-      let optimizedBuffer
-      try {
-        optimizedBuffer = await sharp(file.buffer)
-          .rotate()
-          .resize({
-            width: adminUploadMaxDimension,
-            height: adminUploadMaxDimension,
-            fit: 'inside',
-            withoutEnlargement: true,
-            fastShrinkOnLoad: true,
-          })
-          .webp({
-            quality: adminUploadWebpQuality,
-            effort: 5,
-            smartSubsample: true,
-          })
-          .toBuffer()
-      } catch (sharpErr) {
-        console.error('[upload-image] failed to convert image to webp', sharpErr)
-        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
-        return
-      }
-
       const baseName = sanitizeUploadBaseName(file.originalname)
-      const finalTypeSegment = sanitizePathSegment('webp', 'webp')
       const originalTypeSegment = deriveUploadTypeSegment(file.originalname, mime)
       const scopedPrefix =
         typeof prefixBuilder === 'function'
           ? prefixBuilder({ req, file })
           : adminUploadPrefix
+
+      // Determine if file should be optimized (only JPEG, PNG, WebP)
+      const shouldOptimize = optimizableMimeTypes.has(mime)
+      
+      let finalBuffer
+      let finalMimeType
+      let finalTypeSegment
+      let compressionPercent = 0
+      let quality = null
+
+      if (shouldOptimize) {
+        // Optimize and convert to WebP
+        try {
+          finalBuffer = await sharp(file.buffer)
+            .rotate()
+            .resize({
+              width: adminUploadMaxDimension,
+              height: adminUploadMaxDimension,
+              fit: 'inside',
+              withoutEnlargement: true,
+              fastShrinkOnLoad: true,
+            })
+            .webp({
+              quality: adminUploadWebpQuality,
+              effort: 5,
+              smartSubsample: true,
+            })
+            .toBuffer()
+          finalMimeType = 'image/webp'
+          finalTypeSegment = sanitizePathSegment('webp', 'webp')
+          quality = adminUploadWebpQuality
+          compressionPercent = file.size > 0 
+            ? Math.max(0, Math.round(100 - (finalBuffer.length / file.size) * 100)) 
+            : 0
+        } catch (sharpErr) {
+          console.error('[upload-image] failed to convert image to webp', sharpErr)
+          res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+          return
+        }
+      } else {
+        // Upload as-is without optimization (SVG, GIF, AVIF, HEIC, etc.)
+        finalBuffer = file.buffer
+        finalMimeType = mime
+        // Derive extension from mime type
+        const extMap = {
+          'image/svg+xml': 'svg',
+          'image/gif': 'gif',
+          'image/avif': 'avif',
+          'image/heic': 'heic',
+          'image/heif': 'heif',
+          'image/tiff': 'tiff',
+          'image/bmp': 'bmp',
+        }
+        const ext = extMap[mime] || originalTypeSegment
+        finalTypeSegment = sanitizePathSegment(ext, ext)
+      }
+
       const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix)
 
       try {
-        const { error: uploadError } = await supabaseServiceClient.storage.from(adminUploadBucket).upload(objectPath, optimizedBuffer, {
+        const { error: uploadError } = await supabaseServiceClient.storage.from(adminUploadBucket).upload(objectPath, finalBuffer, {
           cacheControl: '31536000',
-          contentType: 'image/webp',
+          contentType: finalMimeType,
           upsert: false,
         })
         if (uploadError) {
@@ -989,21 +1029,20 @@ async function handleScopedImageUpload(req, res, options = {}) {
       // Transform URL to use media proxy (hides Supabase project URL)
       const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
       const uploadedAt = new Date().toISOString()
-      const compressionPercent =
-        file.size > 0 ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100)) : 0
 
       const payload = {
         ok: true,
         bucket: adminUploadBucket,
         path: objectPath,
         url: proxyUrl,
-        mimeType: 'image/webp',
-        size: optimizedBuffer.length,
+        mimeType: finalMimeType,
+        size: finalBuffer.length,
         originalMimeType: mime,
         originalSize: file.size,
         uploadedAt,
-        quality: adminUploadWebpQuality,
+        quality,
         compressionPercent,
+        optimized: shouldOptimize,
       }
       if (!proxyUrl) {
         payload.warning = 'Bucket is not public; no public URL is available'
@@ -1015,18 +1054,19 @@ async function handleScopedImageUpload(req, res, options = {}) {
         adminName: uploaderInfo?.name || null,
         bucket: adminUploadBucket,
         path: objectPath,
-        publicUrl,
-        mimeType: 'image/webp',
+        publicUrl: proxyUrl,
+        mimeType: finalMimeType,
         originalMimeType: mime,
-        sizeBytes: optimizedBuffer.length,
+        sizeBytes: finalBuffer.length,
         originalSizeBytes: file.size,
-        quality: adminUploadWebpQuality,
+        quality,
         compressionPercent,
         metadata: {
           originalName: file.originalname,
           typeSegment: finalTypeSegment,
           originalTypeSegment,
           scope: auditLabel,
+          optimized: shouldOptimize,
         },
       })
 
@@ -1038,9 +1078,10 @@ async function handleScopedImageUpload(req, res, options = {}) {
             url: proxyUrl,
             originalMimeType: mime,
             originalSize: file.size,
-            optimizedSize: optimizedBuffer.length,
-            quality: adminUploadWebpQuality,
+            finalSize: finalBuffer.length,
+            quality,
             scope: auditLabel,
+            optimized: shouldOptimize,
           }
           let logged = false
           if (sql) {
