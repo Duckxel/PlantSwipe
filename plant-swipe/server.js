@@ -10206,13 +10206,26 @@ async function resolveNotificationAudience(campaign) {
     const rows = await sql`select id::text as id from public.profiles where id is not null and (notify_push is null or notify_push = true)`
     addRows(rows, 'id')
   } else if (campaign.audience === 'tasks_open') {
+    // Query live data directly from garden_plant_task_occurrences to find users with uncompleted tasks today.
+    // This ensures we catch ALL users with remaining tasks, not just those whose cache was populated today.
     const today = new Date().toISOString().slice(0, 10)
+    const startOfDay = `${today}T00:00:00.000Z`
+    const endOfDay = `${today}T23:59:59.999Z`
     const rows = await sql`
-      select distinct c.user_id::text as user_id
-      from public.user_task_daily_cache c
-      join public.profiles p on p.id = c.user_id
-      where c.cache_date = ${today} and c.gardens_with_remaining_tasks > 0 and c.user_id is not null
+      select distinct gm.user_id::text as user_id
+      from public.garden_members gm
+      join public.profiles p on p.id = gm.user_id
+      where gm.user_id is not null
         and (p.notify_push is null or p.notify_push = true)
+        and exists (
+          select 1
+          from public.garden_plant_tasks t
+          join public.garden_plant_task_occurrences occ on occ.task_id = t.id
+          where t.garden_id = gm.garden_id
+            and occ.due_at >= ${startOfDay}::timestamptz
+            and occ.due_at <= ${endOfDay}::timestamptz
+            and occ.completed_count < greatest(1, occ.required_count)
+        )
     `
     addRows(rows, 'user_id')
   } else if (campaign.audience === 'inactive_week') {
