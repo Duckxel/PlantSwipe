@@ -844,6 +844,37 @@ const adminUploadAllowedMimeTypes = new Set([
   'image/svg+xml',
 ])
 
+// Media proxy URL configuration
+// Transforms Supabase storage URLs to use the nginx reverse proxy
+// This prevents exposing the Supabase project URL directly
+const mediaProxyBaseUrl = (process.env.MEDIA_PROXY_URL || 'https://media.aphylia.app').replace(/\/+$/, '')
+
+/**
+ * Transforms a Supabase storage public URL to use the media proxy
+ * Example:
+ *   Input:  https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/file.svg
+ *   Output: https://media.aphylia.app/UTILITY/admin/uploads/svg/file.svg
+ * 
+ * @param {string|null|undefined} url - The Supabase storage public URL
+ * @returns {string|null} - The transformed URL using media proxy, or null if input is invalid
+ */
+function supabaseStorageToMediaProxy(url) {
+  if (!url || !supabaseUrlEnv) return url || null
+  try {
+    const normalizedBase = supabaseUrlEnv.replace(/\/+$/, '')
+    const publicPrefix = `${normalizedBase}/storage/v1/object/public/`
+    const urlStr = String(url)
+    if (!urlStr.startsWith(publicPrefix)) return url
+    // Extract the path after /storage/v1/object/public/
+    const remainder = urlStr.slice(publicPrefix.length)
+    if (!remainder) return url
+    // Build the media proxy URL
+    return `${mediaProxyBaseUrl}/${remainder}`
+  } catch {
+    return url
+  }
+}
+
 const gardenCoverUploadBucket = (() => {
   const fromEnv = (process.env.GARDEN_UPLOAD_BUCKET || '').trim()
   if (fromEnv) return fromEnv
@@ -955,6 +986,8 @@ async function handleScopedImageUpload(req, res, options = {}) {
 
       const { data: publicData } = supabaseServiceClient.storage.from(adminUploadBucket).getPublicUrl(objectPath)
       const publicUrl = publicData?.publicUrl || null
+      // Transform URL to use media proxy (hides Supabase project URL)
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
       const uploadedAt = new Date().toISOString()
       const compressionPercent =
         file.size > 0 ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100)) : 0
@@ -963,7 +996,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         ok: true,
         bucket: adminUploadBucket,
         path: objectPath,
-        url: publicUrl,
+        url: proxyUrl,
         mimeType: 'image/webp',
         size: optimizedBuffer.length,
         originalMimeType: mime,
@@ -972,7 +1005,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         quality: adminUploadWebpQuality,
         compressionPercent,
       }
-      if (!publicUrl) {
+      if (!proxyUrl) {
         payload.warning = 'Bucket is not public; no public URL is available'
       }
 
@@ -1002,7 +1035,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
           const detail = {
             bucket: adminUploadBucket,
             path: objectPath,
-            url: publicUrl,
+            url: proxyUrl,
             originalMimeType: mime,
             originalSize: file.size,
             optimizedSize: optimizedBuffer.length,
@@ -1109,17 +1142,37 @@ function sanitizeFolderInput(value) {
 
 function parseStoragePublicUrl(url) {
   try {
-    if (!url || !supabaseUrlEnv) return null
-    const normalizedBase = supabaseUrlEnv.replace(/\/+$/, '')
-    const publicPrefix = `${normalizedBase}/storage/v1/object/public/`
-    if (!String(url).startsWith(publicPrefix)) return null
-    const remainder = String(url).slice(publicPrefix.length)
-    const parts = remainder.split('/').filter(Boolean)
-    if (parts.length < 2) return null
-    const bucket = parts.shift()
-    const path = parts.join('/')
-    if (!bucket || !path) return null
-    return { bucket, path }
+    if (!url) return null
+    const urlStr = String(url)
+    
+    // Try to parse as a Supabase storage URL
+    if (supabaseUrlEnv) {
+      const normalizedBase = supabaseUrlEnv.replace(/\/+$/, '')
+      const publicPrefix = `${normalizedBase}/storage/v1/object/public/`
+      if (urlStr.startsWith(publicPrefix)) {
+        const remainder = urlStr.slice(publicPrefix.length)
+        const parts = remainder.split('/').filter(Boolean)
+        if (parts.length >= 2) {
+          const bucket = parts.shift()
+          const path = parts.join('/')
+          if (bucket && path) return { bucket, path }
+        }
+      }
+    }
+    
+    // Try to parse as a media proxy URL (e.g., https://media.aphylia.app/BUCKET/path)
+    const proxyPrefix = `${mediaProxyBaseUrl}/`
+    if (urlStr.startsWith(proxyPrefix)) {
+      const remainder = urlStr.slice(proxyPrefix.length)
+      const parts = remainder.split('/').filter(Boolean)
+      if (parts.length >= 2) {
+        const bucket = parts.shift()
+        const path = parts.join('/')
+        if (bucket && path) return { bucket, path }
+      }
+    }
+    
+    return null
   } catch {
     return null
   }
@@ -2184,6 +2237,9 @@ function extractStorageName(path) {
 
 function normalizeAdminMediaRow(row) {
   if (!row) return null
+  // Transform any Supabase URLs to proxy URLs for backward compatibility
+  const rawUrl = row.public_url || row.publicUrl || null
+  const url = rawUrl ? supabaseStorageToMediaProxy(rawUrl) : null
   return {
     id: row.id || null,
     adminId: row.admin_id || row.adminId || null,
@@ -2191,7 +2247,7 @@ function normalizeAdminMediaRow(row) {
     adminName: row.admin_name || row.adminName || null,
     bucket: row.bucket || null,
     path: row.path || null,
-    url: row.public_url || row.publicUrl || null,
+    url,
     mimeType: row.mime_type || row.mimeType || null,
     originalMimeType: row.original_mime_type || row.originalMimeType || null,
     sizeBytes:
@@ -2370,13 +2426,15 @@ async function syncGardenCoverMedia(existingKeys, limit = 200) {
       row.created_at ||
       row.createdAt ||
       null
+    // Transform URL to use media proxy for consistency
+    const proxyUrl = supabaseStorageToMediaProxy(publicUrl) || publicUrl
     const recorded = await recordAdminMediaUpload({
       adminId: ownerId,
       adminEmail: null,
       adminName: ownerName,
       bucket: parsed.bucket,
       path: parsed.path,
-      publicUrl,
+      publicUrl: proxyUrl,
       mimeType: 'image/webp',
       originalMimeType: 'image/webp',
       sizeBytes: null,
@@ -9033,13 +9091,16 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
         .from(gardenCoverUploadBucket)
         .getPublicUrl(objectPath)
       const publicUrl = publicData?.publicUrl || null
-      if (!publicUrl) {
+      // Transform URL to use media proxy (hides Supabase project URL)
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+      if (!proxyUrl) {
         res.status(500).json({ error: 'Failed to generate public URL for cover image' })
         return
       }
 
       try {
-        await updateGardenCoverImage(gardenId, publicUrl)
+        // Store the proxy URL in the database for display
+        await updateGardenCoverImage(gardenId, proxyUrl)
       } catch (dbErr) {
         console.error('[garden-cover] failed to update garden cover', dbErr)
         res.status(500).json({ error: dbErr?.message || 'Failed to update garden cover' })
@@ -9047,7 +9108,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
       }
 
       let deletedPrevious = false
-      if (previousUrl && previousUrl !== publicUrl) {
+      if (previousUrl && previousUrl !== proxyUrl) {
         try {
           const result = await deleteGardenCoverObject(previousUrl)
           deletedPrevious = Boolean(result.deleted)
@@ -9066,7 +9127,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
             adminName: uploaderDisplayName,
             bucket: gardenCoverUploadBucket,
             path: objectPath,
-            publicUrl,
+            publicUrl: proxyUrl,
             mimeType: 'image/webp',
             originalMimeType: mime,
             sizeBytes: optimizedBuffer.length,
@@ -9091,7 +9152,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
         gardenId,
         bucket: gardenCoverUploadBucket,
         path: objectPath,
-        url: publicUrl,
+        url: proxyUrl,
         mimeType: 'image/webp',
         size: optimizedBuffer.length,
         originalMimeType: mime,

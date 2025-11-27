@@ -28,7 +28,7 @@ const memberProfiles: Record<
     role: "CCO / CEO / Founder",
     tag: "Chaotic Creative",
     imageUrl:
-      "https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/webp/img-0151-ab46ee91-19d9-4c9f-9694-8c975c084cf1.webp",
+      "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0151-ab46ee91-19d9-4c9f-9694-8c975c084cf1.webp",
   },
   five: {
     pseudo: "FIVE",
@@ -36,7 +36,7 @@ const memberProfiles: Record<
     role: "CTO / Co-Founder",
     tag: "Sleepless Overthinker",
     imageUrl:
-      "https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/webp/img-0414-2-low-0a499a50-08a7-4615-834d-288b179e628e.webp",
+      "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0414-2-low-0a499a50-08a7-4615-834d-288b179e628e.webp",
   },
 }
 
