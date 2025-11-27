@@ -598,98 +598,6 @@ fi
 # Install nginx site and admin snippet
 log "Installing nginx config…"
 
-# Prepare nginx config with dynamic SSL certificate paths and conditional media server block
-prepare_nginx_config() {
-  local src_config="$1"
-  local dst_config="$2"
-  local primary_domain=""
-  local has_media_domain="false"
-  
-  # Get primary domain from domain.json if it exists
-  if [[ -f "$REPO_DIR/domain.json" ]]; then
-    primary_domain="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
-    if [[ -z "$primary_domain" ]]; then
-      # Fallback: try to find any existing certificate
-      for d in /etc/letsencrypt/live/*; do
-        [[ -d "$d" ]] || continue
-        primary_domain="$(basename "$d")"
-        break
-      done
-    fi
-    
-    # Check if media.aphylia.app is in domain.json
-    if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "media.aphylia.app")" == "true" ]]; then
-      has_media_domain="true"
-      log "media.aphylia.app found in domain.json - including media server block"
-    else
-      log "media.aphylia.app not found in domain.json - excluding media server block"
-    fi
-  else
-    # No domain.json - try to find existing certificate
-    for d in /etc/letsencrypt/live/*; do
-      [[ -d "$d" ]] || continue
-      primary_domain="$(basename "$d")"
-      break
-    done
-  fi
-  
-  # If still no primary domain, use a placeholder (will be fixed later by ensure_nginx_ssl_directives)
-  if [[ -z "$primary_domain" ]]; then
-    log "[WARN] No primary domain found. Using placeholder - will be fixed during SSL setup."
-    primary_domain="__PRIMARY_DOMAIN__"
-  else
-    log "Using primary domain for SSL certificates: $primary_domain"
-  fi
-  
-  # Create temporary config file
-  local tmp_config="/tmp/plant-swipe-processed.conf"
-  cp "$src_config" "$tmp_config"
-  
-  # Replace __PRIMARY_DOMAIN__ placeholder with actual domain
-  sed -i "s|__PRIMARY_DOMAIN__|$primary_domain|g" "$tmp_config"
-  
-  # Conditionally include/exclude media server block
-  if [[ "$has_media_domain" != "true" ]]; then
-    log "Removing media server block (media.aphylia.app not in domain.json)"
-    # Remove the media server block between markers
-    sed -i '/# __MEDIA_SERVER_BLOCK_START__/,/# __MEDIA_SERVER_BLOCK_END__/d' "$tmp_config"
-  else
-    # Remove the markers but keep the server block
-    sed -i '/# __MEDIA_SERVER_BLOCK_START__/d' "$tmp_config"
-    sed -i '/# __MEDIA_SERVER_BLOCK_END__/d' "$tmp_config"
-  fi
-  
-  # Remove SSL listeners if user doesn't want SSL
-  if [[ ! "$WANT_SSL" =~ ^[Yy]$ ]]; then
-    log "Removing SSL listeners (user declined SSL setup)"
-    sed -i -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$tmp_config"
-  fi
-  
-  # Install the processed config
-  $SUDO install -D -m 0644 "$tmp_config" "$dst_config"
-  rm -f "$tmp_config"
-}
-
-# Create nginx config with dynamic SSL certificate paths
-if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
-  log "Installing nginx config with SSL support…"
-  prepare_nginx_config "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
-else
-  log "Installing nginx config without SSL (removing SSL listeners)…"
-  prepare_nginx_config "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
-fi
-
-$SUDO mkdir -p "/etc/nginx/snippets"
-$SUDO install -D -m 0644 "$REPO_DIR/admin_api/nginx-snippet.conf" "$NGINX_SNIPPET_DST"
-$SUDO ln -sfn "$NGINX_SITE_AVAIL" "$NGINX_SITE_ENABL"
-# Disable default site if present (avoids port 80 conflicts)
-if [[ -e /etc/nginx/sites-enabled/default ]]; then
-  $SUDO rm -f /etc/nginx/sites-enabled/default || true
-fi
-# Remove legacy site filenames if present
-$SUDO rm -f /etc/nginx/sites-available/plant-swipe || true
-$SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
-
 # Helper utilities for SSL/Let's Encrypt reconciliation
 get_primary_domain_from_domain_json() {
   local domain_json="$1"
@@ -786,6 +694,98 @@ ensure_nginx_ssl_directives() {
   $SUDO rm -f "$NGINX_SITE_AVAIL.bak"
   return 0
 }
+
+# Prepare nginx config with dynamic SSL certificate paths and conditional media server block
+prepare_nginx_config() {
+  local src_config="$1"
+  local dst_config="$2"
+  local primary_domain=""
+  local has_media_domain="false"
+  
+  # Get primary domain from domain.json if it exists
+  if [[ -f "$REPO_DIR/domain.json" ]]; then
+    primary_domain="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
+    if [[ -z "$primary_domain" ]]; then
+      # Fallback: try to find any existing certificate
+      for d in /etc/letsencrypt/live/*; do
+        [[ -d "$d" ]] || continue
+        primary_domain="$(basename "$d")"
+        break
+      done
+    fi
+    
+    # Check if media.aphylia.app is in domain.json
+    if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "media.aphylia.app")" == "true" ]]; then
+      has_media_domain="true"
+      log "media.aphylia.app found in domain.json - including media server block"
+    else
+      log "media.aphylia.app not found in domain.json - excluding media server block"
+    fi
+  else
+    # No domain.json - try to find existing certificate
+    for d in /etc/letsencrypt/live/*; do
+      [[ -d "$d" ]] || continue
+      primary_domain="$(basename "$d")"
+      break
+    done
+  fi
+  
+  # If still no primary domain, use a placeholder (will be fixed later by ensure_nginx_ssl_directives)
+  if [[ -z "$primary_domain" ]]; then
+    log "[WARN] No primary domain found. Using placeholder - will be fixed during SSL setup."
+    primary_domain="__PRIMARY_DOMAIN__"
+  else
+    log "Using primary domain for SSL certificates: $primary_domain"
+  fi
+  
+  # Create temporary config file
+  local tmp_config="/tmp/plant-swipe-processed.conf"
+  cp "$src_config" "$tmp_config"
+  
+  # Replace __PRIMARY_DOMAIN__ placeholder with actual domain
+  sed -i "s|__PRIMARY_DOMAIN__|$primary_domain|g" "$tmp_config"
+  
+  # Conditionally include/exclude media server block
+  if [[ "$has_media_domain" != "true" ]]; then
+    log "Removing media server block (media.aphylia.app not in domain.json)"
+    # Remove the media server block between markers
+    sed -i '/# __MEDIA_SERVER_BLOCK_START__/,/# __MEDIA_SERVER_BLOCK_END__/d' "$tmp_config"
+  else
+    # Remove the markers but keep the server block
+    sed -i '/# __MEDIA_SERVER_BLOCK_START__/d' "$tmp_config"
+    sed -i '/# __MEDIA_SERVER_BLOCK_END__/d' "$tmp_config"
+  fi
+  
+  # Remove SSL listeners if user doesn't want SSL
+  if [[ ! "$WANT_SSL" =~ ^[Yy]$ ]]; then
+    log "Removing SSL listeners (user declined SSL setup)"
+    sed -i -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$tmp_config"
+  fi
+  
+  # Install the processed config
+  $SUDO install -D -m 0644 "$tmp_config" "$dst_config"
+  rm -f "$tmp_config"
+}
+
+# Create nginx config with dynamic SSL certificate paths
+if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
+  log "Installing nginx config with SSL support…"
+  prepare_nginx_config "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
+else
+  log "Installing nginx config without SSL (removing SSL listeners)…"
+  prepare_nginx_config "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
+fi
+
+$SUDO mkdir -p "/etc/nginx/snippets"
+$SUDO install -D -m 0644 "$REPO_DIR/admin_api/nginx-snippet.conf" "$NGINX_SNIPPET_DST"
+$SUDO ln -sfn "$NGINX_SITE_AVAIL" "$NGINX_SITE_ENABL"
+# Disable default site if present (avoids port 80 conflicts)
+if [[ -e /etc/nginx/sites-enabled/default ]]; then
+  $SUDO rm -f /etc/nginx/sites-enabled/default || true
+fi
+# Remove legacy site filenames if present
+$SUDO rm -f /etc/nginx/sites-available/plant-swipe || true
+$SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
 
 log "Testing nginx configuration…"
 # Test nginx config, but allow SSL errors if certificates don't exist yet (we'll set them up next)
