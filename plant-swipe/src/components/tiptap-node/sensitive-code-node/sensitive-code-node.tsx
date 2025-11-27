@@ -11,6 +11,46 @@ const CODE_TYPES: { value: CodeType; label: string; icon: string; description: s
   { value: "code", label: "Code", icon: "📋", description: "Generic code" },
 ]
 
+// Exact same styles as email HTML output for consistent preview
+const EMAIL_STYLES: Record<CodeType, { bg: string; borderColor: string; accentColor: string; iconBg: string }> = {
+  otp: {
+    bg: "#fef3c7",
+    borderColor: "#fbbf24",
+    accentColor: "#b45309",
+    iconBg: "#fde68a",
+  },
+  verification: {
+    bg: "#d1fae5",
+    borderColor: "#34d399",
+    accentColor: "#047857",
+    iconBg: "#a7f3d0",
+  },
+  password: {
+    bg: "#ede9fe",
+    borderColor: "#a78bfa",
+    accentColor: "#6d28d9",
+    iconBg: "#ddd6fe",
+  },
+  link: {
+    bg: "#dbeafe",
+    borderColor: "#60a5fa",
+    accentColor: "#1d4ed8",
+    iconBg: "#bfdbfe",
+  },
+  email: {
+    bg: "#fce7f3",
+    borderColor: "#f472b6",
+    accentColor: "#be185d",
+    iconBg: "#fbcfe8",
+  },
+  code: {
+    bg: "#f3f4f6",
+    borderColor: "#9ca3af",
+    accentColor: "#374151",
+    iconBg: "#e5e7eb",
+  },
+}
+
 export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeViewProps) {
   const { label, code, type, expiryText } = node.attrs as {
     label: string
@@ -21,68 +61,22 @@ export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeView
 
   const [isEditing, setIsEditing] = useState(false)
 
-  const getTypeConfig = () => {
-    switch (type) {
-      case "otp":
-        return {
-          bg: "from-amber-100 to-amber-50",
-          border: "border-amber-400",
-          accent: "text-amber-700",
-          iconBg: "bg-amber-200",
-        }
-      case "verification":
-        return {
-          bg: "from-emerald-100 to-emerald-50",
-          border: "border-emerald-400",
-          accent: "text-emerald-700",
-          iconBg: "bg-emerald-200",
-        }
-      case "password":
-        return {
-          bg: "from-violet-100 to-violet-50",
-          border: "border-violet-400",
-          accent: "text-violet-700",
-          iconBg: "bg-violet-200",
-        }
-      case "link":
-        return {
-          bg: "from-blue-100 to-blue-50",
-          border: "border-blue-400",
-          accent: "text-blue-700",
-          iconBg: "bg-blue-200",
-        }
-      case "email":
-        return {
-          bg: "from-pink-100 to-pink-50",
-          border: "border-pink-400",
-          accent: "text-pink-700",
-          iconBg: "bg-pink-200",
-        }
-      case "code":
-      default:
-        return {
-          bg: "from-gray-100 to-gray-50",
-          border: "border-gray-400",
-          accent: "text-gray-700",
-          iconBg: "bg-gray-200",
-        }
-    }
-  }
-
-  const config = getTypeConfig()
+  const styles = EMAIL_STYLES[type] || EMAIL_STYLES.otp
   const currentType = CODE_TYPES.find((t) => t.value === type) || CODE_TYPES[0]
 
   return (
     <NodeViewWrapper
       data-type="sensitive-code"
-      className={`my-6 ${selected ? "ring-2 ring-emerald-500 ring-offset-4 rounded-3xl" : ""}`}
+      className={`my-6 ${selected ? "ring-2 ring-emerald-500 ring-offset-4 rounded-2xl" : ""}`}
     >
-      <div
-        className={`relative mx-auto max-w-md rounded-3xl border-[3px] border-dashed bg-gradient-to-br p-8 transition-all ${config.bg} ${config.border} dark:from-stone-800 dark:to-stone-900`}
-        onClick={() => !isEditing && setIsEditing(true)}
-      >
-        {isEditing ? (
-          <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
+      {isEditing ? (
+        // Editing mode - keep the nice UI for editing
+        <div
+          className="relative mx-auto max-w-md rounded-2xl border-[3px] border-dashed p-7 transition-all"
+          style={{ backgroundColor: styles.bg, borderColor: styles.borderColor }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="space-y-4">
             {/* Type selector */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider">
@@ -160,37 +154,92 @@ export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeView
               Done
             </button>
           </div>
-        ) : (
-          <div className="flex flex-col items-center gap-3 cursor-pointer">
-            {/* Icon */}
-            <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-4xl ${config.iconBg} dark:bg-opacity-30`}>
-              {currentType.icon}
-            </div>
-
-            {/* Label */}
-            <div className={`text-xs font-bold uppercase tracking-widest ${config.accent} dark:text-opacity-80`}>
-              {label || "Your verification code"}
-            </div>
-
-            {/* Code display */}
-            <div className="rounded-2xl border-2 border-stone-200 bg-white/90 px-8 py-4 font-mono text-3xl font-bold tracking-[0.3em] text-stone-900 shadow-inner dark:border-stone-700 dark:bg-stone-800 dark:text-white">
-              {code || "{{code}}"}
-            </div>
-
-            {/* Expiry text */}
-            {expiryText && (
-              <div className="mt-2 text-sm font-medium text-red-500 dark:text-red-400">
-                {expiryText}
-              </div>
-            )}
-
-            {/* Edit hint */}
-            <div className="absolute bottom-2 right-2 text-[10px] text-stone-300 dark:text-stone-600">
-              Click to edit
-            </div>
+        </div>
+      ) : (
+        // Preview mode - exact same styles as email HTML output
+        <div
+          className="relative mx-auto max-w-[420px] cursor-pointer"
+          onClick={() => setIsEditing(true)}
+          style={{
+            borderRadius: "16px",
+            padding: "28px",
+            textAlign: "center",
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+            backgroundColor: styles.bg,
+            border: `3px dashed ${styles.borderColor}`,
+          }}
+        >
+          {/* Icon - using same dimensions as email */}
+          <div
+            style={{
+              display: "inline-block",
+              width: "56px",
+              height: "56px",
+              borderRadius: "14px",
+              backgroundColor: styles.iconBg,
+              fontSize: "28px",
+              lineHeight: "56px",
+              textAlign: "center",
+              verticalAlign: "middle",
+              marginBottom: "12px",
+            }}
+          >
+            {currentType.icon}
           </div>
-        )}
-      </div>
+
+          {/* Label */}
+          <div
+            style={{
+              fontSize: "12px",
+              fontWeight: 700,
+              color: styles.accentColor,
+              textTransform: "uppercase",
+              letterSpacing: "2px",
+              margin: "0 0 12px 0",
+            }}
+          >
+            {label || "Your verification code"}
+          </div>
+
+          {/* Code display */}
+          <div
+            style={{
+              fontFamily: "'SF Mono', 'Fira Code', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace",
+              fontSize: "24px",
+              fontWeight: 700,
+              letterSpacing: "0.2em",
+              color: "#111827",
+              backgroundColor: "#ffffff",
+              padding: "14px 28px",
+              borderRadius: "12px",
+              border: "2px solid #e5e7eb",
+              display: "inline-block",
+              margin: "8px 0",
+            }}
+          >
+            {code || "{{code}}"}
+          </div>
+
+          {/* Expiry text */}
+          {expiryText && (
+            <div
+              style={{
+                fontSize: "13px",
+                color: "#ef4444",
+                fontWeight: 500,
+                marginTop: "12px",
+              }}
+            >
+              {expiryText}
+            </div>
+          )}
+
+          {/* Edit hint */}
+          <div className="absolute bottom-2 right-2 text-[10px] text-stone-400">
+            Click to edit
+          </div>
+        </div>
+      )}
     </NodeViewWrapper>
   )
 }
