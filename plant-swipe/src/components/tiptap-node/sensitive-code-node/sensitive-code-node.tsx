@@ -13,12 +13,11 @@ const CODE_TYPES: { value: CodeType; label: string; icon: string; description: s
 ]
 
 export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeViewProps) {
-  const { label, code, type, expiryText, showCopyHint } = node.attrs as {
+  const { label, code, type, expiryText } = node.attrs as {
     label: string
     code: string
     type: CodeType
     expiryText: string
-    showCopyHint: boolean
   }
 
   const [isEditing, setIsEditing] = useState(false)
@@ -161,24 +160,6 @@ export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeView
               />
             </div>
 
-            {/* Show copy hint toggle */}
-            <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3 dark:border-stone-700 dark:bg-stone-800">
-              <span className="text-sm text-stone-600 dark:text-stone-300">Show "Click to copy" hint</span>
-              <button
-                type="button"
-                onClick={() => updateAttributes({ showCopyHint: !showCopyHint })}
-                className={`relative h-6 w-11 rounded-full transition-colors ${
-                  showCopyHint ? "bg-emerald-500" : "bg-stone-300 dark:bg-stone-600"
-                }`}
-              >
-                <span
-                  className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform shadow-sm ${
-                    showCopyHint ? "left-6" : "left-1"
-                  }`}
-                />
-              </button>
-            </div>
-
             <button
               type="button"
               onClick={() => setIsEditing(false)}
@@ -227,13 +208,6 @@ export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeView
                 )}
               </button>
             </div>
-
-            {/* Copy hint */}
-            {showCopyHint && (
-              <div className="text-xs text-stone-400 dark:text-stone-500">
-                {copied ? "Copied!" : "Click to copy"}
-              </div>
-            )}
 
             {/* Expiry text */}
             {expiryText && (

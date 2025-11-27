@@ -13,7 +13,6 @@ export interface SensitiveCodeAttributes {
   code: string
   type: CodeType
   expiryText: string
-  showCopyHint: boolean
 }
 
 declare module "@tiptap/react" {
@@ -70,76 +69,84 @@ export const SensitiveCodeNode = Node.create<SensitiveCodeNodeOptions>({
           return expiryEl?.textContent || ""
         },
       },
-      showCopyHint: {
-        default: true,
-        parseHTML: (element: HTMLElement) => {
-          return element.getAttribute("data-show-copy-hint") !== "false"
-        },
-      },
     }
   },
 
   parseHTML() {
-    return [{ tag: 'div[data-type="sensitive-code"]' }]
+    return [
+      { tag: 'div[data-type="sensitive-code"]' },
+      { tag: 'table[data-type="sensitive-code"]' },
+    ]
   },
 
   renderHTML({ HTMLAttributes }) {
-    const { label, code, type, expiryText, showCopyHint } = HTMLAttributes as SensitiveCodeAttributes
+    const { label, code, type, expiryText } = HTMLAttributes as SensitiveCodeAttributes
     const styles = getCodeStyles(type)
 
+    // Use table-based layout for maximum email client compatibility
+    // Gmail and Outlook don't support flexbox or many CSS features
     return [
-      "div",
+      "table",
       mergeAttributes(
         {
           "data-type": "sensitive-code",
           "data-code-type": type || "otp",
-          "data-show-copy-hint": String(showCopyHint !== false),
+          role: "presentation",
+          cellpadding: "0",
+          cellspacing: "0",
+          border: "0",
+          width: "100%",
           style: `${styles.container} margin: 32px auto; max-width: 420px;`,
         },
         this.options.HTMLAttributes
       ),
-      // Inner content wrapper
       [
-        "div",
-        { style: styles.innerWrapper },
-        // Icon
+        "tr",
+        {},
         [
-          "div",
-          { style: styles.iconWrapper },
-          getTypeIcon(type),
-        ],
-        // Label
-        [
-          "div",
-          { "data-label": "true", style: styles.label },
-          label || "Your verification code",
-        ],
-        // Code display
-        [
-          "div",
-          { "data-code": "true", style: styles.codeBox },
-          code || "{{code}}",
-        ],
-        // Copy instruction (static text for emails - no JS interaction)
-        ...(showCopyHint !== false
-          ? [
+          "td",
+          { align: "center", style: styles.innerWrapper },
+          // Icon in a centered table
+          [
+            "table",
+            { role: "presentation", cellpadding: "0", cellspacing: "0", border: "0", style: "margin: 0 auto 12px auto;" },
+            [
+              "tr",
+              {},
               [
-                "div",
-                { style: styles.copyHint },
-                "Copy and paste this code",
+                "td",
+                { 
+                  align: "center", 
+                  valign: "middle",
+                  style: styles.iconWrapper 
+                },
+                getTypeIcon(type),
               ],
-            ]
-          : []),
-        // Expiry text
-        ...(expiryText
-          ? [
-              [
-                "div",
-                { "data-expiry": "true", style: styles.expiry },
-                expiryText,
-              ],
-            ]
-          : []),
+            ],
+          ],
+          // Label
+          [
+            "div",
+            { "data-label": "true", style: styles.label },
+            label || "Your verification code",
+          ],
+          // Code display
+          [
+            "div",
+            { "data-code": "true", style: styles.codeBox },
+            code || "{{code}}",
+          ],
+          // Expiry text (no copy hint - JS doesn't work in emails)
+          ...(expiryText
+            ? [
+                [
+                  "div",
+                  { "data-expiry": "true", style: styles.expiry },
+                  expiryText,
+                ],
+              ]
+            : []),
+        ],
       ],
     ]
   },
@@ -160,7 +167,6 @@ export const SensitiveCodeNode = Node.create<SensitiveCodeNodeOptions>({
               code: options?.code ?? "{{code}}",
               type: options?.type ?? "otp",
               expiryText: options?.expiryText ?? "",
-              showCopyHint: options?.showCopyHint ?? true,
             },
           })
         },
@@ -187,8 +193,8 @@ function getTypeIcon(type: CodeType): string {
 }
 
 function getCodeStyles(type: CodeType): Record<string, string> {
-  // Email-compatible styles - no flexbox, no gradients, no box-shadow
-  // Many email clients don't support these CSS features
+  // Email-compatible styles - using table-based centering for maximum compatibility
+  // Gmail and Outlook don't support flexbox, so we use tables and inline styles
   const styleMap: Record<CodeType, { bg: string; borderColor: string; accentColor: string; iconBg: string }> = {
     otp: {
       bg: "#fef3c7", // Solid amber background
@@ -241,7 +247,9 @@ function getCodeStyles(type: CodeType): Record<string, string> {
     `.replace(/\s+/g, " ").trim(),
     // Use table-based centering instead of flexbox for email compatibility
     innerWrapper: "text-align: center;",
+    // Icon wrapper using table cell for proper vertical centering in emails
     iconWrapper: `
+      display: inline-block;
       width: 56px;
       height: 56px;
       border-radius: 14px;
@@ -249,7 +257,8 @@ function getCodeStyles(type: CodeType): Record<string, string> {
       font-size: 28px;
       line-height: 56px;
       text-align: center;
-      margin: 0 auto 12px auto;
+      vertical-align: middle;
+      margin-bottom: 12px;
     `.replace(/\s+/g, " ").trim(),
     label: `
       font-size: 12px;
@@ -257,7 +266,7 @@ function getCodeStyles(type: CodeType): Record<string, string> {
       color: ${s.accentColor};
       text-transform: uppercase;
       letter-spacing: 2px;
-      margin-bottom: 12px;
+      margin: 0 0 12px 0;
     `.replace(/\s+/g, " ").trim(),
     codeBox: `
       font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
@@ -271,11 +280,6 @@ function getCodeStyles(type: CodeType): Record<string, string> {
       border: 2px solid #e5e7eb;
       display: inline-block;
       margin: 8px 0;
-    `.replace(/\s+/g, " ").trim(),
-    copyHint: `
-      font-size: 12px;
-      color: #9ca3af;
-      margin-top: 8px;
     `.replace(/\s+/g, " ").trim(),
     expiry: `
       font-size: 13px;

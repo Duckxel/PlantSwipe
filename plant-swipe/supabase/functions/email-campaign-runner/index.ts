@@ -1063,10 +1063,10 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS[DEFAULT_LANGUAGE]
   const copyrightText = strings.copyright.replace("{{year}}", String(currentYear))
 
-  // Aphylia logo URL for emails (via media.aphylia.app CDN)
-  const logoUrl = "https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg"
-  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
-  const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
+  // Aphylia logo URL for emails (using WebP for Gmail compatibility - Gmail doesn't support SVG)
+  const logoUrl = "https://media.aphylia.app/UTILITY/admin/uploads/webp/icon-500-transparent-white-ceea7e70-e569-4efc-87bc-0e1c3bc5f0b9.webp"
+  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
+  const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
   return `<!DOCTYPE html>
 <html lang="${language}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
