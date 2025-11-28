@@ -25,16 +25,17 @@ create policy "Service role only" on public.admin_secrets for all using (false);
 create or replace function public.invoke_edge_function(
   function_name text,
   payload jsonb default '{}'::jsonb
-) returns uuid as $$
+) returns bigint as $$
 declare
   project_url text;
   service_key text;
-  request_id uuid;
+  request_id bigint;
 begin
   select value into project_url from public.admin_secrets where key = 'SUPABASE_URL';
   select value into service_key from public.admin_secrets where key = 'SUPABASE_SERVICE_ROLE_KEY';
 
   if project_url is null or service_key is null then
+    raise warning '[invoke_edge_function] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in admin_secrets';
     return null;
   end if;
 
