@@ -52,36 +52,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, experience_years, accent_key, is_private, disable_friend_requests')
+      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
       setProfile(data as any)
       
-      // Auto-update timezone if missing (detect from browser, fallback to London)
-      // Only auto-update if user hasn't manually set a timezone
-      if (data && !data.timezone) {
-        const detectedTimezone = typeof Intl !== 'undefined'
-          ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
-          : DEFAULT_TIMEZONE
+      // Auto-update timezone and language if missing
+      // Detect from browser and update in background
+      const needsTimezone = data && !data.timezone
+      const needsLanguage = data && !data.language
+      
+      if (needsTimezone || needsLanguage) {
+        const detectedTimezone = needsTimezone
+          ? (typeof Intl !== 'undefined'
+              ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
+              : DEFAULT_TIMEZONE)
+          : null
+        
+        // Detect language from browser (French if browser is French)
+        const detectedLanguage = needsLanguage
+          ? (() => {
+              try {
+                const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
+                return browserLang.startsWith('fr') ? 'fr' : 'en'
+              } catch {
+                return 'en'
+              }
+            })()
+          : null
         
         // Update in background (non-blocking)
-        // This ensures users get a timezone even if they haven't visited Settings yet
         void (async () => {
           try {
+            const updates: Record<string, string> = {}
+            if (detectedTimezone) updates.timezone = detectedTimezone
+            if (detectedLanguage) updates.language = detectedLanguage
+            
             const { error: updateError } = await supabase
               .from('profiles')
-              .update({ timezone: detectedTimezone })
+              .update(updates)
               .eq('id', currentId)
             
             // Update local state if update succeeded
             if (!updateError) {
-              const updatedProfile = { ...data, timezone: detectedTimezone }
+              const updatedProfile = { ...data, ...updates }
               setProfile(updatedProfile as any)
               try { localStorage.setItem('plantswipe.profile', JSON.stringify(updatedProfile)) } catch {}
             }
           } catch {
-            // Silently fail - timezone update is non-critical
+            // Silently fail - auto-detection update is non-critical
           }
         })()
       }

@@ -150,12 +150,13 @@ export function useLanguageNavigate() {
 
 /**
  * Hook to change language and preserve current route
+ * Also syncs the language preference to the user's database profile
  */
 export function useChangeLanguage() {
   const navigate = useNavigate()
   const location = useLocation()
   
-  return (newLang: SupportedLanguage) => {
+  return async (newLang: SupportedLanguage) => {
     const currentPath = removeLanguagePrefix(location.pathname)
     const newPath = addLanguagePrefix(currentPath, newLang)
     
@@ -167,5 +168,20 @@ export function useChangeLanguage() {
     
     // Navigate to new path with language prefix
     navigate(newPath, { replace: true })
+    
+    // Sync to database profile (non-blocking)
+    // Import supabase dynamically to avoid circular dependencies
+    try {
+      const { supabase } = await import('./supabaseClient')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.id) {
+        await supabase
+          .from('profiles')
+          .update({ language: newLang })
+          .eq('id', user.id)
+      }
+    } catch {
+      // Silently fail - localStorage already has the preference
+    }
   }
 }

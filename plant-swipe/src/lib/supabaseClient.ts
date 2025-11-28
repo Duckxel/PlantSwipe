@@ -58,6 +58,7 @@ export type ProfileRow = {
   favorite_plant?: string | null
   avatar_url?: string | null
   timezone?: string | null
+  language?: string | null
   experience_years?: number | null
   accent_key?: string | null
   is_private?: boolean | null
