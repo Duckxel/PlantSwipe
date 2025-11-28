@@ -502,15 +502,20 @@ async function processCampaign(
       summary.status = "partial"
     }
 
-    await finalizeCampaign(client, campaign.id, {
-      status: summary.status,
-      send_completed_at: new Date().toISOString(),
-      send_error: errorMessage,
-      total_recipients: summary.totalRecipients,
-      sent_count: summary.sentCount,
-      failed_count: failureCount,
-      send_summary: summary,
-    })
+    // Try to finalize with error status (don't throw if this fails)
+    try {
+      await finalizeCampaign(client, campaign.id, {
+        status: summary.status,
+        send_completed_at: new Date().toISOString(),
+        send_error: errorMessage,
+        total_recipients: summary.totalRecipients,
+        sent_count: summary.sentCount,
+        failed_count: failureCount,
+        send_summary: summary,
+      })
+    } catch (finalizeError) {
+      console.error("[email-campaign-runner] failed to finalize after error", campaign.id, finalizeError)
+    }
 
     console.error("[email-campaign-runner] campaign failed", campaign.id, errorMessage, error)
     return summary
@@ -836,6 +841,14 @@ async function updateCampaignSchedule(
   summary: CampaignSummary,
   nextScheduledFor: string,
 ) {
+  // Sanitize summary to ensure it can be serialized
+  let sanitizedSummary: Record<string, unknown> | null = null
+  try {
+    sanitizedSummary = JSON.parse(JSON.stringify(summary))
+  } catch {
+    console.warn("[email-campaign-runner] Could not serialize summary for schedule update")
+  }
+
   const { error } = await client
     .from("admin_email_campaigns")
     .update({
@@ -844,13 +857,13 @@ async function updateCampaignSchedule(
       total_recipients: summary.totalRecipients,
       sent_count: summary.sentCount,
       failed_count: summary.failedCount,
-      send_summary: summary,
+      send_summary: sanitizedSummary,
       send_error: null,
       send_completed_at: null,
     })
     .eq("id", campaignId)
   if (error) {
-    throw error
+    throw new Error(`Failed to update campaign schedule: ${error.message || JSON.stringify(error)}`)
   }
 }
 
@@ -974,13 +987,29 @@ async function finalizeCampaign(
   campaignId: string,
   payload: Record<string, unknown>,
 ) {
+  // Remove potentially circular or non-serializable data from send_summary
+  if (payload.send_summary && typeof payload.send_summary === 'object') {
+    try {
+      // Ensure send_summary can be serialized to JSON
+      payload.send_summary = JSON.parse(JSON.stringify(payload.send_summary))
+    } catch (e) {
+      console.warn("[email-campaign-runner] Could not serialize send_summary, removing it")
+      delete payload.send_summary
+    }
+  }
+
   const { error } = await client
     .from("admin_email_campaigns")
     .update(payload)
     .eq("id", campaignId)
+  
   if (error) {
-    console.error("[email-campaign-runner] failed to finalize campaign", campaignId, error)
+    console.error("[email-campaign-runner] failed to finalize campaign", campaignId, JSON.stringify(error))
+    // Throw so the caller knows finalization failed
+    throw new Error(`Failed to finalize campaign: ${error.message || JSON.stringify(error)}`)
   }
+  
+  console.log(`[email-campaign-runner] Campaign ${campaignId} finalized with status: ${payload.status}`)
 }
 
 function renderTemplate(input: string | null | undefined, context: Record<string, string>): string {
