@@ -47,6 +47,7 @@ begin
     url := project_url || '/' || function_name,
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
+      'apikey', service_key,
       'Authorization', 'Bearer ' || service_key
     ),
     body := payload

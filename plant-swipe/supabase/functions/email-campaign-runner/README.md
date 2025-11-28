@@ -33,9 +33,10 @@ Invoke manually (the function also supports scheduled invocations):
 
 ```bash
 curl -X POST \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Content-Type: application/json" \
-  "https://<project-ref>.functions.supabase.co/email-campaign-runner" \
+  "https://<project-ref>.supabase.co/functions/v1/email-campaign-runner" \
   -d '{"campaignId":"<uuid>"}'
 ```
 
