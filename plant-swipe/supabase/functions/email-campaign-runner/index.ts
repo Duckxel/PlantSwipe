@@ -17,6 +17,8 @@ type CampaignRow = {
   variables: unknown
   scheduled_for: string | null
   timezone: string | null
+  test_mode: boolean | null
+  test_email: string | null
 }
 
 type Recipient = {
@@ -294,7 +296,43 @@ async function processCampaign(
   }
 
   try {
-    const recipients = await collectRecipients(client, options.recipientLimit)
+    // Check if this is a test mode campaign - only send to test_email
+    const isTestMode = claimed.test_mode === true
+    const testEmail = claimed.test_email?.trim()
+
+    let recipients: Recipient[]
+
+    if (isTestMode) {
+      if (!testEmail) {
+        summary.status = "failed"
+        summary.reason = "Test mode enabled but no test_email specified"
+        summary.durationMs = Date.now() - startedAt.getTime()
+        await finalizeCampaign(client, campaign.id, {
+          status: "failed",
+          send_completed_at: new Date().toISOString(),
+          send_error: summary.reason,
+          total_recipients: 0,
+          sent_count: 0,
+          failed_count: 0,
+          send_summary: summary,
+        })
+        return summary
+      }
+
+      // For test mode, create a single test recipient
+      console.log(`[email-campaign-runner] TEST MODE: sending only to ${testEmail}`)
+      recipients = [{
+        userId: "test-user-" + campaign.id,
+        email: testEmail,
+        displayName: "Test User",
+        timezone: null,
+        language: DEFAULT_LANGUAGE,
+      }]
+    } else {
+      // Normal mode: collect all recipients
+      recipients = await collectRecipients(client, options.recipientLimit)
+    }
+
     summary.totalRecipients = recipients.length
 
     if (!recipients.length) {
