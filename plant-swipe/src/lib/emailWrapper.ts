@@ -5,6 +5,11 @@
  */
 
 import type { SupportedLanguage } from './i18n'
+import { getDividerHTML, type DividerStyle } from '@/components/tiptap-node/styled-divider-node/styled-divider-node-extension'
+
+// SVG logo URL that should be replaced with PNG for email compatibility
+const SVG_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
+const PNG_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
 
 export interface EmailWrapperOptions {
   subject?: string
@@ -346,4 +351,57 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
   `
 
   return { bodyHtml, signature, footer }
+}
+
+/**
+ * Sanitizes email HTML for maximum compatibility
+ * - Replaces SVG logo URLs with PNG for Gmail compatibility
+ * - Fixes escaped divider HTML from TipTap
+ * - Removes filter:brightness(0) invert(1) that was used for SVG workaround
+ */
+export function sanitizeEmailHtml(html: string): string {
+  let result = html
+
+  // 1. Replace all SVG logo URLs with PNG (Gmail doesn't support SVG)
+  result = result.replace(
+    new RegExp(SVG_LOGO_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+    PNG_LOGO_URL
+  )
+
+  // 2. Remove the old SVG filter workaround that makes PNG logos invisible
+  // The filter:brightness(0) invert(1) was used to make SVGs white, but PNG is already white
+  result = result.replace(/filter:\s*brightness\(0\)\s*invert\(1\);?/g, '')
+
+  // 3. Fix escaped styled-divider HTML (TipTap escapes the inner HTML)
+  // Match dividers with escaped content like &lt;div style="..."&gt;&lt;/div&gt;
+  result = result.replace(
+    /<div[^>]*data-type="styled-divider"[^>]*data-style="([^"]*)"[^>]*data-color="([^"]*)"[^>]*>([^<]*(?:&lt;|&gt;|&#\d+;)[^<]*)<\/div>/gi,
+    (match, style, color, escapedContent) => {
+      // Check if the content is escaped HTML
+      if (escapedContent.includes('&lt;') || escapedContent.includes('&gt;')) {
+        const dividerHtml = getDividerHTML(style as DividerStyle, color)
+        return `<div data-type="styled-divider" data-style="${style}" data-color="${color}" style="padding: 24px 0; text-align: center;">${dividerHtml}</div>`
+      }
+      return match
+    }
+  )
+
+  // 4. Also handle dividers where the style attribute is inline (simpler pattern)
+  // This catches cases where the escaped HTML is directly inside
+  const escapedDividerPatterns = [
+    // Solid divider
+    { escaped: '&lt;div style="height: 2px; background: #059669; opacity: 0.3; border-radius: 1px"&gt;&lt;/div&gt;', style: 'solid', color: 'emerald' },
+    { escaped: '&lt;div style="height: 3px; background-color: #059669; border-radius: 2px"&gt;&lt;/div&gt;', style: 'gradient', color: 'emerald' },
+  ]
+
+  for (const pattern of escapedDividerPatterns) {
+    if (result.includes(pattern.escaped)) {
+      result = result.replace(
+        new RegExp(pattern.escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+        getDividerHTML(pattern.style as DividerStyle, pattern.color)
+      )
+    }
+  }
+
+  return result
 }

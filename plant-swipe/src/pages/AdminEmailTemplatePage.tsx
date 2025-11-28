@@ -36,6 +36,7 @@ import {
   getEmailTemplateTranslations,
 } from "@/lib/emailTranslations"
 import { translateEmailToAllLanguages } from "@/lib/deepl"
+import { sanitizeEmailHtml } from "@/lib/emailWrapper"
 
 // Language display names
 const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
@@ -1528,7 +1529,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
                   }}
                   dangerouslySetInnerHTML={{ 
-                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{email\}\}/gi, "dev@aphylia.app").replace(/\{\{random\}\}/gi, "1234567890").replace(/\{\{url\}\}/gi, "aphylia.app").replace(/\{\{code\}\}/gi, "50L57IC3") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
+                    __html: sanitizeEmailHtml(
+                      templateForm.bodyHtml
+                        .replace(/\{\{user\}\}/gi, "Five")
+                        .replace(/\{\{email\}\}/gi, "dev@aphylia.app")
+                        .replace(/\{\{random\}\}/gi, "1234567890")
+                        .replace(/\{\{url\}\}/gi, "aphylia.app")
+                        .replace(/\{\{code\}\}/gi, "50L57IC3")
+                    ) || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
                   }}
                 />
 
