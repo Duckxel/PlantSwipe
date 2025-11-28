@@ -286,7 +286,8 @@ PY
     fi
 
     local deploy_args=(supabase functions deploy "$fname" --project-ref "$SUPABASE_PROJECT_REF")
-    [[ "$fname" == "contact-support" ]] && deploy_args+=(--no-verify-jwt)
+    # Functions that accept service role key authentication (not user JWTs) need --no-verify-jwt
+    [[ "$fname" == "contact-support" || "$fname" == "email-campaign-runner" ]] && deploy_args+=(--no-verify-jwt)
 
     log "Deploying Supabase function '$fname'…"
     local deploy_output=""
