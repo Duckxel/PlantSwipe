@@ -374,15 +374,19 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
 }
 
 // --- Scheduled Tasks ---
-// Local campaign runner (avoids Edge Function auth complexity)
-cron.schedule('* * * * *', async () => {
-  if (!sql) return
-  try {
-    await processEmailCampaigns()
-  } catch (err) {
-    console.error('[campaign-runner] Error:', err)
-  }
-})
+// Local campaign runner - DISABLED to prevent duplicate sends
+// The Edge Function (email-campaign-runner) is the primary runner, invoked via:
+// 1. Manual "Send" button click → /api/admin/email-campaigns/:id/run
+// 2. Supabase cron job (invoke-email-campaign-runner)
+// Keeping this code for reference but disabled to avoid double-sending emails.
+// cron.schedule('* * * * *', async () => {
+//   if (!sql) return
+//   try {
+//     await processEmailCampaigns()
+//   } catch (err) {
+//     console.error('[campaign-runner] Error:', err)
+//   }
+// })
 
 /**
  * Fetches email template translations for multi-language support

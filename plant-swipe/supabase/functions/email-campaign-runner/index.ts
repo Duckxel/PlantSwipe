@@ -1019,6 +1019,39 @@ function sanitizeHtmlForEmail(html: string): string {
   result = result.replace(/style="\s*;/g, 'style="')
   result = result.replace(/;\s*"/g, '"')
   
+  // 9. Replace SVG logo URLs with PNG for Gmail compatibility (Gmail doesn't support SVG)
+  const SVG_LOGO_URL = "https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg"
+  const PNG_LOGO_URL = "https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png"
+  result = result.replace(new RegExp(SVG_LOGO_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), PNG_LOGO_URL)
+  
+  // 10. Remove the old SVG filter workaround (filter:brightness(0) invert(1))
+  // This was used to make SVGs white, but PNG is already white
+  result = result.replace(/filter:\s*brightness\(0\)\s*invert\(1\);?/g, "")
+  
+  // 11. Fix escaped styled-divider HTML (TipTap escapes the inner HTML)
+  // These patterns match common escaped divider content
+  const escapedDividerReplacements = [
+    // Solid emerald divider
+    {
+      pattern: /&lt;div style="height: 2px; background: #059669; opacity: 0\.3; border-radius: 1px"&gt;&lt;\/div&gt;/g,
+      replacement: '<div style="height: 2px; background: #059669; opacity: 0.3; border-radius: 1px;"></div>'
+    },
+    // Gradient emerald divider  
+    {
+      pattern: /&lt;div style="height: 3px; background-color: #059669; border-radius: 2px"&gt;&lt;\/div&gt;/g,
+      replacement: '<div style="height: 3px; background-color: #059669; border-radius: 2px;"></div>'
+    },
+    // Generic escaped divs within styled-divider containers
+    {
+      pattern: /&lt;div\s+style="([^"]*)"&gt;&lt;\/div&gt;/g,
+      replacement: '<div style="$1"></div>'
+    }
+  ]
+  
+  for (const { pattern, replacement } of escapedDividerReplacements) {
+    result = result.replace(pattern, replacement)
+  }
+  
   return result
 }
 

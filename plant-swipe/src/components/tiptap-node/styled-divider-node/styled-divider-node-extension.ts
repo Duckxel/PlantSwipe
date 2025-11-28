@@ -61,8 +61,9 @@ export const StyledDividerNode = Node.create<StyledDividerNodeOptions>({
 
   renderHTML({ HTMLAttributes }) {
     const { style, color } = HTMLAttributes as StyledDividerAttributes
-    const dividerHtml = getDividerHTML(style, color)
+    const dividerStyle = getDividerStyle(style, color)
 
+    // Return proper DOM structure instead of HTML string to avoid escaping
     return [
       "div",
       mergeAttributes(
@@ -74,7 +75,7 @@ export const StyledDividerNode = Node.create<StyledDividerNodeOptions>({
         },
         this.options.HTMLAttributes
       ),
-      dividerHtml,
+      ["div", { style: dividerStyle }],
     ]
   },
 
@@ -99,7 +100,44 @@ export const StyledDividerNode = Node.create<StyledDividerNodeOptions>({
   },
 })
 
-function getDividerHTML(style: DividerStyle, color: string): string {
+// Returns inline style string for the inner div (for simple line-based dividers)
+function getDividerStyle(style: DividerStyle, color: string): string {
+  const colorMap: Record<string, { primary: string; secondary: string }> = {
+    emerald: { primary: "#059669", secondary: "#34d399" },
+    blue: { primary: "#2563eb", secondary: "#60a5fa" },
+    purple: { primary: "#7c3aed", secondary: "#a78bfa" },
+    pink: { primary: "#db2777", secondary: "#f472b6" },
+    amber: { primary: "#d97706", secondary: "#fbbf24" },
+    gray: { primary: "#4b5563", secondary: "#9ca3af" },
+  }
+
+  const colors = colorMap[color] || colorMap.emerald
+
+  switch (style) {
+    case "gradient":
+      return `height: 3px; background: linear-gradient(90deg, transparent, ${colors.primary}, ${colors.secondary}, ${colors.primary}, transparent); border-radius: 2px;`
+    case "dashed":
+      return `height: 2px; border-top: 2px dashed ${colors.primary}; opacity: 0.5;`
+    case "dots":
+      // For dots, we use a centered layout with bullet characters (email-safe)
+      return `height: 16px; line-height: 16px; text-align: center; font-size: 24px; color: ${colors.primary}; letter-spacing: 12px;`
+    case "fancy":
+      // For fancy, use a simple centered line with emoji (email-safe)
+      return `height: 3px; background: linear-gradient(90deg, transparent 0%, ${colors.primary} 20%, transparent 50%, ${colors.primary} 80%, transparent 100%); border-radius: 2px;`
+    case "wave":
+      // Simplified wave - gradient line (email-safe)
+      return `height: 4px; background: linear-gradient(90deg, transparent, ${colors.primary}, ${colors.secondary}, ${colors.primary}, transparent); border-radius: 2px;`
+    case "stars":
+      // For stars, use letter-spacing and color
+      return `height: 20px; line-height: 20px; text-align: center; font-size: 14px; color: ${colors.primary}; letter-spacing: 6px;`
+    case "solid":
+    default:
+      return `height: 2px; background: ${colors.primary}; opacity: 0.3; border-radius: 1px;`
+  }
+}
+
+// Returns full HTML string for email export (used by post-processing)
+export function getDividerHTML(style: DividerStyle, color: string): string {
   const colorMap: Record<string, { primary: string; secondary: string }> = {
     emerald: { primary: "#059669", secondary: "#34d399" },
     blue: { primary: "#2563eb", secondary: "#60a5fa" },
@@ -117,13 +155,13 @@ function getDividerHTML(style: DividerStyle, color: string): string {
     case "dashed":
       return `<div style="height: 2px; border-top: 2px dashed ${colors.primary}; opacity: 0.5;"></div>`
     case "dots":
-      return `<div style="display: flex; justify-content: center; gap: 12px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: ${colors.secondary};"></span><span style="width: 8px; height: 8px; border-radius: 50%; background: ${colors.primary};"></span><span style="width: 8px; height: 8px; border-radius: 50%; background: ${colors.secondary};"></span></div>`
+      return `<div style="text-align: center; font-size: 24px; color: ${colors.primary}; letter-spacing: 12px;">• • •</div>`
     case "fancy":
-      return `<div style="display: flex; align-items: center; gap: 16px;"><div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, ${colors.primary});"></div><div style="font-size: 20px;">✦</div><div style="flex: 1; height: 1px; background: linear-gradient(90deg, ${colors.primary}, transparent);"></div></div>`
+      return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 0;"><tr><td style="width: 40%; height: 1px; background: linear-gradient(90deg, transparent, ${colors.primary});"></td><td style="width: 20%; text-align: center; font-size: 20px;">✦</td><td style="width: 40%; height: 1px; background: linear-gradient(90deg, ${colors.primary}, transparent);"></td></tr></table>`
     case "wave":
-      return `<div style="height: 20px; background: url('data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 120\" preserveAspectRatio=\"none\"><path d=\"M0,60 C150,120 350,0 600,60 C850,120 1050,0 1200,60\" fill=\"none\" stroke=\"${encodeURIComponent(colors.primary)}\" stroke-width=\"2\"/></svg>') repeat-x center / 200px 20px;"></div>`
+      return `<div style="height: 4px; background: linear-gradient(90deg, transparent, ${colors.primary}, ${colors.secondary}, ${colors.primary}, transparent); border-radius: 2px;"></div>`
     case "stars":
-      return `<div style="display: flex; justify-content: center; gap: 8px; color: ${colors.primary}; font-size: 12px;">✦ ✦ ✦ ✦ ✦</div>`
+      return `<div style="text-align: center; font-size: 14px; color: ${colors.primary}; letter-spacing: 6px;">✦ ✦ ✦ ✦ ✦</div>`
     case "solid":
     default:
       return `<div style="height: 2px; background: ${colors.primary}; opacity: 0.3; border-radius: 1px;"></div>`

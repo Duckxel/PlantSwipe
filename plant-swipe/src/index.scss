@@ -141,6 +141,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+}
+
 @layer components {
   .legal-content {
     @apply space-y-4 text-base leading-relaxed text-stone-700 dark:text-stone-200 text-left;
