@@ -26,7 +26,6 @@ export const SensitiveCodeButton = forwardRef<HTMLButtonElement, SensitiveCodeBu
               code: "{{code}}",
               type: "otp",
               expiryText: "",
-              showCopyHint: true,
             })
             .run()
         }

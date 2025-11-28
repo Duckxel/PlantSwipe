@@ -175,10 +175,10 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS['en']
   const copyrightText = strings.copyright.replace('{{year}}', String(currentYear))
 
-  // Aphylia logo URL for emails (via media.aphylia.app CDN)
-  const logoUrl = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
-  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
-  const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
+  // Aphylia logo URL for emails (using PNG for Gmail compatibility - Gmail doesn't support SVG or WebP)
+  const logoUrl = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
+  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
+  const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
   return `<!DOCTYPE html>
 <html lang="${language}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -306,15 +306,20 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
           </tr>
           <tr>
             <td style="padding:0 48px 48px 48px;">
-              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
+              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdf4;border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
                 <tr>
                   <td style="padding:28px 32px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
-                        <td width="64" style="vertical-align:top;padding-right:20px;">
-                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;">
-                            ${logoImgLarge}
-                          </div>
+                        <td width="72" style="vertical-align:middle;padding-right:20px;">
+                          <!-- Logo in green square - using table for centering -->
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#10b981;border-radius:16px;width:56px;height:56px;">
+                            <tr>
+                              <td align="center" valign="middle" style="width:56px;height:56px;">
+                                ${logoImgLarge}
+                              </td>
+                            </tr>
+                          </table>
                         </td>
                         <td style="vertical-align:middle;">
                           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">
@@ -369,15 +374,19 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
 }
 
 // --- Scheduled Tasks ---
-// Local campaign runner (avoids Edge Function auth complexity)
-cron.schedule('* * * * *', async () => {
-  if (!sql) return
-  try {
-    await processEmailCampaigns()
-  } catch (err) {
-    console.error('[campaign-runner] Error:', err)
-  }
-})
+// Local campaign runner - DISABLED to prevent duplicate sends
+// The Edge Function (email-campaign-runner) is the primary runner, invoked via:
+// 1. Manual "Send" button click → /api/admin/email-campaigns/:id/run
+// 2. Supabase cron job (invoke-email-campaign-runner)
+// Keeping this code for reference but disabled to avoid double-sending emails.
+// cron.schedule('* * * * *', async () => {
+//   if (!sql) return
+//   try {
+//     await processEmailCampaigns()
+//   } catch (err) {
+//     console.error('[campaign-runner] Error:', err)
+//   }
+// })
 
 /**
  * Fetches email template translations for multi-language support
@@ -844,6 +853,37 @@ const adminUploadAllowedMimeTypes = new Set([
   'image/svg+xml',
 ])
 
+// Media proxy URL configuration
+// Transforms Supabase storage URLs to use the nginx reverse proxy
+// This prevents exposing the Supabase project URL directly
+const mediaProxyBaseUrl = (process.env.MEDIA_PROXY_URL || 'https://media.aphylia.app').replace(/\/+$/, '')
+
+/**
+ * Transforms a Supabase storage public URL to use the media proxy
+ * Example:
+ *   Input:  https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/file.svg
+ *   Output: https://media.aphylia.app/UTILITY/admin/uploads/svg/file.svg
+ * 
+ * @param {string|null|undefined} url - The Supabase storage public URL
+ * @returns {string|null} - The transformed URL using media proxy, or null if input is invalid
+ */
+function supabaseStorageToMediaProxy(url) {
+  if (!url || !supabaseUrlEnv) return url || null
+  try {
+    const normalizedBase = supabaseUrlEnv.replace(/\/+$/, '')
+    const publicPrefix = `${normalizedBase}/storage/v1/object/public/`
+    const urlStr = String(url)
+    if (!urlStr.startsWith(publicPrefix)) return url
+    // Extract the path after /storage/v1/object/public/
+    const remainder = urlStr.slice(publicPrefix.length)
+    if (!remainder) return url
+    // Build the media proxy URL
+    return `${mediaProxyBaseUrl}/${remainder}`
+  } catch {
+    return url
+  }
+}
+
 const gardenCoverUploadBucket = (() => {
   const fromEnv = (process.env.GARDEN_UPLOAD_BUCKET || '').trim()
   if (fromEnv) return fromEnv
@@ -873,6 +913,13 @@ const gardenCoverMulter = multer({
   limits: { fileSize: gardenCoverMaxBytes },
 })
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
+
+// Mime types that should be optimized and converted to WebP
+const optimizableMimeTypes = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+])
 
 async function handleScopedImageUpload(req, res, options = {}) {
   const { prefixBuilder, auditLabel = 'admin', actorId = null, uploaderInfo = null } = options
@@ -906,42 +953,75 @@ async function handleScopedImageUpload(req, res, options = {}) {
         return
       }
 
-      let optimizedBuffer
-      try {
-        optimizedBuffer = await sharp(file.buffer)
-          .rotate()
-          .resize({
-            width: adminUploadMaxDimension,
-            height: adminUploadMaxDimension,
-            fit: 'inside',
-            withoutEnlargement: true,
-            fastShrinkOnLoad: true,
-          })
-          .webp({
-            quality: adminUploadWebpQuality,
-            effort: 5,
-            smartSubsample: true,
-          })
-          .toBuffer()
-      } catch (sharpErr) {
-        console.error('[upload-image] failed to convert image to webp', sharpErr)
-        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
-        return
-      }
-
       const baseName = sanitizeUploadBaseName(file.originalname)
-      const finalTypeSegment = sanitizePathSegment('webp', 'webp')
       const originalTypeSegment = deriveUploadTypeSegment(file.originalname, mime)
       const scopedPrefix =
         typeof prefixBuilder === 'function'
           ? prefixBuilder({ req, file })
           : adminUploadPrefix
+
+      // Determine if file should be optimized (only JPEG, PNG, WebP)
+      const shouldOptimize = optimizableMimeTypes.has(mime)
+      
+      let finalBuffer
+      let finalMimeType
+      let finalTypeSegment
+      let compressionPercent = 0
+      let quality = null
+
+      if (shouldOptimize) {
+        // Optimize and convert to WebP
+        try {
+          finalBuffer = await sharp(file.buffer)
+            .rotate()
+            .resize({
+              width: adminUploadMaxDimension,
+              height: adminUploadMaxDimension,
+              fit: 'inside',
+              withoutEnlargement: true,
+              fastShrinkOnLoad: true,
+            })
+            .webp({
+              quality: adminUploadWebpQuality,
+              effort: 5,
+              smartSubsample: true,
+            })
+            .toBuffer()
+          finalMimeType = 'image/webp'
+          finalTypeSegment = sanitizePathSegment('webp', 'webp')
+          quality = adminUploadWebpQuality
+          compressionPercent = file.size > 0 
+            ? Math.max(0, Math.round(100 - (finalBuffer.length / file.size) * 100)) 
+            : 0
+        } catch (sharpErr) {
+          console.error('[upload-image] failed to convert image to webp', sharpErr)
+          res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+          return
+        }
+      } else {
+        // Upload as-is without optimization (SVG, GIF, AVIF, HEIC, etc.)
+        finalBuffer = file.buffer
+        finalMimeType = mime
+        // Derive extension from mime type
+        const extMap = {
+          'image/svg+xml': 'svg',
+          'image/gif': 'gif',
+          'image/avif': 'avif',
+          'image/heic': 'heic',
+          'image/heif': 'heif',
+          'image/tiff': 'tiff',
+          'image/bmp': 'bmp',
+        }
+        const ext = extMap[mime] || originalTypeSegment
+        finalTypeSegment = sanitizePathSegment(ext, ext)
+      }
+
       const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix)
 
       try {
-        const { error: uploadError } = await supabaseServiceClient.storage.from(adminUploadBucket).upload(objectPath, optimizedBuffer, {
+        const { error: uploadError } = await supabaseServiceClient.storage.from(adminUploadBucket).upload(objectPath, finalBuffer, {
           cacheControl: '31536000',
-          contentType: 'image/webp',
+          contentType: finalMimeType,
           upsert: false,
         })
         if (uploadError) {
@@ -955,24 +1035,25 @@ async function handleScopedImageUpload(req, res, options = {}) {
 
       const { data: publicData } = supabaseServiceClient.storage.from(adminUploadBucket).getPublicUrl(objectPath)
       const publicUrl = publicData?.publicUrl || null
+      // Transform URL to use media proxy (hides Supabase project URL)
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
       const uploadedAt = new Date().toISOString()
-      const compressionPercent =
-        file.size > 0 ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100)) : 0
 
       const payload = {
         ok: true,
         bucket: adminUploadBucket,
         path: objectPath,
-        url: publicUrl,
-        mimeType: 'image/webp',
-        size: optimizedBuffer.length,
+        url: proxyUrl,
+        mimeType: finalMimeType,
+        size: finalBuffer.length,
         originalMimeType: mime,
         originalSize: file.size,
         uploadedAt,
-        quality: adminUploadWebpQuality,
+        quality,
         compressionPercent,
+        optimized: shouldOptimize,
       }
-      if (!publicUrl) {
+      if (!proxyUrl) {
         payload.warning = 'Bucket is not public; no public URL is available'
       }
 
@@ -982,18 +1063,19 @@ async function handleScopedImageUpload(req, res, options = {}) {
         adminName: uploaderInfo?.name || null,
         bucket: adminUploadBucket,
         path: objectPath,
-        publicUrl,
-        mimeType: 'image/webp',
+        publicUrl: proxyUrl,
+        mimeType: finalMimeType,
         originalMimeType: mime,
-        sizeBytes: optimizedBuffer.length,
+        sizeBytes: finalBuffer.length,
         originalSizeBytes: file.size,
-        quality: adminUploadWebpQuality,
+        quality,
         compressionPercent,
         metadata: {
           originalName: file.originalname,
           typeSegment: finalTypeSegment,
           originalTypeSegment,
           scope: auditLabel,
+          optimized: shouldOptimize,
         },
       })
 
@@ -1002,12 +1084,13 @@ async function handleScopedImageUpload(req, res, options = {}) {
           const detail = {
             bucket: adminUploadBucket,
             path: objectPath,
-            url: publicUrl,
+            url: proxyUrl,
             originalMimeType: mime,
             originalSize: file.size,
-            optimizedSize: optimizedBuffer.length,
-            quality: adminUploadWebpQuality,
+            finalSize: finalBuffer.length,
+            quality,
             scope: auditLabel,
+            optimized: shouldOptimize,
           }
           let logged = false
           if (sql) {
@@ -1109,17 +1192,37 @@ function sanitizeFolderInput(value) {
 
 function parseStoragePublicUrl(url) {
   try {
-    if (!url || !supabaseUrlEnv) return null
-    const normalizedBase = supabaseUrlEnv.replace(/\/+$/, '')
-    const publicPrefix = `${normalizedBase}/storage/v1/object/public/`
-    if (!String(url).startsWith(publicPrefix)) return null
-    const remainder = String(url).slice(publicPrefix.length)
-    const parts = remainder.split('/').filter(Boolean)
-    if (parts.length < 2) return null
-    const bucket = parts.shift()
-    const path = parts.join('/')
-    if (!bucket || !path) return null
-    return { bucket, path }
+    if (!url) return null
+    const urlStr = String(url)
+    
+    // Try to parse as a Supabase storage URL
+    if (supabaseUrlEnv) {
+      const normalizedBase = supabaseUrlEnv.replace(/\/+$/, '')
+      const publicPrefix = `${normalizedBase}/storage/v1/object/public/`
+      if (urlStr.startsWith(publicPrefix)) {
+        const remainder = urlStr.slice(publicPrefix.length)
+        const parts = remainder.split('/').filter(Boolean)
+        if (parts.length >= 2) {
+          const bucket = parts.shift()
+          const path = parts.join('/')
+          if (bucket && path) return { bucket, path }
+        }
+      }
+    }
+    
+    // Try to parse as a media proxy URL (e.g., https://media.aphylia.app/BUCKET/path)
+    const proxyPrefix = `${mediaProxyBaseUrl}/`
+    if (urlStr.startsWith(proxyPrefix)) {
+      const remainder = urlStr.slice(proxyPrefix.length)
+      const parts = remainder.split('/').filter(Boolean)
+      if (parts.length >= 2) {
+        const bucket = parts.shift()
+        const path = parts.join('/')
+        if (bucket && path) return { bucket, path }
+      }
+    }
+    
+    return null
   } catch {
     return null
   }
@@ -2184,6 +2287,9 @@ function extractStorageName(path) {
 
 function normalizeAdminMediaRow(row) {
   if (!row) return null
+  // Transform any Supabase URLs to proxy URLs for backward compatibility
+  const rawUrl = row.public_url || row.publicUrl || null
+  const url = rawUrl ? supabaseStorageToMediaProxy(rawUrl) : null
   return {
     id: row.id || null,
     adminId: row.admin_id || row.adminId || null,
@@ -2191,7 +2297,7 @@ function normalizeAdminMediaRow(row) {
     adminName: row.admin_name || row.adminName || null,
     bucket: row.bucket || null,
     path: row.path || null,
-    url: row.public_url || row.publicUrl || null,
+    url,
     mimeType: row.mime_type || row.mimeType || null,
     originalMimeType: row.original_mime_type || row.originalMimeType || null,
     sizeBytes:
@@ -2370,13 +2476,15 @@ async function syncGardenCoverMedia(existingKeys, limit = 200) {
       row.created_at ||
       row.createdAt ||
       null
+    // Transform URL to use media proxy for consistency
+    const proxyUrl = supabaseStorageToMediaProxy(publicUrl) || publicUrl
     const recorded = await recordAdminMediaUpload({
       adminId: ownerId,
       adminEmail: null,
       adminName: ownerName,
       bucket: parsed.bucket,
       path: parsed.path,
-      publicUrl,
+      publicUrl: proxyUrl,
       mimeType: 'image/webp',
       originalMimeType: 'image/webp',
       sizeBytes: null,
@@ -9033,13 +9141,16 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
         .from(gardenCoverUploadBucket)
         .getPublicUrl(objectPath)
       const publicUrl = publicData?.publicUrl || null
-      if (!publicUrl) {
+      // Transform URL to use media proxy (hides Supabase project URL)
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+      if (!proxyUrl) {
         res.status(500).json({ error: 'Failed to generate public URL for cover image' })
         return
       }
 
       try {
-        await updateGardenCoverImage(gardenId, publicUrl)
+        // Store the proxy URL in the database for display
+        await updateGardenCoverImage(gardenId, proxyUrl)
       } catch (dbErr) {
         console.error('[garden-cover] failed to update garden cover', dbErr)
         res.status(500).json({ error: dbErr?.message || 'Failed to update garden cover' })
@@ -9047,7 +9158,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
       }
 
       let deletedPrevious = false
-      if (previousUrl && previousUrl !== publicUrl) {
+      if (previousUrl && previousUrl !== proxyUrl) {
         try {
           const result = await deleteGardenCoverObject(previousUrl)
           deletedPrevious = Boolean(result.deleted)
@@ -9066,7 +9177,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
             adminName: uploaderDisplayName,
             bucket: gardenCoverUploadBucket,
             path: objectPath,
-            publicUrl,
+            publicUrl: proxyUrl,
             mimeType: 'image/webp',
             originalMimeType: mime,
             sizeBytes: optimizedBuffer.length,
@@ -9091,7 +9202,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
         gardenId,
         bucket: gardenCoverUploadBucket,
         path: objectPath,
-        url: publicUrl,
+        url: proxyUrl,
         mimeType: 'image/webp',
         size: optimizedBuffer.length,
         originalMimeType: mime,
@@ -10206,13 +10317,26 @@ async function resolveNotificationAudience(campaign) {
     const rows = await sql`select id::text as id from public.profiles where id is not null and (notify_push is null or notify_push = true)`
     addRows(rows, 'id')
   } else if (campaign.audience === 'tasks_open') {
+    // Query live data directly from garden_plant_task_occurrences to find users with uncompleted tasks today.
+    // This ensures we catch ALL users with remaining tasks, not just those whose cache was populated today.
     const today = new Date().toISOString().slice(0, 10)
+    const startOfDay = `${today}T00:00:00.000Z`
+    const endOfDay = `${today}T23:59:59.999Z`
     const rows = await sql`
-      select distinct c.user_id::text as user_id
-      from public.user_task_daily_cache c
-      join public.profiles p on p.id = c.user_id
-      where c.cache_date = ${today} and c.gardens_with_remaining_tasks > 0 and c.user_id is not null
+      select distinct gm.user_id::text as user_id
+      from public.garden_members gm
+      join public.profiles p on p.id = gm.user_id
+      where gm.user_id is not null
         and (p.notify_push is null or p.notify_push = true)
+        and exists (
+          select 1
+          from public.garden_plant_tasks t
+          join public.garden_plant_task_occurrences occ on occ.task_id = t.id
+          where t.garden_id = gm.garden_id
+            and occ.due_at >= ${startOfDay}::timestamptz
+            and occ.due_at <= ${endOfDay}::timestamptz
+            and occ.completed_count < greatest(1, occ.required_count)
+        )
     `
     addRows(rows, 'user_id')
   } else if (campaign.audience === 'inactive_week') {

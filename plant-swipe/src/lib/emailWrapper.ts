@@ -5,6 +5,11 @@
  */
 
 import type { SupportedLanguage } from './i18n'
+import { getDividerHTML, type DividerStyle } from '@/components/tiptap-node/styled-divider-node/styled-divider-node-extension'
+
+// SVG logo URL that should be replaced with PNG for email compatibility
+const SVG_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
+const PNG_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
 
 export interface EmailWrapperOptions {
   subject?: string
@@ -56,10 +61,10 @@ export function getEmailWrapperStrings(language: SupportedLanguage = 'en') {
   return EMAIL_WRAPPER_I18N[language] || EMAIL_WRAPPER_I18N.en
 }
 
-// Aphylia logo URL for emails
-const APHYLIA_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
-const APHYLIA_LOGO_IMG = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
-const APHYLIA_LOGO_IMG_LARGE = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="48" height="48" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
+// Aphylia logo URL for emails (using PNG for better email client compatibility - Gmail doesn't support SVG or WebP)
+const APHYLIA_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
+const APHYLIA_LOGO_IMG = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
+const APHYLIA_LOGO_IMG_LARGE = `<img src="${APHYLIA_LOGO_URL}" alt="Aphylia" width="48" height="48" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
 /**
  * Wraps email body content with a beautiful styled template
@@ -214,16 +219,20 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
           <!-- Signature Section -->
           <tr>
             <td style="padding:0 48px 48px 48px;">
-              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
+              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdf4;border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
                 <tr>
                   <td style="padding:28px 32px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
-                        <td width="64" style="vertical-align:top;padding-right:20px;">
-                          <!-- Logo -->
-                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px -8px rgba(16, 185, 129, 0.5);">
-                            ${APHYLIA_LOGO_IMG_LARGE}
-                          </div>
+                        <td width="72" style="vertical-align:middle;padding-right:20px;">
+                          <!-- Logo in green square - using table for centering -->
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#10b981;border-radius:16px;width:56px;height:56px;">
+                            <tr>
+                              <td align="center" valign="middle" style="width:56px;height:56px;">
+                                ${APHYLIA_LOGO_IMG_LARGE}
+                              </td>
+                            </tr>
+                          </table>
                         </td>
                         <td style="vertical-align:middle;">
                           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">
@@ -311,17 +320,23 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
   const strings = getEmailWrapperStrings(lang)
 
   const signature = `
-    <div style="margin-top:32px;padding:24px;background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);">
-      <div style="display:flex;align-items:center;gap:16px;">
-        <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px -8px rgba(16, 185, 129, 0.5);">
-          ${APHYLIA_LOGO_IMG_LARGE}
-        </div>
-        <div>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:32px;padding:24px;background-color:#f0fdf4;border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);">
+      <tr>
+        <td width="72" style="vertical-align:middle;padding-right:16px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#10b981;border-radius:16px;width:56px;height:56px;">
+            <tr>
+              <td align="center" valign="middle" style="width:56px;height:56px;">
+                ${APHYLIA_LOGO_IMG_LARGE}
+              </td>
+            </tr>
+          </table>
+        </td>
+        <td style="vertical-align:middle;">
           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;">${strings.teamName}</p>
           <p style="margin:0;font-size:14px;color:#6b7280;">${strings.tagline}</p>
-        </div>
-      </div>
-    </div>
+        </td>
+      </tr>
+    </table>
   `
 
   const footer = `
@@ -336,4 +351,57 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
   `
 
   return { bodyHtml, signature, footer }
+}
+
+/**
+ * Sanitizes email HTML for maximum compatibility
+ * - Replaces SVG logo URLs with PNG for Gmail compatibility
+ * - Fixes escaped divider HTML from TipTap
+ * - Removes filter:brightness(0) invert(1) that was used for SVG workaround
+ */
+export function sanitizeEmailHtml(html: string): string {
+  let result = html
+
+  // 1. Replace all SVG logo URLs with PNG (Gmail doesn't support SVG)
+  result = result.replace(
+    new RegExp(SVG_LOGO_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+    PNG_LOGO_URL
+  )
+
+  // 2. Remove the old SVG filter workaround that makes PNG logos invisible
+  // The filter:brightness(0) invert(1) was used to make SVGs white, but PNG is already white
+  result = result.replace(/filter:\s*brightness\(0\)\s*invert\(1\);?/g, '')
+
+  // 3. Fix escaped styled-divider HTML (TipTap escapes the inner HTML)
+  // Match dividers with escaped content like &lt;div style="..."&gt;&lt;/div&gt;
+  result = result.replace(
+    /<div[^>]*data-type="styled-divider"[^>]*data-style="([^"]*)"[^>]*data-color="([^"]*)"[^>]*>([^<]*(?:&lt;|&gt;|&#\d+;)[^<]*)<\/div>/gi,
+    (match, style, color, escapedContent) => {
+      // Check if the content is escaped HTML
+      if (escapedContent.includes('&lt;') || escapedContent.includes('&gt;')) {
+        const dividerHtml = getDividerHTML(style as DividerStyle, color)
+        return `<div data-type="styled-divider" data-style="${style}" data-color="${color}" style="padding: 24px 0; text-align: center;">${dividerHtml}</div>`
+      }
+      return match
+    }
+  )
+
+  // 4. Also handle dividers where the style attribute is inline (simpler pattern)
+  // This catches cases where the escaped HTML is directly inside
+  const escapedDividerPatterns = [
+    // Solid divider
+    { escaped: '&lt;div style="height: 2px; background: #059669; opacity: 0.3; border-radius: 1px"&gt;&lt;/div&gt;', style: 'solid', color: 'emerald' },
+    { escaped: '&lt;div style="height: 3px; background-color: #059669; border-radius: 2px"&gt;&lt;/div&gt;', style: 'gradient', color: 'emerald' },
+  ]
+
+  for (const pattern of escapedDividerPatterns) {
+    if (result.includes(pattern.escaped)) {
+      result = result.replace(
+        new RegExp(pattern.escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+        getDividerHTML(pattern.style as DividerStyle, pattern.color)
+      )
+    }
+  }
+
+  return result
 }

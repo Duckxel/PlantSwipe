@@ -1019,6 +1019,39 @@ function sanitizeHtmlForEmail(html: string): string {
   result = result.replace(/style="\s*;/g, 'style="')
   result = result.replace(/;\s*"/g, '"')
   
+  // 9. Replace SVG logo URLs with PNG for Gmail compatibility (Gmail doesn't support SVG)
+  const SVG_LOGO_URL = "https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg"
+  const PNG_LOGO_URL = "https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png"
+  result = result.replace(new RegExp(SVG_LOGO_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), PNG_LOGO_URL)
+  
+  // 10. Remove the old SVG filter workaround (filter:brightness(0) invert(1))
+  // This was used to make SVGs white, but PNG is already white
+  result = result.replace(/filter:\s*brightness\(0\)\s*invert\(1\);?/g, "")
+  
+  // 11. Fix escaped styled-divider HTML (TipTap escapes the inner HTML)
+  // These patterns match common escaped divider content
+  const escapedDividerReplacements = [
+    // Solid emerald divider
+    {
+      pattern: /&lt;div style="height: 2px; background: #059669; opacity: 0\.3; border-radius: 1px"&gt;&lt;\/div&gt;/g,
+      replacement: '<div style="height: 2px; background: #059669; opacity: 0.3; border-radius: 1px;"></div>'
+    },
+    // Gradient emerald divider  
+    {
+      pattern: /&lt;div style="height: 3px; background-color: #059669; border-radius: 2px"&gt;&lt;\/div&gt;/g,
+      replacement: '<div style="height: 3px; background-color: #059669; border-radius: 2px;"></div>'
+    },
+    // Generic escaped divs within styled-divider containers
+    {
+      pattern: /&lt;div\s+style="([^"]*)"&gt;&lt;\/div&gt;/g,
+      replacement: '<div style="$1"></div>'
+    }
+  ]
+  
+  for (const { pattern, replacement } of escapedDividerReplacements) {
+    result = result.replace(pattern, replacement)
+  }
+  
   return result
 }
 
@@ -1063,10 +1096,10 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS[DEFAULT_LANGUAGE]
   const copyrightText = strings.copyright.replace("{{year}}", String(currentYear))
 
-  // Aphylia logo URL for emails (via media.aphylia.app CDN)
-  const logoUrl = "https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg"
-  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
-  const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;filter:brightness(0) invert(1);" />`
+  // Aphylia logo URL for emails (using PNG for Gmail compatibility - Gmail doesn't support SVG or WebP)
+  const logoUrl = "https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png"
+  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
+  const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
   return `<!DOCTYPE html>
 <html lang="${language}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -1194,15 +1227,20 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
           </tr>
           <tr>
             <td style="padding:0 48px 48px 48px;">
-              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%);border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
+              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdf4;border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
                 <tr>
                   <td style="padding:28px 32px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
-                        <td width="64" style="vertical-align:top;padding-right:20px;">
-                          <div style="width:56px;height:56px;background:linear-gradient(135deg, #059669 0%, #10b981 100%);border-radius:16px;display:flex;align-items:center;justify-content:center;">
-                            ${logoImgLarge}
-                          </div>
+                        <td width="72" style="vertical-align:middle;padding-right:20px;">
+                          <!-- Logo in green square - using table for centering -->
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#10b981;border-radius:16px;width:56px;height:56px;">
+                            <tr>
+                              <td align="center" valign="middle" style="width:56px;height:56px;">
+                                ${logoImgLarge}
+                              </td>
+                            </tr>
+                          </table>
                         </td>
                         <td style="vertical-align:middle;">
                           <p style="margin:0 0 4px 0;font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">

@@ -36,6 +36,7 @@ import {
   getEmailTemplateTranslations,
 } from "@/lib/emailTranslations"
 import { translateEmailToAllLanguages } from "@/lib/deepl"
+import { sanitizeEmailHtml } from "@/lib/emailWrapper"
 
 // Language display names
 const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
@@ -1288,7 +1289,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               height: auto !important;
               border-radius: 12px !important;
             }
-            /* Email Card Styles */
+            /* Email Card Styles - Override general table styles */
             .email-preview-body [data-type="email-card"] {
               margin: 28px 0 !important;
               padding: 0 !important;
@@ -1299,16 +1300,21 @@ export const AdminEmailTemplatePage: React.FC = () => {
               overflow: hidden !important;
             }
             .email-preview-body [data-type="email-card"] table {
+              width: 100% !important;
               margin: 0 !important;
               border: none !important;
+              border-collapse: collapse !important;
             }
             .email-preview-body [data-type="email-card"] td {
               padding: 24px !important;
               border: none !important;
+              vertical-align: middle !important;
             }
             .email-preview-body [data-type="email-card"] td:first-child {
+              width: 60px !important;
               padding-right: 8px !important;
               font-size: 32px !important;
+              text-align: center !important;
             }
             .email-preview-body [data-type="email-card"] strong {
               display: block !important;
@@ -1337,18 +1343,19 @@ export const AdminEmailTemplatePage: React.FC = () => {
               box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35) !important;
               transition: all 0.2s ease !important;
             }
-            /* Table styling */
-            .email-preview-body table {
+            /* Table styling - exclude special components */
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) {
               width: 100% !important;
               border-collapse: collapse !important;
               margin: 20px 0 !important;
             }
-            .email-preview-body th, .email-preview-body td {
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th,
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) td {
               padding: 12px 16px !important;
               border: 1px solid #e5e7eb !important;
               text-align: left !important;
             }
-            .email-preview-body th {
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th {
               background: #f9fafb !important;
               font-weight: 600 !important;
               color: #111827 !important;
@@ -1363,36 +1370,59 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 transform: translate(-50%, -100%);
               }
             }
-            /* Interactive element styles for preview */
-            .email-preview-body [data-type="sensitive-code"] {
-              cursor: pointer;
-              transition: transform 0.2s ease, box-shadow 0.2s ease;
+            /* Sensitive Code Block Styles - Override general table styles */
+            .email-preview-body table[data-type="sensitive-code"] {
+              width: auto !important;
+              max-width: 420px !important;
+              margin: 32px auto !important;
+              border-radius: 16px !important;
+              border-collapse: separate !important;
+              border-spacing: 0 !important;
+              padding: 28px !important;
+              text-align: center !important;
             }
-            .email-preview-body [data-type="sensitive-code"]:hover {
-              transform: scale(1.02);
-              box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+            /* Dashed border colors based on code type */
+            .email-preview-body table[data-code-type="otp"] {
+              background-color: #fef3c7 !important;
+              border: 3px dashed #fbbf24 !important;
             }
-            .email-preview-body [data-type="sensitive-code"] [data-code] {
-              transition: background 0.2s ease, border-color 0.2s ease;
+            .email-preview-body table[data-code-type="verification"] {
+              background-color: #d1fae5 !important;
+              border: 3px dashed #34d399 !important;
             }
-            .email-preview-body [data-type="sensitive-code"]:hover [data-code] {
-              background: #ffffff !important;
-              border-color: #10b981 !important;
+            .email-preview-body table[data-code-type="password"] {
+              background-color: #ede9fe !important;
+              border: 3px dashed #a78bfa !important;
             }
-            .email-preview-body [data-type="email-button"] a {
-              cursor: pointer;
-              transition: transform 0.2s ease, box-shadow 0.2s ease;
+            .email-preview-body table[data-code-type="link"] {
+              background-color: #dbeafe !important;
+              border: 3px dashed #60a5fa !important;
             }
-            .email-preview-body [data-type="email-button"] a:hover {
-              transform: translateY(-2px);
-              box-shadow: 0 12px 32px rgba(16, 185, 129, 0.5) !important;
+            .email-preview-body table[data-code-type="email"] {
+              background-color: #fce7f3 !important;
+              border: 3px dashed #f472b6 !important;
             }
-            .email-preview-body [data-type="email-card"] {
-              cursor: pointer;
-              transition: transform 0.2s ease;
+            .email-preview-body table[data-code-type="code"] {
+              background-color: #f3f4f6 !important;
+              border: 3px dashed #9ca3af !important;
             }
-            .email-preview-body [data-type="email-card"]:hover {
-              transform: scale(1.01);
+            .email-preview-body table[data-type="sensitive-code"] td {
+              padding: 0 !important;
+              border: none !important;
+              background: transparent !important;
+            }
+            .email-preview-body table[data-type="sensitive-code"] > tbody > tr > td {
+              padding: 0 !important;
+              border: none !important;
+            }
+            .email-preview-body table[data-type="sensitive-code"] table {
+              width: auto !important;
+              margin: 0 auto 12px auto !important;
+              border: none !important;
+            }
+            .email-preview-body table[data-type="sensitive-code"] table td {
+              padding: 0 !important;
+              border: none !important;
             }
           `}</style>
           {/* Floating Controls */}
@@ -1499,7 +1529,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
                   }}
                   dangerouslySetInnerHTML={{ 
-                    __html: templateForm.bodyHtml.replace(/\{\{user\}\}/gi, "Five").replace(/\{\{email\}\}/gi, "dev@aphylia.app").replace(/\{\{random\}\}/gi, "1234567890").replace(/\{\{url\}\}/gi, "aphylia.app").replace(/\{\{code\}\}/gi, "50L57IC3") || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
+                    __html: sanitizeEmailHtml(
+                      templateForm.bodyHtml
+                        .replace(/\{\{user\}\}/gi, "Five")
+                        .replace(/\{\{email\}\}/gi, "dev@aphylia.app")
+                        .replace(/\{\{random\}\}/gi, "1234567890")
+                        .replace(/\{\{url\}\}/gi, "aphylia.app")
+                        .replace(/\{\{code\}\}/gi, "50L57IC3")
+                    ) || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
                   }}
                 />
 
