@@ -427,7 +427,8 @@ async function processCampaign(
       }
     }
 
-    if (successfulRecipients.length) {
+    // Record sends for tracking (skip for test mode since test users don't exist in auth.users)
+    if (successfulRecipients.length && !isTestMode) {
       await recordCampaignSends(client, campaign.id, successfulRecipients)
     }
 
@@ -480,8 +481,15 @@ async function processCampaign(
 
     return summary
   } catch (error) {
+    // Properly stringify any error type (Error instances, plain objects, or primitives)
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error)
+    
     summary.status = "failed"
-    summary.reason = error instanceof Error ? error.message : String(error)
+    summary.reason = errorMessage
     summary.durationMs = Date.now() - startedAt.getTime()
     const failureCount =
       summary.totalRecipients > 0
@@ -489,17 +497,22 @@ async function processCampaign(
         : summary.failedCount
     summary.failedCount = failureCount
 
+    // If emails were already sent, mark as partial success instead of failed
+    if (summary.sentThisRun > 0) {
+      summary.status = "partial"
+    }
+
     await finalizeCampaign(client, campaign.id, {
-      status: "failed",
+      status: summary.status,
       send_completed_at: new Date().toISOString(),
-      send_error: summary.reason,
+      send_error: errorMessage,
       total_recipients: summary.totalRecipients,
       sent_count: summary.sentCount,
       failed_count: failureCount,
       send_summary: summary,
     })
 
-    console.error("[email-campaign-runner] campaign failed", campaign.id, error)
+    console.error("[email-campaign-runner] campaign failed", campaign.id, errorMessage, error)
     return summary
   }
 }
