@@ -358,7 +358,9 @@ async function processCampaign(
     const unsentRecipients = recipients.filter((recipient) => !alreadySentSet.has(recipient.userId))
 
     // Fetch email template translations for multi-language support
+    console.log(`[email-campaign-runner] Campaign ${campaign.id} template_id: ${campaign.template_id || 'NULL'}`)
     const emailTranslations = await fetchEmailTemplateTranslations(client, campaign.template_id)
+    console.log(`[email-campaign-runner] Loaded ${emailTranslations.size} translations: [${Array.from(emailTranslations.keys()).join(', ')}]`)
 
     if (!unsentRecipients.length) {
       summary.status = "sent"
@@ -874,6 +876,11 @@ async function sendBatch(
     // Get user's language and find appropriate translation
     const userLang = recipient.language as SupportedLanguage
     const translation = translations.get(userLang)
+    
+    // Debug: log language matching (only for first few recipients per batch to avoid spam)
+    if (batchIndex === 0 && recipients.indexOf(recipient) < 3) {
+      console.log(`[email-campaign-runner] Recipient ${recipient.email}: lang=${userLang}, translation_found=${!!translation}`)
+    }
     
     // Use translated content if available, otherwise fall back to default campaign content
     const rawSubject = translation?.subject || campaign.subject
