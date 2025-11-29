@@ -3759,28 +3759,6 @@ export const AdminPage: React.FC = () => {
                     );
                   })}
                 </nav>
-                {/* External Links */}
-                <div className="relative z-10 p-4 border-t border-white/30 dark:border-white/10">
-                  <a
-                    href="https://analytics.google.com/analytics/web"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={sidebarCollapsed ? "Analytics" : undefined}
-                    className={`w-full flex ${
-                      sidebarCollapsed ? "flex-col items-center gap-1 py-3" : "items-center gap-3 px-4 py-3"
-                    } rounded-2xl transition text-stone-700 dark:text-stone-200 hover:bg-white/70 dark:hover:bg-white/10`}
-                  >
-                    <div className="w-5 h-5 rounded bg-orange-500 flex items-center justify-center flex-shrink-0">
-                      <ArrowUpRight className="h-3 w-3 text-white" />
-                    </div>
-                    {!sidebarCollapsed && (
-                      <>
-                        <span className="font-medium">Analytics</span>
-                        <ExternalLink className="ml-auto h-3.5 w-3.5 opacity-50" />
-                      </>
-                    )}
-                  </a>
-                </div>
               </div>
             </aside>
 
