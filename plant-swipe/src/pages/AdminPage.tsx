@@ -3676,19 +3676,6 @@ export const AdminPage: React.FC = () => {
                     </Link>
                   );
                 })}
-                {/* Analytics External Link */}
-                <a
-                  href="https://analytics.google.com/analytics/web"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition text-stone-700 dark:text-stone-200 bg-stone-100 dark:bg-[#111116] hover:bg-stone-200 dark:hover:bg-[#1e1e22]"
-                >
-                  <div className="w-4 h-4 rounded bg-orange-500 flex items-center justify-center flex-shrink-0">
-                    <ArrowUpRight className="h-2.5 w-2.5 text-white" />
-                  </div>
-                  <span>Analytics</span>
-                  <ExternalLink className="h-3 w-3 opacity-50" />
-                </a>
             </div>
           </div>
         </div>
@@ -5258,6 +5245,21 @@ export const AdminPage: React.FC = () => {
                           >
                             <span className="inline-block h-3 w-3 rounded-sm bg-blue-600 dark:bg-blue-500" />
                             <span>Linode</span>
+                            <ExternalLink className="h-3 w-3 opacity-70" />
+                          </a>
+                        </Button>
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="rounded-2xl"
+                        >
+                          <a
+                            href="https://analytics.google.com/analytics/web"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="inline-block h-3 w-3 rounded-sm bg-orange-500 dark:bg-orange-400" />
+                            <span>Analytics</span>
                             <ExternalLink className="h-3 w-3 opacity-70" />
                           </a>
                         </Button>
