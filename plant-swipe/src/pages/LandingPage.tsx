@@ -561,11 +561,12 @@ const ShowcaseSection: React.FC = () => {
 const TestimonialsSection: React.FC = () => {
   const { t } = useTranslation("Landing")
 
-  const testimonials = t("testimonials.items", { returnObjects: true }) as Array<{
+  const rawTestimonials = t("testimonials.items", { returnObjects: true })
+  const testimonials = Array.isArray(rawTestimonials) ? rawTestimonials as Array<{
     name: string
     role: string
     quote: string
-  }>
+  }> : []
 
   return (
     <section className="py-20 lg:py-32 bg-gradient-to-b from-slate-50 to-white dark:from-slate-900/20 dark:to-transparent">
@@ -617,9 +618,13 @@ const TestimonialsSection: React.FC = () => {
 const PricingSection: React.FC = () => {
   const { t } = useTranslation("Landing")
 
-  const freeFeatures = t("pricingSection.free.features", { returnObjects: true }) as string[]
-  const proFeatures = t("pricingSection.pro.features", { returnObjects: true }) as string[]
-  const clubFeatures = t("pricingSection.club.features", { returnObjects: true }) as string[]
+  const rawFreeFeatures = t("pricingSection.free.features", { returnObjects: true })
+  const rawProFeatures = t("pricingSection.pro.features", { returnObjects: true })
+  const rawClubFeatures = t("pricingSection.club.features", { returnObjects: true })
+  
+  const freeFeatures = Array.isArray(rawFreeFeatures) ? rawFreeFeatures as string[] : []
+  const proFeatures = Array.isArray(rawProFeatures) ? rawProFeatures as string[] : []
+  const clubFeatures = Array.isArray(rawClubFeatures) ? rawClubFeatures as string[] : []
 
   const plans = [
     {
@@ -747,7 +752,8 @@ const FAQSection: React.FC = () => {
   const [openIndex, setOpenIndex] = React.useState<number | null>(0)
   const { t } = useTranslation("Landing")
 
-  const faqs = t("faq.items", { returnObjects: true }) as Array<{ q: string; a: string }>
+  const rawFaqs = t("faq.items", { returnObjects: true })
+  const faqs = Array.isArray(rawFaqs) ? rawFaqs as Array<{ q: string; a: string }> : []
 
   return (
     <section id="faq" className="py-20 lg:py-32 bg-gradient-to-b from-slate-50 to-white dark:from-slate-900/20 dark:to-transparent scroll-mt-20">

@@ -78,9 +78,13 @@ const PricingPage: React.FC = () => {
     description: t("pricing.pageDescription"),
   })
 
-  const freeFeatures = t("pricing.free.features", { returnObjects: true }) as string[]
-  const plusFeatures = t("pricing.plus.features", { returnObjects: true }) as string[]
-  const faqItems = t("pricing.faq.items", { returnObjects: true }) as Array<{ q: string; a: string }>
+  const rawFreeFeatures = t("pricing.free.features", { returnObjects: true })
+  const rawPlusFeatures = t("pricing.plus.features", { returnObjects: true })
+  const rawFaqItems = t("pricing.faq.items", { returnObjects: true })
+  
+  const freeFeatures = Array.isArray(rawFreeFeatures) ? rawFreeFeatures as string[] : []
+  const plusFeatures = Array.isArray(rawPlusFeatures) ? rawPlusFeatures as string[] : []
+  const faqItems = Array.isArray(rawFaqItems) ? rawFaqItems as Array<{ q: string; a: string }> : []
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 md:py-12 space-y-16">
