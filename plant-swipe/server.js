@@ -6021,9 +6021,18 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
 })
 
 // Public endpoint to send automatic email (called from auth flow)
+// Uses the same method as campaign emails: direct Resend API call with wrapper
 app.post('/api/send-automatic-email', async (req, res) => {
-  if (!supabaseServiceClient) {
-    res.status(500).json({ error: 'Supabase service client not configured' })
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+  if (!apiKey) {
+    console.error('[send-automatic-email] No Resend API key configured')
+    res.status(500).json({ error: 'Email service not configured' })
+    return
+  }
+  
+  if (!sql) {
+    console.error('[send-automatic-email] Database connection not available')
+    res.status(500).json({ error: 'Database not configured' })
     return
   }
   
@@ -6034,26 +6043,142 @@ app.post('/api/send-automatic-email', async (req, res) => {
     return
   }
   
+  const lang = userLanguage || 'en'
+  
   try {
-    // Invoke the edge function
-    const { data, error } = await supabaseServiceClient.functions.invoke('send-automatic-email', {
-      body: {
-        triggerType,
-        userId,
-        userEmail,
-        userDisplayName,
-        userLanguage: userLanguage || 'en',
-      },
-    })
+    // 1. Load trigger configuration
+    const triggerRows = await sql`
+      select t.*, tpl.title as template_title, tpl.subject, tpl.body_html
+      from public.admin_email_triggers t
+      left join public.admin_email_templates tpl on tpl.id = t.template_id
+      where t.trigger_type = ${triggerType}
+      limit 1
+    `
     
-    if (error) {
-      console.error('[send-automatic-email] Edge function error:', error)
-      res.status(500).json({ error: error.message || 'Failed to send email' })
+    if (!triggerRows || !triggerRows.length) {
+      console.log(`[send-automatic-email] Trigger type "${triggerType}" not found`)
+      res.json({ sent: false, reason: 'Trigger not configured' })
       return
     }
     
-    console.log(`[send-automatic-email] ${triggerType} to ${userEmail}:`, data?.sent ? 'sent' : data?.reason || 'not sent')
-    res.json(data)
+    const trigger = triggerRows[0]
+    
+    // 2. Check if enabled and has a template
+    if (!trigger.is_enabled) {
+      console.log(`[send-automatic-email] Trigger "${triggerType}" is disabled`)
+      res.json({ sent: false, reason: 'Trigger is disabled' })
+      return
+    }
+    
+    if (!trigger.template_id) {
+      console.log(`[send-automatic-email] Trigger "${triggerType}" has no template configured`)
+      res.json({ sent: false, reason: 'No template configured' })
+      return
+    }
+    
+    // 3. Check if we've already sent this automatic email to this user
+    const existingSend = await sql`
+      select id from public.admin_automatic_email_sends
+      where trigger_type = ${triggerType} and user_id = ${userId}
+      limit 1
+    `
+    
+    if (existingSend && existingSend.length > 0) {
+      console.log(`[send-automatic-email] Already sent "${triggerType}" to user ${userId}`)
+      res.json({ sent: false, reason: 'Already sent to this user' })
+      return
+    }
+    
+    // 4. Load translations for the template (for multi-language support)
+    const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
+    
+    // 5. Get user's language-specific content (fallback to template's default content)
+    const translation = emailTranslations.get(lang)
+    const rawSubject = translation?.subject || trigger.subject
+    const rawBodyHtml = translation?.bodyHtml || trigger.body_html
+    
+    if (!rawSubject || !rawBodyHtml) {
+      console.error(`[send-automatic-email] Template "${trigger.template_id}" has no content`)
+      res.status(500).json({ error: 'Template has no content' })
+      return
+    }
+    
+    // 6. Prepare variable replacement context (same as campaign emails)
+    const userRaw = userDisplayName || 'User'
+    const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+    
+    // Generate random 10-character string (uppercase, lowercase, numbers)
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    let randomStr = ''
+    for (let i = 0; i < 10; i++) {
+      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    
+    const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+    
+    // Variables available for replacement in email templates
+    const context = { 
+      user: userCap,                                     // User's display name (capitalized)
+      email: userEmail,                                  // User's email address
+      random: randomStr,                                 // 10 random characters (unique per email)
+      url: websiteUrl.replace(/^https?:\/\//, ''),       // Website URL without protocol (e.g., "aphylia.app")
+      code: 'XXXXXX'                                     // Placeholder (real codes are for transactional emails)
+    }
+    const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
+    
+    // 7. Render the email content
+    const subject = replaceVars(rawSubject)
+    const bodyHtmlRaw = replaceVars(rawBodyHtml)
+    
+    // 8. Sanitize HTML for email client compatibility (same as campaigns)
+    const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
+    
+    // 9. Wrap with the beautiful email wrapper (same as campaigns)
+    const html = wrapEmailHtml(bodyHtml, subject, lang)
+    const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+    
+    // 10. Send via Resend API (same method as campaigns)
+    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Plant Swipe <info@aphylia.app>'
+    
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: userEmail,
+        subject: subject,
+        html: html,
+        text: text,
+        headers: { 'X-Trigger-Type': triggerType },
+        tags: [{ name: 'trigger_type', value: triggerType }]
+      })
+    })
+    
+    if (!resendResponse.ok) {
+      const errorText = await resendResponse.text().catch(() => '')
+      console.error(`[send-automatic-email] Resend API error (${resendResponse.status}):`, errorText)
+      res.status(500).json({ error: `Failed to send email: ${errorText || resendResponse.status}` })
+      return
+    }
+    
+    const resendData = await resendResponse.json().catch(() => ({}))
+    console.log(`[send-automatic-email] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
+    
+    // 11. Record the send to prevent duplicates
+    try {
+      await sql`
+        insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
+        values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
+      `
+    } catch (logErr) {
+      // Don't fail the request if logging fails, email was already sent
+      console.warn('[send-automatic-email] Failed to log send:', logErr?.message || logErr)
+    }
+    
+    res.json({ sent: true, resendId: resendData.id })
   } catch (err) {
     console.error('[send-automatic-email] Error:', err)
     res.status(500).json({ error: err?.message || 'Failed to send email' })
