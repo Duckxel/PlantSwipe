@@ -1281,6 +1281,13 @@ export const AdminPage: React.FC = () => {
     React.useState<boolean>(false);
   const [isPromotionCadenceCollapsed, setIsPromotionCadenceCollapsed] =
     React.useState<boolean>(false);
+  const [addFromDialogOpen, setAddFromDialogOpen] = React.useState(false);
+  const [addFromSearchQuery, setAddFromSearchQuery] = React.useState("");
+  const [addFromSearchResults, setAddFromSearchResults] = React.useState<
+    Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }>
+  >([]);
+  const [addFromSearchLoading, setAddFromSearchLoading] = React.useState(false);
+  const [addButtonExpanded, setAddButtonExpanded] = React.useState(false);
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -1496,6 +1503,41 @@ export const AdminPage: React.FC = () => {
       });
     },
     [],
+  );
+
+  const searchPlantsForAddFrom = React.useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setAddFromSearchResults([]);
+      return;
+    }
+    setAddFromSearchLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("plants")
+        .select("id, name, scientific_name, status")
+        .or(`name.ilike.%${trimmed}%,scientific_name.ilike.%${trimmed}%`)
+        .order("name")
+        .limit(20);
+      if (error) throw error;
+      setAddFromSearchResults(data || []);
+    } catch (err) {
+      console.error("Failed to search plants:", err);
+      setAddFromSearchResults([]);
+    } finally {
+      setAddFromSearchLoading(false);
+    }
+  }, []);
+
+  const handleSelectPlantForPrefill = React.useCallback(
+    (plantId: string) => {
+      setAddFromDialogOpen(false);
+      setAddFromSearchQuery("");
+      setAddFromSearchResults([]);
+      setAddButtonExpanded(false);
+      navigate(`/create?prefillFrom=${plantId}`);
+    },
+    [navigate],
   );
 
   const loadPlantDashboard = React.useCallback(async () => {
@@ -5288,18 +5330,54 @@ export const AdminPage: React.FC = () => {
                                       Status mix, promotion calendar and approval coverage.
                                     </div>
                                   </div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="rounded-xl"
-                                    onClick={() => loadPlantDashboard()}
-                                    disabled={plantDashboardLoading}
-                                  >
-                                    <RefreshCw
-                                      className={`h-4 w-4 mr-2 ${plantDashboardLoading ? "animate-spin" : ""}`}
-                                    />
-                                    Refresh
-                                  </Button>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="rounded-xl"
+                                      onClick={() => loadPlantDashboard()}
+                                      disabled={plantDashboardLoading}
+                                    >
+                                      <RefreshCw
+                                        className={`h-4 w-4 mr-2 ${plantDashboardLoading ? "animate-spin" : ""}`}
+                                      />
+                                      Refresh
+                                    </Button>
+                                    <div className="relative">
+                                      <div className="flex">
+                                        <Button
+                                          size="sm"
+                                          className="rounded-l-xl rounded-r-none bg-emerald-600 hover:bg-emerald-700 text-white"
+                                          onClick={() => navigate("/create")}
+                                        >
+                                          <Plus className="h-4 w-4 mr-1" />
+                                          Add Plant
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          className="rounded-l-none rounded-r-xl bg-emerald-600 hover:bg-emerald-700 text-white border-l border-emerald-500 px-2"
+                                          onClick={() => setAddButtonExpanded(!addButtonExpanded)}
+                                        >
+                                          <ChevronDown className={`h-4 w-4 transition-transform ${addButtonExpanded ? "rotate-180" : ""}`} />
+                                        </Button>
+                                      </div>
+                                      {addButtonExpanded && (
+                                        <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] shadow-lg overflow-hidden">
+                                          <button
+                                            type="button"
+                                            className="w-full px-4 py-2.5 text-sm text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors flex items-center gap-2"
+                                            onClick={() => {
+                                              setAddButtonExpanded(false);
+                                              setAddFromDialogOpen(true);
+                                            }}
+                                          >
+                                            <Copy className="h-4 w-4 opacity-60" />
+                                            Add FROM...
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                                 <div className="grid gap-4 md:grid-cols-2">
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
@@ -7381,6 +7459,73 @@ export const AdminPage: React.FC = () => {
         </main>
       </div>
     </div>
+
+    {/* Add FROM Plant Dialog */}
+    <Dialog open={addFromDialogOpen} onOpenChange={(open) => {
+      setAddFromDialogOpen(open);
+      if (!open) {
+        setAddFromSearchQuery("");
+        setAddFromSearchResults([]);
+      }
+    }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add Plant FROM Existing</DialogTitle>
+          <DialogDescription>
+            Search for an existing plant to use as a template. All data including translations will be copied to a new plant.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+            <Input
+              value={addFromSearchQuery}
+              onChange={(e) => {
+                setAddFromSearchQuery(e.target.value);
+                searchPlantsForAddFrom(e.target.value);
+              }}
+              placeholder="Search plants by name..."
+              className="pl-10"
+            />
+          </div>
+          <div className="max-h-[300px] overflow-y-auto rounded-xl border border-stone-200 dark:border-[#3e3e42]">
+            {addFromSearchLoading ? (
+              <div className="p-4 text-sm text-center opacity-60">Searching...</div>
+            ) : addFromSearchQuery.trim() && addFromSearchResults.length === 0 ? (
+              <div className="p-4 text-sm text-center opacity-60">No plants found</div>
+            ) : addFromSearchResults.length === 0 ? (
+              <div className="p-4 text-sm text-center opacity-60">Type to search for plants</div>
+            ) : (
+              <div className="divide-y divide-stone-200 dark:divide-[#2f2f35]">
+                {addFromSearchResults.map((plant) => (
+                  <button
+                    key={plant.id}
+                    type="button"
+                    onClick={() => handleSelectPlantForPrefill(plant.id)}
+                    className="w-full px-4 py-3 text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
+                  >
+                    <div className="font-medium text-sm">{plant.name}</div>
+                    {plant.scientific_name && (
+                      <div className="text-xs italic opacity-60">{plant.scientific_name}</div>
+                    )}
+                    {plant.status && (
+                      <Badge variant="outline" className="mt-1 text-[10px]">
+                        {plant.status}
+                      </Badge>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl">Cancel</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 );
 };

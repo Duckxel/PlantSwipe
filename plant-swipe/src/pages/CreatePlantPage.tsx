@@ -1,7 +1,7 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Loader2, Sparkles } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, Loader2, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
@@ -13,7 +13,7 @@ import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
 import {
@@ -529,6 +529,8 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
 export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: string) => void; initialName?: string }> = ({ onCancel, onSaved, initialName }) => {
   const { t } = useTranslation('common')
   const { id } = useParams<{ id?: string }>()
+  const [searchParams] = useSearchParams()
+  const prefillFromId = searchParams.get('prefillFrom')
   const navigate = useNavigate()
   const languageNavigate = useLanguageNavigate()
   const { profile } = useAuth()
@@ -536,8 +538,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
   const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
-  const [loading, setLoading] = React.useState<boolean>(!!id)
+  const [loading, setLoading] = React.useState<boolean>(!!id || !!prefillFromId)
   const [saving, setSaving] = React.useState(false)
+  const [prefillSourceName, setPrefillSourceName] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [aiWorking, setAiWorking] = React.useState(false)
   const [aiCompleted, setAiCompleted] = React.useState(false)
@@ -618,6 +621,57 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       fetchPlant()
       return () => { ignore = true }
     }, [id, language, t])
+
+    // Handle prefillFrom parameter - load existing plant data into a new plant
+    React.useEffect(() => {
+      if (!prefillFromId || id) { 
+        // Don't prefill if we're editing an existing plant (id is set)
+        if (!id && !prefillFromId) setLoading(false)
+        return 
+      }
+      let ignore = false
+      setLoading(true)
+      const prefillFromSource = async () => {
+        try {
+          // Load all translations for the source plant
+          const sourcePlant = await loadPlant(prefillFromId, 'en')
+          if (!sourcePlant) {
+            throw new Error('Source plant not found')
+          }
+          if (!ignore) {
+            // Create a new plant with a new ID, but copy all the data from the source
+            const newId = generateUUIDv4()
+            const prefilled: Plant = {
+              ...sourcePlant,
+              id: newId,
+              name: `${sourcePlant.name} (Copy)`,
+              meta: {
+                ...sourcePlant.meta,
+                status: IN_PROGRESS_STATUS,
+                createdBy: profile?.display_name || undefined,
+                createdAt: new Date().toISOString(),
+                updatedBy: undefined,
+                updatedAt: undefined,
+              },
+            }
+            setPlant(prefilled)
+            setPrefillSourceName(sourcePlant.name)
+            // Don't mark as existingLoaded - this is a new plant
+            setExistingLoaded(false)
+          }
+        } catch (e: any) {
+          if (!ignore) {
+            setError(e?.message || t('plantAdmin.errors.loadPlant', 'Failed to load source plant'))
+          }
+        } finally {
+          if (!ignore) {
+            setLoading(false)
+          }
+        }
+      }
+      prefillFromSource()
+      return () => { ignore = true }
+    }, [prefillFromId, id, profile?.display_name, t])
 
     const captureColorSuggestions = (data: unknown) => {
     if (!data) return
@@ -1350,6 +1404,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           </div>
         </div>
       </div>
+      {prefillSourceName && (
+        <Card className="border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-950/30">
+          <CardContent className="flex gap-2 items-center py-3">
+            <Copy className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm text-blue-800 dark:text-blue-200">
+              Creating new plant from template: <strong>{prefillSourceName}</strong>
+            </span>
+          </CardContent>
+        </Card>
+      )}
       {error && (
         <Card className="border-red-500">
           <CardContent className="flex gap-2 items-center text-red-700 py-3">
