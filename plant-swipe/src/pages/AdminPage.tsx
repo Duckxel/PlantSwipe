@@ -1281,6 +1281,13 @@ export const AdminPage: React.FC = () => {
     React.useState<boolean>(false);
   const [isPromotionCadenceCollapsed, setIsPromotionCadenceCollapsed] =
     React.useState<boolean>(false);
+  const [addFromDialogOpen, setAddFromDialogOpen] = React.useState(false);
+  const [addFromSearchQuery, setAddFromSearchQuery] = React.useState("");
+  const [addFromSearchResults, setAddFromSearchResults] = React.useState<
+    Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }>
+  >([]);
+  const [addFromSearchLoading, setAddFromSearchLoading] = React.useState(false);
+  const [addButtonExpanded, setAddButtonExpanded] = React.useState(false);
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -1496,6 +1503,41 @@ export const AdminPage: React.FC = () => {
       });
     },
     [],
+  );
+
+  const searchPlantsForAddFrom = React.useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setAddFromSearchResults([]);
+      return;
+    }
+    setAddFromSearchLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("plants")
+        .select("id, name, scientific_name, status")
+        .or(`name.ilike.%${trimmed}%,scientific_name.ilike.%${trimmed}%`)
+        .order("name")
+        .limit(20);
+      if (error) throw error;
+      setAddFromSearchResults(data || []);
+    } catch (err) {
+      console.error("Failed to search plants:", err);
+      setAddFromSearchResults([]);
+    } finally {
+      setAddFromSearchLoading(false);
+    }
+  }, []);
+
+  const handleSelectPlantForPrefill = React.useCallback(
+    (plantId: string) => {
+      setAddFromDialogOpen(false);
+      setAddFromSearchQuery("");
+      setAddFromSearchResults([]);
+      setAddButtonExpanded(false);
+      navigate(`/create?prefillFrom=${plantId}`);
+    },
+    [navigate],
   );
 
   const loadPlantDashboard = React.useCallback(async () => {
@@ -3676,19 +3718,6 @@ export const AdminPage: React.FC = () => {
                     </Link>
                   );
                 })}
-                {/* Analytics External Link */}
-                <a
-                  href="https://analytics.google.com/analytics/web"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition text-stone-700 dark:text-stone-200 bg-stone-100 dark:bg-[#111116] hover:bg-stone-200 dark:hover:bg-[#1e1e22]"
-                >
-                  <div className="w-4 h-4 rounded bg-orange-500 flex items-center justify-center flex-shrink-0">
-                    <ArrowUpRight className="h-2.5 w-2.5 text-white" />
-                  </div>
-                  <span>Analytics</span>
-                  <ExternalLink className="h-3 w-3 opacity-50" />
-                </a>
             </div>
           </div>
         </div>
@@ -3772,28 +3801,6 @@ export const AdminPage: React.FC = () => {
                     );
                   })}
                 </nav>
-                {/* External Links */}
-                <div className="relative z-10 p-4 border-t border-white/30 dark:border-white/10">
-                  <a
-                    href="https://analytics.google.com/analytics/web"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={sidebarCollapsed ? "Analytics" : undefined}
-                    className={`w-full flex ${
-                      sidebarCollapsed ? "flex-col items-center gap-1 py-3" : "items-center gap-3 px-4 py-3"
-                    } rounded-2xl transition text-stone-700 dark:text-stone-200 hover:bg-white/70 dark:hover:bg-white/10`}
-                  >
-                    <div className="w-5 h-5 rounded bg-orange-500 flex items-center justify-center flex-shrink-0">
-                      <ArrowUpRight className="h-3 w-3 text-white" />
-                    </div>
-                    {!sidebarCollapsed && (
-                      <>
-                        <span className="font-medium">Analytics</span>
-                        <ExternalLink className="ml-auto h-3.5 w-3.5 opacity-50" />
-                      </>
-                    )}
-                  </a>
-                </div>
               </div>
             </aside>
 
@@ -5261,6 +5268,21 @@ export const AdminPage: React.FC = () => {
                             <ExternalLink className="h-3 w-3 opacity-70" />
                           </a>
                         </Button>
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="rounded-2xl"
+                        >
+                          <a
+                            href="https://analytics.google.com/analytics/web"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="inline-block h-3 w-3 rounded-sm bg-orange-500 dark:bg-orange-400" />
+                            <span>Analytics</span>
+                            <ExternalLink className="h-3 w-3 opacity-70" />
+                          </a>
+                        </Button>
                       </div>
                     </div>
                   </>
@@ -5759,22 +5781,57 @@ export const AdminPage: React.FC = () => {
                               Sorted by request count and most recent updates.
                             </div>
                           </div>
-                          <Button
-                            variant="outline"
-                            className="rounded-xl"
-                            onClick={() =>
-                              loadPlantRequests({ initial: false })
-                            }
-                            disabled={
-                              plantRequestsLoading || plantRequestsRefreshing
-                            }
-                          >
-                            <RefreshCw
-                              className={`h-4 w-4 mr-2 ${plantRequestsLoading || plantRequestsRefreshing ? "animate-spin" : ""}`}
-                            />
-                            <span className="hidden sm:inline">Refresh</span>
-                            <span className="sm:hidden inline">Reload</span>
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              className="rounded-xl"
+                              onClick={() =>
+                                loadPlantRequests({ initial: false })
+                              }
+                              disabled={
+                                plantRequestsLoading || plantRequestsRefreshing
+                              }
+                            >
+                              <RefreshCw
+                                className={`h-4 w-4 mr-2 ${plantRequestsLoading || plantRequestsRefreshing ? "animate-spin" : ""}`}
+                              />
+                              <span className="hidden sm:inline">Refresh</span>
+                              <span className="sm:hidden inline">Reload</span>
+                            </Button>
+                            <div className="relative">
+                              <div className="flex">
+                                <Button
+                                  className="rounded-l-xl rounded-r-none bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => navigate("/create")}
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  <span className="hidden sm:inline">Add Plant</span>
+                                  <span className="sm:hidden inline">Add</span>
+                                </Button>
+                                <Button
+                                  className="rounded-l-none rounded-r-xl bg-emerald-600 hover:bg-emerald-700 text-white border-l border-emerald-500 px-2"
+                                  onClick={() => setAddButtonExpanded(!addButtonExpanded)}
+                                >
+                                  <ChevronDown className={`h-4 w-4 transition-transform ${addButtonExpanded ? "rotate-180" : ""}`} />
+                                </Button>
+                              </div>
+                              {addButtonExpanded && (
+                                <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] shadow-lg overflow-hidden">
+                                  <button
+                                    type="button"
+                                    className="w-full px-4 py-2.5 text-sm text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors flex items-center gap-2"
+                                    onClick={() => {
+                                      setAddButtonExpanded(false);
+                                      setAddFromDialogOpen(true);
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 opacity-60" />
+                                    Add FROM...
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
 
                         {/* Statistics */}
@@ -7401,6 +7458,73 @@ export const AdminPage: React.FC = () => {
         </main>
       </div>
     </div>
+
+    {/* Add FROM Plant Dialog */}
+    <Dialog open={addFromDialogOpen} onOpenChange={(open) => {
+      setAddFromDialogOpen(open);
+      if (!open) {
+        setAddFromSearchQuery("");
+        setAddFromSearchResults([]);
+      }
+    }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add Plant FROM Existing</DialogTitle>
+          <DialogDescription>
+            Search for an existing plant to use as a template. All data including translations will be copied to a new plant.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+            <Input
+              value={addFromSearchQuery}
+              onChange={(e) => {
+                setAddFromSearchQuery(e.target.value);
+                searchPlantsForAddFrom(e.target.value);
+              }}
+              placeholder="Search plants by name..."
+              className="pl-10"
+            />
+          </div>
+          <div className="max-h-[300px] overflow-y-auto rounded-xl border border-stone-200 dark:border-[#3e3e42]">
+            {addFromSearchLoading ? (
+              <div className="p-4 text-sm text-center opacity-60">Searching...</div>
+            ) : addFromSearchQuery.trim() && addFromSearchResults.length === 0 ? (
+              <div className="p-4 text-sm text-center opacity-60">No plants found</div>
+            ) : addFromSearchResults.length === 0 ? (
+              <div className="p-4 text-sm text-center opacity-60">Type to search for plants</div>
+            ) : (
+              <div className="divide-y divide-stone-200 dark:divide-[#2f2f35]">
+                {addFromSearchResults.map((plant) => (
+                  <button
+                    key={plant.id}
+                    type="button"
+                    onClick={() => handleSelectPlantForPrefill(plant.id)}
+                    className="w-full px-4 py-3 text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
+                  >
+                    <div className="font-medium text-sm">{plant.name}</div>
+                    {plant.scientific_name && (
+                      <div className="text-xs italic opacity-60">{plant.scientific_name}</div>
+                    )}
+                    {plant.status && (
+                      <Badge variant="outline" className="mt-1 text-[10px]">
+                        {plant.status}
+                      </Badge>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl">Cancel</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 );
 };
