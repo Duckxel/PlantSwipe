@@ -5101,6 +5101,67 @@ app.post('/api/admin/notifications/:id/state', async (req, res) => {
   }
 })
 
+// Debug endpoint for notification diagnostics
+app.get('/api/admin/notifications/debug', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    // Get pending campaigns
+    const pendingCampaigns = await sql`
+      select id, title, state, delivery_mode, next_run_at, planned_for, schedule_start_at, timezone
+      from public.notification_campaigns
+      where deleted_at is null
+        and state not in ('cancelled','completed')
+      order by next_run_at asc nulls last
+      limit 10
+    `
+    
+    // Get recent user notifications
+    const recentNotifications = await sql`
+      select un.id, un.user_id, un.title, un.delivery_status, un.scheduled_for, un.delivered_at, un.delivery_error, un.campaign_id
+      from public.user_notifications un
+      order by un.scheduled_for desc
+      limit 20
+    `
+    
+    // Get subscription counts
+    const subscriptionStats = await sql`
+      select 
+        count(distinct user_id) as users_with_subscriptions,
+        count(*) as total_subscriptions
+      from public.user_push_subscriptions
+    `
+    
+    // Get notification delivery stats
+    const deliveryStats = await sql`
+      select 
+        delivery_status,
+        count(*) as count
+      from public.user_notifications
+      where scheduled_for >= now() - interval '24 hours'
+      group by delivery_status
+    `
+    
+    res.json({
+      pushEnabled: pushNotificationsEnabled,
+      vapidConfigured: Boolean(vapidPublicKey && vapidPrivateKey),
+      workerIntervalMs: notificationWorkerIntervalMs,
+      serverTime: new Date().toISOString(),
+      pendingCampaigns: pendingCampaigns || [],
+      recentNotifications: recentNotifications || [],
+      subscriptionStats: subscriptionStats?.[0] || { users_with_subscriptions: 0, total_subscriptions: 0 },
+      deliveryStats: deliveryStats || [],
+    })
+  } catch (err) {
+    console.error('[notifications] debug endpoint failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to get debug info' })
+  }
+})
+
 // ---- Admin email templates ----
 app.get('/api/admin/email-templates', async (req, res) => {
   const adminId = await ensureAdmin(req, res)
@@ -10784,7 +10845,9 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
 
 async function deliverPushNotifications(notifications, campaign) {
   if (!sql || !notifications.length) return { sent: 0, failed: 0 }
+  console.log(`[notifications] Delivering ${notifications.length} notification(s) for campaign: ${campaign?.id || 'adhoc'}`)
   if (!pushNotificationsEnabled) {
+    console.warn('[notifications] Push notifications disabled (VAPID keys not configured)')
     const ids = notifications.map((row) => row.id)
     await sql`
       update public.user_notifications
@@ -10803,6 +10866,7 @@ async function deliverPushNotifications(notifications, campaign) {
     from public.user_push_subscriptions
     where user_id = any(${userIds})
   `
+  console.log(`[notifications] Found ${subscriptions?.length || 0} push subscription(s) for ${userIds.length} user(s)`)
   const subsByUser = new Map()
   for (const sub of subscriptions || []) {
     const list = subsByUser.get(sub.user_id) || []
@@ -10963,13 +11027,19 @@ async function runNotificationCampaign(row) {
       and state <> 'cancelled'
     returning *
   `
-  if (!claimed || !claimed.length) return
+  if (!claimed || !claimed.length) {
+    console.warn(`[notifications] Could not claim campaign ${row.id} - already processed or cancelled`)
+    return
+  }
   const campaign = normalizeNotificationCampaign(claimed[0])
   if (!campaign) return
   const iteration = (campaign.runCount || 0) + 1
+  console.log(`[notifications] Running campaign "${campaign.title}" (id=${campaign.id}), iteration=${iteration}, audience=${campaign.audience}`)
   const recipients = await resolveNotificationAudience(campaign)
+  console.log(`[notifications] Resolved ${recipients.length} recipient(s) for campaign ${campaign.id}`)
   const scheduledFor = new Date().toISOString()
   const inserted = await insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor)
+  console.log(`[notifications] Queued ${inserted.length} notification(s) for delivery`)
   const summary = {
     recipients: recipients.length,
     queued: inserted.length,
@@ -10991,6 +11061,7 @@ async function runNotificationCampaign(row) {
         updated_at = now()
     where id = ${campaign.id}
   `
+  console.log(`[notifications] Campaign ${campaign.id} completed. State=${nextState}, next_run_at=${nextRunAt || 'none'}`)
 }
 
 async function processDueNotificationCampaigns() {
@@ -11006,8 +11077,12 @@ async function processDueNotificationCampaigns() {
     order by next_run_at asc
     limit 5
   `
+  if (due && due.length > 0) {
+    console.log(`[notifications] Found ${due.length} due campaign(s) to process`)
+  }
   for (const row of due || []) {
     try {
+      console.log(`[notifications] Processing campaign: id=${row.id}, title="${row.title}", state=${row.state}, delivery_mode=${row.delivery_mode}, next_run_at=${row.next_run_at}`)
       await runNotificationCampaign(row)
     } catch (err) {
       console.error('[notifications] campaign run failed', err)
