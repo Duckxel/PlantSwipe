@@ -3721,6 +3721,77 @@ do $$ begin
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- Admin Automatic Email Triggers (configuration for automatic emails like welcome emails)
+create table if not exists public.admin_email_triggers (
+  id uuid primary key default gen_random_uuid(),
+  trigger_type text not null unique, -- e.g., 'WELCOME_EMAIL', 'PASSWORD_RESET', etc.
+  display_name text not null,        -- e.g., 'New User Welcome Email'
+  description text,                  -- e.g., 'Sent when a new user creates an account'
+  is_enabled boolean default false,  -- Whether this trigger is active
+  template_id uuid references public.admin_email_templates(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Insert default trigger types
+insert into public.admin_email_triggers (trigger_type, display_name, description, is_enabled)
+values 
+  ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false)
+on conflict (trigger_type) do nothing;
+
+alter table public.admin_email_triggers enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_email_triggers' and policyname='aetrig_admin_all') then
+    drop policy aetrig_admin_all on public.admin_email_triggers;
+  end if;
+  create policy aetrig_admin_all on public.admin_email_triggers for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Allow service role to read triggers (for edge functions)
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_email_triggers' and policyname='aetrig_service_select') then
+    drop policy aetrig_service_select on public.admin_email_triggers;
+  end if;
+  create policy aetrig_service_select on public.admin_email_triggers for select to service_role using (true);
+end $$;
+
+-- Tracking table for automatic email sends (to prevent duplicates)
+create table if not exists public.admin_automatic_email_sends (
+  id uuid primary key default gen_random_uuid(),
+  trigger_type text not null,
+  user_id uuid references auth.users(id) on delete cascade,
+  template_id uuid references public.admin_email_templates(id) on delete set null,
+  sent_at timestamptz default now(),
+  status text default 'sent',
+  error text,
+  unique(trigger_type, user_id)
+);
+
+create index if not exists idx_admin_auto_sends_trigger_user 
+  on public.admin_automatic_email_sends(trigger_type, user_id);
+
+alter table public.admin_automatic_email_sends enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_automatic_email_sends' and policyname='aaes_admin_all') then
+    drop policy aaes_admin_all on public.admin_automatic_email_sends;
+  end if;
+  create policy aaes_admin_all on public.admin_automatic_email_sends for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Allow service role full access (for edge functions)
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_automatic_email_sends' and policyname='aaes_service_all') then
+    drop policy aaes_service_all on public.admin_automatic_email_sends;
+  end if;
+  create policy aaes_service_all on public.admin_automatic_email_sends for all to service_role using (true) with check (true);
+end $$;
+
 -- Function to check if a user is eligible for a timezone-aware campaign
 -- Returns true if now() >= scheduled_time adjusted for user timezone
 create or replace function public.is_campaign_due_for_user(

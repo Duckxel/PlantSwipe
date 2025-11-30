@@ -185,6 +185,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Update local session immediately; profile fetch runs in background
     await loadSession()
     refreshProfile().catch(() => {})
+
+    // Send welcome email (non-blocking, fire-and-forget)
+    // This calls our backend which invokes the edge function
+    if (email) {
+      const detectedLanguage = (() => {
+        try {
+          const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
+          return browserLang.startsWith('fr') ? 'fr' : 'en'
+        } catch {
+          return 'en'
+        }
+      })()
+      
+      fetch('/api/send-automatic-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          triggerType: 'WELCOME_EMAIL',
+          userId: uid,
+          userEmail: email,
+          userDisplayName: displayName,
+          userLanguage: detectedLanguage,
+        }),
+        credentials: 'same-origin',
+      }).catch((err) => {
+        console.warn('[signup] Failed to send welcome email:', err)
+      })
+    }
+
     return {}
   }
 

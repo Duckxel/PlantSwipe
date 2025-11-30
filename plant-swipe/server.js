@@ -5872,6 +5872,194 @@ function normalizeEmailCampaignRow(row) {
   }
 }
 
+// ---- Admin email triggers (automatic emails) ----
+function normalizeEmailTriggerRow(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    triggerType: row.trigger_type,
+    displayName: row.display_name,
+    description: row.description || null,
+    isEnabled: row.is_enabled === true,
+    templateId: row.template_id || null,
+    templateTitle: row.template_title || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+app.get('/api/admin/email-triggers', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select t.*, tpl.title as template_title
+      from public.admin_email_triggers t
+      left join public.admin_email_templates tpl on tpl.id = t.template_id
+      order by t.display_name asc
+    `
+    const triggers = (rows || []).map((row) => normalizeEmailTriggerRow(row)).filter(Boolean)
+    res.json({ triggers })
+  } catch (err) {
+    console.error('[email-triggers] failed to load triggers', err)
+    res.status(500).json({ error: err?.message || 'Failed to load triggers' })
+  }
+})
+
+app.get('/api/admin/email-triggers/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const triggerId = String(req.params?.id || '').trim()
+  if (!triggerId) {
+    res.status(400).json({ error: 'Missing trigger id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select t.*, tpl.title as template_title
+      from public.admin_email_triggers t
+      left join public.admin_email_templates tpl on tpl.id = t.template_id
+      where t.id = ${triggerId}
+      limit 1
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Trigger not found' })
+      return
+    }
+    const trigger = normalizeEmailTriggerRow(rows[0])
+    res.json({ trigger })
+  } catch (err) {
+    console.error('[email-triggers] failed to load trigger', err)
+    res.status(500).json({ error: err?.message || 'Failed to load trigger' })
+  }
+})
+
+app.put('/api/admin/email-triggers/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const triggerId = String(req.params?.id || '').trim()
+  if (!triggerId) {
+    res.status(400).json({ error: 'Missing trigger id' })
+    return
+  }
+  try {
+    const body = req.body || {}
+    
+    // Get current state
+    const current = await sql`
+      select * from public.admin_email_triggers where id = ${triggerId} limit 1
+    `
+    if (!current || !current.length) {
+      res.status(404).json({ error: 'Trigger not found' })
+      return
+    }
+    
+    // Calculate new values
+    let newEnabled = current[0].is_enabled
+    let newTemplateId = current[0].template_id
+    
+    if (body.templateId !== undefined) {
+      newTemplateId = body.templateId || null
+      // If clearing template, also disable the trigger
+      if (!newTemplateId) {
+        newEnabled = false
+      }
+    }
+    
+    if (typeof body.isEnabled === 'boolean') {
+      // Only allow enabling if there's a template
+      if (body.isEnabled && !newTemplateId) {
+        newEnabled = false
+      } else {
+        newEnabled = body.isEnabled
+      }
+    }
+    
+    // Simple direct update
+    const rows = await sql`
+      update public.admin_email_triggers
+      set is_enabled = ${newEnabled},
+          template_id = ${newTemplateId},
+          updated_at = now()
+      where id = ${triggerId}
+      returning *
+    `
+    
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Trigger not found after update' })
+      return
+    }
+    
+    // Fetch with template title
+    const refreshed = await sql`
+      select t.*, tpl.title as template_title
+      from public.admin_email_triggers t
+      left join public.admin_email_templates tpl on tpl.id = t.template_id
+      where t.id = ${triggerId}
+      limit 1
+    `
+    
+    const trigger = normalizeEmailTriggerRow(refreshed[0])
+    console.log('[email-triggers] updated trigger:', trigger.triggerType, 'enabled:', trigger.isEnabled, 'template:', trigger.templateId)
+    res.json({ trigger })
+  } catch (err) {
+    console.error('[email-triggers] failed to update trigger', err)
+    res.status(500).json({ error: err?.message || 'Failed to update trigger' })
+  }
+})
+
+// Public endpoint to send automatic email (called from auth flow)
+app.post('/api/send-automatic-email', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service client not configured' })
+    return
+  }
+  
+  const { triggerType, userId, userEmail, userDisplayName, userLanguage } = req.body || {}
+  
+  if (!triggerType || !userId || !userEmail || !userDisplayName) {
+    res.status(400).json({ error: 'Missing required fields: triggerType, userId, userEmail, userDisplayName' })
+    return
+  }
+  
+  try {
+    // Invoke the edge function
+    const { data, error } = await supabaseServiceClient.functions.invoke('send-automatic-email', {
+      body: {
+        triggerType,
+        userId,
+        userEmail,
+        userDisplayName,
+        userLanguage: userLanguage || 'en',
+      },
+    })
+    
+    if (error) {
+      console.error('[send-automatic-email] Edge function error:', error)
+      res.status(500).json({ error: error.message || 'Failed to send email' })
+      return
+    }
+    
+    console.log(`[send-automatic-email] ${triggerType} to ${userEmail}:`, data?.sent ? 'sent' : data?.reason || 'not sent')
+    res.json(data)
+  } catch (err) {
+    console.error('[send-automatic-email] Error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send email' })
+  }
+})
+
   // Admin: global stats (bypass RLS via server connection)
   app.get('/api/admin/stats', async (req, res) => {
   const uid = "public"
