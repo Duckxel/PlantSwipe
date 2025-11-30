@@ -5330,54 +5330,18 @@ export const AdminPage: React.FC = () => {
                                       Status mix, promotion calendar and approval coverage.
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="rounded-xl"
-                                      onClick={() => loadPlantDashboard()}
-                                      disabled={plantDashboardLoading}
-                                    >
-                                      <RefreshCw
-                                        className={`h-4 w-4 mr-2 ${plantDashboardLoading ? "animate-spin" : ""}`}
-                                      />
-                                      Refresh
-                                    </Button>
-                                    <div className="relative">
-                                      <div className="flex">
-                                        <Button
-                                          size="sm"
-                                          className="rounded-l-xl rounded-r-none bg-emerald-600 hover:bg-emerald-700 text-white"
-                                          onClick={() => navigate("/create")}
-                                        >
-                                          <Plus className="h-4 w-4 mr-1" />
-                                          Add Plant
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          className="rounded-l-none rounded-r-xl bg-emerald-600 hover:bg-emerald-700 text-white border-l border-emerald-500 px-2"
-                                          onClick={() => setAddButtonExpanded(!addButtonExpanded)}
-                                        >
-                                          <ChevronDown className={`h-4 w-4 transition-transform ${addButtonExpanded ? "rotate-180" : ""}`} />
-                                        </Button>
-                                      </div>
-                                      {addButtonExpanded && (
-                                        <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] shadow-lg overflow-hidden">
-                                          <button
-                                            type="button"
-                                            className="w-full px-4 py-2.5 text-sm text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors flex items-center gap-2"
-                                            onClick={() => {
-                                              setAddButtonExpanded(false);
-                                              setAddFromDialogOpen(true);
-                                            }}
-                                          >
-                                            <Copy className="h-4 w-4 opacity-60" />
-                                            Add FROM...
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="rounded-xl"
+                                    onClick={() => loadPlantDashboard()}
+                                    disabled={plantDashboardLoading}
+                                  >
+                                    <RefreshCw
+                                      className={`h-4 w-4 mr-2 ${plantDashboardLoading ? "animate-spin" : ""}`}
+                                    />
+                                    Refresh
+                                  </Button>
                                 </div>
                                 <div className="grid gap-4 md:grid-cols-2">
                                   <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
@@ -5817,22 +5781,57 @@ export const AdminPage: React.FC = () => {
                               Sorted by request count and most recent updates.
                             </div>
                           </div>
-                          <Button
-                            variant="outline"
-                            className="rounded-xl"
-                            onClick={() =>
-                              loadPlantRequests({ initial: false })
-                            }
-                            disabled={
-                              plantRequestsLoading || plantRequestsRefreshing
-                            }
-                          >
-                            <RefreshCw
-                              className={`h-4 w-4 mr-2 ${plantRequestsLoading || plantRequestsRefreshing ? "animate-spin" : ""}`}
-                            />
-                            <span className="hidden sm:inline">Refresh</span>
-                            <span className="sm:hidden inline">Reload</span>
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              className="rounded-xl"
+                              onClick={() =>
+                                loadPlantRequests({ initial: false })
+                              }
+                              disabled={
+                                plantRequestsLoading || plantRequestsRefreshing
+                              }
+                            >
+                              <RefreshCw
+                                className={`h-4 w-4 mr-2 ${plantRequestsLoading || plantRequestsRefreshing ? "animate-spin" : ""}`}
+                              />
+                              <span className="hidden sm:inline">Refresh</span>
+                              <span className="sm:hidden inline">Reload</span>
+                            </Button>
+                            <div className="relative">
+                              <div className="flex">
+                                <Button
+                                  className="rounded-l-xl rounded-r-none bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => navigate("/create")}
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  <span className="hidden sm:inline">Add Plant</span>
+                                  <span className="sm:hidden inline">Add</span>
+                                </Button>
+                                <Button
+                                  className="rounded-l-none rounded-r-xl bg-emerald-600 hover:bg-emerald-700 text-white border-l border-emerald-500 px-2"
+                                  onClick={() => setAddButtonExpanded(!addButtonExpanded)}
+                                >
+                                  <ChevronDown className={`h-4 w-4 transition-transform ${addButtonExpanded ? "rotate-180" : ""}`} />
+                                </Button>
+                              </div>
+                              {addButtonExpanded && (
+                                <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] shadow-lg overflow-hidden">
+                                  <button
+                                    type="button"
+                                    className="w-full px-4 py-2.5 text-sm text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors flex items-center gap-2"
+                                    onClick={() => {
+                                      setAddButtonExpanded(false);
+                                      setAddFromDialogOpen(true);
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 opacity-60" />
+                                    Add FROM...
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
 
                         {/* Statistics */}
