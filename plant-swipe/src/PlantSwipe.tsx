@@ -1047,7 +1047,8 @@ export default function PlantSwipe() {
     }
 
     // Landing page has its own layout, skip the app shell
-    const isLandingPage = currentView === "landing" && !user
+    // Show landing page for both logged out users AND logged in users visiting "/"
+    const isLandingPage = currentView === "landing"
 
     if (isLandingPage) {
       return (

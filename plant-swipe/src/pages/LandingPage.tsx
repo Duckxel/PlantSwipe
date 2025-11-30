@@ -1,6 +1,7 @@
 import React from "react"
 import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { useAuth } from "@/context/AuthContext"
 import {
   Leaf,
   Droplets,
@@ -15,6 +16,7 @@ import {
   Check,
   Sparkles,
   ArrowRight,
+  Home,
 } from "lucide-react"
 
 // Lightweight landing page - no heavy dependencies for fast LCP
@@ -65,6 +67,7 @@ const LandingPage: React.FC = () => {
    ───────────────────────────────────────────────────────────────────────────── */
 const LandingNav: React.FC = () => {
   const [scrolled, setScrolled] = React.useState(false)
+  const { user } = useAuth()
 
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -88,8 +91,8 @@ const LandingNav: React.FC = () => {
       }`}
     >
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 group">
+        {/* Logo - links to discovery for logged in users */}
+        <Link to={user ? "/discovery" : "/"} className="flex items-center gap-2 group">
           <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
             <Leaf className="h-5 w-5 text-white" />
           </div>
@@ -126,21 +129,35 @@ const LandingNav: React.FC = () => {
           </button>
         </div>
 
-        {/* CTA Buttons */}
+        {/* CTA Buttons - different for logged in vs logged out users */}
         <div className="flex items-center gap-3">
-          <Link
-            to="/discovery"
-            className="hidden sm:inline-flex text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors px-4 py-2"
-          >
-            Log in
-          </Link>
-          <Link
-            to="/discovery"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-200 hover:-translate-y-0.5"
-          >
-            Get started
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          {user ? (
+            // Logged in user - show "Back to App" button
+            <Link
+              to="/discovery"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-200 hover:-translate-y-0.5"
+            >
+              <Home className="h-4 w-4" />
+              Back to App
+            </Link>
+          ) : (
+            // Logged out user - show login and get started
+            <>
+              <Link
+                to="/discovery"
+                className="hidden sm:inline-flex text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors px-4 py-2"
+              >
+                Log in
+              </Link>
+              <Link
+                to="/discovery"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-200 hover:-translate-y-0.5"
+              >
+                Get started
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </>
+          )}
         </div>
       </nav>
     </header>
