@@ -84,7 +84,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   }, [])
   
   const currentView: "discovery" | "gardens" | "search" | "create" | "profile" =
-    pathWithoutLang === "/" ? "discovery" :
+    pathWithoutLang === "/discovery" || pathWithoutLang.startsWith("/discovery/") ? "discovery" :
     pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
     pathWithoutLang.startsWith("/search") ? "search" :
     pathWithoutLang.startsWith("/create") ? "create" :
@@ -117,7 +117,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
         {/* Icon-only nav items */}
         <div className="flex items-center justify-around gap-8">
           <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'discovery' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-            <Link to="/" aria-label="Discover" className="no-underline flex items-center justify-center">
+            <Link to="/discovery" aria-label="Discover" className="no-underline flex items-center justify-center">
               <Sparkles className="h-6 w-6" />
             </Link>
           </Button>
