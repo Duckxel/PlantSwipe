@@ -3,6 +3,7 @@ import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/ui/button"
 import {
   Leaf,
   Droplets,
@@ -18,6 +19,10 @@ import {
   Sparkles,
   ArrowRight,
   Home,
+  Search,
+  CreditCard,
+  LogIn,
+  UserPlus,
 } from "lucide-react"
 
 // Lightweight landing page - no heavy dependencies for fast LCP
@@ -62,25 +67,19 @@ const LandingPage: React.FC = () => {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   NAVIGATION
+   NAVIGATION - Matches TopBar exactly
    ───────────────────────────────────────────────────────────────────────────── */
 const LandingNav: React.FC = () => {
   const [scrolled, setScrolled] = React.useState(false)
   const { user } = useAuth()
-  const { t } = useTranslation("Landing")
+  const { t } = useTranslation("common")
+  const { t: tLanding } = useTranslation("Landing")
 
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
     window.addEventListener("scroll", onScroll, { passive: true })
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
-
-  const scrollToSection = (id: string) => {
-    const el = document.getElementById(id)
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" })
-    }
-  }
 
   return (
     <>
@@ -95,85 +94,135 @@ const LandingNav: React.FC = () => {
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           scrolled
-            ? "bg-background/80 backdrop-blur-xl border-b border-border shadow-sm"
-            : "bg-transparent"
+            ? "bg-background/95 backdrop-blur-xl border-b border-border shadow-sm"
+            : "bg-background/50 backdrop-blur-sm"
         }`}
       >
-        <nav className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Logo - links to discovery for logged in users */}
-          <Link to={user ? "/discovery" : "/"} className="flex items-center gap-2 group">
+        {/* Desktop Navigation - matches TopBar exactly */}
+        <div className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2" style={{ paddingTop: '1.5rem', paddingBottom: '0.5rem' }}>
+          {/* Logo Icon */}
+          <Link
+            to={user ? "/discovery" : "/"}
+            className="flex-shrink-0 no-underline cursor-pointer"
+            style={{ marginTop: '-1.25rem' }}
+          >
+            <img 
+              src="/icons/plant-swipe-icon.svg" 
+              alt="Aphylia" 
+              className="h-16 w-14 plant-icon-theme"
+              draggable="false"
+            />
+          </Link>
+          
+          {/* Logo Text */}
+          <Link
+            to={user ? "/discovery" : "/"}
+            className="font-brand text-[1.925rem] md:text-[2.625rem] leading-none font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white hover:opacity-90 whitespace-nowrap shrink-0"
+          >
+            {t('common.appName')}
+          </Link>
+
+          {/* Nav Pills */}
+          <nav className="ml-4 hidden md:flex gap-2">
+            {user ? (
+              // Logged-in user on landing page: just show Encyclopedia and Pricing
+              <>
+                <NavPill to="/search" isActive={false} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+                <NavPill to="/pricing" isActive={false} icon={<CreditCard className="h-4 w-4" />} label={t('common.pricing', { defaultValue: 'Pricing' })} />
+              </>
+            ) : (
+              // Logged-out navigation: Encyclopedia, Pricing
+              <>
+                <NavPill to="/search" isActive={false} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+                <NavPill to="/pricing" isActive={false} icon={<CreditCard className="h-4 w-4" />} label={t('common.pricing', { defaultValue: 'Pricing' })} />
+              </>
+            )}
+          </nav>
+
+          {/* Right side buttons */}
+          <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
+            {user ? (
+              // Logged in user - show "Return to app" button
+              <Button asChild className="rounded-2xl" variant="default">
+                <Link to="/discovery">
+                  <Home className="h-4 w-4 mr-2" />
+                  {tLanding("nav.backToApp")}
+                </Link>
+              </Button>
+            ) : (
+              // Logged out user - show signup and login buttons
+              <>
+                <Button asChild className="rounded-2xl" variant="secondary">
+                  <Link to="/discovery">
+                    <UserPlus className="h-4 w-4 mr-2" /> {t('common.signup')}
+                  </Link>
+                </Button>
+                <Button asChild className="rounded-2xl" variant="default">
+                  <Link to="/discovery">
+                    <LogIn className="h-4 w-4 mr-2" /> {t('common.login')}
+                  </Link>
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Navigation */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3">
+          <Link to={user ? "/discovery" : "/"} className="flex items-center gap-2">
             <img 
               src="/icons/plant-swipe-icon.svg" 
               alt="Aphylia" 
               className="h-10 w-9 plant-icon-theme"
               draggable="false"
             />
-            <span className="font-brand text-2xl font-semibold tracking-tight text-foreground">
-              Aphylia
+            <span className="font-brand text-xl font-semibold text-black dark:text-white">
+              {t('common.appName')}
             </span>
           </Link>
-
-          {/* Desktop Nav Links */}
-          <div className="hidden md:flex items-center gap-6">
-            <button
-              onClick={() => scrollToSection("features")}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t("nav.features")}
-            </button>
-            <button
-              onClick={() => scrollToSection("how-it-works")}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t("nav.howItWorks")}
-            </button>
-            <Link
-              to="/pricing"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t("nav.pricing")}
-            </Link>
-            <button
-              onClick={() => scrollToSection("faq")}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t("nav.faq")}
-            </button>
-          </div>
-
-          {/* CTA Buttons - different for logged in vs logged out users */}
-          <div className="flex items-center gap-3">
+          
+          <div className="flex items-center gap-2">
             {user ? (
-              // Logged in user - show "Back to App" button
-              <Link
-                to="/discovery"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all"
-              >
-                <Home className="h-4 w-4" />
-                {t("nav.backToApp")}
-              </Link>
+              <Button asChild size="sm" className="rounded-2xl" variant="default">
+                <Link to="/discovery">
+                  <Home className="h-4 w-4 mr-1" />
+                  {tLanding("nav.backToApp")}
+                </Link>
+              </Button>
             ) : (
-              // Logged out user - show login and get started
-              <>
-                <Link
-                  to="/discovery"
-                  className="hidden sm:inline-flex text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-4 py-2"
-                >
-                  {t("nav.login")}
+              <Button asChild size="sm" className="rounded-2xl" variant="default">
+                <Link to="/discovery">
+                  <LogIn className="h-4 w-4 mr-1" /> {t('common.login')}
                 </Link>
-                <Link
-                  to="/discovery"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all"
-                >
-                  {t("nav.getStarted")}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </>
+              </Button>
             )}
           </div>
-        </nav>
+        </div>
       </header>
     </>
+  )
+}
+
+/* NavPill component - matches TopBar exactly */
+function NavPill({ to, isActive, icon, label }: { to: string; isActive: boolean; icon: React.ReactNode; label: string }) {
+  return (
+    <div className="relative inline-block align-middle overflow-visible">
+      <Button
+        asChild
+        variant="secondary"
+        className={isActive 
+          ? "rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 hover:text-white dark:hover:text-black" 
+          : "rounded-2xl bg-white dark:bg-[#252526] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#2d2d30] hover:text-black dark:hover:text-white"
+        }
+      >
+        <Link to={to} className="no-underline">
+          <span className="inline-flex items-center gap-2">
+            {icon}
+            <span>{label}</span>
+          </span>
+        </Link>
+      </Button>
+    </div>
   )
 }
 
