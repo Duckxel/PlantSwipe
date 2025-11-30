@@ -49,9 +49,6 @@ const LandingPage: React.FC = () => {
       {/* Social Proof */}
       <TestimonialsSection />
 
-      {/* Pricing */}
-      <PricingSection />
-
       {/* FAQ */}
       <FAQSection />
 
@@ -117,12 +114,6 @@ const LandingNav: React.FC = () => {
             className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
           >
             {t("nav.howItWorks")}
-          </button>
-          <button
-            onClick={() => scrollToSection("pricing")}
-            className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-          >
-            {t("nav.pricing")}
           </button>
           <button
             onClick={() => scrollToSection("faq")}
@@ -604,139 +595,6 @@ const TestimonialsSection: React.FC = () => {
                   <p className="text-slate-500 dark:text-slate-400 text-xs">{testimonial.role}</p>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   PRICING SECTION
-   ───────────────────────────────────────────────────────────────────────────── */
-const PricingSection: React.FC = () => {
-  const { t } = useTranslation("Landing")
-
-  const rawFreeFeatures = t("pricingSection.free.features", { returnObjects: true })
-  const rawProFeatures = t("pricingSection.pro.features", { returnObjects: true })
-  const rawClubFeatures = t("pricingSection.club.features", { returnObjects: true })
-  
-  const freeFeatures = Array.isArray(rawFreeFeatures) ? rawFreeFeatures as string[] : []
-  const proFeatures = Array.isArray(rawProFeatures) ? rawProFeatures as string[] : []
-  const clubFeatures = Array.isArray(rawClubFeatures) ? rawClubFeatures as string[] : []
-
-  const plans = [
-    {
-      name: t("pricingSection.free.name"),
-      price: t("pricingSection.free.price"),
-      description: t("pricingSection.free.description"),
-      features: freeFeatures,
-      cta: t("pricingSection.free.cta"),
-      highlighted: false,
-    },
-    {
-      name: t("pricingSection.pro.name"),
-      price: t("pricingSection.pro.price"),
-      description: t("pricingSection.pro.description"),
-      features: proFeatures,
-      cta: t("pricingSection.pro.cta"),
-      highlighted: true,
-      popular: t("pricingSection.pro.popular"),
-    },
-    {
-      name: t("pricingSection.club.name"),
-      price: t("pricingSection.club.price"),
-      description: t("pricingSection.club.description"),
-      features: clubFeatures,
-      cta: t("pricingSection.club.cta"),
-      highlighted: false,
-    },
-  ]
-
-  return (
-    <section id="pricing" className="py-20 lg:py-32 scroll-mt-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-4">
-            {t("pricingSection.title")}
-          </h2>
-          <p className="text-lg text-slate-600 dark:text-slate-300">
-            {t("pricingSection.subtitle")}
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-          {plans.map((plan, i) => (
-            <div
-              key={i}
-              className={`relative rounded-3xl p-8 ${
-                plan.highlighted
-                  ? "bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-2xl shadow-emerald-500/30 scale-105 z-10"
-                  : "bg-white dark:bg-white/[0.02] border border-slate-200/50 dark:border-white/5"
-              }`}
-            >
-              {plan.highlighted && plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-amber-400 text-amber-900 text-xs font-semibold">
-                  {plan.popular}
-                </div>
-              )}
-
-              <div className="mb-6">
-                <h3
-                  className={`text-xl font-bold mb-2 ${
-                    plan.highlighted ? "text-white" : "text-slate-900 dark:text-white"
-                  }`}
-                >
-                  {plan.name}
-                </h3>
-                <p
-                  className={`text-sm ${plan.highlighted ? "text-white/80" : "text-slate-600 dark:text-slate-400"}`}
-                >
-                  {plan.description}
-                </p>
-              </div>
-
-              <div className="mb-6">
-                <span
-                  className={`text-4xl font-bold ${
-                    plan.highlighted ? "text-white" : "text-slate-900 dark:text-white"
-                  }`}
-                >
-                  ${plan.price}
-                </span>
-                <span
-                  className={`text-sm ${plan.highlighted ? "text-white/70" : "text-slate-500 dark:text-slate-400"}`}
-                >
-                  /month
-                </span>
-              </div>
-
-              <ul className="space-y-3 mb-8">
-                {plan.features.map((feature, j) => (
-                  <li key={j} className="flex items-center gap-3 text-sm">
-                    <Check
-                      className={`h-4 w-4 flex-shrink-0 ${
-                        plan.highlighted ? "text-white" : "text-emerald-500"
-                      }`}
-                    />
-                    <span className={plan.highlighted ? "text-white/90" : "text-slate-700 dark:text-slate-300"}>
-                      {feature}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                to="/discovery"
-                className={`block w-full py-3 rounded-xl text-center font-semibold transition-all duration-200 ${
-                  plan.highlighted
-                    ? "bg-white text-emerald-600 hover:bg-slate-100"
-                    : "bg-emerald-500 text-white hover:bg-emerald-600"
-                }`}
-              >
-                {plan.cta}
-              </Link>
             </div>
           ))}
         </div>
