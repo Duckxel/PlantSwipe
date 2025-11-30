@@ -124,7 +124,7 @@ const RESEND_API_KEY =
   Deno.env.get("SUPABASE_RESEND_API_KEY") ??
   ""
 
-const DEFAULT_FROM_EMAIL = "Plant Swipe <info@aphylia.app>"
+const DEFAULT_FROM_EMAIL = "Aphylia <info@aphylia.app>"
 const fromEmail = formatFromAddress(
   Deno.env.get("EMAIL_CAMPAIGN_FROM") ?? Deno.env.get("RESEND_FROM") ?? DEFAULT_FROM_EMAIL,
 )
@@ -1162,7 +1162,7 @@ function safeParseJson(input: string): unknown {
   }
 }
 
-function formatFromAddress(raw: string, defaultName = "Plant Swipe"): string {
+function formatFromAddress(raw: string, defaultName = "Aphylia"): string {
   if (!raw) return DEFAULT_FROM_EMAIL
   if (raw.includes("<")) return raw
   return `${defaultName} <${raw}>`

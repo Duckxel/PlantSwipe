@@ -22,6 +22,7 @@ import {
   Search,
   X,
   Copy,
+  Zap,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -65,6 +66,18 @@ type EmailCampaign = {
   sendCompletedAt: string | null
   testMode: boolean
   testEmail: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+type EmailTrigger = {
+  id: string
+  triggerType: string
+  displayName: string
+  description: string | null
+  isEnabled: boolean
+  templateId: string | null
+  templateTitle?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -163,9 +176,18 @@ export const AdminEmailsPanel: React.FC = () => {
   const [sheetOpen, setSheetOpen] = React.useState(false)
 
   const location = useLocation()
-  const activeView = location.pathname.includes("/templates") ? "templates" : "campaigns"
+  const activeView = location.pathname.includes("/templates") 
+    ? "templates" 
+    : location.pathname.includes("/automatic") 
+      ? "automatic" 
+      : "campaigns"
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
   const [templateSearch, setTemplateSearch] = React.useState("")
+  
+  // Automatic email triggers state
+  const [triggers, setTriggers] = React.useState<EmailTrigger[]>([])
+  const [loadingTriggers, setLoadingTriggers] = React.useState(false)
+  const [savingTrigger, setSavingTrigger] = React.useState<string | null>(null)
 
   // Filter templates based on search query
   const filteredTemplates = React.useMemo(() => {
@@ -207,11 +229,65 @@ export const AdminEmailsPanel: React.FC = () => {
     }
   }, [])
 
+  const loadTriggers = React.useCallback(async () => {
+    setLoadingTriggers(true)
+    try {
+      const headers = await buildAdminHeaders()
+      const resp = await fetch("/api/admin/email-triggers", { headers, credentials: "same-origin" })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data?.error || "Failed to load triggers")
+      setTriggers(Array.isArray(data?.triggers) ? data.triggers : [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingTriggers(false)
+    }
+  }, [])
+
   React.useEffect(() => {
     if (activeView === "campaigns") loadCampaigns().catch(() => {})
     if (activeView === "templates") loadTemplates().catch(() => {})
+    if (activeView === "automatic") {
+      loadTriggers().catch(() => {})
+      loadTemplates().catch(() => {}) // Load templates for the dropdown
+    }
     loadTemplates().catch(() => {}) 
-  }, [activeView, loadTemplates, loadCampaigns])
+  }, [activeView, loadTemplates, loadCampaigns, loadTriggers])
+
+  const handleUpdateTrigger = React.useCallback(
+    async (trigger: EmailTrigger, updates: { isEnabled?: boolean; templateId?: string | null }) => {
+      setSavingTrigger(trigger.id)
+      try {
+        const headers = await buildAdminHeaders()
+        const resp = await fetch(`/api/admin/email-triggers/${encodeURIComponent(trigger.id)}`, {
+          method: "PUT",
+          headers,
+          credentials: "same-origin",
+          body: JSON.stringify(updates),
+        })
+        const data = await resp.json().catch(() => ({}))
+        if (!resp.ok) throw new Error(data?.error || "Failed to update trigger")
+        
+        // Update local state
+        setTriggers(prev => prev.map(t => 
+          t.id === trigger.id 
+            ? { 
+                ...t, 
+                ...updates,
+                templateTitle: updates.templateId 
+                  ? templates.find(tpl => tpl.id === updates.templateId)?.title || null
+                  : updates.templateId === null ? null : t.templateTitle
+              } 
+            : t
+        ))
+      } catch (err) {
+        alert((err as Error).message)
+      } finally {
+        setSavingTrigger(null)
+      }
+    },
+    [templates],
+  )
 
   const handleCreateCampaign = React.useCallback(async () => {
     if (!campaignForm.title.trim() || !campaignForm.templateId || !campaignForm.scheduledFor) {
@@ -416,6 +492,18 @@ export const AdminEmailsPanel: React.FC = () => {
               )}
             </Link>
             <Link
+              to="/admin/emails/automatic"
+              className={cn(
+                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
+                activeView === "automatic"
+                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+              )}
+            >
+              <Zap className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Automatic
+            </Link>
+            <Link
               to="/admin/emails/templates"
               className={cn(
                 "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
@@ -600,6 +688,157 @@ export const AdminEmailsPanel: React.FC = () => {
                   </div>
                 )
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Automatic Emails View */}
+      {activeView === "automatic" && (
+        <div className="space-y-4">
+          {loadingTriggers ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Loading automatic emails...</span>
+              </div>
+            </div>
+          ) : triggers.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-12 text-center">
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-4">
+                <Zap className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">No automatic emails configured</h3>
+              <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm mx-auto">
+                Automatic emails will appear here once they are set up in the database.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4">
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  <strong>💡 How it works:</strong> When enabled, these emails are automatically sent when specific events occur (e.g., new user signup). 
+                  Configure a template and enable the trigger to start sending.
+                </p>
+              </div>
+              
+              <div className="grid gap-4">
+                {triggers.map((trigger) => (
+                  <div
+                    key={trigger.id}
+                    className="rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 sm:p-6"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                      {/* Icon and Info */}
+                      <div className="flex items-start gap-4 flex-1">
+                        <div className={cn(
+                          "flex-shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center",
+                          trigger.isEnabled 
+                            ? "bg-emerald-100 dark:bg-emerald-900/30" 
+                            : "bg-stone-100 dark:bg-[#2a2a2d]"
+                        )}>
+                          <Zap className={cn(
+                            "h-5 w-5 sm:h-6 sm:w-6",
+                            trigger.isEnabled 
+                              ? "text-emerald-600 dark:text-emerald-400" 
+                              : "text-stone-400"
+                          )} />
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold text-stone-900 dark:text-white text-base sm:text-lg">
+                              {trigger.displayName}
+                            </h3>
+                            <span className={cn(
+                              "px-2 py-0.5 rounded-full text-xs font-medium",
+                              trigger.isEnabled
+                                ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-500"
+                            )}>
+                              {trigger.isEnabled ? "Active" : "Disabled"}
+                            </span>
+                          </div>
+                          
+                          {trigger.description && (
+                            <p className="text-sm text-stone-500 dark:text-stone-400 mb-3">
+                              {trigger.description}
+                            </p>
+                          )}
+                          
+                          <div className="text-xs text-stone-400 font-mono">
+                            Trigger: {trigger.triggerType}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Controls */}
+                      <div className="flex flex-col gap-3 sm:min-w-[280px]">
+                        {/* Template Selection */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                            Email Template
+                          </Label>
+                          <Select
+                            value={trigger.templateId || ""}
+                            onChange={(e) => {
+                              const newTemplateId = e.target.value || null
+                              handleUpdateTrigger(trigger, { templateId: newTemplateId })
+                            }}
+                            disabled={savingTrigger === trigger.id}
+                            className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                          >
+                            <option value="">No template (disabled)</option>
+                            {templates.map((tpl) => (
+                              <option key={tpl.id} value={tpl.id}>
+                                {tpl.title} (v{tpl.version})
+                              </option>
+                            ))}
+                          </Select>
+                          {trigger.templateId && trigger.templateTitle && (
+                            <p className="text-xs text-stone-500">
+                              Using latest version of: <span className="font-medium">{trigger.templateTitle}</span>
+                            </p>
+                          )}
+                          {!trigger.templateId && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              ⚠️ Select a template to enable this trigger
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Enable/Disable Toggle */}
+                        <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
+                          <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                            Send Automatically
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTrigger(trigger, { isEnabled: !trigger.isEnabled })}
+                            disabled={savingTrigger === trigger.id || !trigger.templateId}
+                            className={cn(
+                              "relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                              trigger.isEnabled ? "bg-emerald-500" : "bg-stone-300 dark:bg-stone-600"
+                            )}
+                            title={!trigger.templateId ? "Select a template first" : trigger.isEnabled ? "Disable" : "Enable"}
+                          >
+                            {savingTrigger === trigger.id ? (
+                              <Loader2 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-white" />
+                            ) : (
+                              <span
+                                className={cn(
+                                  "absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+                                  trigger.isEnabled ? "left-6" : "left-1"
+                                )}
+                              />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
