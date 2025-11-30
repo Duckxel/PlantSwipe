@@ -553,7 +553,7 @@ async function processEmailCampaigns() {
 
       // 4. Send Batches
       const batchSize = 40
-      const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Plant Swipe <info@aphylia.app>'
+      const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
       let batchSentCount = 0
 
       for (let i = 0; i < dueRecipients.length; i += batchSize) {
@@ -775,7 +775,7 @@ const supportEmailTargets = parseEmailTargets(process.env.SUPPORT_EMAIL_TO || pr
 const supportEmailFrom =
   process.env.SUPPORT_EMAIL_FROM
   || process.env.RESEND_FROM
-  || (supportEmailTargets[0] ? `Plant Swipe <${supportEmailTargets[0]}>` : `Plant Swipe <${DEFAULT_SUPPORT_EMAIL}>`)
+  || (supportEmailTargets[0] ? `Aphylia <${supportEmailTargets[0]}>` : `Aphylia <${DEFAULT_SUPPORT_EMAIL}>`)
 const businessEmailTargets = parseEmailTargets(
   process.env.BUSINESS_EMAIL_TO || process.env.BUSINESS_EMAIL || process.env.CONTACT_EMAIL_TO,
   DEFAULT_BUSINESS_EMAIL,
@@ -783,7 +783,7 @@ const businessEmailTargets = parseEmailTargets(
 const businessEmailFrom =
   process.env.BUSINESS_EMAIL_FROM
   || process.env.RESEND_BUSINESS_FROM
-  || (businessEmailTargets[0] ? `Plant Swipe Partnerships <${businessEmailTargets[0]}>` : supportEmailFrom)
+  || (businessEmailTargets[0] ? `Aphylia Partnerships <${businessEmailTargets[0]}>` : supportEmailFrom)
 const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
 const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
 const contactRateLimitStore = new Map()
@@ -3152,7 +3152,7 @@ async function dispatchSupportEmail({ name, email, subject, message, audience = 
     `<p style="font-family:system-ui,sans-serif;margin:0 0 16px;"><strong>Delivered to:</strong> ${escapeHtml(targets.join(', '))}</p>`,
     `<p style="font-family:system-ui,sans-serif;margin:0;">${escapeHtml(sanitizedMessage || 'No additional message provided.').replace(/\n/g, '<br />')}</p>`,
   ].join('')
-  const finalSubject = safeSubject || `Contact form message from ${safeName || email || 'Plant Swipe user'}`
+  const finalSubject = safeSubject || `Contact form message from ${safeName || email || 'Aphylia user'}`
 
   if (resendApiKey) {
     const payload = {
@@ -6138,7 +6138,7 @@ app.post('/api/send-automatic-email', async (req, res) => {
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
     
     // 10. Send via Resend API (same method as campaigns)
-    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Plant Swipe <info@aphylia.app>'
+    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
     
     const resendResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',
