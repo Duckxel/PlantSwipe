@@ -171,13 +171,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
       : DEFAULT_TIMEZONE
     
-    // Create profile row
+    // Detect language from browser (French if browser is French, else English)
+    const detectedLanguage = (() => {
+      try {
+        const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
+        return browserLang.startsWith('fr') ? 'fr' : 'en'
+      } catch {
+        return 'en'
+      }
+    })()
+    
+    // Create profile row with detected timezone and language
     // Note: notify_push and notify_email columns will default to true once the migration is applied
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
       display_name: displayName,
       liked_plant_ids: [],
       timezone: detectedTimezone,
+      language: detectedLanguage,
       accent_key: 'emerald',
     })
     if (perr) return { error: perr.message }
@@ -187,17 +198,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshProfile().catch(() => {})
 
     // Send welcome email (non-blocking, fire-and-forget)
-    // This calls our backend which invokes the edge function
+    // Uses the same detected language that was saved to the profile
     if (email) {
-      const detectedLanguage = (() => {
-        try {
-          const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
-          return browserLang.startsWith('fr') ? 'fr' : 'en'
-        } catch {
-          return 'en'
-        }
-      })()
-      
       fetch('/api/send-automatic-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
