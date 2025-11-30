@@ -1,6 +1,5 @@
 import React from "react"
 import { motion } from "framer-motion"
-import { useTranslation } from "react-i18next"
 import {
   Check,
   X,
@@ -8,7 +7,6 @@ import {
   Sparkles,
   Heart,
   Crown,
-  Zap,
   Shield,
   Bell,
   Camera,
@@ -16,7 +14,6 @@ import {
   Users,
   BarChart3,
   Clock,
-  Infinity,
   Gift,
   ArrowRight,
   BookMarked,
@@ -59,7 +56,6 @@ const featureCategories = [
 ] as const
 
 const PricingPage: React.FC = () => {
-  const { t } = useTranslation("common")
   const { user } = useAuth()
 
   usePageMetadata({
