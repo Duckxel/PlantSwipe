@@ -2,7 +2,7 @@ import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut } from "lucide-react"
+import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
@@ -83,11 +83,12 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     }
   }, [])
   
-  const currentView: "discovery" | "gardens" | "search" | "create" | "profile" =
+  const currentView: "discovery" | "gardens" | "search" | "create" | "profile" | "pricing" =
     pathWithoutLang === "/discovery" || pathWithoutLang.startsWith("/discovery/") ? "discovery" :
     pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
     pathWithoutLang.startsWith("/search") ? "search" :
     pathWithoutLang.startsWith("/create") ? "create" :
+    pathWithoutLang === "/pricing" ? "pricing" :
     pathWithoutLang.startsWith("/profile") || pathWithoutLang.startsWith("/u/") || pathWithoutLang.startsWith("/friends") || pathWithoutLang.startsWith("/settings") ? "profile" :
     "discovery"
 
@@ -114,42 +115,57 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             </Button>
           </div>
         )}
-        {/* Icon-only nav items */}
+        {/* Icon-only nav items - different for logged in vs logged out */}
         <div className="flex items-center justify-around gap-8">
-          <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'discovery' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-            <Link to="/discovery" aria-label="Discover" className="no-underline flex items-center justify-center">
-              <Sparkles className="h-6 w-6" />
-            </Link>
-          </Button>
-          <div className="relative overflow-visible">
-            <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-            <Link to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
-                <Sprout className="h-6 w-6" />
-              </Link>
-            </Button>
-            {hasUnfinished && (
-              <span
-                className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#252526]"
-                aria-hidden="true"
-              />
-            )}
-          </div>
-          <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-            <Link to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
-              <Search className="h-6 w-6" />
-            </Link>
-          </Button>
           {user ? (
-            <Button
-              variant={"secondary"}
-              size={"icon"}
-              className={currentView === 'profile' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}
-              onClick={() => setProfileMenuOpen(true)}
-              aria-label="Profile"
-            >
-              <User className="h-6 w-6" />
-            </Button>
+            // Logged-in navigation: Discovery, Gardens, Search, Profile
+            <>
+              <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'discovery' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                <Link to="/discovery" aria-label="Discover" className="no-underline flex items-center justify-center">
+                  <Sparkles className="h-6 w-6" />
+                </Link>
+              </Button>
+              <div className="relative overflow-visible">
+                <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                  <Link to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
+                    <Sprout className="h-6 w-6" />
+                  </Link>
+                </Button>
+                {hasUnfinished && (
+                  <span
+                    className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#252526]"
+                    aria-hidden="true"
+                  />
+                )}
+              </div>
+              <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                <Link to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
+                  <Search className="h-6 w-6" />
+                </Link>
+              </Button>
+              <Button
+                variant={"secondary"}
+                size={"icon"}
+                className={currentView === 'profile' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}
+                onClick={() => setProfileMenuOpen(true)}
+                aria-label="Profile"
+              >
+                <User className="h-6 w-6" />
+              </Button>
+            </>
           ) : (
+            // Logged-out navigation: Search, Pricing, Login
+            <>
+              <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                <Link to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
+                  <Search className="h-6 w-6" />
+                </Link>
+              </Button>
+              <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'pricing' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                <Link to="/pricing" aria-label="Pricing" className="no-underline flex items-center justify-center">
+                  <CreditCard className="h-6 w-6" />
+                </Link>
+              </Button>
               <Button
                 variant={"secondary"}
                 size={"icon"}
@@ -166,6 +182,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
               >
                 <User className="h-6 w-6" />
               </Button>
+            </>
           )}
         </div>
       </div>
@@ -221,6 +238,16 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             >
               <Settings className="h-5 w-5" />
               <span>{t("common.settings")}</span>
+            </button>
+            <button
+              onClick={() => {
+                setProfileMenuOpen(false)
+                navigate("/pricing")
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3 text-emerald-600 dark:text-emerald-400"
+            >
+              <Crown className="h-5 w-5" />
+              <span>{t("common.membership", { defaultValue: "Membership" })}</span>
             </button>
             <button
               onClick={() => {

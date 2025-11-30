@@ -46,6 +46,7 @@ const SettingsPageLazy = lazy(() => import("@/pages/SettingsPage"))
 const ContactUsPageLazy = lazy(() => import("@/pages/ContactUsPage"))
 const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
 const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
+const PricingPageLazy = lazy(() => import("@/pages/PricingPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
@@ -1346,6 +1347,14 @@ export default function PlantSwipe() {
               element={
                 <Suspense fallback={routeLoadingFallback}>
                   <DownloadPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/pricing"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PricingPageLazy />
                 </Suspense>
               }
             />

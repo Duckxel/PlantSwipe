@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -97,9 +97,20 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         {t('common.appName')}
       </Link>
       <nav className="ml-4 hidden md:flex gap-2">
-        <NavPill to="/discovery" isActive={pathWithoutLang === '/discovery' || pathWithoutLang.startsWith('/discovery/')} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
-        <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished} />
-        <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+        {user ? (
+          // Logged-in navigation: Discovery, Gardens, Encyclopedia
+          <>
+            <NavPill to="/discovery" isActive={pathWithoutLang === '/discovery' || pathWithoutLang.startsWith('/discovery/')} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
+            <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished} />
+            <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+          </>
+        ) : (
+          // Logged-out navigation: Encyclopedia, Pricing
+          <>
+            <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+            <NavPill to="/pricing" isActive={pathWithoutLang === '/pricing'} icon={<CreditCard className="h-4 w-4" />} label={t('common.pricing', { defaultValue: 'Pricing' })} />
+          </>
+        )}
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
         {!user ? (
@@ -138,6 +149,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                   <Settings className="h-4 w-4" /> {t('common.settings')}
+                </button>
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/pricing') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2 text-emerald-600 dark:text-emerald-400" role="menuitem">
+                  <Crown className="h-4 w-4" /> {t('common.membership', { defaultValue: 'Membership' })}
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
                   <LogOut className="h-4 w-4" /> {t('common.logout')}
