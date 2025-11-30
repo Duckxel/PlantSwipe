@@ -19,6 +19,7 @@ import {
   Infinity,
   Gift,
   ArrowRight,
+  BookMarked,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -29,30 +30,30 @@ import { useAuth } from "@/context/AuthContext"
 // Feature comparison data
 const featureCategories = [
   {
-    name: "Plant Management",
+    name: "Gardens & Plants",
     features: [
-      { name: "Plants in your garden", free: "Up to 15 plants", plus: "Unlimited", icon: Leaf },
-      { name: "Plant identification", free: "3 per month", plus: "Unlimited", icon: Camera },
-      { name: "Care reminders", free: true, plus: true, icon: Bell },
-      { name: "Plant library access", free: true, plus: true, icon: Sparkles },
+      { name: "Gardens you can create", free: "Up to 5", plus: "Unlimited", icon: Leaf },
+      { name: "Plants per garden", free: "Unlimited", plus: "Unlimited", icon: Sparkles },
+      { name: "Plant identification (AI)", free: false, plus: "Unlimited", icon: Camera },
+      { name: "Bookmark collections", free: "Unlimited", plus: "Unlimited", icon: Heart },
     ],
   },
   {
-    name: "Advanced Features",
+    name: "Core Features",
+    features: [
+      { name: "Plant library & encyclopedia", free: true, plus: true, icon: BookMarked },
+      { name: "Care reminders & tasks", free: true, plus: true, icon: Bell },
+      { name: "Task progress tracking", free: true, plus: true, icon: Clock },
+      { name: "Garden sharing & collaboration", free: true, plus: true, icon: Users },
+    ],
+  },
+  {
+    name: "Advanced & Support",
     features: [
       { name: "Garden analytics & insights", free: false, plus: true, icon: BarChart3 },
-      { name: "Priority notifications", free: false, plus: true, icon: Zap },
-      { name: "Custom care schedules", free: "Basic", plus: "Advanced", icon: Clock },
       { name: "Export garden data", free: false, plus: true, icon: Cloud },
-    ],
-  },
-  {
-    name: "Community & Support",
-    features: [
-      { name: "Community access", free: true, plus: true, icon: Users },
       { name: "Priority support", free: false, plus: true, icon: Shield },
       { name: "Early access to features", free: false, plus: true, icon: Gift },
-      { name: "Ad-free experience", free: false, plus: true, icon: Crown },
     ],
   },
 ] as const
@@ -119,11 +120,14 @@ const PricingPage: React.FC = () => {
 
           <ul className="space-y-3">
             {[
-              "Up to 15 plants in your garden",
-              "3 plant identifications per month",
-              "Basic care reminders",
-              "Full plant library access",
-              "Community features",
+              "Up to 5 gardens",
+              "Unlimited plants per garden",
+              "Full plant library & encyclopedia",
+              "Care reminders & task tracking",
+              "Bookmark collections",
+              "Garden sharing with friends",
+              "Cross-device sync",
+              "Offline access (PWA)",
             ].map((feature, i) => (
               <li key={i} className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
                 <Check className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
@@ -172,14 +176,14 @@ const PricingPage: React.FC = () => {
 
           <ul className="space-y-3">
             {[
-              "Unlimited plants",
-              "Unlimited plant identifications",
-              "Advanced care schedules",
+              "Everything in Free",
+              "Unlimited gardens",
+              "AI plant identification",
               "Garden analytics & insights",
+              "Export your garden data",
               "Priority support",
               "Early access to new features",
-              "Ad-free experience",
-              "Export your garden data",
+              "Support Aphylia's development",
             ].map((feature, i) => (
               <li key={i} className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
                 <Check className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
@@ -341,19 +345,19 @@ const PricingPage: React.FC = () => {
           {[
             {
               q: "Can I use Aphylia completely free?",
-              a: "Absolutely! Our free tier includes everything you need to care for up to 15 plants, including reminders, library access, and community features. No credit card required.",
+              a: "Absolutely! Our free tier includes up to 5 gardens with unlimited plants each, care reminders, the full plant encyclopedia, bookmark collections, and more. No credit card required.",
             },
             {
-              q: "What happens if I exceed my free limits?",
-              a: "You'll simply see a friendly prompt to upgrade or manage your garden. We never delete your plants or data. Your garden is safe.",
+              q: "What happens if I reach 5 gardens?",
+              a: "You'll see a friendly prompt to upgrade or manage your existing gardens. We never delete your gardens or plants. Your data is always safe.",
             },
             {
               q: "Can I cancel Plus anytime?",
               a: "Yes, cancel with one click from your settings. You'll keep Plus features until your billing period ends, then seamlessly return to Free.",
             },
             {
-              q: "Is there a yearly discount?",
-              a: "We're working on annual plans with savings. Join our newsletter to be the first to know when they launch.",
+              q: "What is AI plant identification?",
+              a: "Plus members can snap a photo of any plant and our AI will identify the species and provide care recommendations. It's a powerful tool for discovering unknown plants.",
             },
           ].map((faq, i) => (
             <div
