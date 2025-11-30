@@ -1334,6 +1334,20 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     languageNavigate(`/plants/${id}`)
   }, [id, languageNavigate])
 
+  // Ctrl+S keyboard shortcut to save
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        if (!saving && !aiWorking) {
+          savePlant()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [saving, aiWorking, savePlant])
+
   return (
     <div className="max-w-6xl mx-auto px-4 pb-12 space-y-6">
       <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b2a21] dark:via-[#101712] dark:to-[#0c120e] shadow-[0_24px_80px_-40px_rgba(16,185,129,0.45)] dark:shadow-[0_28px_90px_-50px_rgba(34,197,94,0.35)]">
