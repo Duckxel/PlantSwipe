@@ -2,6 +2,7 @@ import React from "react"
 import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useAuth } from "@/context/AuthContext"
+import { useTranslation } from "react-i18next"
 import {
   Leaf,
   Droplets,
@@ -21,10 +22,11 @@ import {
 
 // Lightweight landing page - no heavy dependencies for fast LCP
 const LandingPage: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
   usePageMetadata({
-    title: "Aphylia – Your companion for happier plants",
-    description:
-      "Know your plants. Learn how to take care of them. Aphylia is a smart plant & garden companion that tracks care, reminds you, and helps you learn.",
+    title: "Aphylia – " + t("hero.badge"),
+    description: t("hero.description"),
   })
 
   return (
@@ -68,6 +70,7 @@ const LandingPage: React.FC = () => {
 const LandingNav: React.FC = () => {
   const [scrolled, setScrolled] = React.useState(false)
   const { user } = useAuth()
+  const { t } = useTranslation("Landing")
 
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -107,25 +110,25 @@ const LandingNav: React.FC = () => {
             onClick={() => scrollToSection("features")}
             className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
           >
-            Features
+            {t("nav.features")}
           </button>
           <button
             onClick={() => scrollToSection("how-it-works")}
             className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
           >
-            How it works
+            {t("nav.howItWorks")}
           </button>
           <button
             onClick={() => scrollToSection("pricing")}
             className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
           >
-            Pricing
+            {t("nav.pricing")}
           </button>
           <button
             onClick={() => scrollToSection("faq")}
             className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
           >
-            FAQ
+            {t("nav.faq")}
           </button>
         </div>
 
@@ -138,7 +141,7 @@ const LandingNav: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-200 hover:-translate-y-0.5"
             >
               <Home className="h-4 w-4" />
-              Back to App
+              {t("nav.backToApp")}
             </Link>
           ) : (
             // Logged out user - show login and get started
@@ -147,13 +150,13 @@ const LandingNav: React.FC = () => {
                 to="/discovery"
                 className="hidden sm:inline-flex text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors px-4 py-2"
               >
-                Log in
+                {t("nav.login")}
               </Link>
               <Link
                 to="/discovery"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-200 hover:-translate-y-0.5"
               >
-                Get started
+                {t("nav.getStarted")}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </>
@@ -168,6 +171,8 @@ const LandingNav: React.FC = () => {
    HERO SECTION
    ───────────────────────────────────────────────────────────────────────────── */
 const HeroSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
   return (
     <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-32 overflow-hidden">
       {/* Background Glow */}
@@ -187,21 +192,20 @@ const HeroSection: React.FC = () => {
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-700/30">
               <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                Your companion for happier plants
+                {t("hero.badge")}
               </span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1]">
-              Know your plants.{" "}
+              {t("hero.title")}{" "}
               <span className="bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 bg-clip-text text-transparent">
-                Learn how to care
+                {t("hero.titleHighlight")}
               </span>{" "}
-              for them.
+              {t("hero.titleEnd")}
             </h1>
 
             <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-300 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-              Aphylia is a smart plant & garden app that tracks care schedules, sends timely reminders,
-              and teaches you everything about your green companions.
+              {t("hero.description")}
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
@@ -210,19 +214,19 @@ const HeroSection: React.FC = () => {
                 className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white text-base font-semibold shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-200 hover:-translate-y-0.5"
               >
                 <Leaf className="h-5 w-5" />
-                Download Aphylia
+                {t("hero.ctaDownload")}
               </Link>
               <Link
                 to="/discovery"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-900 dark:text-white text-base font-semibold border border-slate-200 dark:border-white/10 shadow-sm transition-all duration-200"
               >
-                Try it in your browser
+                {t("hero.ctaTryBrowser")}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
 
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Built for plant lovers, beginners and experts alike.
+              {t("hero.socialProof")}
             </p>
           </div>
 
@@ -237,6 +241,8 @@ const HeroSection: React.FC = () => {
 }
 
 const HeroCard: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
   return (
     <div className="relative">
       {/* Glow behind card */}
@@ -263,8 +269,8 @@ const HeroCard: React.FC = () => {
               {/* Overlay info */}
               <div className="absolute bottom-3 left-3 right-3">
                 <div className="bg-black/60 backdrop-blur-md rounded-xl p-3 space-y-1">
-                  <p className="text-white font-semibold text-sm">Monstera deliciosa</p>
-                  <p className="text-white/70 text-xs italic">Swiss Cheese Plant</p>
+                  <p className="text-white font-semibold text-sm">{t("heroCard.plantName")}</p>
+                  <p className="text-white/70 text-xs italic">{t("heroCard.plantSubname")}</p>
                 </div>
               </div>
             </div>
@@ -273,11 +279,11 @@ const HeroCard: React.FC = () => {
             <div className="grid grid-cols-2 gap-2">
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
                 <Droplets className="h-4 w-4 text-blue-400" />
-                <span className="text-xs text-white/80">Every 7 days</span>
+                <span className="text-xs text-white/80">{t("heroCard.waterFrequency")}</span>
               </div>
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
                 <Sun className="h-4 w-4 text-amber-400" />
-                <span className="text-xs text-white/80">Bright indirect</span>
+                <span className="text-xs text-white/80">{t("heroCard.lightLevel")}</span>
               </div>
             </div>
 
@@ -287,8 +293,8 @@ const HeroCard: React.FC = () => {
                 <Bell className="h-4 w-4 text-emerald-400" />
               </div>
               <div>
-                <p className="text-xs text-emerald-300/80">Next reminder</p>
-                <p className="text-sm font-medium text-white">Water in 2 days</p>
+                <p className="text-xs text-emerald-300/80">{t("heroCard.nextReminder")}</p>
+                <p className="text-sm font-medium text-white">{t("heroCard.waterIn")}</p>
               </div>
             </div>
           </div>
@@ -301,7 +307,7 @@ const HeroCard: React.FC = () => {
           <div className="h-6 w-6 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
             <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <span className="text-xs font-medium text-slate-700 dark:text-slate-200">Care logged!</span>
+          <span className="text-xs font-medium text-slate-700 dark:text-slate-200">{t("heroCard.careLogged")}</span>
         </div>
       </div>
     </div>
@@ -311,51 +317,6 @@ const HeroCard: React.FC = () => {
 /* ─────────────────────────────────────────────────────────────────────────────
    FEATURES SECTION
    ───────────────────────────────────────────────────────────────────────────── */
-const features = [
-  {
-    icon: BookMarked,
-    title: "Smart Plant Library",
-    description:
-      "Access a comprehensive database with detailed care info—sunlight needs, watering schedules, soil preferences, and toxicity warnings.",
-    color: "emerald",
-  },
-  {
-    icon: Bell,
-    title: "Care Reminders",
-    description:
-      "Never forget to water, mist, or fertilize. Get personalized notifications based on each plant's unique needs.",
-    color: "blue",
-  },
-  {
-    icon: BookMarked,
-    title: "Collections & Bookmarks",
-    description:
-      "Organize plants by room, garden, or mood. Create custom collections and save your favorites for quick access.",
-    color: "purple",
-  },
-  {
-    icon: Camera,
-    title: "Visual Plant ID",
-    description:
-      "Snap a photo and let Aphylia identify your mystery plant. Get instant care recommendations.",
-    color: "pink",
-  },
-  {
-    icon: NotebookPen,
-    title: "Garden Journal",
-    description:
-      "Track growth milestones, log repotting dates, add notes, and document your plant journey with photos.",
-    color: "amber",
-  },
-  {
-    icon: Wifi,
-    title: "Offline-Friendly PWA",
-    description:
-      "Works beautifully on mobile and desktop. Install once—it runs offline and syncs when you're back online.",
-    color: "teal",
-  },
-] as const
-
 const colorMap = {
   emerald: "from-emerald-400 to-green-500 shadow-emerald-500/25",
   blue: "from-blue-400 to-cyan-500 shadow-blue-500/25",
@@ -366,21 +327,68 @@ const colorMap = {
 } as const
 
 const FeaturesSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
+  const features = [
+    {
+      icon: BookMarked,
+      titleKey: "features.smartLibrary.title",
+      descKey: "features.smartLibrary.description",
+      color: "emerald" as const,
+    },
+    {
+      icon: Bell,
+      titleKey: "features.careReminders.title",
+      descKey: "features.careReminders.description",
+      color: "blue" as const,
+    },
+    {
+      icon: BookMarked,
+      titleKey: "features.collections.title",
+      descKey: "features.collections.description",
+      color: "purple" as const,
+    },
+    {
+      icon: Camera,
+      titleKey: "features.plantId.title",
+      descKey: "features.plantId.description",
+      color: "pink" as const,
+    },
+    {
+      icon: NotebookPen,
+      titleKey: "features.journal.title",
+      descKey: "features.journal.description",
+      color: "amber" as const,
+    },
+    {
+      icon: Wifi,
+      titleKey: "features.pwa.title",
+      descKey: "features.pwa.description",
+      color: "teal" as const,
+    },
+  ]
+
   return (
     <section id="features" className="py-20 lg:py-32 scroll-mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-4">
-            Everything your garden needs, in one app.
+            {t("features.title")}
           </h2>
           <p className="text-lg text-slate-600 dark:text-slate-300">
-            From tracking watering schedules to identifying unknown species, Aphylia has you covered.
+            {t("features.subtitle")}
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((feature, i) => (
-            <FeatureCard key={i} {...feature} />
+            <FeatureCard
+              key={i}
+              icon={feature.icon}
+              title={t(feature.titleKey)}
+              description={t(feature.descKey)}
+              color={feature.color}
+            />
           ))}
         </div>
       </div>
@@ -418,25 +426,15 @@ const FeatureCard: React.FC<{
 /* ─────────────────────────────────────────────────────────────────────────────
    HOW IT WORKS
    ───────────────────────────────────────────────────────────────────────────── */
-const steps = [
-  {
-    num: 1,
-    title: "Add your plants",
-    description: "Search our library or snap a photo to identify and add plants to your collection.",
-  },
-  {
-    num: 2,
-    title: "Set your conditions",
-    description: "Tell us about your space—light levels, humidity, and location—for tailored advice.",
-  },
-  {
-    num: 3,
-    title: "Let Aphylia remind you",
-    description: "Sit back while we send timely reminders for watering, feeding, and more.",
-  },
-] as const
-
 const HowItWorksSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
+  const steps = [
+    { num: 1, titleKey: "howItWorks.step1.title", descKey: "howItWorks.step1.description" },
+    { num: 2, titleKey: "howItWorks.step2.title", descKey: "howItWorks.step2.description" },
+    { num: 3, titleKey: "howItWorks.step3.title", descKey: "howItWorks.step3.description" },
+  ]
+
   return (
     <section
       id="how-it-works"
@@ -445,10 +443,10 @@ const HowItWorksSection: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-4">
-            From seedling to jungle, in 3 steps.
+            {t("howItWorks.title")}
           </h2>
           <p className="text-lg text-slate-600 dark:text-slate-300">
-            Getting started is simple. Set up once, and Aphylia handles the rest.
+            {t("howItWorks.subtitle")}
           </p>
         </div>
 
@@ -467,8 +465,8 @@ const HowItWorksSection: React.FC = () => {
                   <span className="text-2xl font-bold text-white">{step.num}</span>
                 </div>
 
-                <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">{step.title}</h3>
-                <p className="text-slate-600 dark:text-slate-400 text-sm max-w-xs mx-auto">{step.description}</p>
+                <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">{t(step.titleKey)}</h3>
+                <p className="text-slate-600 dark:text-slate-400 text-sm max-w-xs mx-auto">{t(step.descKey)}</p>
               </div>
             ))}
           </div>
@@ -482,15 +480,17 @@ const HowItWorksSection: React.FC = () => {
    SHOWCASE SECTION
    ───────────────────────────────────────────────────────────────────────────── */
 const ShowcaseSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
   return (
     <section className="py-20 lg:py-32 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-4">
-            Designed for your shelf, balcony, or jungle.
+            {t("showcase.title")}
           </h2>
           <p className="text-lg text-slate-600 dark:text-slate-300">
-            Whether you have one succulent or a hundred tropicals, Aphylia adapts to your style.
+            {t("showcase.subtitle")}
           </p>
         </div>
 
@@ -509,13 +509,13 @@ const ShowcaseSection: React.FC = () => {
               <div className="relative h-full min-h-[300px] flex flex-col justify-end">
                 <div className="absolute top-4 right-4">
                   <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-medium">
-                    Dashboard Preview
+                    {t("showcase.dashboardPreview")}
                   </span>
                 </div>
                 <div className="space-y-4">
-                  <h3 className="text-2xl font-bold text-white">Your garden at a glance</h3>
+                  <h3 className="text-2xl font-bold text-white">{t("showcase.dashboardTitle")}</h3>
                   <p className="text-slate-400 max-w-md">
-                    See all your plants, upcoming tasks, and care history in one beautiful dashboard.
+                    {t("showcase.dashboardDescription")}
                   </p>
                 </div>
               </div>
@@ -525,27 +525,27 @@ const ShowcaseSection: React.FC = () => {
             <div className="rounded-2xl bg-blue-500/10 border border-blue-500/20 p-6 flex flex-col justify-between">
               <Droplets className="h-8 w-8 text-blue-400 mb-4" />
               <div>
-                <p className="text-sm font-medium text-blue-300 mb-1">Watering Reminder</p>
-                <p className="text-xs text-blue-300/70">Your Pothos needs water today</p>
+                <p className="text-sm font-medium text-blue-300 mb-1">{t("showcase.wateringReminder")}</p>
+                <p className="text-xs text-blue-300/70">{t("showcase.wateringText")}</p>
               </div>
             </div>
 
             <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-6 flex flex-col justify-between">
               <Sun className="h-8 w-8 text-amber-400 mb-4" />
               <div>
-                <p className="text-sm font-medium text-amber-300 mb-1">Light Check</p>
-                <p className="text-xs text-amber-300/70">Move Fern to brighter spot</p>
+                <p className="text-sm font-medium text-amber-300 mb-1">{t("showcase.lightCheck")}</p>
+                <p className="text-xs text-amber-300/70">{t("showcase.lightText")}</p>
               </div>
             </div>
 
             <div className="md:col-span-1 rounded-2xl bg-rose-500/10 border border-rose-500/20 p-6 flex flex-col justify-between">
               <div className="flex items-center gap-2 mb-4">
                 <div className="h-2 w-2 rounded-full bg-rose-400 animate-pulse" />
-                <span className="text-xs text-rose-300/80">Toxicity Alert</span>
+                <span className="text-xs text-rose-300/80">{t("showcase.toxicityAlert")}</span>
               </div>
               <div>
-                <p className="text-sm font-medium text-rose-300 mb-1">Pet Warning</p>
-                <p className="text-xs text-rose-300/70">Dieffenbachia is toxic to cats</p>
+                <p className="text-sm font-medium text-rose-300 mb-1">{t("showcase.petWarning")}</p>
+                <p className="text-xs text-rose-300/70">{t("showcase.petWarningText")}</p>
               </div>
             </div>
           </div>
@@ -558,48 +558,29 @@ const ShowcaseSection: React.FC = () => {
 /* ─────────────────────────────────────────────────────────────────────────────
    TESTIMONIALS
    ───────────────────────────────────────────────────────────────────────────── */
-const testimonials = [
-  {
-    name: "Sarah M.",
-    role: "Plant Parent",
-    quote: "Aphylia saved my monstera! The reminders are a lifesaver for someone as forgetful as me.",
-    avatar: "S",
-  },
-  {
-    name: "James K.",
-    role: "Urban Gardener",
-    quote: "Finally an app that understands balcony gardening. The light recommendations are spot on.",
-    avatar: "J",
-  },
-  {
-    name: "Mia T.",
-    role: "Succulent Collector",
-    quote: "I've tried many plant apps, but Aphylia's journal feature is perfect for tracking my 50+ succulents.",
-    avatar: "M",
-  },
-  {
-    name: "David L.",
-    role: "Beginner",
-    quote: "As a complete newbie, the plant ID feature taught me so much about caring for my first plants.",
-    avatar: "D",
-  },
-] as const
-
 const TestimonialsSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
+  const testimonials = t("testimonials.items", { returnObjects: true }) as Array<{
+    name: string
+    role: string
+    quote: string
+  }>
+
   return (
     <section className="py-20 lg:py-32 bg-gradient-to-b from-slate-50 to-white dark:from-slate-900/20 dark:to-transparent">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-4">
-            Loved by plant people.
+            {t("testimonials.title")}
           </h2>
           <p className="text-lg text-slate-600 dark:text-slate-300">
-            Join thousands of happy gardeners growing healthier plants with Aphylia.
+            {t("testimonials.subtitle")}
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {testimonials.map((t, i) => (
+          {testimonials.map((testimonial, i) => (
             <div
               key={i}
               className="rounded-2xl border border-slate-200/50 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] p-6 hover:shadow-lg transition-shadow"
@@ -611,15 +592,15 @@ const TestimonialsSection: React.FC = () => {
                 ))}
               </div>
 
-              <p className="text-slate-700 dark:text-slate-300 text-sm mb-6 leading-relaxed">"{t.quote}"</p>
+              <p className="text-slate-700 dark:text-slate-300 text-sm mb-6 leading-relaxed">"{testimonial.quote}"</p>
 
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center text-white font-semibold text-sm">
-                  {t.avatar}
+                  {testimonial.name.charAt(0)}
                 </div>
                 <div>
-                  <p className="font-medium text-slate-900 dark:text-white text-sm">{t.name}</p>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs">{t.role}</p>
+                  <p className="font-medium text-slate-900 dark:text-white text-sm">{testimonial.name}</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs">{testimonial.role}</p>
                 </div>
               </div>
             </div>
@@ -633,55 +614,50 @@ const TestimonialsSection: React.FC = () => {
 /* ─────────────────────────────────────────────────────────────────────────────
    PRICING SECTION
    ───────────────────────────────────────────────────────────────────────────── */
-const plans = [
-  {
-    name: "Free",
-    price: "0",
-    description: "Perfect for getting started",
-    features: ["Up to 10 plants", "Basic care reminders", "Plant library access", "Community support"],
-    cta: "Get started free",
-    highlighted: false,
-  },
-  {
-    name: "Pro",
-    price: "4.99",
-    description: "For serious plant parents",
-    features: [
-      "Unlimited plants",
-      "Advanced analytics",
-      "Priority reminders",
-      "Export garden data",
-      "Early access to features",
-    ],
-    cta: "Start Pro trial",
-    highlighted: true,
-  },
-  {
-    name: "Garden Club",
-    price: "9.99",
-    description: "For families & communities",
-    features: [
-      "Everything in Pro",
-      "Up to 5 members",
-      "Shared gardens",
-      "Collaborative journals",
-      "Priority support",
-    ],
-    cta: "Join the Club",
-    highlighted: false,
-  },
-] as const
-
 const PricingSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
+  const freeFeatures = t("pricingSection.free.features", { returnObjects: true }) as string[]
+  const proFeatures = t("pricingSection.pro.features", { returnObjects: true }) as string[]
+  const clubFeatures = t("pricingSection.club.features", { returnObjects: true }) as string[]
+
+  const plans = [
+    {
+      name: t("pricingSection.free.name"),
+      price: t("pricingSection.free.price"),
+      description: t("pricingSection.free.description"),
+      features: freeFeatures,
+      cta: t("pricingSection.free.cta"),
+      highlighted: false,
+    },
+    {
+      name: t("pricingSection.pro.name"),
+      price: t("pricingSection.pro.price"),
+      description: t("pricingSection.pro.description"),
+      features: proFeatures,
+      cta: t("pricingSection.pro.cta"),
+      highlighted: true,
+      popular: t("pricingSection.pro.popular"),
+    },
+    {
+      name: t("pricingSection.club.name"),
+      price: t("pricingSection.club.price"),
+      description: t("pricingSection.club.description"),
+      features: clubFeatures,
+      cta: t("pricingSection.club.cta"),
+      highlighted: false,
+    },
+  ]
+
   return (
     <section id="pricing" className="py-20 lg:py-32 scroll-mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-4">
-            Start for free. Grow as you grow.
+            {t("pricingSection.title")}
           </h2>
           <p className="text-lg text-slate-600 dark:text-slate-300">
-            Choose a plan that matches your garden size. Upgrade anytime.
+            {t("pricingSection.subtitle")}
           </p>
         </div>
 
@@ -695,9 +671,9 @@ const PricingSection: React.FC = () => {
                   : "bg-white dark:bg-white/[0.02] border border-slate-200/50 dark:border-white/5"
               }`}
             >
-              {plan.highlighted && (
+              {plan.highlighted && plan.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-amber-400 text-amber-900 text-xs font-semibold">
-                  Most Popular
+                  {plan.popular}
                 </div>
               )}
 
@@ -767,45 +743,21 @@ const PricingSection: React.FC = () => {
 /* ─────────────────────────────────────────────────────────────────────────────
    FAQ SECTION
    ───────────────────────────────────────────────────────────────────────────── */
-const faqs = [
-  {
-    q: "Is Aphylia free to use?",
-    a: "Yes! Our free plan lets you track up to 10 plants with basic reminders. Upgrade anytime for unlimited plants and advanced features.",
-  },
-  {
-    q: "Does it work offline?",
-    a: "Absolutely. Aphylia is a Progressive Web App (PWA) that works offline. Your changes sync automatically when you're back online.",
-  },
-  {
-    q: "Can I sync across devices?",
-    a: "Yes. Create an account and your garden syncs seamlessly between your phone, tablet, and computer.",
-  },
-  {
-    q: "How accurate is the plant identification?",
-    a: "Our AI identifies thousands of common houseplants and garden species with high accuracy. If unsure, it suggests similar matches.",
-  },
-  {
-    q: "Is my data private?",
-    a: "Your privacy is our priority. We never sell your data. All garden data is encrypted and only accessible to you.",
-  },
-  {
-    q: "Can I cancel my subscription anytime?",
-    a: "Yes, cancel anytime from your settings. You'll keep Pro features until the end of your billing period.",
-  },
-] as const
-
 const FAQSection: React.FC = () => {
   const [openIndex, setOpenIndex] = React.useState<number | null>(0)
+  const { t } = useTranslation("Landing")
+
+  const faqs = t("faq.items", { returnObjects: true }) as Array<{ q: string; a: string }>
 
   return (
     <section id="faq" className="py-20 lg:py-32 bg-gradient-to-b from-slate-50 to-white dark:from-slate-900/20 dark:to-transparent scroll-mt-20">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-4">
-            Frequently asked questions
+            {t("faq.title")}
           </h2>
           <p className="text-lg text-slate-600 dark:text-slate-300">
-            Everything you need to know about Aphylia.
+            {t("faq.subtitle")}
           </p>
         </div>
 
@@ -846,6 +798,8 @@ const FAQSection: React.FC = () => {
    FINAL CTA
    ───────────────────────────────────────────────────────────────────────────── */
 const FinalCTASection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
   return (
     <section className="py-20 lg:py-32">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -858,10 +812,10 @@ const FinalCTASection: React.FC = () => {
 
           <div className="relative text-center space-y-8">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white max-w-2xl mx-auto leading-tight">
-              Ready to grow happier plants?
+              {t("finalCta.title")}
             </h2>
             <p className="text-lg text-white/80 max-w-xl mx-auto">
-              Join thousands of plant lovers who trust Aphylia to keep their gardens thriving.
+              {t("finalCta.subtitle")}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
@@ -869,13 +823,13 @@ const FinalCTASection: React.FC = () => {
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white text-emerald-600 text-base font-semibold shadow-xl hover:bg-slate-50 transition-all duration-200 hover:-translate-y-0.5"
               >
                 <Leaf className="h-5 w-5" />
-                Download Aphylia
+                {t("finalCta.ctaDownload")}
               </Link>
               <Link
                 to="/about"
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-semibold border border-white/20 transition-all duration-200"
               >
-                View docs
+                {t("finalCta.ctaDocs")}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
@@ -890,6 +844,8 @@ const FinalCTASection: React.FC = () => {
    FOOTER
    ───────────────────────────────────────────────────────────────────────────── */
 const LandingFooter: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
   return (
     <footer className="border-t border-slate-200/50 dark:border-white/5 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -903,21 +859,21 @@ const LandingFooter: React.FC = () => {
 
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
             <Link to="/about" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
-              About
+              {t("footer.about")}
             </Link>
             <Link to="/blog" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
-              Blog
+              {t("footer.blog")}
             </Link>
             <Link to="/terms" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
-              Terms
+              {t("footer.terms")}
             </Link>
             <Link to="/contact" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
-              Contact
+              {t("footer.contact")}
             </Link>
           </div>
 
           <p className="text-sm text-slate-500 dark:text-slate-500">
-            © {new Date().getFullYear()} Aphylia. All rights reserved.
+            © {new Date().getFullYear()} Aphylia. {t("footer.allRightsReserved")}
           </p>
         </div>
       </div>

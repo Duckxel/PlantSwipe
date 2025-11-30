@@ -28,11 +28,124 @@
     "result": "résultat",
     "results": "résultats",
     "allRightsReserved": "Tous droits réservés",
+    "pricing": "Tarifs",
+    "membership": "Abonnement",
     "footer": {
       "about": "À propos",
       "blog": "Blog",
       "contactUs": "Nous contacter",
       "termsOfServices": "Conditions d'utilisation"
+    }
+  },
+  "pricing": {
+    "pageTitle": "Tarifs – Aphylia",
+    "pageDescription": "Choisissez le forfait qui convient à votre jardin. Aphylia est gratuit pour toujours avec des fonctionnalités Plus optionnelles pour les passionnés.",
+    "hero": {
+      "badge": "Gratuit pour toujours, par choix",
+      "title": "Des tarifs simples et transparents",
+      "subtitle": "Aphylia est conçu pour les amoureux des plantes, pas pour le profit. Nos fonctionnalités principales sont gratuites et le resteront toujours. Plus est pour ceux qui veulent aller plus loin."
+    },
+    "free": {
+      "name": "Gratuit",
+      "description": "Tout ce dont vous avez besoin pour commencer votre aventure botanique",
+      "price": "0",
+      "period": "/pour toujours",
+      "features": [
+        "Jusqu'à 5 jardins",
+        "Plantes illimitées par jardin",
+        "Bibliothèque complète et encyclopédie",
+        "Rappels d'entretien et suivi des tâches",
+        "Collections de favoris",
+        "Partage de jardins avec des amis",
+        "Synchronisation multi-appareils"
+      ],
+      "cta": "Commencer gratuitement",
+      "ctaCurrent": "Forfait actuel"
+    },
+    "plus": {
+      "name": "Plus",
+      "description": "Pour les passionnés de plantes qui veulent tout",
+      "price": "5",
+      "period": "/mois",
+      "badge": "Recommandé",
+      "features": [
+        "Tout de Gratuit",
+        "Jardins illimités",
+        "Identification de plantes",
+        "Analyses et statistiques du jardin",
+        "Exporter vos données de jardin",
+        "Support prioritaire",
+        "Accès anticipé aux nouvelles fonctionnalités",
+        "Soutenir le développement d'Aphylia"
+      ],
+      "cta": "Passer à Plus",
+      "cancelNote": "Annulez à tout moment. Sans conditions."
+    },
+    "philosophy": {
+      "title": "Pourquoi nous gardons Aphylia gratuit",
+      "p1": "Nous croyons que l'entretien des plantes devrait être accessible à tous.",
+      "p1cont": "Que vous soigniez votre première succulente ou que vous gériez une jungle intérieure florissante, vous méritez des outils qui vous aident à réussir — sans vous ruiner.",
+      "p2start": "C'est pourquoi les fonctionnalités principales d'Aphylia sont",
+      "p2highlight": "gratuites pour toujours",
+      "p2end": ". Pas d'essai, pas de limites cachées qui rendent l'application inutilisable. Juste des outils authentiques et utiles pour les amoureux des plantes.",
+      "p3question": "Alors pourquoi Plus ?",
+      "p3answer": "Faire fonctionner Aphylia coûte de l'argent réel — serveurs, développement, bases de données de plantes, systèmes d'identification. Plus permet aux passionnés de plantes qui veulent des fonctionnalités avancées de nous aider à maintenir le service et à continuer à construire quelque chose de spécial.",
+      "p3note": "Pensez à Plus comme votre façon de soutenir la communauté Aphylia tout en débloquant des super-pouvoirs supplémentaires pour votre jardin."
+    },
+    "comparison": {
+      "title": "Comparer les forfaits en détail",
+      "subtitle": "Voyez exactement ce que vous obtenez avec chaque forfait",
+      "features": "Fonctionnalités",
+      "categories": {
+        "gardensPlants": "Jardins et plantes",
+        "coreFeatures": "Fonctionnalités principales",
+        "advancedSupport": "Avancé et support"
+      },
+      "featureNames": {
+        "gardensCreate": "Jardins que vous pouvez créer",
+        "plantsPerGarden": "Plantes par jardin",
+        "plantId": "Identification de plantes",
+        "bookmarks": "Collections de favoris",
+        "plantLibrary": "Bibliothèque et encyclopédie",
+        "careReminders": "Rappels d'entretien et tâches",
+        "taskTracking": "Suivi de progression des tâches",
+        "gardenSharing": "Partage et collaboration de jardins",
+        "analytics": "Analyses et statistiques du jardin",
+        "exportData": "Exporter les données du jardin",
+        "prioritySupport": "Support prioritaire",
+        "earlyAccess": "Accès anticipé aux fonctionnalités"
+      },
+      "values": {
+        "upTo5": "Jusqu'à 5",
+        "unlimited": "Illimité"
+      }
+    },
+    "faq": {
+      "title": "Questions fréquentes",
+      "items": [
+        {
+          "q": "Puis-je utiliser Aphylia complètement gratuitement ?",
+          "a": "Absolument ! Notre forfait gratuit inclut jusqu'à 5 jardins avec des plantes illimitées chacun, des rappels d'entretien, l'encyclopédie complète des plantes, des collections de favoris et plus encore. Aucune carte de crédit requise."
+        },
+        {
+          "q": "Que se passe-t-il si j'atteins 5 jardins ?",
+          "a": "Vous verrez une invitation amicale à passer au supérieur ou à gérer vos jardins existants. Nous ne supprimons jamais vos jardins ou vos plantes. Vos données sont toujours en sécurité."
+        },
+        {
+          "q": "Puis-je annuler Plus à tout moment ?",
+          "a": "Oui, annulez en un clic depuis vos paramètres. Vous conserverez les fonctionnalités Plus jusqu'à la fin de votre période de facturation, puis retournerez au forfait Gratuit."
+        },
+        {
+          "q": "Qu'est-ce que l'identification de plantes ?",
+          "a": "Les membres Plus peuvent prendre une photo de n'importe quelle plante et notre système identifiera l'espèce et fournira des recommandations d'entretien. C'est un outil puissant pour découvrir des plantes inconnues."
+        }
+      ]
+    },
+    "bottomCta": {
+      "title": "Prêt à grandir avec Aphylia ?",
+      "subtitle": "Commencez gratuitement et passez au supérieur quand vous êtes prêt. Vos plantes vous remercieront.",
+      "ctaFree": "Commencer gratuitement",
+      "ctaPlus": "Obtenir Plus"
     }
   },
   "seo": {

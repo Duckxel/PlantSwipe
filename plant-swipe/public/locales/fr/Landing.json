@@ -1,0 +1,198 @@
+{
+  "nav": {
+    "features": "Fonctionnalités",
+    "howItWorks": "Comment ça marche",
+    "pricing": "Tarifs",
+    "faq": "FAQ",
+    "login": "Connexion",
+    "getStarted": "Commencer",
+    "backToApp": "Retour à l'app"
+  },
+  "hero": {
+    "badge": "Votre compagnon pour des plantes plus heureuses",
+    "title": "Connaissez vos plantes.",
+    "titleHighlight": "Apprenez à en prendre soin",
+    "titleEnd": ".",
+    "description": "Aphylia est une application intelligente de plantes et de jardinage qui suit les calendriers d'entretien, envoie des rappels opportuns et vous apprend tout sur vos compagnons verts.",
+    "ctaDownload": "Télécharger Aphylia",
+    "ctaTryBrowser": "Essayer dans le navigateur",
+    "socialProof": "Conçu pour les amoureux des plantes, débutants et experts."
+  },
+  "heroCard": {
+    "plantName": "Monstera deliciosa",
+    "plantSubname": "Plante fromage suisse",
+    "waterFrequency": "Tous les 7 jours",
+    "lightLevel": "Lumière indirecte vive",
+    "nextReminder": "Prochain rappel",
+    "waterIn": "Arrosage dans 2 jours",
+    "careLogged": "Soin enregistré !"
+  },
+  "features": {
+    "title": "Tout ce dont votre jardin a besoin, dans une seule application.",
+    "subtitle": "Du suivi des arrosages à l'identification d'espèces inconnues, Aphylia vous accompagne.",
+    "smartLibrary": {
+      "title": "Bibliothèque de plantes intelligente",
+      "description": "Accédez à une base de données complète avec des informations détaillées sur les soins — besoins en lumière, calendriers d'arrosage, préférences de sol et avertissements de toxicité."
+    },
+    "careReminders": {
+      "title": "Rappels d'entretien",
+      "description": "N'oubliez plus jamais d'arroser, brumiser ou fertiliser. Recevez des notifications personnalisées selon les besoins de chaque plante."
+    },
+    "collections": {
+      "title": "Collections et favoris",
+      "description": "Organisez vos plantes par pièce, jardin ou ambiance. Créez des collections personnalisées et sauvegardez vos favorites."
+    },
+    "plantId": {
+      "title": "Identification visuelle",
+      "description": "Prenez une photo et laissez Aphylia identifier votre plante mystère. Obtenez des recommandations de soins instantanées."
+    },
+    "journal": {
+      "title": "Journal de jardin",
+      "description": "Suivez les étapes de croissance, enregistrez les dates de rempotage, ajoutez des notes et documentez votre parcours botanique avec des photos."
+    },
+    "pwa": {
+      "title": "Synchronisation multi-appareils",
+      "description": "Fonctionne parfaitement sur mobile et ordinateur. Vos données se synchronisent sur tous vos appareils."
+    }
+  },
+  "howItWorks": {
+    "title": "Du semis à la jungle, en 3 étapes.",
+    "subtitle": "Commencer est simple. Configurez une fois, et Aphylia s'occupe du reste.",
+    "step1": {
+      "title": "Ajoutez vos plantes",
+      "description": "Parcourez notre bibliothèque ou prenez une photo pour identifier et ajouter des plantes à votre collection."
+    },
+    "step2": {
+      "title": "Définissez vos conditions",
+      "description": "Parlez-nous de votre espace — niveaux de lumière, humidité et emplacement — pour des conseils personnalisés."
+    },
+    "step3": {
+      "title": "Laissez Aphylia vous rappeler",
+      "description": "Détendez-vous pendant que nous envoyons des rappels opportuns pour l'arrosage, la fertilisation et plus encore."
+    }
+  },
+  "showcase": {
+    "title": "Conçu pour votre étagère, balcon ou jungle.",
+    "subtitle": "Que vous ayez une succulente ou une centaine de plantes tropicales, Aphylia s'adapte à votre style.",
+    "dashboardPreview": "Aperçu du tableau de bord",
+    "dashboardTitle": "Votre jardin en un coup d'œil",
+    "dashboardDescription": "Voyez toutes vos plantes, tâches à venir et historique des soins dans un tableau de bord élégant.",
+    "wateringReminder": "Rappel d'arrosage",
+    "wateringText": "Votre Pothos a besoin d'eau aujourd'hui",
+    "lightCheck": "Vérification lumière",
+    "lightText": "Déplacez la fougère vers plus de lumière",
+    "toxicityAlert": "Alerte toxicité",
+    "petWarning": "Avertissement animaux",
+    "petWarningText": "Le Dieffenbachia est toxique pour les chats"
+  },
+  "testimonials": {
+    "title": "Adoré par les amoureux des plantes.",
+    "subtitle": "Rejoignez des milliers de jardiniers heureux qui cultivent des plantes plus saines avec Aphylia.",
+    "items": [
+      {
+        "name": "Sarah M.",
+        "role": "Parent de plantes",
+        "quote": "Aphylia a sauvé mon monstera ! Les rappels sont une bouée de sauvetage pour quelqu'un d'aussi distrait que moi."
+      },
+      {
+        "name": "James K.",
+        "role": "Jardinier urbain",
+        "quote": "Enfin une application qui comprend le jardinage de balcon. Les recommandations de lumière sont parfaites."
+      },
+      {
+        "name": "Mia T.",
+        "role": "Collectionneuse de succulentes",
+        "quote": "J'ai essayé beaucoup d'applications de plantes, mais le journal d'Aphylia est parfait pour suivre mes 50+ succulentes."
+      },
+      {
+        "name": "David L.",
+        "role": "Débutant",
+        "quote": "En tant que novice complet, la fonction d'identification m'a appris tant de choses sur l'entretien de mes premières plantes."
+      }
+    ]
+  },
+  "pricingSection": {
+    "title": "Commencez gratuitement. Évoluez à votre rythme.",
+    "subtitle": "Choisissez un forfait adapté à la taille de votre jardin. Passez au supérieur à tout moment.",
+    "free": {
+      "name": "Gratuit",
+      "price": "0",
+      "description": "Parfait pour commencer",
+      "features": [
+        "Jusqu'à 5 jardins",
+        "Plantes illimitées par jardin",
+        "Rappels d'entretien basiques",
+        "Accès à la bibliothèque",
+        "Support communautaire"
+      ],
+      "cta": "Commencer gratuitement"
+    },
+    "pro": {
+      "name": "Plus",
+      "price": "5",
+      "description": "Pour les passionnés de plantes",
+      "features": [
+        "Jardins illimités",
+        "Identification de plantes",
+        "Analyses avancées",
+        "Export des données",
+        "Support prioritaire",
+        "Accès anticipé aux fonctionnalités"
+      ],
+      "cta": "Commencer Plus",
+      "popular": "Le plus populaire"
+    },
+    "club": {
+      "name": "Garden Club",
+      "price": "9,99",
+      "description": "Pour familles et communautés",
+      "features": [
+        "Tout de Plus",
+        "Jusqu'à 5 membres",
+        "Jardins partagés",
+        "Journaux collaboratifs",
+        "Support prioritaire"
+      ],
+      "cta": "Rejoindre le Club"
+    }
+  },
+  "faq": {
+    "title": "Questions fréquentes",
+    "subtitle": "Tout ce que vous devez savoir sur Aphylia.",
+    "items": [
+      {
+        "q": "Aphylia est-elle gratuite ?",
+        "a": "Oui ! Notre forfait gratuit vous permet de suivre jusqu'à 5 jardins avec des plantes illimitées et des rappels basiques. Passez au supérieur à tout moment pour des jardins illimités et des fonctionnalités avancées."
+      },
+      {
+        "q": "Puis-je synchroniser entre appareils ?",
+        "a": "Oui. Créez un compte et votre jardin se synchronise parfaitement entre votre téléphone, tablette et ordinateur."
+      },
+      {
+        "q": "Quelle est la précision de l'identification ?",
+        "a": "Notre système identifie des milliers de plantes d'intérieur et d'espèces de jardin avec une grande précision. En cas de doute, il suggère des correspondances similaires."
+      },
+      {
+        "q": "Mes données sont-elles privées ?",
+        "a": "Votre vie privée est notre priorité. Nous ne vendons jamais vos données. Toutes les données de jardin sont cryptées et accessibles uniquement par vous."
+      },
+      {
+        "q": "Puis-je annuler mon abonnement à tout moment ?",
+        "a": "Oui, annulez à tout moment depuis vos paramètres. Vous conserverez les fonctionnalités Plus jusqu'à la fin de votre période de facturation."
+      }
+    ]
+  },
+  "finalCta": {
+    "title": "Prêt à cultiver des plantes plus heureuses ?",
+    "subtitle": "Rejoignez des milliers d'amoureux des plantes qui font confiance à Aphylia pour garder leurs jardins florissants.",
+    "ctaDownload": "Télécharger Aphylia",
+    "ctaDocs": "Voir la documentation"
+  },
+  "footer": {
+    "about": "À propos",
+    "blog": "Blog",
+    "terms": "Conditions",
+    "contact": "Contact",
+    "allRightsReserved": "Tous droits réservés."
+  }
+}

@@ -1,5 +1,6 @@
 import React from "react"
 import { motion } from "framer-motion"
+import { useTranslation } from "react-i18next"
 import {
   Check,
   X,
@@ -24,45 +25,62 @@ import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useAuth } from "@/context/AuthContext"
 
-// Feature comparison data
-const featureCategories = [
+// Feature type definition
+type FeatureItem = {
+  nameKey: string
+  free: boolean | string
+  plus: boolean | string
+  icon: React.ElementType
+}
+
+type FeatureCategory = {
+  nameKey: string
+  features: FeatureItem[]
+}
+
+// Feature comparison data with icon references
+const featureCategoriesConfig: FeatureCategory[] = [
   {
-    name: "Gardens & Plants",
+    nameKey: "pricing.comparison.categories.gardensPlants",
     features: [
-      { name: "Gardens you can create", free: "Up to 5", plus: "Unlimited", icon: Leaf },
-      { name: "Plants per garden", free: "Unlimited", plus: "Unlimited", icon: Sparkles },
-      { name: "Plant identification", free: false, plus: "Unlimited", icon: Camera },
-      { name: "Bookmark collections", free: "Unlimited", plus: "Unlimited", icon: Heart },
+      { nameKey: "pricing.comparison.featureNames.gardensCreate", free: "pricing.comparison.values.upTo5", plus: "pricing.comparison.values.unlimited", icon: Leaf },
+      { nameKey: "pricing.comparison.featureNames.plantsPerGarden", free: "pricing.comparison.values.unlimited", plus: "pricing.comparison.values.unlimited", icon: Sparkles },
+      { nameKey: "pricing.comparison.featureNames.plantId", free: false, plus: "pricing.comparison.values.unlimited", icon: Camera },
+      { nameKey: "pricing.comparison.featureNames.bookmarks", free: "pricing.comparison.values.unlimited", plus: "pricing.comparison.values.unlimited", icon: Heart },
     ],
   },
   {
-    name: "Core Features",
+    nameKey: "pricing.comparison.categories.coreFeatures",
     features: [
-      { name: "Plant library & encyclopedia", free: true, plus: true, icon: BookMarked },
-      { name: "Care reminders & tasks", free: true, plus: true, icon: Bell },
-      { name: "Task progress tracking", free: true, plus: true, icon: Clock },
-      { name: "Garden sharing & collaboration", free: true, plus: true, icon: Users },
+      { nameKey: "pricing.comparison.featureNames.plantLibrary", free: true, plus: true, icon: BookMarked },
+      { nameKey: "pricing.comparison.featureNames.careReminders", free: true, plus: true, icon: Bell },
+      { nameKey: "pricing.comparison.featureNames.taskTracking", free: true, plus: true, icon: Clock },
+      { nameKey: "pricing.comparison.featureNames.gardenSharing", free: true, plus: true, icon: Users },
     ],
   },
   {
-    name: "Advanced & Support",
+    nameKey: "pricing.comparison.categories.advancedSupport",
     features: [
-      { name: "Garden analytics & insights", free: false, plus: true, icon: BarChart3 },
-      { name: "Export garden data", free: false, plus: true, icon: Cloud },
-      { name: "Priority support", free: false, plus: true, icon: Shield },
-      { name: "Early access to features", free: false, plus: true, icon: Gift },
+      { nameKey: "pricing.comparison.featureNames.analytics", free: false, plus: true, icon: BarChart3 },
+      { nameKey: "pricing.comparison.featureNames.exportData", free: false, plus: true, icon: Cloud },
+      { nameKey: "pricing.comparison.featureNames.prioritySupport", free: false, plus: true, icon: Shield },
+      { nameKey: "pricing.comparison.featureNames.earlyAccess", free: false, plus: true, icon: Gift },
     ],
   },
-] as const
+]
 
 const PricingPage: React.FC = () => {
   const { user } = useAuth()
+  const { t } = useTranslation("common")
 
   usePageMetadata({
-    title: "Pricing – Aphylia",
-    description:
-      "Choose the plan that fits your garden. Aphylia is free forever with optional Plus features for serious plant parents.",
+    title: t("pricing.pageTitle"),
+    description: t("pricing.pageDescription"),
   })
+
+  const freeFeatures = t("pricing.free.features", { returnObjects: true }) as string[]
+  const plusFeatures = t("pricing.plus.features", { returnObjects: true }) as string[]
+  const faqItems = t("pricing.faq.items", { returnObjects: true }) as Array<{ q: string; a: string }>
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 md:py-12 space-y-16">
@@ -75,16 +93,15 @@ const PricingPage: React.FC = () => {
       >
         <Badge className="rounded-full px-4 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-0">
           <Heart className="h-3.5 w-3.5 mr-1.5 fill-current" />
-          Free forever, by design
+          {t("pricing.hero.badge")}
         </Badge>
 
         <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-white">
-          Simple, transparent pricing
+          {t("pricing.hero.title")}
         </h1>
 
         <p className="text-lg md:text-xl text-slate-600 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
-          Aphylia is built for plant lovers, not profit. Our core features are free and always will be.
-          Plus is for those who want to go further.
+          {t("pricing.hero.subtitle")}
         </p>
       </motion.section>
 
@@ -102,28 +119,20 @@ const PricingPage: React.FC = () => {
               <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
                 <Leaf className="h-5 w-5 text-slate-600 dark:text-slate-300" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Free</h2>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{t("pricing.free.name")}</h2>
             </div>
             <p className="text-slate-600 dark:text-slate-400 text-sm">
-              Everything you need to start your plant journey
+              {t("pricing.free.description")}
             </p>
           </div>
 
           <div className="flex items-baseline gap-1">
-            <span className="text-5xl font-bold text-slate-900 dark:text-white">$0</span>
-            <span className="text-slate-500 dark:text-slate-400">/forever</span>
+            <span className="text-5xl font-bold text-slate-900 dark:text-white">${t("pricing.free.price")}</span>
+            <span className="text-slate-500 dark:text-slate-400">{t("pricing.free.period")}</span>
           </div>
 
           <ul className="space-y-3">
-            {[
-              "Up to 5 gardens",
-              "Unlimited plants per garden",
-              "Full plant library & encyclopedia",
-              "Care reminders & task tracking",
-              "Bookmark collections",
-              "Garden sharing with friends",
-              "Cross-device sync",
-            ].map((feature, i) => (
+            {freeFeatures.map((feature, i) => (
               <li key={i} className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
                 <Check className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
                 <span>{feature}</span>
@@ -137,7 +146,7 @@ const PricingPage: React.FC = () => {
             className="w-full rounded-xl h-12 text-base font-medium"
           >
             <Link to={user ? "/discovery" : "/discovery"}>
-              {user ? "Current Plan" : "Get Started Free"}
+              {user ? t("pricing.free.ctaCurrent") : t("pricing.free.cta")}
             </Link>
           </Button>
         </div>
@@ -148,7 +157,7 @@ const PricingPage: React.FC = () => {
           <div className="absolute -top-4 left-1/2 -translate-x-1/2">
             <Badge className="rounded-full px-4 py-1.5 bg-emerald-500 text-white border-0 shadow-lg">
               <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-              Recommended
+              {t("pricing.plus.badge")}
             </Badge>
           </div>
 
@@ -157,29 +166,20 @@ const PricingPage: React.FC = () => {
               <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center shadow-lg shadow-emerald-500/25">
                 <Crown className="h-5 w-5 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Plus</h2>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{t("pricing.plus.name")}</h2>
             </div>
             <p className="text-slate-600 dark:text-slate-400 text-sm">
-              For dedicated plant parents who want it all
+              {t("pricing.plus.description")}
             </p>
           </div>
 
           <div className="flex items-baseline gap-1">
-            <span className="text-5xl font-bold text-slate-900 dark:text-white">$5</span>
-            <span className="text-slate-500 dark:text-slate-400">/month</span>
+            <span className="text-5xl font-bold text-slate-900 dark:text-white">${t("pricing.plus.price")}</span>
+            <span className="text-slate-500 dark:text-slate-400">{t("pricing.plus.period")}</span>
           </div>
 
           <ul className="space-y-3">
-            {[
-              "Everything in Free",
-              "Unlimited gardens",
-              "Plant identification",
-              "Garden analytics & insights",
-              "Export your garden data",
-              "Priority support",
-              "Early access to new features",
-              "Support Aphylia's development",
-            ].map((feature, i) => (
+            {plusFeatures.map((feature, i) => (
               <li key={i} className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
                 <Check className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
                 <span>{feature}</span>
@@ -192,13 +192,13 @@ const PricingPage: React.FC = () => {
             className="w-full rounded-xl h-12 text-base font-medium bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/25"
           >
             <Link to="/contact">
-              Upgrade to Plus
+              {t("pricing.plus.cta")}
               <ArrowRight className="h-4 w-4 ml-2" />
             </Link>
           </Button>
 
           <p className="text-xs text-center text-slate-500 dark:text-slate-400">
-            Cancel anytime. No questions asked.
+            {t("pricing.plus.cancelNote")}
           </p>
         </div>
       </motion.section>
@@ -220,32 +220,29 @@ const PricingPage: React.FC = () => {
               <Heart className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">
-              Why we keep Aphylia free
+              {t("pricing.philosophy.title")}
             </h2>
           </div>
 
           <div className="space-y-4 text-slate-600 dark:text-slate-300 leading-relaxed">
             <p>
-              <strong className="text-slate-900 dark:text-white">We believe plant care should be accessible to everyone.</strong>{" "}
-              Whether you're nurturing your first succulent or managing a thriving indoor jungle, you deserve 
-              tools that help you succeed—without breaking the bank.
+              <strong className="text-slate-900 dark:text-white">{t("pricing.philosophy.p1")}</strong>{" "}
+              {t("pricing.philosophy.p1cont")}
             </p>
 
             <p>
-              That's why Aphylia's core features are <strong className="text-emerald-600 dark:text-emerald-400">free forever</strong>. 
-              No trials, no hidden limits that make the app unusable. Just genuine, useful tools for plant lovers.
+              {t("pricing.philosophy.p2start")}{" "}
+              <strong className="text-emerald-600 dark:text-emerald-400">{t("pricing.philosophy.p2highlight")}</strong>
+              {t("pricing.philosophy.p2end")}
             </p>
 
             <p>
-              <strong className="text-slate-900 dark:text-white">So why Plus?</strong>{" "}
-              Running Aphylia costs real money—servers, development, plant databases, AI for identification. 
-              Plus lets passionate plant parents who want advanced features help us keep the lights on and 
-              continue building something special.
+              <strong className="text-slate-900 dark:text-white">{t("pricing.philosophy.p3question")}</strong>{" "}
+              {t("pricing.philosophy.p3answer")}
             </p>
 
             <p className="text-sm text-slate-500 dark:text-slate-400 italic">
-              Think of Plus as your way of supporting the Aphylia community while unlocking extra superpowers 
-              for your garden.
+              {t("pricing.philosophy.p3note")}
             </p>
           </div>
         </div>
@@ -260,10 +257,10 @@ const PricingPage: React.FC = () => {
       >
         <div className="text-center space-y-2">
           <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">
-            Compare plans in detail
+            {t("pricing.comparison.title")}
           </h2>
           <p className="text-slate-600 dark:text-slate-400">
-            See exactly what you get with each plan
+            {t("pricing.comparison.subtitle")}
           </p>
         </div>
 
@@ -271,26 +268,26 @@ const PricingPage: React.FC = () => {
           {/* Table Header */}
           <div className="grid grid-cols-3 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700/50">
             <div className="p-4 md:p-6 font-medium text-slate-700 dark:text-slate-300">
-              Features
+              {t("pricing.comparison.features")}
             </div>
             <div className="p-4 md:p-6 text-center border-l border-slate-200 dark:border-slate-700/50">
-              <span className="font-semibold text-slate-900 dark:text-white">Free</span>
+              <span className="font-semibold text-slate-900 dark:text-white">{t("pricing.free.name")}</span>
             </div>
             <div className="p-4 md:p-6 text-center border-l border-slate-200 dark:border-slate-700/50 bg-emerald-50/50 dark:bg-emerald-900/10">
               <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1.5">
                 <Crown className="h-4 w-4" />
-                Plus
+                {t("pricing.plus.name")}
               </span>
             </div>
           </div>
 
           {/* Feature Categories */}
-          {featureCategories.map((category, catIdx) => (
+          {featureCategoriesConfig.map((category, catIdx) => (
             <div key={catIdx}>
               {/* Category Header */}
               <div className="px-4 md:px-6 py-3 bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700/50">
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  {category.name}
+                  {t(category.nameKey)}
                 </span>
               </div>
 
@@ -301,20 +298,25 @@ const PricingPage: React.FC = () => {
                   className={`grid grid-cols-3 ${
                     featIdx !== category.features.length - 1
                       ? "border-b border-slate-100 dark:border-slate-700/30"
-                      : catIdx !== featureCategories.length - 1
+                      : catIdx !== featureCategoriesConfig.length - 1
                       ? "border-b border-slate-200 dark:border-slate-700/50"
                       : ""
                   }`}
                 >
                   <div className="p-4 md:p-5 flex items-center gap-3">
                     <feature.icon className="h-4 w-4 text-slate-400 dark:text-slate-500 flex-shrink-0 hidden sm:block" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">{feature.name}</span>
+                    <span className="text-sm text-slate-700 dark:text-slate-300">{t(feature.nameKey)}</span>
                   </div>
                   <div className="p-4 md:p-5 flex items-center justify-center border-l border-slate-100 dark:border-slate-700/30">
-                    <FeatureValue value={feature.free} />
+                    <FeatureValue 
+                      value={typeof feature.free === "boolean" ? feature.free : t(feature.free)} 
+                    />
                   </div>
                   <div className="p-4 md:p-5 flex items-center justify-center border-l border-slate-100 dark:border-slate-700/30 bg-emerald-50/30 dark:bg-emerald-900/5">
-                    <FeatureValue value={feature.plus} isPlus />
+                    <FeatureValue 
+                      value={typeof feature.plus === "boolean" ? feature.plus : t(feature.plus)} 
+                      isPlus 
+                    />
                   </div>
                 </div>
               ))}
@@ -332,29 +334,12 @@ const PricingPage: React.FC = () => {
       >
         <div className="text-center space-y-2">
           <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">
-            Common questions
+            {t("pricing.faq.title")}
           </h2>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-          {[
-            {
-              q: "Can I use Aphylia completely free?",
-              a: "Absolutely! Our free tier includes up to 5 gardens with unlimited plants each, care reminders, the full plant encyclopedia, bookmark collections, and more. No credit card required.",
-            },
-            {
-              q: "What happens if I reach 5 gardens?",
-              a: "You'll see a friendly prompt to upgrade or manage your existing gardens. We never delete your gardens or plants. Your data is always safe.",
-            },
-            {
-              q: "Can I cancel Plus anytime?",
-              a: "Yes, cancel with one click from your settings. You'll keep Plus features until your billing period ends, then seamlessly return to Free.",
-            },
-            {
-              q: "What is plant identification?",
-              a: "Plus members can snap a photo of any plant and our system will identify the species and provide care recommendations. It's a powerful tool for discovering unknown plants.",
-            },
-          ].map((faq, i) => (
+          {faqItems.map((faq, i) => (
             <div
               key={i}
               className="rounded-2xl border border-slate-200/70 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/30 p-6 space-y-2"
@@ -374,22 +359,22 @@ const PricingPage: React.FC = () => {
         className="text-center space-y-6 pb-8"
       >
         <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">
-          Ready to grow with Aphylia?
+          {t("pricing.bottomCta.title")}
         </h2>
         <p className="text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
-          Start free and upgrade when you're ready. Your plants will thank you.
+          {t("pricing.bottomCta.subtitle")}
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button asChild variant="outline" className="rounded-xl h-12 px-8">
             <Link to="/discovery">
               <Leaf className="h-4 w-4 mr-2" />
-              Start Free
+              {t("pricing.bottomCta.ctaFree")}
             </Link>
           </Button>
           <Button asChild className="rounded-xl h-12 px-8 bg-emerald-500 hover:bg-emerald-600">
             <Link to="/contact">
               <Crown className="h-4 w-4 mr-2" />
-              Get Plus
+              {t("pricing.bottomCta.ctaPlus")}
             </Link>
           </Button>
         </div>
