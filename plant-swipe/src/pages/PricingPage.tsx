@@ -34,7 +34,7 @@ const featureCategories = [
     features: [
       { name: "Gardens you can create", free: "Up to 5", plus: "Unlimited", icon: Leaf },
       { name: "Plants per garden", free: "Unlimited", plus: "Unlimited", icon: Sparkles },
-      { name: "Plant identification (AI)", free: false, plus: "Unlimited", icon: Camera },
+      { name: "Plant identification", free: false, plus: "Unlimited", icon: Camera },
       { name: "Bookmark collections", free: "Unlimited", plus: "Unlimited", icon: Heart },
     ],
   },
@@ -127,7 +127,6 @@ const PricingPage: React.FC = () => {
               "Bookmark collections",
               "Garden sharing with friends",
               "Cross-device sync",
-              "Offline access (PWA)",
             ].map((feature, i) => (
               <li key={i} className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
                 <Check className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
@@ -178,7 +177,7 @@ const PricingPage: React.FC = () => {
             {[
               "Everything in Free",
               "Unlimited gardens",
-              "AI plant identification",
+              "Plant identification",
               "Garden analytics & insights",
               "Export your garden data",
               "Priority support",
@@ -356,8 +355,8 @@ const PricingPage: React.FC = () => {
               a: "Yes, cancel with one click from your settings. You'll keep Plus features until your billing period ends, then seamlessly return to Free.",
             },
             {
-              q: "What is AI plant identification?",
-              a: "Plus members can snap a photo of any plant and our AI will identify the species and provide care recommendations. It's a powerful tool for discovering unknown plants.",
+              q: "What is plant identification?",
+              a: "Plus members can snap a photo of any plant and our system will identify the species and provide care recommendations. It's a powerful tool for discovering unknown plants.",
             },
           ].map((faq, i) => (
             <div
