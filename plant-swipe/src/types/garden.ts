@@ -9,6 +9,7 @@ export interface Garden {
   createdBy: string
   createdAt: string
   streak?: number
+  isPublic?: boolean
 }
 
 export interface GardenMember {

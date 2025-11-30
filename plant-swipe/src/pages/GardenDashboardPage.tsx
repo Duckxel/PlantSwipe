@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { PlantDetails } from "@/components/plant/PlantDetails";
-import { Info, ArrowUpRight, UploadCloud, Loader2 } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import type { Garden } from "@/types/garden";
@@ -51,6 +51,7 @@ import {
   getGardenWeeklyStatsCached,
   getGardenTodayProgressUltraFast,
   refreshGardenTaskCache,
+  updateGardenPrivacy,
 } from "@/lib/gardens";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -1365,6 +1366,27 @@ export const GardenDashboardPage: React.FC = () => {
       return self?.role === "owner";
     }, [members, currentUserId, profile?.is_admin]);
 
+    // Check if current user is a member of this garden
+    const isMember = React.useMemo(() => {
+      if (!currentUserId) return false;
+      return members.some((m) => m.userId === currentUserId);
+    }, [members, currentUserId]);
+
+    // Can view garden content (member, admin, or public garden)
+    const canViewFullGarden = React.useMemo(() => {
+      if (profile?.is_admin) return true;
+      if (isMember) return true;
+      return false;
+    }, [isMember, profile?.is_admin]);
+
+    // Can view at least the overview (public gardens or members)
+    const canViewOverview = React.useMemo(() => {
+      if (profile?.is_admin) return true;
+      if (isMember) return true;
+      if (garden?.isPublic !== false) return true; // Public by default
+      return false;
+    }, [isMember, garden?.isPublic, profile?.is_admin]);
+
     React.useEffect(() => {
       load();
     }, [load]);
@@ -2297,18 +2319,52 @@ export const GardenDashboardPage: React.FC = () => {
           </main>
         </>
       )}
-      {!loading && garden && (
+      {/* Private garden view for non-members */}
+      {!loading && garden && !canViewOverview && (
+        <div className="col-span-full">
+          <Card className="rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-8 md:p-12 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] text-center">
+            <div className="max-w-md mx-auto space-y-6">
+              <div className="w-20 h-20 mx-auto rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center">
+                <Lock className="w-10 h-10 text-stone-400 dark:text-stone-500" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold mb-2">{garden.name}</h2>
+                <div className="text-lg font-medium text-stone-600 dark:text-stone-400">
+                  {t("gardenDashboard.privateGarden.title")}
+                </div>
+              </div>
+              <p className="text-sm text-stone-500 dark:text-stone-400">
+                {t("gardenDashboard.privateGarden.description")}
+              </p>
+              <div className="flex items-center justify-center gap-2 text-sm text-stone-400 dark:text-stone-500">
+                <Lock className="w-4 h-4" />
+                <span>{t("gardenDashboard.privateGarden.membersOnly")}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+      {!loading && garden && canViewOverview && (
         <>
           <aside className={`${sidebarPanelBase} space-y-4`}>
             <div className="text-xl font-semibold">{garden.name}</div>
+            {/* Show privacy badge for public viewers */}
+            {!isMember && garden.isPublic !== false && (
+              <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-full px-3 py-1.5">
+                <Globe className="w-3.5 h-3.5" />
+                {t("gardenDashboard.publicGarden")}
+              </div>
+            )}
             <nav className="flex flex-wrap md:flex-col gap-2">
               {(
-                [
-                  ["overview", t("gardenDashboard.overview")],
-                  ["plants", t("gardenDashboard.plants")],
-                  ["routine", t("gardenDashboard.routine")],
-                  ["settings", t("gardenDashboard.settings")],
-                ] as Array<[TabKey, string]>
+                canViewFullGarden
+                  ? [
+                      ["overview", t("gardenDashboard.overview")],
+                      ["plants", t("gardenDashboard.plants")],
+                      ["routine", t("gardenDashboard.routine")],
+                      ["settings", t("gardenDashboard.settings")],
+                    ]
+                  : [["overview", t("gardenDashboard.overview")]]
               ).map(([k, label]) => (
                 <Button
                   key={k}
@@ -2322,6 +2378,12 @@ export const GardenDashboardPage: React.FC = () => {
                 </Button>
               ))}
             </nav>
+            {/* Show hint for non-members */}
+            {!isMember && (
+              <div className="text-xs text-stone-500 dark:text-stone-400 pt-2 border-t border-stone-200/50 dark:border-stone-700/50">
+                {t("gardenDashboard.viewingAsGuest")}
+              </div>
+            )}
           </aside>
           <main className={mainPanelClass}>
             <Routes>
@@ -2345,6 +2407,7 @@ export const GardenDashboardPage: React.FC = () => {
               <Route
                 path="plants"
                 element={
+                  canViewFullGarden ? (
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <div className="text-lg font-medium">
@@ -2562,32 +2625,40 @@ export const GardenDashboardPage: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
                 }
               />
               {/* Routine route kept for weekly chart; item rows show completers instead of button */}
               <Route
                 path="routine"
                 element={
-                  <RoutineSection
-                    plants={plants}
-                    duePlantIds={dueToday}
-                    onLogWater={logWater}
-                    weekDays={weekDays}
-                    weekCounts={weekCounts}
-                    weekCountsByType={weekCountsByType}
-                    serverToday={serverToday}
-                    dueThisWeekByPlant={dueThisWeekByPlant}
-                    todayTaskOccurrences={todayTaskOccurrences}
-                    onProgressOccurrence={progressOccurrenceHandler}
-                    progressingOccIds={progressingOccIds}
-                    completingPlantIds={completingPlantIds}
-                    completeAllTodayForPlant={completeAllTodayForPlant}
-                  />
+                  canViewFullGarden ? (
+                    <RoutineSection
+                      plants={plants}
+                      duePlantIds={dueToday}
+                      onLogWater={logWater}
+                      weekDays={weekDays}
+                      weekCounts={weekCounts}
+                      weekCountsByType={weekCountsByType}
+                      serverToday={serverToday}
+                      dueThisWeekByPlant={dueThisWeekByPlant}
+                      todayTaskOccurrences={todayTaskOccurrences}
+                      onProgressOccurrence={progressOccurrenceHandler}
+                      progressingOccIds={progressingOccIds}
+                      completingPlantIds={completingPlantIds}
+                      completeAllTodayForPlant={completeAllTodayForPlant}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
                 }
               />
               <Route
                 path="settings"
                 element={
+                  canViewFullGarden ? (
                   <div className="space-y-6">
                     {garden && (
                       <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-r from-emerald-50/80 via-white to-white dark:from-[#252526] dark:via-[#1f1f1f] dark:to-[#1b1b1f] p-4 shadow-sm">
@@ -2618,6 +2689,19 @@ export const GardenDashboardPage: React.FC = () => {
                       </div>
                       <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
                         <GardenDetailsEditor
+                          garden={garden}
+                          onSaved={load}
+                          canEdit={viewerIsOwner}
+                        />
+                      </Card>
+                    </div>
+                    {/* Privacy Settings */}
+                    <div className="space-y-3">
+                      <div className="text-lg font-medium">
+                        {t("gardenDashboard.settingsSection.privacy")}
+                      </div>
+                      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
+                        <GardenPrivacyToggle
                           garden={garden}
                           onSaved={load}
                           canEdit={viewerIsOwner}
@@ -2716,6 +2800,9 @@ export const GardenDashboardPage: React.FC = () => {
                       )}
                     </div>
                   </div>
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
                 }
               />
               <Route path="" element={<Navigate to={`overview`} replace />} />
@@ -4677,6 +4764,113 @@ function GardenDetailsEditor({
             : t("gardenDashboard.settingsSection.saveChanges")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function GardenPrivacyToggle({
+  garden,
+  onSaved,
+  canEdit,
+}: {
+  garden: Garden;
+  onSaved: () => Promise<void>;
+  canEdit?: boolean;
+}) {
+  const { t } = useTranslation("common");
+  const [isPublic, setIsPublic] = React.useState(garden.isPublic !== false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setIsPublic(garden.isPublic !== false);
+  }, [garden.isPublic]);
+
+  const togglePrivacy = async () => {
+    if (submitting || !canEdit) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const newValue = !isPublic;
+      await updateGardenPrivacy(garden.id, newValue);
+      setIsPublic(newValue);
+      try {
+        await logGardenActivity({
+          gardenId: garden.id,
+          kind: "note" as any,
+          message: newValue
+            ? t("gardenDashboard.settingsSection.privacyMadePublic")
+            : t("gardenDashboard.settingsSection.privacyMadePrivate"),
+          actorColor: null,
+        });
+      } catch {}
+      await onSaved();
+    } catch (e: any) {
+      setErr(e?.message || t("gardenDashboard.settingsSection.privacyUpdateFailed"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-4">
+        <div
+          className={`flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center ${
+            isPublic
+              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+              : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400"
+          }`}
+        >
+          {isPublic ? <Globe className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-medium">
+            {isPublic
+              ? t("gardenDashboard.settingsSection.privacyPublicTitle")
+              : t("gardenDashboard.settingsSection.privacyPrivateTitle")}
+          </div>
+          <div className="text-sm text-muted-foreground mt-1">
+            {isPublic
+              ? t("gardenDashboard.settingsSection.privacyPublicDescription")
+              : t("gardenDashboard.settingsSection.privacyPrivateDescription")}
+          </div>
+        </div>
+      </div>
+
+      {err && <div className="text-sm text-red-600">{err}</div>}
+
+      <div className="flex justify-end">
+        <Button
+          variant={isPublic ? "secondary" : "default"}
+          className="rounded-2xl"
+          onClick={togglePrivacy}
+          disabled={submitting || !canEdit}
+        >
+          {submitting ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              {t("gardenDashboard.settingsSection.privacyUpdating")}
+            </>
+          ) : isPublic ? (
+            <>
+              <Lock className="w-4 h-4 mr-2" />
+              {t("gardenDashboard.settingsSection.privacyMakePrivate")}
+            </>
+          ) : (
+            <>
+              <Globe className="w-4 h-4 mr-2" />
+              {t("gardenDashboard.settingsSection.privacyMakePublic")}
+            </>
+          )}
+        </Button>
+      </div>
+
+      {!canEdit && (
+        <div className="text-xs text-muted-foreground">
+          {t("gardenDashboard.settingsSection.privacyOnlyOwnerCanChange")}
+        </div>
+      )}
     </div>
   );
 }

@@ -421,7 +421,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
 export async function getGarden(gardenId: string): Promise<Garden | null> {
   const { data, error } = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak')
+    .select('id, name, cover_image_url, created_by, created_at, streak, is_public')
     .eq('id', gardenId)
     .maybeSingle()
   if (error) throw new Error(error.message)
@@ -433,7 +433,16 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
     streak: Number((data as any).streak ?? 0),
+    isPublic: (data as any).is_public !== false, // Default to true if null/undefined
   }
+}
+
+export async function updateGardenPrivacy(gardenId: string, isPublic: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('gardens')
+    .update({ is_public: isPublic })
+    .eq('id', gardenId)
+  if (error) throw new Error(error.message)
 }
 
 export async function refreshGardenStreak(gardenId: string, anchorDayIso?: string | null): Promise<void> {
