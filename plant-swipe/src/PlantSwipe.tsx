@@ -756,6 +756,8 @@ export default function PlantSwipe() {
         }
         console.log('[auth] login ok')
       }
+      // Reset submitting state before closing dialog
+      setAuthSubmitting(false)
       setAuthOpen(false)
     } catch (e: unknown) {
       console.error('[auth] unexpected error', e)
@@ -772,9 +774,16 @@ export default function PlantSwipe() {
     }
   }, [user])
 
+  // Reset form state when dialog closes
   React.useEffect(() => {
     if (!authOpen) {
       setAuthAcceptedTerms(false)
+      setAuthSubmitting(false)
+      setAuthError(null)
+      setAuthEmail("")
+      setAuthPassword("")
+      setAuthPassword2("")
+      setAuthDisplayName("")
     }
   }, [authOpen])
 
