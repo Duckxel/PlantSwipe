@@ -2332,7 +2332,8 @@ export const GardenDashboardPage: React.FC = () => {
                     gardenId={id!}
                     activityRev={activityRev}
                     plants={plants}
-                    membersCount={members.length}
+                    members={members}
+                    garden={garden}
                     serverToday={serverToday}
                     dailyStats={dailyStats}
                     totalOnHand={totalOnHand}
@@ -3346,7 +3347,8 @@ function OverviewSection({
   gardenId,
   activityRev,
   plants,
-  membersCount,
+  members,
+  garden,
   serverToday,
   dailyStats,
   totalOnHand,
@@ -3356,7 +3358,15 @@ function OverviewSection({
   gardenId: string;
   activityRev?: number;
   plants: any[];
-  membersCount: number;
+  members: Array<{
+    userId: string;
+    displayName?: string | null;
+    email?: string | null;
+    role: "owner" | "member";
+    joinedAt?: string;
+    accentKey?: string | null;
+  }>;
+  garden: Garden | null;
   serverToday: string | null;
   dailyStats: Array<{
     date: string;
@@ -3369,8 +3379,7 @@ function OverviewSection({
   baseStreak: number;
 }) {
   const { t } = useTranslation("common");
-  const cardSurface =
-    "rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm";
+  const navigate = useLanguageNavigate();
   const [activity, setActivity] = React.useState<
     Array<{
       id: string;
@@ -3385,6 +3394,38 @@ function OverviewSection({
   >([]);
   const [loadingAct, setLoadingAct] = React.useState(false);
   const [errAct, setErrAct] = React.useState<string | null>(null);
+  const [memberProfiles, setMemberProfiles] = React.useState<
+    Record<string, { avatarUrl?: string | null; accentKey?: string | null }>
+  >({});
+
+  // Fetch member avatar URLs
+  React.useEffect(() => {
+    let ignore = false;
+    (async () => {
+      if (members.length === 0) return;
+      try {
+        const userIds = members.map((m) => m.userId);
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, avatar_url, accent_key")
+          .in("id", userIds);
+        if (!ignore && data) {
+          const map: Record<
+            string,
+            { avatarUrl?: string | null; accentKey?: string | null }
+          > = {};
+          for (const p of data) {
+            map[p.id] = { avatarUrl: p.avatar_url, accentKey: p.accent_key };
+          }
+          setMemberProfiles(map);
+        }
+      } catch {}
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [members]);
+
   React.useEffect(() => {
     let ignore = false;
     (async () => {
@@ -3408,6 +3449,7 @@ function OverviewSection({
       ignore = true;
     };
   }, [gardenId, serverToday, activityRev]);
+
   const totalToDoToday =
     dailyStats.find((d) => d.date === (serverToday || ""))?.due ?? 0;
   const completedToday =
@@ -3425,18 +3467,14 @@ function OverviewSection({
   );
 
   const colorForDay = (completed: number, success: boolean) => {
-    // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
-    if (!success) return "bg-stone-200 dark:bg-stone-700";
-    // Green: Tasks were accomplished
-    // Light mode: lighter color = fewer tasks, darker color = more tasks
-    // Dark mode: darker color = fewer tasks, lighter color = more tasks
-    if (maxCompleted <= 0) return "bg-emerald-400 dark:bg-emerald-800";
+    if (!success) return "bg-stone-300/60 dark:bg-stone-700/60";
+    if (maxCompleted <= 0) return "bg-emerald-400 dark:bg-emerald-700";
     const ratio = completed / maxCompleted;
-    if (ratio <= 0) return "bg-emerald-300 dark:bg-emerald-900";
-    if (ratio <= 0.25) return "bg-emerald-400 dark:bg-emerald-800";
-    if (ratio <= 0.5) return "bg-emerald-500 dark:bg-emerald-700";
-    if (ratio <= 0.75) return "bg-emerald-600 dark:bg-emerald-600";
-    return "bg-emerald-700 dark:bg-emerald-500";
+    if (ratio <= 0) return "bg-emerald-300 dark:bg-emerald-800";
+    if (ratio <= 0.25) return "bg-emerald-400 dark:bg-emerald-700";
+    if (ratio <= 0.5) return "bg-emerald-500 dark:bg-emerald-600";
+    if (ratio <= 0.75) return "bg-emerald-600 dark:bg-emerald-500";
+    return "bg-emerald-700 dark:bg-emerald-400";
   };
 
   const days = Array.from({ length: 30 }, (_, i) => {
@@ -3444,13 +3482,12 @@ function OverviewSection({
     d.setDate(d.getDate() - (29 - i));
     const dateIso = d.toISOString().slice(0, 10);
     const dayNum = d.getDate();
-    // Treat missing task row as failed per requirement
     const found = dailyStats.find((x) => x.date === dateIso);
     const success = found ? found.success : false;
     const completed = found ? found.completed || 0 : 0;
     return { dayNum, isToday: i === 29, success, completed };
   });
-  // Use DB-backed streak as base, but if today is in progress we can show live preview
+
   const streak = (() => {
     let s = baseStreak;
     if (serverToday) {
@@ -3459,139 +3496,482 @@ function OverviewSection({
     }
     return s;
   })();
+
+  // Get plants with images for the gallery
+  const plantsWithImages = React.useMemo(() => {
+    return plants
+      .map((gp) => {
+        const primaryImageUrl = gp.plant?.photos
+          ? getPrimaryPhotoUrl(gp.plant.photos)
+          : gp.plant?.image || null;
+        return {
+          id: gp.id,
+          name: gp.nickname || gp.plant?.name || "Plant",
+          imageUrl: primaryImageUrl,
+          plantId: gp.plant?.id,
+        };
+      })
+      .filter((p) => p.imageUrl);
+  }, [plants]);
+
+  // Get initials for avatar fallback
+  const getInitials = (name?: string | null) => {
+    if (!name) return "?";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  // Get accent color for member
+  const getMemberColor = (member: (typeof members)[0]) => {
+    const profile = memberProfiles[member.userId];
+    const accentKey = profile?.accentKey || member.accentKey;
+    if (accentKey) {
+      const option = getAccentOption(accentKey);
+      if (option) return option.cssVar || option.value;
+    }
+    // Fallback colors based on name hash
+    const colors = [
+      "#10b981",
+      "#3b82f6",
+      "#8b5cf6",
+      "#ec4899",
+      "#f59e0b",
+      "#06b6d4",
+    ];
+    const name = member.displayName || member.email || member.userId;
+    let hash = 0;
+    for (let i = 0; i < name.length; i++)
+      hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return colors[hash % colors.length];
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className={cardSurface}>
-          <div className="text-xs opacity-60">
-            {t("gardenDashboard.overviewSection.plants")}
-          </div>
-          <div className="text-2xl font-semibold">{totalOnHand}</div>
-          <div className="text-[11px] opacity-60">
-            {t("gardenDashboard.overviewSection.species")} {speciesOnHand}
-          </div>
-        </Card>
-        <Card className={cardSurface}>
-          <div className="text-xs opacity-60">
-            {t("gardenDashboard.overviewSection.members")}
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <svg
-              className="w-4 h-4 text-muted-foreground"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+    <div className="space-y-6">
+      {/* Hero Section with Cover Image */}
+      <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+        {garden?.coverImageUrl ? (
+          <>
+            <div className="absolute inset-0">
+              <img
+                src={garden.coverImageUrl}
+                alt={garden.name}
+                className="w-full h-full object-cover"
               />
-            </svg>
-            <div className="text-2xl font-semibold">{membersCount}</div>
-          </div>
-        </Card>
-        <Card className={cardSurface}>
-          <div className="text-xs opacity-60">
-            {t("gardenDashboard.overviewSection.streak")}
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <svg
-              className="w-4 h-4 text-orange-500"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
-            </svg>
-            <div className="text-2xl font-semibold">
-              {streak} {t("gardenDashboard.overviewSection.days")}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+            </div>
+            <div className="relative z-10 p-8 md:p-10 min-h-[280px] flex flex-col justify-end">
+              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+                <div className="space-y-3">
+                  <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">
+                    {garden.name}
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-4 text-white/90">
+                    <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                      <span className="text-lg">🌱</span>
+                      <span className="font-medium">{totalOnHand}</span>
+                      <span className="text-sm opacity-80">
+                        {t("gardenDashboard.overviewSection.plants")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                      <span className="text-lg">🔥</span>
+                      <span className="font-medium">{streak}</span>
+                      <span className="text-sm opacity-80">
+                        {t("gardenDashboard.overviewSection.dayStreak")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Ring */}
+                <div className="flex items-center gap-4">
+                  <div className="relative w-20 h-20">
+                    <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r="34"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.2)"
+                        strokeWidth="8"
+                      />
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r="34"
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="8"
+                        strokeLinecap="round"
+                        strokeDasharray={`${(progressPct / 100) * 213.6} 213.6`}
+                        className="drop-shadow-lg"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                      <span className="text-xl font-bold">{progressPct}%</span>
+                    </div>
+                  </div>
+                  <div className="text-white">
+                    <div className="text-sm opacity-80">
+                      {t("gardenDashboard.overviewSection.todaysProgress")}
+                    </div>
+                    <div className="font-semibold">
+                      {completedToday}/{totalToDoToday}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="relative z-10 p-8 md:p-10 min-h-[200px]">
+            <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
+            <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative">
+              <div className="space-y-3">
+                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+                  {garden?.name || t("gardenDashboard.overview")}
+                </h1>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
+                    <span className="text-lg">🌱</span>
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                      {totalOnHand}
+                    </span>
+                    <span className="text-sm text-stone-600 dark:text-stone-300">
+                      {t("gardenDashboard.overviewSection.plants")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
+                    <span className="text-lg">🔥</span>
+                    <span className="font-semibold text-orange-600 dark:text-orange-400">
+                      {streak}
+                    </span>
+                    <span className="text-sm text-stone-600 dark:text-stone-300">
+                      {t("gardenDashboard.overviewSection.dayStreak")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-stone-200/50 dark:border-stone-500/20">
+                    <span className="text-lg">🌿</span>
+                    <span className="font-semibold text-stone-700 dark:text-stone-300">
+                      {speciesOnHand}
+                    </span>
+                    <span className="text-sm text-stone-600 dark:text-stone-300">
+                      {t("gardenDashboard.overviewSection.species")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Ring for no-cover variant */}
+              <div className="flex items-center gap-4">
+                <div className="relative w-20 h-20">
+                  <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r="34"
+                      fill="none"
+                      stroke="currentColor"
+                      className="text-stone-200 dark:text-stone-700"
+                      strokeWidth="8"
+                    />
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r="34"
+                      fill="none"
+                      stroke="#10b981"
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray={`${(progressPct / 100) * 213.6} 213.6`}
+                      className="drop-shadow-sm"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {progressPct}%
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-stone-500 dark:text-stone-400">
+                    {t("gardenDashboard.overviewSection.todaysProgress")}
+                  </div>
+                  <div className="font-semibold text-stone-700 dark:text-stone-200">
+                    {completedToday}/{totalToDoToday}{" "}
+                    {t("gardenDashboard.overviewSection.tasksDone")}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </Card>
+        )}
       </div>
 
-      <Card className={cardSurface}>
-        <div className="font-medium mb-2">
-          {t("gardenDashboard.overviewSection.todaysProgress")}
-        </div>
-        <div className="text-sm opacity-60 mb-2">
-          {completedToday} / {totalToDoToday || 0}{" "}
-          {t("gardenDashboard.overviewSection.tasksDone")}
-        </div>
-        <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded-full overflow-hidden">
-          <div
-            className="h-3 bg-emerald-600 dark:bg-emerald-500"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
-      </Card>
+      {/* Members Section */}
+      {members.length > 0 && (
+        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <span>👥</span>
+              {t("gardenDashboard.overviewSection.gardenMembers")}
+              <span className="text-sm font-normal text-stone-500 dark:text-stone-400">
+                ({members.length})
+              </span>
+            </h3>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {members.map((member) => {
+              const profile = memberProfiles[member.userId];
+              const avatarUrl = profile?.avatarUrl;
+              const color = getMemberColor(member);
+              const isOwner = member.role === "owner";
+              return (
+                <div
+                  key={member.userId}
+                  className="group flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 rounded-2xl px-3 py-2 transition-all hover:bg-stone-100 dark:hover:bg-stone-800 hover:shadow-md cursor-pointer"
+                  title={member.displayName || member.email || "Member"}
+                >
+                  <div className="relative">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={member.displayName || "Member"}
+                        className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-stone-700 shadow-sm"
+                      />
+                    ) : (
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ring-2 ring-white dark:ring-stone-700 shadow-sm"
+                        style={{ backgroundColor: color }}
+                      >
+                        {getInitials(member.displayName || member.email)}
+                      </div>
+                    )}
+                    {isOwner && (
+                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-stone-800">
+                        <span className="text-[10px]">👑</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate max-w-[120px] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      {member.displayName || member.email?.split("@")[0] || "Member"}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                      {isOwner
+                        ? t("gardenDashboard.settingsSection.owner")
+                        : t("gardenDashboard.settingsSection.member")}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
-      <Card className={cardSurface}>
-        <div className="font-medium mb-3">
-          {t("gardenDashboard.overviewSection.last30Days")}
-        </div>
-        <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
-          {days.map((d, idx) => (
-            <div key={idx} className="flex flex-col items-center">
+      {/* Plants Gallery */}
+      {plantsWithImages.length > 0 && (
+        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <span>🌿</span>
+              {t("gardenDashboard.overviewSection.gardenPlants")}
+              <span className="text-sm font-normal text-stone-500 dark:text-stone-400">
+                ({plants.length})
+              </span>
+            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+              onClick={() => navigate(`/garden/${gardenId}/plants`)}
+            >
+              {t("gardenDashboard.overviewSection.viewAll")}
+              <ArrowUpRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+            {plantsWithImages.slice(0, 12).map((plant, idx) => (
               <div
-                className={`w-7 h-7 rounded-md flex items-center justify-center ${colorForDay(d.completed, d.success)}`}
+                key={plant.id}
+                className="group relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
+                onClick={() => {
+                  if (plant.plantId) navigate(`/plants/${plant.plantId}`);
+                }}
+                style={{
+                  animationDelay: `${idx * 50}ms`,
+                }}
               >
-                <div className="text-[11px]">{d.dayNum}</div>
+                <img
+                  src={plant.imageUrl!}
+                  alt={plant.name}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                <div className="absolute bottom-0 left-0 right-0 p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
+                  <div className="text-white text-xs font-medium truncate drop-shadow-lg">
+                    {plant.name}
+                  </div>
+                </div>
               </div>
-              {d.isToday && (
-                <div className="mt-1 h-0.5 w-5 bg-black dark:bg-white rounded-full" />
+            ))}
+            {plants.length > 12 && (
+              <div
+                className="aspect-square rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all border-2 border-dashed border-emerald-300 dark:border-emerald-700"
+                onClick={() => navigate(`/garden/${gardenId}/plants`)}
+              >
+                <span className="text-2xl mb-1">+{plants.length - 12}</span>
+                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  {t("gardenDashboard.overviewSection.morePlants")}
+                </span>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* 30-Day Calendar */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
+            <span>📅</span>
+            {t("gardenDashboard.overviewSection.last30Days")}
+          </h3>
+          <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-emerald-500" />
+              <span>{t("gardenDashboard.overviewSection.completed")}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-stone-300 dark:bg-stone-600" />
+              <span>{t("gardenDashboard.overviewSection.missed")}</span>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 md:grid-cols-10 gap-2">
+          {days.map((d, idx) => (
+            <div
+              key={idx}
+              className={`relative aspect-square rounded-xl flex flex-col items-center justify-center transition-all ${
+                d.isToday
+                  ? "ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-[#1f1f1f]"
+                  : ""
+              } ${colorForDay(d.completed, d.success)}`}
+            >
+              <span
+                className={`text-sm font-medium ${
+                  d.success
+                    ? "text-white"
+                    : "text-stone-600 dark:text-stone-300"
+                }`}
+              >
+                {d.dayNum}
+              </span>
+              {d.completed > 0 && d.success && (
+                <span className="text-[10px] text-white/80">
+                  {d.completed}
+                </span>
               )}
             </div>
           ))}
         </div>
       </Card>
 
-      {/* Activity (today) */}
-      <Card className={cardSurface}>
-        <div className="font-medium mb-2">
-          {t("gardenDashboard.overviewSection.activityToday")}
+      {/* Activity Feed */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
+            <span>⚡</span>
+            {t("gardenDashboard.overviewSection.activityToday")}
+          </h3>
         </div>
         {loadingAct && (
-          <div className="text-sm opacity-60">
+          <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
             {t("gardenDashboard.overviewSection.loadingActivity")}
           </div>
         )}
-        {errAct && <div className="text-sm text-red-600">{errAct}</div>}
-        {!loadingAct && activity.length === 0 && (
-          <div className="text-sm opacity-60">
-            {t("gardenDashboard.overviewSection.noActivity")}
+        {errAct && (
+          <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
+            {errAct}
           </div>
         )}
-        <div className="space-y-2">
-          {activity.map((a) => {
-            const color = a.actorColor || null;
-            const ts = (() => {
-              try {
-                return new Date(a.occurredAt).toLocaleTimeString([], {
-                  hour12: false,
-                });
-              } catch {
-                return "";
-              }
-            })();
-            return (
-              <div key={a.id} className="text-sm flex items-start gap-2">
-                {ts && (
-                  <span className="text-xs opacity-60 tabular-nums">{ts}</span>
-                )}
-                {ts && <span className="text-xs opacity-40">//</span>}
-                <span
-                  className="font-semibold"
-                  style={color ? { color } : undefined}
+        {!loadingAct && activity.length === 0 && (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-3">🌱</div>
+            <div className="text-sm text-stone-500 dark:text-stone-400">
+              {t("gardenDashboard.overviewSection.noActivity")}
+            </div>
+            <div className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+              {t("gardenDashboard.overviewSection.startCaring")}
+            </div>
+          </div>
+        )}
+        {!loadingAct && activity.length > 0 && (
+          <div className="space-y-3">
+            {activity.slice(0, 10).map((a, idx) => {
+              const color = a.actorColor || null;
+              const ts = (() => {
+                try {
+                  return new Date(a.occurredAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  });
+                } catch {
+                  return "";
+                }
+              })();
+              const kindEmoji =
+                a.kind === "task_completed"
+                  ? "✅"
+                  : a.kind === "task_progressed"
+                    ? "🔄"
+                    : a.kind === "plant_added"
+                      ? "🌱"
+                      : a.kind === "member_joined"
+                        ? "👋"
+                        : "📝";
+              return (
+                <div
+                  key={a.id}
+                  className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                  style={{ animationDelay: `${idx * 30}ms` }}
                 >
-                  {a.actorName || t("gardenDashboard.settingsSection.unknown")}
-                </span>
-                <span className="opacity-80">{a.message}</span>
-              </div>
-            );
-          })}
-        </div>
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-stone-700 flex items-center justify-center shadow-sm">
+                    <span className="text-sm">{kindEmoji}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className="font-semibold text-sm"
+                        style={color ? { color } : undefined}
+                      >
+                        {a.actorName ||
+                          t("gardenDashboard.settingsSection.unknown")}
+                      </span>
+                      <span className="text-sm text-stone-600 dark:text-stone-300">
+                        {a.message}
+                      </span>
+                    </div>
+                    {ts && (
+                      <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5 tabular-nums">
+                        {ts}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
     </div>
   );
