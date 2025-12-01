@@ -9871,32 +9871,58 @@ app.get('/api/garden/:id/overview', async (req, res) => {
 
     // First, fetch garden to check privacy
     if (sql) {
-      // Try with privacy column first, fallback if column doesn't exist
+      // Try with privacy column first, then progressively simpler fallbacks
       let gRows = []
+      let gardenQuerySuccess = false
+      
+      // Attempt 1: Full query with privacy and streak
       try {
-        console.log('[overview] Fetching garden', gardenId)
+        console.log('[overview] Fetching garden', gardenId, '(attempt 1: full query)')
         gRows = await sql`
           select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy
           from public.gardens where id = ${gardenId} limit 1
         `
-        console.log('[overview] Garden query succeeded, rows:', gRows?.length || 0)
-      } catch (e) {
-        console.error('[overview] Garden query failed:', e?.message || e)
-        // Privacy column might not exist yet, try without it
-        if (String(e?.message || '').includes('privacy')) {
+        console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
+        gardenQuerySuccess = true
+      } catch (e1) {
+        console.error('[overview] Garden query failed (attempt 1):', e1?.message || e1)
+        
+        // Attempt 2: Without privacy column
+        try {
+          console.log('[overview] Fetching garden', gardenId, '(attempt 2: without privacy)')
           gRows = await sql`
             select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy
             from public.gardens where id = ${gardenId} limit 1
           `
-        } else {
-          throw e
+          console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
+          gardenQuerySuccess = true
+        } catch (e2) {
+          console.error('[overview] Garden query failed (attempt 2):', e2?.message || e2)
+          
+          // Attempt 3: Minimal query (basic columns only)
+          try {
+            console.log('[overview] Fetching garden', gardenId, '(attempt 3: minimal)')
+            gRows = await sql`
+              select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy
+              from public.gardens where id = ${gardenId} limit 1
+            `
+            console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
+            gardenQuerySuccess = true
+          } catch (e3) {
+            console.error('[overview] Garden query failed (attempt 3):', e3?.message || e3)
+            throw new Error('Failed to fetch garden after all attempts: ' + (e3?.message || 'Unknown error'))
+          }
         }
       }
+      
       garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
-      console.log('[overview] Garden found:', !!garden)
+      console.log('[overview] Garden found:', !!garden, 'querySuccess:', gardenQuerySuccess)
 
+      // Fetch plants with try-catch
       console.log('[overview] Fetching plants for garden', gardenId)
-      const gpRows = await sql`
+      let gpRows = []
+      try {
+        gpRows = await sql`
           select
             gp.id::text as id,
             gp.garden_id::text as garden_id,
@@ -9930,7 +9956,12 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           order by gp.sort_index asc nulls last
         `
         console.log('[overview] Plants query succeeded, rows:', gpRows?.length || 0)
-        plants = (gpRows || []).map((r) => {
+      } catch (plantsErr) {
+        console.error('[overview] Plants query failed:', plantsErr?.message || plantsErr)
+        // Plants query failed, continue with empty plants (non-fatal)
+        gpRows = []
+      }
+      plants = (gpRows || []).map((r) => {
           const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
           const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
           return {
