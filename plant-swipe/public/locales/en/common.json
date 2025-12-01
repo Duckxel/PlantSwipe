@@ -537,6 +537,7 @@
     "garden": {
     "title": "Gardens",
     "yourGardens": "Your Gardens",
+    "addToGarden": "Add to Garden",
     "create": "Create Garden",
     "createGarden": "Create a Garden",
     "name": "Name",
@@ -1040,6 +1041,173 @@
       "notRecorded": "Not recorded",
       "unknown": "Unknown",
       "sources": "Sources"
+    },
+    "enums": {
+      "habitat": {
+        "aquatic": "Aquatic",
+        "semiaquatic": "Semi-aquatic",
+        "wetland": "Wetland",
+        "tropical": "Tropical",
+        "temperate": "Temperate",
+        "arid": "Arid",
+        "mediterranean": "Mediterranean",
+        "mountain": "Mountain",
+        "grassland": "Grassland",
+        "forest": "Forest",
+        "coastal": "Coastal",
+        "urban": "Urban"
+      },
+      "livingSpace": {
+        "indoor": "Indoor",
+        "outdoor": "Outdoor",
+        "both": "Indoor & Outdoor"
+      },
+      "division": {
+        "seed": "Seed",
+        "cutting": "Cutting",
+        "division": "Division",
+        "layering": "Layering",
+        "grafting": "Grafting",
+        "tissueseparation": "Tissue separation",
+        "bulbseparation": "Bulb separation"
+      },
+      "soil": {
+        "vermiculite": "Vermiculite",
+        "perlite": "Perlite",
+        "sphagnummoss": "Sphagnum moss",
+        "rockwool": "Rock wool",
+        "sand": "Sand",
+        "gravel": "Gravel",
+        "pottingsoil": "Potting soil",
+        "peat": "Peat",
+        "claypebbles": "Clay pebbles",
+        "coconutfiber": "Coconut fiber"
+      },
+      "mulching": {
+        "bark": "Bark",
+        "woodchips": "Wood chips",
+        "greenmanure": "Green manure",
+        "cocoabeanhulls": "Cocoa bean hulls",
+        "buckwheathulls": "Buckwheat hulls",
+        "cerealstraw": "Cereal straw",
+        "hempstraw": "Hemp straw",
+        "wovenfabric": "Woven fabric",
+        "pozzolana": "Pozzolana",
+        "crushedslate": "Crushed slate",
+        "claypellets": "Clay pellets"
+      },
+      "fertilizer": {
+        "nitrogen": "Nitrogen",
+        "phosphorus": "Phosphorus",
+        "potassium": "Potassium",
+        "calcium": "Calcium",
+        "magnesium": "Magnesium",
+        "sulfur": "Sulfur",
+        "iron": "Iron",
+        "boron": "Boron",
+        "manganese": "Manganese",
+        "molybene": "Molybdenum",
+        "chlorine": "Chlorine",
+        "copper": "Copper",
+        "zinc": "Zinc",
+        "granularfertilizer": "Granular fertilizer",
+        "liquidfertilizer": "Liquid fertilizer",
+        "manure": "Manure",
+        "guano": "Guano",
+        "coffeegrounds": "Coffee grounds",
+        "bananapeel": "Banana peel",
+        "eggshell": "Eggshell"
+      },
+      "wateringType": {
+        "surface": "Surface",
+        "buried": "Buried",
+        "hose": "Hose",
+        "drop": "Drip",
+        "drench": "Drench"
+      },
+      "sowType": {
+        "direct": "Direct",
+        "row": "Row",
+        "hill": "Hill",
+        "broadcast": "Broadcast",
+        "seedtray": "Seed tray",
+        "cell": "Cell"
+      },
+      "polenizer": {
+        "bee": "Bee",
+        "wasp": "Wasp",
+        "ant": "Ant",
+        "butterfly": "Butterfly",
+        "bird": "Bird",
+        "mosquito": "Mosquito",
+        "fly": "Fly",
+        "beetle": "Beetle",
+        "ladybug": "Ladybug",
+        "stagbeetle": "Stag beetle",
+        "cockchafer": "Cockchafer",
+        "dungbeetle": "Dung beetle",
+        "weevil": "Weevil"
+      },
+      "conservationStatus": {
+        "stable": "Stable",
+        "endangered": "Endangered",
+        "vulnerable": "Vulnerable",
+        "nearthreatened": "Near Threatened",
+        "leastconcern": "Least Concern",
+        "criticallyendangered": "Critically Endangered"
+      },
+      "toxicity": {
+        "nontoxic": "Non-toxic",
+        "midlyirritating": "Mildly irritating",
+        "highlytoxic": "Highly toxic",
+        "lethallytoxic": "Lethally toxic"
+      },
+      "lifeCycle": {
+        "annual": "Annual",
+        "biennials": "Biennial",
+        "perenials": "Perennial",
+        "ephemerals": "Ephemeral",
+        "monocarpic": "Monocarpic",
+        "polycarpic": "Polycarpic"
+      },
+      "foliage": {
+        "deciduous": "Deciduous",
+        "evergreen": "Evergreen",
+        "semievergreen": "Semi-evergreen",
+        "marcescent": "Marcescent"
+      },
+      "comestiblePart": {
+        "flower": "Flower",
+        "fruit": "Fruit",
+        "seed": "Seed",
+        "leaf": "Leaf",
+        "stem": "Stem",
+        "root": "Root",
+        "bulb": "Bulb",
+        "bark": "Bark",
+        "wood": "Wood"
+      },
+      "fruitType": {
+        "nut": "Nut",
+        "seed": "Seed",
+        "stone": "Stone fruit"
+      },
+      "nutritionNeed": {
+        "nitrogen": "Nitrogen",
+        "phosphorus": "Phosphorus",
+        "potassium": "Potassium",
+        "calcium": "Calcium",
+        "magnesium": "Magnesium",
+        "sulfur": "Sulfur",
+        "iron": "Iron"
+      },
+      "composition": {
+        "flowerbed": "Flowerbed",
+        "path": "Path",
+        "hedge": "Hedge",
+        "groundcover": "Ground cover",
+        "pot": "Pot"
+      }
     }
   },
   "gardenDashboard": {

@@ -718,6 +718,54 @@ const PlantInfoSkeleton: React.FC<{ label?: string }> = ({ label = 'Loading...' 
 const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   const { t } = useTranslation('common')
   
+  // Comprehensive enum value translator
+  const translateEnum = React.useCallback((value: string | null | undefined): string => {
+    if (!value) return ''
+    const key = value.toLowerCase().replace(/[_\s-]/g, '')
+    
+    // Try specific translation keys in order of priority
+    const translationKeys = [
+      `plantDetails.utility.${key}`,
+      `plantDetails.seasons.${key}`,
+      `plantDetails.sunLevels.${key}`,
+      `plantDetails.maintenanceLevels.${key}`,
+      `plantDetails.plantType.${key}`,
+      `plantDetails.timePeriods.${key}`,
+      `moreInfo.enums.habitat.${key}`,
+      `moreInfo.enums.livingSpace.${key}`,
+      `moreInfo.enums.division.${key}`,
+      `moreInfo.enums.soil.${key}`,
+      `moreInfo.enums.mulching.${key}`,
+      `moreInfo.enums.fertilizer.${key}`,
+      `moreInfo.enums.wateringType.${key}`,
+      `moreInfo.enums.sowType.${key}`,
+      `moreInfo.enums.polenizer.${key}`,
+      `moreInfo.enums.conservationStatus.${key}`,
+      `moreInfo.enums.toxicity.${key}`,
+      `moreInfo.enums.lifeCycle.${key}`,
+      `moreInfo.enums.foliage.${key}`,
+      `moreInfo.enums.comestiblePart.${key}`,
+      `moreInfo.enums.fruitType.${key}`,
+      `moreInfo.enums.nutritionNeed.${key}`,
+    ]
+    
+    for (const translationKey of translationKeys) {
+      const translated = t(translationKey, { defaultValue: '' })
+      if (translated && translated !== '') return translated
+    }
+    
+    // Fallback: format the value nicely
+    return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }, [t])
+  
+  // Translate arrays of enum values
+  const translateEnumArray = React.useCallback((values: (string | null | undefined)[] | undefined): string[] => {
+    if (!values) return []
+    return values
+      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+      .map(v => translateEnum(v))
+  }, [translateEnum])
+  
   const monthLabels = React.useMemo(() => [
     t('moreInfo.timeline.months.jan'),
     t('moreInfo.timeline.months.feb'),
@@ -751,18 +799,18 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     const habitats = plant.plantCare?.habitat || []
   const activePins = habitats.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
     ...MAP_PIN_POSITIONS[idx],
-    label,
+    label: translateEnum(label),
   }))
   const climateBadges = [
     plant.identity?.livingSpace,
     plant.plantCare?.levelSun,
     plant.ecology?.conservationStatus,
-  ].filter(Boolean) as string[]
+  ].filter(Boolean).map(v => translateEnum(v))
   const highlightBadges = [
-    plant.identity?.livingSpace,
-    plant.plantCare?.levelSun,
-    plant.utility?.[0],
-    plant.identity?.season?.slice(0, 2).join(' • '),
+    plant.identity?.livingSpace ? translateEnum(plant.identity.livingSpace) : null,
+    plant.plantCare?.levelSun ? translateEnum(plant.plantCare.levelSun) : null,
+    plant.utility?.[0] ? translateEnum(plant.utility[0]) : null,
+    plant.identity?.season?.slice(0, 2).map(s => translateEnum(s)).join(' • '),
   ].filter(Boolean) as string[]
     const palette = plant.identity?.colors?.length ? plant.identity.colors : []
     const showPalette = palette.length > 0
@@ -773,9 +821,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       if (!schedules.length) return t('moreInfo.values.flexible')
       return schedules
         .map((schedule) => {
-          const season = schedule.season ? `${schedule.season}: ` : ''
+          const season = schedule.season ? `${translateEnum(schedule.season)}: ` : ''
           const quantity = schedule.quantity ? `${schedule.quantity}` : ''
-          const period = schedule.timePeriod ? ` / ${schedule.timePeriod}` : ''
+          const period = schedule.timePeriod ? ` / ${translateEnum(schedule.timePeriod)}` : ''
           return `${season}${quantity}${period}`.trim() || t('moreInfo.values.scheduled')
         })
         .join(' • ')
@@ -788,27 +836,27 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const danger = plant.danger ?? {}
       const misc = plant.miscellaneous ?? {}
       const meta = plant.meta ?? {}
-      const soilList = compactStrings(plantCare.soil as string[] | undefined)
-      const originList = compactStrings(plantCare.origin)
-      const wateringTypeList = compactStrings(plantCare.wateringType as string[] | undefined)
-      const divisionList = compactStrings(plantCare.division as string[] | undefined)
-      const nutritionNeeds = compactStrings(plantCare.nutritionNeed as string[] | undefined)
-      const fertilizerList = compactStrings(plantCare.fertilizer as string[] | undefined)
-      const mulchingMaterial = formatTextValue(
+      const soilList = translateEnumArray(plantCare.soil as string[] | undefined)
+      const originList = compactStrings(plantCare.origin) // Origins are place names, not enums
+      const wateringTypeList = translateEnumArray(plantCare.wateringType as string[] | undefined)
+      const divisionList = translateEnumArray(plantCare.division as string[] | undefined)
+      const nutritionNeeds = translateEnumArray(plantCare.nutritionNeed as string[] | undefined)
+      const fertilizerList = translateEnumArray(plantCare.fertilizer as string[] | undefined)
+      const mulchingMaterial = plantCare.mulching ? translateEnum(
         typeof plantCare.mulching === 'string' ? plantCare.mulching : plantCare.mulching?.material,
-      )
-      const comestiblePartList = compactStrings(plant.comestiblePart as string[] | undefined)
-      const fruitTypeList = compactStrings(plant.fruitType as string[] | undefined)
-      const utilityList = compactStrings(plant.utility as string[] | undefined)
-      const sowTypeList = compactStrings(growth.sowType as string[] | undefined)
-      const pollenizerList = compactStrings(ecology.polenizer as string[] | undefined)
+      ) : null
+      const comestiblePartList = translateEnumArray(plant.comestiblePart as string[] | undefined)
+      const fruitTypeList = translateEnumArray(plant.fruitType as string[] | undefined)
+      const utilityList = translateEnumArray(plant.utility as string[] | undefined)
+      const sowTypeList = translateEnumArray(growth.sowType as string[] | undefined)
+      const pollenizerList = translateEnumArray(ecology.polenizer as string[] | undefined)
       const companions = compactStrings(misc.companions)
       const tagList = compactStrings(misc.tags)
       const pestList = compactStrings(danger.pests)
       const diseaseList = compactStrings(danger.diseases)
-      const symbolismList = compactStrings(identity.symbolism)
-      const allergenList = compactStrings(identity.allergens)
-      const compositionList = compactStrings(identity.composition as string[] | undefined)
+      const symbolismList = compactStrings(identity.symbolism) // Symbolism is free text, not enums
+      const allergenList = compactStrings(identity.allergens) // Allergens are free text
+      const compositionList = translateEnumArray(identity.composition as string[] | undefined)
       const colorTraitList = [
         (identity.multicolor ?? plant.multicolor) ? t('moreInfo.values.multicolor') : null,
         (identity.bicolor ?? plant.bicolor) ? t('moreInfo.values.bicolor') : null,
@@ -872,15 +920,16 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const colorTraitLabel = colorTraitList.length ? colorTraitList.join(' • ') : null
       const comestiblePartsLabel = comestiblePartList.length ? comestiblePartList.join(' • ') : null
       const fruitTypeLabel = fruitTypeList.length ? fruitTypeList.join(' • ') : null
-      const livingSpaceLabel = identity.livingSpace || null
-      const maintenanceLabel =
-        identity.maintenanceLevel || plantCare.maintenanceLevel || plant.identity?.maintenanceLevel || null
+      const livingSpaceLabel = identity.livingSpace ? translateEnum(identity.livingSpace) : null
+      const maintenanceLabel = identity.maintenanceLevel || plantCare.maintenanceLevel || plant.identity?.maintenanceLevel
+        ? translateEnum(identity.maintenanceLevel || plantCare.maintenanceLevel || plant.identity?.maintenanceLevel)
+        : null
       const seasonLabel =
-        (identity.season && identity.season.length ? identity.season : plant.seasons)?.join(' • ') || null
-      const conservationLabel = plant.ecology?.conservationStatus || null
+        (identity.season && identity.season.length ? identity.season : plant.seasons)?.map(s => translateEnum(s)).join(' • ') || null
+      const conservationLabel = plant.ecology?.conservationStatus ? translateEnum(plant.ecology.conservationStatus) : null
       const identityFamily = formatTextValue(identity.family)
-      const lifeCycleLabel = formatTextValue(identity.lifeCycle)
-      const foliageLabel = formatTextValue(identity.foliagePersistance)
+      const lifeCycleLabel = identity.lifeCycle ? translateEnum(identity.lifeCycle) : null
+      const foliageLabel = identity.foliagePersistance ? translateEnum(identity.foliagePersistance) : null
       const growthCut = formatTextValue(growth.cut)
       const growthSupportNotes = formatTextValue(growth.adviceTutoring)
       const growthSowingNotes = formatTextValue(growth.adviceSowing)
@@ -907,7 +956,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         },
         {
           label: t('moreInfo.labels.sunlight'),
-          value: plantCare.levelSun || t('moreInfo.values.adaptive'),
+          value: plantCare.levelSun ? translateEnum(plantCare.levelSun) : t('moreInfo.values.adaptive'),
           icon: <Sun className="h-3.5 w-3.5" />,
         },
         {
@@ -991,12 +1040,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const riskItems = filterInfoItems([
         {
           label: t('moreInfo.labels.toxicityHuman'),
-          value: plant.identity?.toxicityHuman || t('moreInfo.values.low'),
+          value: plant.identity?.toxicityHuman ? translateEnum(plant.identity.toxicityHuman) : t('moreInfo.values.low'),
           icon: <Flame className="h-3.5 w-3.5" />,
         },
         {
           label: t('moreInfo.labels.toxicityPets'),
-          value: plant.identity?.toxicityPets || t('moreInfo.values.low'),
+          value: plant.identity?.toxicityPets ? translateEnum(plant.identity.toxicityPets) : t('moreInfo.values.low'),
           icon: <Leaf className="h-3.5 w-3.5" />,
         },
         {
@@ -1169,13 +1218,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {climateBadges.length ? (
                   climateBadges.map((badge) => (
-                    <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                    <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
                       <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
                       {badge}
                     </Badge>
                   ))
                 ) : (
-                  <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                  <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
                     <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
                     {t('moreInfo.values.temperate')}
                   </Badge>

@@ -537,6 +537,7 @@
     "garden": {
     "title": "Jardins",
     "yourGardens": "Vos jardins",
+    "addToGarden": "Ajouter au jardin",
     "create": "Créer un jardin",
     "createGarden": "Créer un jardin",
     "name": "Nom",
@@ -1040,6 +1041,173 @@
       "notRecorded": "Non enregistré",
       "unknown": "Inconnu",
       "sources": "Sources"
+    },
+    "enums": {
+      "habitat": {
+        "aquatic": "Aquatique",
+        "semiaquatic": "Semi-aquatique",
+        "wetland": "Zone humide",
+        "tropical": "Tropical",
+        "temperate": "Tempéré",
+        "arid": "Aride",
+        "mediterranean": "Méditerranéen",
+        "mountain": "Montagnard",
+        "grassland": "Prairie",
+        "forest": "Forêt",
+        "coastal": "Côtier",
+        "urban": "Urbain"
+      },
+      "livingSpace": {
+        "indoor": "Intérieur",
+        "outdoor": "Extérieur",
+        "both": "Intérieur & Extérieur"
+      },
+      "division": {
+        "seed": "Graine",
+        "cutting": "Bouturage",
+        "division": "Division",
+        "layering": "Marcottage",
+        "grafting": "Greffe",
+        "tissueseparation": "Séparation de tissus",
+        "bulbseparation": "Séparation de bulbes"
+      },
+      "soil": {
+        "vermiculite": "Vermiculite",
+        "perlite": "Perlite",
+        "sphagnummoss": "Mousse de sphaigne",
+        "rockwool": "Laine de roche",
+        "sand": "Sable",
+        "gravel": "Gravier",
+        "pottingsoil": "Terreau",
+        "peat": "Tourbe",
+        "claypebbles": "Billes d'argile",
+        "coconutfiber": "Fibre de coco"
+      },
+      "mulching": {
+        "bark": "Écorce",
+        "woodchips": "Copeaux de bois",
+        "greenmanure": "Engrais vert",
+        "cocoabeanhulls": "Coques de fèves de cacao",
+        "buckwheathulls": "Coques de sarrasin",
+        "cerealstraw": "Paille de céréales",
+        "hempstraw": "Paille de chanvre",
+        "wovenfabric": "Toile tissée",
+        "pozzolana": "Pouzzolane",
+        "crushedslate": "Ardoise pilée",
+        "claypellets": "Granulés d'argile"
+      },
+      "fertilizer": {
+        "nitrogen": "Azote",
+        "phosphorus": "Phosphore",
+        "potassium": "Potassium",
+        "calcium": "Calcium",
+        "magnesium": "Magnésium",
+        "sulfur": "Soufre",
+        "iron": "Fer",
+        "boron": "Bore",
+        "manganese": "Manganèse",
+        "molybene": "Molybdène",
+        "chlorine": "Chlore",
+        "copper": "Cuivre",
+        "zinc": "Zinc",
+        "granularfertilizer": "Engrais granulé",
+        "liquidfertilizer": "Engrais liquide",
+        "manure": "Fumier",
+        "guano": "Guano",
+        "coffeegrounds": "Marc de café",
+        "bananapeel": "Peau de banane",
+        "eggshell": "Coquille d'œuf"
+      },
+      "wateringType": {
+        "surface": "Surface",
+        "buried": "Enterré",
+        "hose": "Tuyau",
+        "drop": "Goutte à goutte",
+        "drench": "Trempage"
+      },
+      "sowType": {
+        "direct": "Direct",
+        "row": "En ligne",
+        "hill": "En butte",
+        "broadcast": "À la volée",
+        "seedtray": "En plateau",
+        "cell": "En cellule"
+      },
+      "polenizer": {
+        "bee": "Abeille",
+        "wasp": "Guêpe",
+        "ant": "Fourmi",
+        "butterfly": "Papillon",
+        "bird": "Oiseau",
+        "mosquito": "Moustique",
+        "fly": "Mouche",
+        "beetle": "Scarabée",
+        "ladybug": "Coccinelle",
+        "stagbeetle": "Lucane",
+        "cockchafer": "Hanneton",
+        "dungbeetle": "Bousier",
+        "weevil": "Charançon"
+      },
+      "conservationStatus": {
+        "stable": "Stable",
+        "endangered": "En danger",
+        "vulnerable": "Vulnérable",
+        "nearthreatened": "Quasi menacé",
+        "leastconcern": "Préoccupation mineure",
+        "criticallyendangered": "En danger critique"
+      },
+      "toxicity": {
+        "nontoxic": "Non toxique",
+        "midlyirritating": "Légèrement irritant",
+        "highlytoxic": "Très toxique",
+        "lethallytoxic": "Mortellement toxique"
+      },
+      "lifeCycle": {
+        "annual": "Annuelle",
+        "biennials": "Bisannuelle",
+        "perenials": "Vivace",
+        "ephemerals": "Éphémère",
+        "monocarpic": "Monocarpique",
+        "polycarpic": "Polycarpique"
+      },
+      "foliage": {
+        "deciduous": "Caduc",
+        "evergreen": "Persistant",
+        "semievergreen": "Semi-persistant",
+        "marcescent": "Marcescent"
+      },
+      "comestiblePart": {
+        "flower": "Fleur",
+        "fruit": "Fruit",
+        "seed": "Graine",
+        "leaf": "Feuille",
+        "stem": "Tige",
+        "root": "Racine",
+        "bulb": "Bulbe",
+        "bark": "Écorce",
+        "wood": "Bois"
+      },
+      "fruitType": {
+        "nut": "Noix",
+        "seed": "Graine",
+        "stone": "Fruit à noyau"
+      },
+      "nutritionNeed": {
+        "nitrogen": "Azote",
+        "phosphorus": "Phosphore",
+        "potassium": "Potassium",
+        "calcium": "Calcium",
+        "magnesium": "Magnésium",
+        "sulfur": "Soufre",
+        "iron": "Fer"
+      },
+      "composition": {
+        "flowerbed": "Massif",
+        "path": "Allée",
+        "hedge": "Haie",
+        "groundcover": "Couvre-sol",
+        "pot": "Pot"
+      }
     }
   },
   "gardenDashboard": {
