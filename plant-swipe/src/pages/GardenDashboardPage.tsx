@@ -341,8 +341,14 @@ export const GardenDashboardPage: React.FC = () => {
                   privacy: data.garden.privacy || 'public',
                 });
               if (Array.isArray(data.plants)) {
-                setPlants(data.plants);
-                hydratedPlants = data.plants;
+                // If server returned empty plants, don't mark as hydrated for plants
+                // This allows fallback to direct supabase query which may have correct RLS
+                if (data.plants.length > 0) {
+                  setPlants(data.plants);
+                  hydratedPlants = data.plants;
+                } else {
+                  console.warn("[GardenDashboard] Server returned 0 plants, will try direct query");
+                }
               }
               if (Array.isArray(data.members))
                 setMembers(
@@ -360,7 +366,8 @@ export const GardenDashboardPage: React.FC = () => {
                 setServerToday(todayIso);
                 serverTodayRef.current = todayIso;
               }
-              hydrated = true;
+              // Only mark fully hydrated if we got plants
+              hydrated = hydratedPlants !== null && hydratedPlants.length > 0;
             }
           }
         } catch {}
@@ -381,6 +388,7 @@ export const GardenDashboardPage: React.FC = () => {
             : null;
           gpsLocal = gpsRaw;
           setPlants(gpsRaw);
+          hydratedPlants = gpsRaw;
           setMembers(
             ms.map((m) => ({
               userId: m.userId,
