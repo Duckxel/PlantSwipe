@@ -2,7 +2,7 @@ import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, CreditCard } from "lucide-react"
+import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, LayoutGrid, HelpCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
@@ -154,16 +154,21 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
               </Button>
             </>
           ) : (
-            // Logged-out navigation: Search, Pricing, Login (all pages)
+            // Logged-out navigation: Features, FAQ, Encyclopedia, Login (all pages)
             <>
+              <MobileNavAnchorButton 
+                to="/#features" 
+                icon={<LayoutGrid className="h-6 w-6" />} 
+                label={t('common.landingFeatures', { defaultValue: 'Features' })}
+              />
+              <MobileNavAnchorButton 
+                to="/#faq" 
+                icon={<HelpCircle className="h-6 w-6" />} 
+                label={t('common.landingFaq', { defaultValue: 'FAQ' })}
+              />
               <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-                <Link to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
+                <Link to="/search" aria-label={t('common.encyclopedia')} className="no-underline flex items-center justify-center">
                   <Search className="h-6 w-6" />
-                </Link>
-              </Button>
-              <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'pricing' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-                <Link to="/pricing" aria-label="Pricing" className="no-underline flex items-center justify-center">
-                  <CreditCard className="h-6 w-6" />
                 </Link>
               </Button>
               <Button
@@ -272,6 +277,47 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   }
 
   return navMarkup
+}
+
+/** MobileNavAnchorButton - for anchor links that navigate to landing page sections */
+function MobileNavAnchorButton({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+  const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
+  
+  const handleClick = () => {
+    const [path, hash] = to.split('#')
+    const targetPath = path || '/'
+    
+    // If we're already on the landing page, just scroll to the section
+    if (pathWithoutLang === '/' || pathWithoutLang === '') {
+      const el = document.getElementById(hash)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    } else {
+      // Navigate to landing page with hash
+      navigate(targetPath)
+      // After navigation, scroll to section (need small delay for page to load)
+      setTimeout(() => {
+        const el = document.getElementById(hash)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 100)
+    }
+  }
+
+  return (
+    <Button
+      variant="secondary"
+      size="icon"
+      className="h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"
+      onClick={handleClick}
+      aria-label={label}
+    >
+      {icon}
+    </Button>
+  )
 }
 
 export const MobileNavBar = React.memo(MobileNavBarComponent)
