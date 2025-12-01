@@ -64,6 +64,7 @@ const LandingPage: React.FC = () => {
       <MobileNavBar
         canCreate={false}
         onLogin={openLogin}
+        onSignup={openSignup}
         onProfile={handleProfileNavigation}
         onLogout={handleLogout}
       />

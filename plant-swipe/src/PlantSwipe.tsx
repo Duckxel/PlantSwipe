@@ -1163,6 +1163,7 @@ export default function PlantSwipe() {
             onProfile={handleProfileNavigation}
             onLogout={handleLogoutNavigation}
             onLogin={openLogin}
+            onSignup={openSignup}
           />
 
           {/* Layout: grid only when search view (to avoid narrow column in other views) */}

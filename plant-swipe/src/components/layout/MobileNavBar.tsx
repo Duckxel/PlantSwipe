@@ -2,7 +2,7 @@ import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, LayoutGrid, HelpCircle } from "lucide-react"
+import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, LayoutGrid, HelpCircle, LogIn, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
@@ -14,6 +14,7 @@ interface MobileNavBarProps {
   onProfile?: () => void | Promise<void>
   onLogout?: () => void | Promise<void>
   onLogin?: () => void
+  onSignup?: () => void
 }
 
 const MOBILE_NAV_HOST_ATTR = "data-mobile-nav-root"
@@ -65,7 +66,7 @@ const useMobileNavHost = () => {
   return host
 }
 
-const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin }) => {
+const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin, onSignup }) => {
   const host = useMobileNavHost()
   const pathWithoutLang = usePathWithoutLanguage()
   const navigate = useLanguageNavigate()
@@ -73,6 +74,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "mobile" })
   const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
+  const [guestMenuOpen, setGuestMenuOpen] = React.useState(false)
   const navRef = React.useRef<HTMLElement | null>(null)
 
   React.useEffect(() => {
@@ -176,13 +178,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                 size={"icon"}
                 className="h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"
                 type="button"
-                onClick={() => {
-                  if (onLogin) {
-                    onLogin()
-                  } else {
-                    navigate('/')
-                  }
-                }}
+                onClick={() => setGuestMenuOpen(true)}
                 aria-label={t('common.login')}
               >
                 <User className="h-6 w-6" />
@@ -265,6 +261,40 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             >
               <LogOut className="h-5 w-5" />
               <span>{t("common.logout")}</span>
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+      {/* Guest menu for non-logged-in users */}
+      <Sheet open={guestMenuOpen} onOpenChange={setGuestMenuOpen}>
+        <SheetContent side="bottom" className="rounded-t-3xl">
+          <SheetHeader>
+            <SheetTitle>{t("common.welcome", { defaultValue: "Welcome" })}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-2">
+            <button
+              onClick={() => {
+                setGuestMenuOpen(false)
+                if (onLogin) {
+                  onLogin()
+                }
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
+            >
+              <LogIn className="h-5 w-5" />
+              <span>{t("common.login")}</span>
+            </button>
+            <button
+              onClick={() => {
+                setGuestMenuOpen(false)
+                if (onSignup) {
+                  onSignup()
+                }
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3 text-emerald-600 dark:text-emerald-400"
+            >
+              <UserPlus className="h-5 w-5" />
+              <span>{t("common.signup")}</span>
             </button>
           </div>
         </SheetContent>
