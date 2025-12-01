@@ -18,7 +18,9 @@ import {
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { PlantDetails } from "@/components/plant/PlantDetails";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Bookmark } from "lucide-react";
+import { getUserBookmarks } from "@/lib/bookmarks";
+import type { Bookmark as BookmarkType } from "@/types/bookmark";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import type { Garden, GardenPrivacy } from "@/types/garden";
@@ -184,6 +186,26 @@ export const GardenDashboardPage: React.FC = () => {
     Array<"week" | "month" | "year"> | undefined
   >(undefined);
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
+
+  // Add from bookmarks state
+  const [addButtonExpanded, setAddButtonExpanded] = React.useState(false);
+  const [bookmarkSelectOpen, setBookmarkSelectOpen] = React.useState(false);
+  const [userBookmarks, setUserBookmarks] = React.useState<BookmarkType[]>([]);
+  const [bookmarksLoading, setBookmarksLoading] = React.useState(false);
+  const [addingFromBookmark, setAddingFromBookmark] = React.useState(false);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    if (!addButtonExpanded) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-add-plant-dropdown]')) {
+        setAddButtonExpanded(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [addButtonExpanded]);
 
   React.useEffect(() => {
     if (addDetailsOpen) {
@@ -1990,6 +2012,88 @@ export const GardenDashboardPage: React.FC = () => {
     }
   };
 
+  // Load user's bookmarks when opening the bookmark select dialog
+  const loadUserBookmarks = React.useCallback(async () => {
+    if (!user?.id) return;
+    setBookmarksLoading(true);
+    try {
+      const bookmarks = await getUserBookmarks(user.id);
+      setUserBookmarks(bookmarks);
+    } catch (e) {
+      console.error("Failed to load bookmarks:", e);
+    } finally {
+      setBookmarksLoading(false);
+    }
+  }, [user?.id]);
+
+  // Open the bookmark select dialog
+  const openBookmarkSelect = React.useCallback(() => {
+    setAddButtonExpanded(false);
+    setBookmarkSelectOpen(true);
+    loadUserBookmarks();
+  }, [loadUserBookmarks]);
+
+  // Add all plants from a bookmark to the garden
+  const addPlantsFromBookmark = async (bookmark: BookmarkType) => {
+    if (!id || !bookmark.items || bookmark.items.length === 0) return;
+    
+    setAddingFromBookmark(true);
+    try {
+      const addedPlantNames: string[] = [];
+      
+      for (const item of bookmark.items) {
+        if (!item.plant_id) continue;
+        
+        try {
+          // Add the plant to garden (1 of each, 1 on hand)
+          const gp = await addPlantToGarden({
+            gardenId: id,
+            plantId: item.plant_id,
+            seedsPlanted: 0,
+          });
+          
+          // Set plants_on_hand to 1
+          await supabase
+            .from("garden_plants")
+            .update({ plants_on_hand: 1 })
+            .eq("id", gp.id);
+          
+          // Track added plant names for activity log
+          const plantName = item.plant?.name || "Plant";
+          addedPlantNames.push(plantName);
+        } catch (e) {
+          console.error("Failed to add plant from bookmark:", e);
+        }
+      }
+      
+      // Log activity
+      if (addedPlantNames.length > 0) {
+        try {
+          const actorColorCss = getActorColorCss();
+          const message = addedPlantNames.length === 1
+            ? `added "${addedPlantNames[0]}" from bookmark "${bookmark.name}"`
+            : `added ${addedPlantNames.length} plants from bookmark "${bookmark.name}"`;
+          await logGardenActivity({
+            gardenId: id,
+            kind: "plant_added" as any,
+            message,
+            actorColor: actorColorCss || null,
+          });
+          setActivityRev((r) => r + 1);
+        } catch {}
+      }
+      
+      setBookmarkSelectOpen(false);
+      emitGardenRealtime("plants");
+      // Reload to show the new plants
+      load({ silent: true });
+    } catch (e: any) {
+      setError(e?.message || "Failed to add plants from bookmark");
+    } finally {
+      setAddingFromBookmark(false);
+    }
+  };
+
   const openEditSchedule = async (gardenPlant: any) => {
     try {
       const schedule = await getGardenPlantSchedule(gardenPlant.id);
@@ -2463,12 +2567,34 @@ export const GardenDashboardPage: React.FC = () => {
                       <div className="text-lg font-medium">
                         {t("gardenDashboard.plantsSection.plantsInGarden")}
                       </div>
-                      <Button
-                        className="rounded-2xl"
-                        onClick={() => setAddOpen(true)}
-                      >
-                        {t("gardenDashboard.plantsSection.addPlant")}
-                      </Button>
+                      <div className="relative" data-add-plant-dropdown>
+                        <div className="flex">
+                          <Button
+                            className="rounded-l-2xl rounded-r-none"
+                            onClick={() => setAddOpen(true)}
+                          >
+                            {t("gardenDashboard.plantsSection.addPlant")}
+                          </Button>
+                          <Button
+                            className="rounded-l-none rounded-r-2xl border-l border-emerald-700 dark:border-emerald-900 px-2"
+                            onClick={() => setAddButtonExpanded(!addButtonExpanded)}
+                          >
+                            <ChevronDown className={`h-4 w-4 transition-transform ${addButtonExpanded ? "rotate-180" : ""}`} />
+                          </Button>
+                        </div>
+                        {addButtonExpanded && (
+                          <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] shadow-lg overflow-hidden">
+                            <button
+                              type="button"
+                              className="w-full px-4 py-2.5 text-sm text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors flex items-center gap-2"
+                              onClick={openBookmarkSelect}
+                            >
+                              <Bookmark className="h-4 w-4 opacity-60" />
+                              {t("gardenDashboard.plantsSection.addFromBookmarks", { defaultValue: "Add from Bookmarks" })}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {plants.map((gp: any, idx: number) => (
@@ -2982,6 +3108,85 @@ export const GardenDashboardPage: React.FC = () => {
                     {t("gardenDashboard.plantsSection.add")}
                   </Button>
                 </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Add from Bookmarks Dialog */}
+          <Dialog open={bookmarkSelectOpen} onOpenChange={setBookmarkSelectOpen}>
+            <DialogContent
+              className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur max-h-[80vh] overflow-hidden flex flex-col"
+              aria-describedby={undefined}
+            >
+              <DialogHeader>
+                <DialogTitle>
+                  {t("gardenDashboard.plantsSection.addFromBookmarks", { defaultValue: "Add from Bookmarks" })}
+                </DialogTitle>
+                <DialogDescription className="sr-only">
+                  {t("gardenDashboard.plantsSection.selectBookmark", { defaultValue: "Select a bookmark to add all its plants to your garden" })}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 overflow-y-auto min-h-0 py-2">
+                {bookmarksLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+                  </div>
+                ) : userBookmarks.length === 0 ? (
+                  <div className="text-center py-12 text-stone-500 dark:text-stone-400">
+                    <Bookmark className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                    <p>{t("gardenDashboard.plantsSection.noBookmarks", { defaultValue: "You don't have any bookmarks yet" })}</p>
+                    <p className="text-sm mt-1">{t("gardenDashboard.plantsSection.createBookmarksHint", { defaultValue: "Create bookmarks from plant pages to use this feature" })}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {userBookmarks.map((bookmark) => (
+                      <button
+                        key={bookmark.id}
+                        type="button"
+                        disabled={addingFromBookmark || !bookmark.plant_count}
+                        className="w-full p-4 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white/60 dark:bg-[#1f1f1f]/60 hover:bg-stone-50 dark:hover:bg-[#2a2a2d] transition-colors text-left flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => addPlantsFromBookmark(bookmark)}
+                      >
+                        {/* Preview images */}
+                        <div className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 relative">
+                          {bookmark.preview_images && bookmark.preview_images.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-0.5 w-full h-full">
+                              {bookmark.preview_images.slice(0, 4).map((img, i) => (
+                                <div key={i} className="relative overflow-hidden">
+                                  <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Bookmark className="h-6 w-6 text-stone-300 dark:text-stone-600" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{bookmark.name}</div>
+                          <div className="text-sm text-stone-500 dark:text-stone-400">
+                            {bookmark.plant_count || 0} {t("bookmarks.plants", { defaultValue: "plants" })}
+                          </div>
+                        </div>
+                        {addingFromBookmark ? (
+                          <Loader2 className="h-5 w-5 animate-spin text-emerald-500 flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 -rotate-90 text-stone-400 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end pt-2 border-t border-stone-200 dark:border-[#3e3e42]">
+                <Button
+                  variant="secondary"
+                  className="rounded-2xl"
+                  onClick={() => setBookmarkSelectOpen(false)}
+                >
+                  {t("common.cancel", { defaultValue: "Cancel" })}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
