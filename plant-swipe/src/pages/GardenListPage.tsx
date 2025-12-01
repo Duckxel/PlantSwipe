@@ -402,77 +402,16 @@ export const GardenListPage: React.FC = () => {
         return;
       }
 
-      // Multi-layer cache check: memory -> localStorage -> API
+      // Cache key for storing results
       const cacheKey = `${today}::${gardensList
         .map((g) => g.id)
         .sort()
         .join(",")}`;
       const now = Date.now();
-
-      // 1. Check memory cache first (fastest)
-      const cached = taskDataCacheRef.current;
-      if (
-        cached &&
-        cached.today === today &&
-        now - cached.timestamp < TASK_DATA_CACHE_TTL
-      ) {
-        const cachedOccs = cached.data.occurrences || [];
-        const cachedPlants = cached.data.plants || [];
-        
-        // ONLY use memory cache if it has BOTH occurrences AND plants
-        if (cachedOccs.length > 0 && cachedPlants.length > 0) {
-          setTodayTaskOccurrences(cachedOccs);
-          setCompletionsByOcc(cached.data.completions || {});
-          setAllPlants(cachedPlants);
-          setLoadingTasks(false);
-          return;
-        }
-        
-        // Cache is empty - clear it and fall through to load from DB
-        console.warn("[GardenList] Memory cache has no data, clearing");
-        taskDataCacheRef.current = null;
-      }
-
-      // 2. Check localStorage cache (persists across page reloads)
       const localStorageKey = `garden_tasks_cache_${cacheKey}`;
-      const localStorageCache = getLocalStorageCache(localStorageKey);
-      if (localStorageCache && localStorageCache.data) {
-        const cachedOccs = localStorageCache.data.occurrences || [];
-        const cachedPlants = localStorageCache.data.plants || [];
-        
-        // ONLY use cache if it has BOTH occurrences AND plants
-        // If cache is empty, always fall through to load fresh data
-        if (cachedOccs.length > 0 && cachedPlants.length > 0) {
-          // Cache has valid data - use it
-          setTodayTaskOccurrences(cachedOccs);
-          setCompletionsByOcc(localStorageCache.data.completions || {});
-          setAllPlants(cachedPlants);
-          setLoadingTasks(false);
-
-          // Also update memory cache
-          taskDataCacheRef.current = {
-            data: localStorageCache.data,
-            timestamp: localStorageCache.timestamp || now,
-            today,
-          };
-
-          // Refresh in background if cache is getting stale
-          if (
-            localStorageCache.timestamp &&
-            now - localStorageCache.timestamp > LOCALSTORAGE_TASK_CACHE_TTL / 2
-          ) {
-            setTimeout(() => {
-              loadAllTodayOccurrences(gardensOverride, todayOverride, skipResync);
-            }, 100);
-          }
-          return;
-        }
-        
-        // Cache is empty or invalid - clear it and fall through to load from DB
-        console.warn("[GardenList] Cache has no data, clearing and loading fresh");
-        clearLocalStorageCache(localStorageKey);
-        taskDataCacheRef.current = null;
-      }
+      
+      // SIMPLIFIED: Always load fresh data, don't use cache to return early
+      // This fixes issues where stale/empty cache prevents proper loading
 
       setLoadingTasks(true);
       try {
@@ -498,31 +437,11 @@ export const GardenListPage: React.FC = () => {
           }
         }
 
-        // 2) Resync only if truly needed - this is expensive!
-        // Skip if we already synced recently (using resyncCacheRef)
-        // Only resync if explicitly requested AND cache is stale
-        const gardensNeedingResync: string[] = [];
+        // 2) Resync task occurrences to ensure they exist in the database
+        // This is necessary for tasks to show up - always do it unless explicitly skipped
         if (!skipResync) {
-          const now = Date.now();
-          for (const g of gardensList) {
-            const cacheKey = `${g.id}::${today}`;
-            const lastSync = resyncCacheRef.current[cacheKey] || 0;
-            // Only resync if last sync was more than CACHE_TTL ago
-            if (now - lastSync > CACHE_TTL) {
-              gardensNeedingResync.push(g.id);
-            }
-          }
-          
-          // Only call expensive resync if there are gardens that need it
-          if (gardensNeedingResync.length > 0) {
-            await resyncMultipleGardensTasks(gardensNeedingResync, startIso, endIso);
-            
-            // Update cache timestamps for synced gardens
-            for (const gid of gardensNeedingResync) {
-              const cacheKey = `${gid}::${today}`;
-              resyncCacheRef.current[cacheKey] = now;
-            }
-          }
+          const gardenIdsToSync = gardensList.map((g) => g.id);
+          await resyncMultipleGardensTasks(gardenIdsToSync, startIso, endIso);
         }
 
         // 3) Load occurrences for all gardens in a single batched query (reduces egress)
