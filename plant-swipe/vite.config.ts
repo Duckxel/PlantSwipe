@@ -93,6 +93,8 @@ export default defineConfig({
   envPrefix: ['VITE_'],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   build: {
+    // Disable gzip size reporting to prevent OOM during build
+    reportCompressedSize: false,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -101,10 +103,15 @@ export default defineConfig({
           'three': ['three'],
           'supabase': ['@supabase/supabase-js'],
           'ui-components': ['@radix-ui/react-dialog', '@radix-ui/react-label', '@radix-ui/react-slot'],
+          'framer': ['framer-motion'],
+          'i18n': ['i18next', 'react-i18next'],
         },
       },
     },
     chunkSizeWarningLimit: 1000,
+    // Reduce memory usage during build
+    minify: 'esbuild',
+    sourcemap: false,
   },
   server: {
     host: process.env.VITE_DEV_HOST || '127.0.0.1',
