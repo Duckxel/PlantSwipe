@@ -380,12 +380,29 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   if (memberErr) throw new Error(memberErr.message)
   const gardenIds = (memberRows || []).map((r: { garden_id: string }) => r.garden_id)
   if (gardenIds.length === 0) return []
-  const { data: gardens, error: gerr } = await supabase
+  
+  // Try with privacy column first, fallback if column doesn't exist
+  let gardens: any[] = []
+  let gerr: any = null
+  const result = await supabase
     .from('gardens')
     .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
     .in('id', gardenIds)
+  gardens = result.data || []
+  gerr = result.error
+  
+  // If error mentions privacy column, try without it
+  if (gerr && String(gerr.message || '').toLowerCase().includes('privacy')) {
+    const fallbackResult = await supabase
+      .from('gardens')
+      .select('id, name, cover_image_url, created_by, created_at, streak')
+      .in('id', gardenIds)
+    gardens = fallbackResult.data || []
+    gerr = fallbackResult.error
+  }
+  
   if (gerr) throw new Error(gerr.message)
-  return (gardens || []).map((g: any) => ({
+  return gardens.map((g: any) => ({
     id: String(g.id),
     name: String(g.name),
     coverImageUrl: g.cover_image_url || null,
@@ -398,11 +415,29 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
 
 export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string }): Promise<Garden> {
   const { name, coverImageUrl = null, ownerUserId } = params
-  const { data, error } = await supabase
+  
+  // Try with privacy column first, fallback if column doesn't exist
+  let data: any = null
+  let error: any = null
+  const result = await supabase
     .from('gardens')
     .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId })
     .select('id, name, cover_image_url, created_by, created_at, privacy')
     .single()
+  data = result.data
+  error = result.error
+  
+  // If error mentions privacy column, try without it
+  if (error && String(error.message || '').toLowerCase().includes('privacy')) {
+    const fallbackResult = await supabase
+      .from('gardens')
+      .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId })
+      .select('id, name, cover_image_url, created_by, created_at')
+      .single()
+    data = fallbackResult.data
+    error = fallbackResult.error
+  }
+  
   if (error) throw new Error(error.message)
   const garden: Garden = {
     id: String(data.id),

@@ -9874,11 +9874,14 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       // Try with privacy column first, fallback if column doesn't exist
       let gRows = []
       try {
+        console.log('[overview] Fetching garden', gardenId)
         gRows = await sql`
           select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy
           from public.gardens where id = ${gardenId} limit 1
         `
+        console.log('[overview] Garden query succeeded, rows:', gRows?.length || 0)
       } catch (e) {
+        console.error('[overview] Garden query failed:', e?.message || e)
         // Privacy column might not exist yet, try without it
         if (String(e?.message || '').includes('privacy')) {
           gRows = await sql`
@@ -9890,8 +9893,10 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         }
       }
       garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
+      console.log('[overview] Garden found:', !!garden)
 
-        const gpRows = await sql`
+      console.log('[overview] Fetching plants for garden', gardenId)
+      const gpRows = await sql`
           select
             gp.id::text as id,
             gp.garden_id::text as garden_id,
@@ -9924,6 +9929,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           where gp.garden_id = ${gardenId}
           order by gp.sort_index asc nulls last
         `
+        console.log('[overview] Plants query succeeded, rows:', gpRows?.length || 0)
         plants = (gpRows || []).map((r) => {
           const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
           const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
@@ -9961,15 +9967,36 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           }
         })
 
-      const mRows = await sql`
-        select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
-               p.display_name, p.accent_key,
-               u.email
-        from public.garden_members gm
-        left join public.profiles p on p.id = gm.user_id
-        left join auth.users u on u.id = gm.user_id
-        where gm.garden_id = ${gardenId}
-      `
+      // Fetch members - try with auth.users first, fallback if access denied
+      console.log('[overview] Fetching members for garden', gardenId)
+      let mRows = []
+      try {
+        mRows = await sql`
+          select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
+                 p.display_name, p.accent_key,
+                 u.email
+          from public.garden_members gm
+          left join public.profiles p on p.id = gm.user_id
+          left join auth.users u on u.id = gm.user_id
+          where gm.garden_id = ${gardenId}
+        `
+        console.log('[overview] Members query with auth.users succeeded, rows:', mRows?.length || 0)
+      } catch (memberErr) {
+        console.error('[overview] members query with auth.users failed:', memberErr?.message || memberErr)
+        // Fallback: query without auth.users (email will be null)
+        try {
+          mRows = await sql`
+            select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
+                   p.display_name, p.accent_key
+            from public.garden_members gm
+            left join public.profiles p on p.id = gm.user_id
+            where gm.garden_id = ${gardenId}
+          `
+          console.log('[overview] Members fallback query succeeded, rows:', mRows?.length || 0)
+        } catch (fallbackErr) {
+          console.error('[overview] members fallback query also failed:', fallbackErr?.message || fallbackErr)
+        }
+      }
       members = (mRows || []).map((r) => ({
         gardenId: String(r.garden_id),
         userId: String(r.user_id),
@@ -9979,18 +10006,24 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         email: r.email || null,
         accentKey: r.accent_key || null,
       }))
+      console.log('[overview] Finished SQL queries for garden', gardenId)
     } else if (supabaseUrlEnv && supabaseAnonKey) {
+      console.log('[overview] Using Supabase REST API for garden', gardenId)
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
 
       // Garden (include privacy field if available)
       const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy&limit=1`
+      console.log('[overview] Fetching garden via REST API')
       const gResp = await fetch(gUrl, { headers })
       if (gResp.ok) {
         const arr = await gResp.json().catch(() => [])
         const row = Array.isArray(arr) && arr[0] ? arr[0] : null
         if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public' }
+        console.log('[overview] Garden found via REST:', !!garden)
+      } else {
+        console.error('[overview] Garden REST query failed:', gResp.status, await gResp.text().catch(() => ''))
       }
 
       // Garden plants
@@ -10090,6 +10123,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
     
     res.json({ ok: true, garden: gardenOut, plants, members, serverNow })
   } catch (e) {
+    console.error('[overview] Error for garden', req.params.id, ':', e?.message || e)
+    console.error('[overview] Stack:', e?.stack || 'No stack')
     res.status(500).json({ ok: false, error: e?.message || 'overview failed' })
   }
 })
