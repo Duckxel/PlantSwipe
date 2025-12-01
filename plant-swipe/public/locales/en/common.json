@@ -811,6 +811,147 @@
       "dec": "Dec"
     }
   },
+  "moreInfo": {
+    "header": {
+      "eyebrow": "Immersive overview",
+      "title": "Feel the plant before the paragraphs",
+      "subtitle": "Play with the holographic cube, skim the seasonal timeline, and glance at ecology badges—then dive deeper if you want."
+    },
+    "cube": {
+      "eyebrow": "3D View",
+      "title": "Dimensions"
+    },
+    "dimensions": {
+      "height": "Height",
+      "heightSub": "Vertical growth",
+      "spread": "Spread",
+      "spreadSub": "Canopy reach",
+      "spacing": "Spacing",
+      "spacingSub": "Garden spacing"
+    },
+    "palette": {
+      "title": "Color Moodboard"
+    },
+    "timeline": {
+      "title": "Seasonal Timeline",
+      "hoverPrompt": "Hover a month"
+    },
+    "habitatMap": {
+      "title": "Habitat Map"
+    },
+    "recipes": {
+      "title": "Recipe Ideas",
+      "subtitle": "Culinary inspiration for this plant"
+    },
+    "gallery": {
+      "title": "Image Gallery"
+    },
+    "sections": {
+      "careHighlights": "Care Highlights",
+      "careDetails": "Care Details",
+      "usageFlavor": "Usage & Flavor",
+      "ecology": "Ecology",
+      "identityTraits": "Identity & Traits",
+      "growthStructure": "Growth & Structure",
+      "riskStatus": "Risk & Status",
+      "recordsSources": "Records & Sources"
+    },
+    "labels": {
+      "water": "Water",
+      "sunlight": "Sunlight",
+      "soilMix": "Soil Mix",
+      "maintenance": "Maintenance",
+      "temperature": "Temperature",
+      "humidity": "Humidity",
+      "origin": "Origin",
+      "wateringType": "Watering Type",
+      "division": "Division",
+      "mulching": "Mulching",
+      "nutritionNeed": "Nutrition Need",
+      "fertilizer": "Fertilizer",
+      "soilAdvice": "Soil Advice",
+      "mulchingAdvice": "Mulching Advice",
+      "fertilizerAdvice": "Fertilizer Advice",
+      "utility": "Utility",
+      "comestibleParts": "Comestible Parts",
+      "fruitType": "Fruit Type",
+      "medicinalNotes": "Medicinal Notes",
+      "nutritionalIntake": "Nutritional Intake",
+      "infusionFriendly": "Infusion Friendly",
+      "infusionNotes": "Infusion Notes",
+      "infusionMix": "Infusion Mix",
+      "aromatherapy": "Aromatherapy",
+      "spiceMixes": "Spice Mixes",
+      "habitat": "Habitat",
+      "pollinators": "Pollinators",
+      "groundEffect": "Ground Effect",
+      "melliferous": "Melliferous",
+      "greenManure": "Green Manure",
+      "companions": "Companions",
+      "tags": "Tags",
+      "family": "Family",
+      "lifeCycle": "Life Cycle",
+      "foliage": "Foliage",
+      "livingSpace": "Living Space",
+      "seasons": "Seasons",
+      "symbolism": "Symbolism",
+      "allergens": "Allergens",
+      "compositionUses": "Composition Uses",
+      "colorTraits": "Color Traits",
+      "fragrance": "Fragrance",
+      "spiked": "Spiked",
+      "sowType": "Sow Type",
+      "needsSupport": "Needs Support",
+      "supportNotes": "Support Notes",
+      "transplanting": "Transplanting",
+      "sowingNotes": "Sowing Notes",
+      "cutType": "Cut Type",
+      "toxicityHuman": "Toxicity (Human)",
+      "toxicityPets": "Toxicity (Pets)",
+      "conservation": "Conservation",
+      "pests": "Pests",
+      "diseases": "Diseases",
+      "adminCommentary": "Admin Commentary"
+    },
+    "values": {
+      "flexible": "Flexible",
+      "scheduled": "Scheduled",
+      "adaptive": "Adaptive",
+      "loamyBlend": "Loamy blend",
+      "ornamental": "Ornamental",
+      "gardenAdaptable": "Garden adaptable",
+      "beeFriendly": "Bee friendly",
+      "low": "Low",
+      "stable": "Stable",
+      "temperate": "Temperate",
+      "multicolor": "Multicolor",
+      "bicolor": "Bicolor",
+      "essentialOils": "Essential oils",
+      "notForOils": "Not for oils",
+      "infusionReady": "Infusion ready",
+      "notForInfusions": "Not for infusions",
+      "pollinatorMagnet": "Pollinator magnet",
+      "notMelliferous": "Not melliferous",
+      "feedsNeighbors": "Feeds neighbors",
+      "neutralGroundEffect": "Neutral ground effect",
+      "needsSupport": "Needs support",
+      "selfSupporting": "Self-supporting",
+      "transplantRecommended": "Transplant recommended",
+      "noTransplantNeeded": "No transplant needed",
+      "fragrant": "Fragrant",
+      "neutralScent": "Neutral scent",
+      "hasThorns": "Has thorns",
+      "smoothStems": "Smooth stems"
+    },
+    "meta": {
+      "created": "Created",
+      "updated": "Updated",
+      "by": "By",
+      "notRecorded": "Not recorded",
+      "unknown": "Unknown",
+      "sources": "Sources"
+    }
+  },
   "gardenDashboard": {
     "loading": "Loading...",
     "overview": "Overview",

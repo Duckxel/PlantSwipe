@@ -717,6 +717,7 @@ const PlantInfoSkeleton: React.FC<{ label?: string }> = ({ label = 'Loading...' 
 }
 
 const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
+  const { t } = useTranslation('common')
   const timelineData = React.useMemo(() => buildTimelineData(plant), [plant])
   const height = plant.growth?.height ?? null
   const wingspan = plant.growth?.wingspan ?? null
@@ -728,9 +729,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     return clamp(baseScale, 0.35, 1.08) * 1.45
   }, [primaryDimension])
     const dimensionLegend = [
-      { label: 'Height', value: height ? `${height} cm` : '—', subLabel: 'Vertical growth' },
-      { label: 'Spread', value: wingspan ? `${wingspan} cm` : '—', subLabel: 'Canopy reach' },
-      { label: 'Spacing', value: spacing ? `${spacing} cm` : '—', subLabel: 'Garden spacing' },
+      { label: t('moreInfo.dimensions.height'), value: height ? `${height} cm` : '—', subLabel: t('moreInfo.dimensions.heightSub') },
+      { label: t('moreInfo.dimensions.spread'), value: wingspan ? `${wingspan} cm` : '—', subLabel: t('moreInfo.dimensions.spreadSub') },
+      { label: t('moreInfo.dimensions.spacing'), value: spacing ? `${spacing} cm` : '—', subLabel: t('moreInfo.dimensions.spacingSub') },
     ]
     const habitats = plant.plantCare?.habitat || []
   const activePins = habitats.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
@@ -754,13 +755,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     const paletteColClass = showPalette ? 'col-span-1' : ''
     const timelineColClass = showPalette ? 'col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
-      if (!schedules.length) return 'Flexible'
+      if (!schedules.length) return t('moreInfo.values.flexible')
       return schedules
         .map((schedule) => {
           const season = schedule.season ? `${schedule.season}: ` : ''
           const quantity = schedule.quantity ? `${schedule.quantity}` : ''
           const period = schedule.timePeriod ? ` / ${schedule.timePeriod}` : ''
-          return `${season}${quantity}${period}`.trim() || 'Scheduled'
+          return `${season}${quantity}${period}`.trim() || t('moreInfo.values.scheduled')
         })
         .join(' • ')
     }
@@ -794,8 +795,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const allergenList = compactStrings(identity.allergens)
       const compositionList = compactStrings(identity.composition as string[] | undefined)
       const colorTraitList = [
-        (identity.multicolor ?? plant.multicolor) ? 'Multicolor' : null,
-        (identity.bicolor ?? plant.bicolor) ? 'Bicolor' : null,
+        (identity.multicolor ?? plant.multicolor) ? t('moreInfo.values.multicolor') : null,
+        (identity.bicolor ?? plant.bicolor) ? t('moreInfo.values.bicolor') : null,
       ].filter(Boolean) as string[]
       const nutritionalList = compactStrings(usage.nutritionalIntake)
       const nutritionalLabel = nutritionalList.length ? nutritionalList.join(' • ') : null
@@ -819,22 +820,22 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const updatedTimestamp = formatTimestampDetailed(meta.updatedAt ?? meta.updatedTime)
       const createdByLabel = formatTextValue(meta.createdBy)
       const updatedByLabel = formatTextValue(meta.updatedBy)
-      const aromaDescriptor = formatBooleanDescriptor(usage.aromatherapy, 'Essential oils', 'Not for oils')
-      const infusionDescriptor = formatBooleanDescriptor(usage.infusion, 'Infusion ready', 'Not for infusions')
+      const aromaDescriptor = formatBooleanDescriptor(usage.aromatherapy, t('moreInfo.values.essentialOils'), t('moreInfo.values.notForOils'))
+      const infusionDescriptor = formatBooleanDescriptor(usage.infusion, t('moreInfo.values.infusionReady'), t('moreInfo.values.notForInfusions'))
       const melliferousDescriptor = formatBooleanDescriptor(
         ecology.melliferous,
-        'Pollinator magnet',
-        'Not melliferous',
+        t('moreInfo.values.pollinatorMagnet'),
+        t('moreInfo.values.notMelliferous'),
       )
       const manureDescriptor = formatBooleanDescriptor(
         ecology.beFertilizer,
-        'Feeds neighbors',
-        'Neutral ground effect',
+        t('moreInfo.values.feedsNeighbors'),
+        t('moreInfo.values.neutralGroundEffect'),
       )
-      const supportDescriptor = formatBooleanDescriptor(growth.tutoring, 'Needs support', 'Self-supporting')
-      const transplantDescriptor = formatBooleanDescriptor(growth.transplanting, 'Transplant recommended', 'No transplant needed')
-      const fragranceDescriptor = formatBooleanDescriptor(identity.scent, 'Fragrant', 'Neutral scent')
-      const spikedDescriptor = formatBooleanDescriptor(identity.spiked, 'Has thorns', 'Smooth stems')
+      const supportDescriptor = formatBooleanDescriptor(growth.tutoring, t('moreInfo.values.needsSupport'), t('moreInfo.values.selfSupporting'))
+      const transplantDescriptor = formatBooleanDescriptor(growth.transplanting, t('moreInfo.values.transplantRecommended'), t('moreInfo.values.noTransplantNeeded'))
+      const fragranceDescriptor = formatBooleanDescriptor(identity.scent, t('moreInfo.values.fragrant'), t('moreInfo.values.neutralScent'))
+      const spikedDescriptor = formatBooleanDescriptor(identity.spiked, t('moreInfo.values.hasThorns'), t('moreInfo.values.smoothStems'))
       const recipesIdeasList = compactStrings(usage.recipesIdeas)
       const habitatLabel = habitats.length ? habitats.join(' • ') : null
       const pollenizerLabel = pollenizerList.length ? pollenizerList.join(' • ') : null
@@ -885,123 +886,123 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 
       const careHighlights = filterInfoItems([
         {
-          label: 'Water',
+          label: t('moreInfo.labels.water'),
           value: formatWaterPlans(plant.plantCare?.watering?.schedules || []),
           icon: <Droplets className="h-3.5 w-3.5" />,
         },
         {
-          label: 'Sunlight',
-          value: plantCare.levelSun || 'Adaptive',
+          label: t('moreInfo.labels.sunlight'),
+          value: plantCare.levelSun || t('moreInfo.values.adaptive'),
           icon: <Sun className="h-3.5 w-3.5" />,
         },
         {
-          label: 'Soil Mix',
-          value: soilLabel || 'Loamy blend',
+          label: t('moreInfo.labels.soilMix'),
+          value: soilLabel || t('moreInfo.values.loamyBlend'),
           icon: <Leaf className="h-3.5 w-3.5" />,
         },
         {
-          label: 'Maintenance',
+          label: t('moreInfo.labels.maintenance'),
           value: maintenanceLabel,
           icon: <Sprout className="h-3.5 w-3.5" />,
         },
         {
-          label: 'Temperature',
+          label: t('moreInfo.labels.temperature'),
           value: temperatureWindow,
           icon: <Thermometer className="h-3.5 w-3.5" />,
         },
         {
-          label: 'Humidity',
+          label: t('moreInfo.labels.humidity'),
           value: humidityValue,
           icon: <Droplets className="h-3.5 w-3.5" />,
         },
       ])
       const careDetails = filterInfoItems([
-        { label: 'Origin', value: originLabel },
-        { label: 'Watering Type', value: wateringTypeLabel },
-        { label: 'Division', value: divisionLabel },
-        { label: 'Mulching', value: mulchingMaterial },
-        { label: 'Nutrition Need', value: nutrientLabel },
-        { label: 'Fertilizer', value: fertilizerLabel },
-        { label: 'Soil Advice', value: soilAdvice, variant: 'note' },
-        { label: 'Mulching Advice', value: mulchingAdvice, variant: 'note' },
-        { label: 'Fertilizer Advice', value: fertilizerAdvice, variant: 'note' },
+        { label: t('moreInfo.labels.origin'), value: originLabel },
+        { label: t('moreInfo.labels.wateringType'), value: wateringTypeLabel },
+        { label: t('moreInfo.labels.division'), value: divisionLabel },
+        { label: t('moreInfo.labels.mulching'), value: mulchingMaterial },
+        { label: t('moreInfo.labels.nutritionNeed'), value: nutrientLabel },
+        { label: t('moreInfo.labels.fertilizer'), value: fertilizerLabel },
+        { label: t('moreInfo.labels.soilAdvice'), value: soilAdvice, variant: 'note' },
+        { label: t('moreInfo.labels.mulchingAdvice'), value: mulchingAdvice, variant: 'note' },
+        { label: t('moreInfo.labels.fertilizerAdvice'), value: fertilizerAdvice, variant: 'note' },
       ])
       const usageFlavor = filterInfoItems([
         {
-          label: 'Utility',
-          value: utilityLabel || 'Ornamental',
+          label: t('moreInfo.labels.utility'),
+          value: utilityLabel || t('moreInfo.values.ornamental'),
           icon: <Palette className="h-3.5 w-3.5" />,
         },
-        { label: 'Comestible Parts', value: comestiblePartsLabel, icon: <Leaf className="h-3.5 w-3.5" /> },
-        { label: 'Fruit Type', value: fruitTypeLabel },
-        { label: 'Medicinal Notes', value: medicinalNotes, variant: 'note' },
-        { label: 'Nutritional Intake', value: nutritionalLabel },
-        { label: 'Infusion Friendly', value: infusionDescriptor },
-        { label: 'Infusion Notes', value: infusionNotes, variant: 'note' },
-        { label: 'Infusion Mix', value: infusionMixSummary, variant: 'note' },
-        { label: 'Aromatherapy', value: aromaDescriptor },
-        { label: 'Spice Mixes', value: spiceMixesLabel },
+        { label: t('moreInfo.labels.comestibleParts'), value: comestiblePartsLabel, icon: <Leaf className="h-3.5 w-3.5" /> },
+        { label: t('moreInfo.labels.fruitType'), value: fruitTypeLabel },
+        { label: t('moreInfo.labels.medicinalNotes'), value: medicinalNotes, variant: 'note' },
+        { label: t('moreInfo.labels.nutritionalIntake'), value: nutritionalLabel },
+        { label: t('moreInfo.labels.infusionFriendly'), value: infusionDescriptor },
+        { label: t('moreInfo.labels.infusionNotes'), value: infusionNotes, variant: 'note' },
+        { label: t('moreInfo.labels.infusionMix'), value: infusionMixSummary, variant: 'note' },
+        { label: t('moreInfo.labels.aromatherapy'), value: aromaDescriptor },
+        { label: t('moreInfo.labels.spiceMixes'), value: spiceMixesLabel },
       ])
       const ecologyItems = filterInfoItems([
-        { label: 'Habitat', value: habitatLabel || 'Garden adaptable', icon: <MapPin className="h-3.5 w-3.5" /> },
-        { label: 'Pollinators', value: pollenizerLabel || 'Bee friendly', icon: <Wind className="h-3.5 w-3.5" /> },
-        { label: 'Ground Effect', value: groundEffectLabel, icon: <Sprout className="h-3.5 w-3.5" /> },
-        { label: 'Melliferous', value: melliferousDescriptor },
-        { label: 'Green Manure', value: manureDescriptor },
-        { label: 'Companions', value: companionsLabel },
-        { label: 'Tags', value: tagLabel },
+        { label: t('moreInfo.labels.habitat'), value: habitatLabel || t('moreInfo.values.gardenAdaptable'), icon: <MapPin className="h-3.5 w-3.5" /> },
+        { label: t('moreInfo.labels.pollinators'), value: pollenizerLabel || t('moreInfo.values.beeFriendly'), icon: <Wind className="h-3.5 w-3.5" /> },
+        { label: t('moreInfo.labels.groundEffect'), value: groundEffectLabel, icon: <Sprout className="h-3.5 w-3.5" /> },
+        { label: t('moreInfo.labels.melliferous'), value: melliferousDescriptor },
+        { label: t('moreInfo.labels.greenManure'), value: manureDescriptor },
+        { label: t('moreInfo.labels.companions'), value: companionsLabel },
+        { label: t('moreInfo.labels.tags'), value: tagLabel },
       ])
       const identityItems = filterInfoItems([
-        { label: 'Family', value: identityFamily },
-        { label: 'Life Cycle', value: lifeCycleLabel },
-        { label: 'Foliage', value: foliageLabel },
-        { label: 'Living Space', value: livingSpaceLabel },
-        { label: 'Seasons', value: seasonLabel },
-        { label: 'Symbolism', value: symbolismLabel },
-        { label: 'Allergens', value: allergenLabel },
-        { label: 'Composition Uses', value: compositionLabel },
-        { label: 'Color Traits', value: colorTraitLabel },
-        { label: 'Fragrance', value: fragranceDescriptor },
-        { label: 'Spiked', value: spikedDescriptor },
+        { label: t('moreInfo.labels.family'), value: identityFamily },
+        { label: t('moreInfo.labels.lifeCycle'), value: lifeCycleLabel },
+        { label: t('moreInfo.labels.foliage'), value: foliageLabel },
+        { label: t('moreInfo.labels.livingSpace'), value: livingSpaceLabel },
+        { label: t('moreInfo.labels.seasons'), value: seasonLabel },
+        { label: t('moreInfo.labels.symbolism'), value: symbolismLabel },
+        { label: t('moreInfo.labels.allergens'), value: allergenLabel },
+        { label: t('moreInfo.labels.compositionUses'), value: compositionLabel },
+        { label: t('moreInfo.labels.colorTraits'), value: colorTraitLabel },
+        { label: t('moreInfo.labels.fragrance'), value: fragranceDescriptor },
+        { label: t('moreInfo.labels.spiked'), value: spikedDescriptor },
       ])
       const growthItems = filterInfoItems([
-        { label: 'Sow Type', value: sowTypeLabel },
-        { label: 'Needs Support', value: supportDescriptor },
-        { label: 'Support Notes', value: growthSupportNotes, variant: 'note' },
-        { label: 'Transplanting', value: transplantDescriptor },
-        { label: 'Sowing Notes', value: growthSowingNotes, variant: 'note' },
-        { label: 'Cut Type', value: growthCut },
+        { label: t('moreInfo.labels.sowType'), value: sowTypeLabel },
+        { label: t('moreInfo.labels.needsSupport'), value: supportDescriptor },
+        { label: t('moreInfo.labels.supportNotes'), value: growthSupportNotes, variant: 'note' },
+        { label: t('moreInfo.labels.transplanting'), value: transplantDescriptor },
+        { label: t('moreInfo.labels.sowingNotes'), value: growthSowingNotes, variant: 'note' },
+        { label: t('moreInfo.labels.cutType'), value: growthCut },
       ])
       const riskItems = filterInfoItems([
         {
-          label: 'Toxicity (Human)',
-          value: plant.identity?.toxicityHuman || 'Low',
+          label: t('moreInfo.labels.toxicityHuman'),
+          value: plant.identity?.toxicityHuman || t('moreInfo.values.low'),
           icon: <Flame className="h-3.5 w-3.5" />,
         },
         {
-          label: 'Toxicity (Pets)',
-          value: plant.identity?.toxicityPets || 'Low',
+          label: t('moreInfo.labels.toxicityPets'),
+          value: plant.identity?.toxicityPets || t('moreInfo.values.low'),
           icon: <Leaf className="h-3.5 w-3.5" />,
         },
         {
-          label: 'Conservation',
-          value: conservationLabel || 'Stable',
+          label: t('moreInfo.labels.conservation'),
+          value: conservationLabel || t('moreInfo.values.stable'),
           icon: <Compass className="h-3.5 w-3.5" />,
         },
-        { label: 'Pests', value: pestLabel },
-        { label: 'Diseases', value: diseaseLabel },
+        { label: t('moreInfo.labels.pests'), value: pestLabel },
+        { label: t('moreInfo.labels.diseases'), value: diseaseLabel },
       ])
-      const recordItems = filterInfoItems([{ label: 'Admin Commentary', value: adminCommentary, variant: 'note' }])
+      const recordItems = filterInfoItems([{ label: t('moreInfo.labels.adminCommentary'), value: adminCommentary, variant: 'note' }])
       const sourcesValue = formatSourcesList(misc.sources)
       const infoSections = [
-        { title: 'Care Highlights', icon: <Droplets className="h-4 w-4" />, items: careHighlights },
-        { title: 'Care Details', icon: <Thermometer className="h-4 w-4" />, items: careDetails },
-        { title: 'Usage & Flavor', icon: <Leaf className="h-4 w-4" />, items: usageFlavor },
-        { title: 'Ecology', icon: <Sprout className="h-4 w-4" />, items: ecologyItems },
-        { title: 'Identity & Traits', icon: <Palette className="h-4 w-4" />, items: identityItems },
-        { title: 'Growth & Structure', icon: <Wind className="h-4 w-4" />, items: growthItems },
-        { title: 'Risk & Status', icon: <Flame className="h-4 w-4" />, items: riskItems },
-        { title: 'Records & Sources', icon: <Compass className="h-4 w-4" />, items: recordItems },
+        { title: t('moreInfo.sections.careHighlights'), icon: <Droplets className="h-4 w-4" />, items: careHighlights },
+        { title: t('moreInfo.sections.careDetails'), icon: <Thermometer className="h-4 w-4" />, items: careDetails },
+        { title: t('moreInfo.sections.usageFlavor'), icon: <Leaf className="h-4 w-4" />, items: usageFlavor },
+        { title: t('moreInfo.sections.ecology'), icon: <Sprout className="h-4 w-4" />, items: ecologyItems },
+        { title: t('moreInfo.sections.identityTraits'), icon: <Palette className="h-4 w-4" />, items: identityItems },
+        { title: t('moreInfo.sections.growthStructure'), icon: <Wind className="h-4 w-4" />, items: growthItems },
+        { title: t('moreInfo.sections.riskStatus'), icon: <Flame className="h-4 w-4" />, items: riskItems },
+        { title: t('moreInfo.sections.recordsSources'), icon: <Compass className="h-4 w-4" />, items: recordItems },
       ].filter((section) => section.items.length > 0)
 
   return (
@@ -1009,10 +1010,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       className="space-y-4 sm:space-y-6"
     >
         <div className="flex flex-col gap-1.5 sm:gap-2">
-          <p className="text-[11px] uppercase tracking-[0.45em] text-emerald-500/80">Immersive overview</p>
-          <h2 className="text-xl sm:text-2xl font-semibold text-stone-900 dark:text-stone-100">Feel the plant before the paragraphs</h2>
+          <p className="text-[11px] uppercase tracking-[0.45em] text-emerald-500/80">{t('moreInfo.header.eyebrow')}</p>
+          <h2 className="text-xl sm:text-2xl font-semibold text-stone-900 dark:text-stone-100">{t('moreInfo.header.title')}</h2>
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-            Play with the holographic cube, skim the seasonal timeline, and glance at ecology badges—then dive deeper if you want.
+            {t('moreInfo.header.subtitle')}
           </p>
         </div>
       
@@ -1025,9 +1026,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <div className="mb-3 space-y-2">
                 <div>
                   <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
-                    3D View
+                    {t('moreInfo.cube.eyebrow')}
                   </p>
-                  <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Dimensions</p>
+                  <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
                 </div>
                 {highlightBadges.length > 0 && (
                   <div className="flex flex-wrap gap-2">
@@ -1065,7 +1066,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <div className="relative space-y-2 sm:space-y-3">
                 <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                   <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Color Moodboard</span>
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
                 </div>
                 <div className="grid grid-cols-1 gap-1.5 sm:gap-2">
                   {palette.map((color, idx) => {
@@ -1085,12 +1086,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
                   <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.timeline.title')}</span>
                 </div>
                 {hoveredMonth ? (
                   <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">{hoveredMonth}</span>
                 ) : (
-                  <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">Hover a month</span>
+                  <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">{t('moreInfo.timeline.hoverPrompt')}</span>
                 )}
               </div>
               <div className="h-52 sm:h-64">
@@ -1126,7 +1127,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             <div className="space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Habitat Map</span>
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.habitatMap.title')}</span>
               </div>
               <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
                 <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />
@@ -1155,7 +1156,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 ) : (
                   <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
                     <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                    Temperate
+                    {t('moreInfo.values.temperate')}
                   </Badge>
                 )}
               </div>
@@ -1174,8 +1175,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <Utensils className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100">Recipe Ideas</h3>
-                  <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">Culinary inspiration for this plant</p>
+                  <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100">{t('moreInfo.recipes.title')}</h3>
+                  <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">{t('moreInfo.recipes.subtitle')}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2.5 sm:gap-3">
@@ -1219,7 +1220,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
                   <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Image Gallery</span>
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.gallery.title')}</span>
                 </div>
                 <div className="max-h-[400px]">
                   <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
@@ -1232,20 +1233,20 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             <div className="rounded-2xl border border-stone-200/70 bg-white/90 p-4 sm:p-5 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]">
               <div className="flex flex-col gap-3 text-xs sm:text-sm text-stone-600 dark:text-stone-300">
                 <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
-                  <span className="font-semibold text-stone-800 dark:text-stone-100">Created</span>
-                  <span className="text-stone-700 dark:text-stone-200">{createdTimestamp || 'Not recorded'}</span>
+                  <span className="font-semibold text-stone-800 dark:text-stone-100">{t('moreInfo.meta.created')}</span>
+                  <span className="text-stone-700 dark:text-stone-200">{createdTimestamp || t('moreInfo.meta.notRecorded')}</span>
                   <span className="text-stone-400">•</span>
-                  <span className="text-stone-700 dark:text-stone-200">By {createdByLabel || 'Unknown'}</span>
+                  <span className="text-stone-700 dark:text-stone-200">{t('moreInfo.meta.by')} {createdByLabel || t('moreInfo.meta.unknown')}</span>
                 </div>
                 <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
-                  <span className="font-semibold text-stone-800 dark:text-stone-100">Updated</span>
-                  <span className="text-stone-700 dark:text-stone-200">{updatedTimestamp || 'Not recorded'}</span>
+                  <span className="font-semibold text-stone-800 dark:text-stone-100">{t('moreInfo.meta.updated')}</span>
+                  <span className="text-stone-700 dark:text-stone-200">{updatedTimestamp || t('moreInfo.meta.notRecorded')}</span>
                   <span className="text-stone-400">•</span>
-                  <span className="text-stone-700 dark:text-stone-200">By {updatedByLabel || 'Unknown'}</span>
+                  <span className="text-stone-700 dark:text-stone-200">{t('moreInfo.meta.by')} {updatedByLabel || t('moreInfo.meta.unknown')}</span>
                 </div>
                 {sourcesValue && (
                   <div className="flex flex-wrap gap-2 sm:gap-3 items-center text-stone-700 dark:text-stone-200">
-                    <span className="font-semibold text-stone-800 dark:text-stone-100">Sources</span>
+                    <span className="font-semibold text-stone-800 dark:text-stone-100">{t('moreInfo.meta.sources')}</span>
                     <span className="text-stone-400">•</span>
                     <span className="flex-1 min-w-0">{sourcesValue}</span>
                   </div>
