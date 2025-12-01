@@ -180,7 +180,10 @@
         "q": "Can I cancel my subscription anytime?",
         "a": "Yes, cancel anytime from your settings. You'll keep Plus features until the end of your billing period."
       }
-    ]
+    ],
+    "supportTitle": "We're here to answer your questions",
+    "supportSubtitle": "Let us know any question you have",
+    "supportButton": "Contact Support"
   },
   "finalCta": {
     "title": "Ready to grow happier plants?",

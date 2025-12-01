@@ -22,6 +22,7 @@ import {
   Check,
   Sparkles,
   ArrowRight,
+  MessageCircle,
 } from "lucide-react"
 
 // Lightweight landing page - no heavy dependencies for fast LCP
@@ -578,6 +579,28 @@ const FAQSection: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Support CTA */}
+        <div className="mt-12 text-center">
+          <div className="inline-flex flex-col items-center gap-4 p-6 rounded-2xl bg-card border border-border">
+            <MessageCircle className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+            <div className="space-y-1">
+              <p className="font-semibold text-foreground">
+                {t("faq.supportTitle", { defaultValue: "We're here to answer your questions" })}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {t("faq.supportSubtitle", { defaultValue: "Let us know any question you have" })}
+              </p>
+            </div>
+            <Link
+              to="/contact"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all"
+            >
+              {t("faq.supportButton", { defaultValue: "Contact Support" })}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </div>
     </section>

@@ -180,7 +180,10 @@
         "q": "Puis-je annuler mon abonnement à tout moment ?",
         "a": "Oui, annulez à tout moment depuis vos paramètres. Vous conserverez les fonctionnalités Plus jusqu'à la fin de votre période de facturation."
       }
-    ]
+    ],
+    "supportTitle": "Nous sommes là pour répondre à vos questions",
+    "supportSubtitle": "Faites-nous part de toutes vos questions",
+    "supportButton": "Contacter le support"
   },
   "finalCta": {
     "title": "Prêt à cultiver des plantes plus heureuses ?",
