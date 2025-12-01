@@ -416,92 +416,37 @@ export const GardenListPage: React.FC = () => {
         cached.today === today &&
         now - cached.timestamp < TASK_DATA_CACHE_TTL
       ) {
-        // IMPORTANT: If memory cache has empty occurrences but skipResync=false, invalidate cache
-        // This ensures we reload when resync is requested
-        if (cached.data.occurrences.length === 0 && !skipResync) {
-          const cacheAge = now - cached.timestamp;
-          if (cacheAge < 1000) {
-            // Very fresh cache with no tasks - might be stale, clear it
-            console.warn(
-              "[GardenList] Fresh memory cache has no tasks, clearing to force reload",
-            );
-            taskDataCacheRef.current = null;
-            // Fall through to load from DB
-          } else {
-            // Use cache but it's empty - mismatch detection will catch this
-            setTodayTaskOccurrences(cached.data.occurrences);
-            setCompletionsByOcc(cached.data.completions || {});
-            setAllPlants(cached.data.plants);
-            setLoadingTasks(false);
-            return;
-          }
-        } else {
-          // Cache has tasks or skipResync is true - use it
-          setTodayTaskOccurrences(cached.data.occurrences);
+        const cachedOccs = cached.data.occurrences || [];
+        const cachedPlants = cached.data.plants || [];
+        
+        // ONLY use memory cache if it has BOTH occurrences AND plants
+        if (cachedOccs.length > 0 && cachedPlants.length > 0) {
+          setTodayTaskOccurrences(cachedOccs);
           setCompletionsByOcc(cached.data.completions || {});
-          setAllPlants(cached.data.plants);
+          setAllPlants(cachedPlants);
           setLoadingTasks(false);
           return;
         }
+        
+        // Cache is empty - clear it and fall through to load from DB
+        console.warn("[GardenList] Memory cache has no data, clearing");
+        taskDataCacheRef.current = null;
       }
 
       // 2. Check localStorage cache (persists across page reloads)
       const localStorageKey = `garden_tasks_cache_${cacheKey}`;
       const localStorageCache = getLocalStorageCache(localStorageKey);
       if (localStorageCache && localStorageCache.data) {
-        // IMPORTANT: If cache has empty occurrences but progress shows tasks exist, invalidate cache
         const cachedOccs = localStorageCache.data.occurrences || [];
-        if (cachedOccs.length === 0 && !skipResync) {
-          // Check if progress indicates tasks should exist - if so, invalidate cache
-          // We can't check progressByGarden here (it's not in scope), so we'll rely on mismatch detection
-          // But we can still check if cache is very fresh (< 1 second) - if so, it might be stale
-          const cacheAge = localStorageCache.timestamp
-            ? now - localStorageCache.timestamp
-            : Infinity;
-          if (cacheAge < 1000) {
-            // Very fresh cache with no tasks - might be stale, clear it
-            console.warn(
-              "[GardenList] Fresh cache has no tasks, clearing to force reload",
-            );
-            clearLocalStorageCache(localStorageKey);
-            taskDataCacheRef.current = null;
-            // Fall through to load from DB
-          } else {
-            // Cache is older, use it but refresh in background
-            setTodayTaskOccurrences(cachedOccs);
-            setCompletionsByOcc(localStorageCache.data.completions || {});
-            setAllPlants(localStorageCache.data.plants || []);
-            setLoadingTasks(false);
-
-            // Also update memory cache
-            taskDataCacheRef.current = {
-              data: localStorageCache.data,
-              timestamp: localStorageCache.timestamp || now,
-              today,
-            };
-
-            // Refresh in background if cache is getting stale
-            if (
-              localStorageCache.timestamp &&
-              now - localStorageCache.timestamp >
-                LOCALSTORAGE_TASK_CACHE_TTL / 2
-            ) {
-              // Cache is half-expired, refresh in background
-              setTimeout(() => {
-                loadAllTodayOccurrences(
-                  gardensOverride,
-                  todayOverride,
-                  skipResync,
-                );
-              }, 100);
-            }
-            return;
-          }
-        } else {
-          // Cache has tasks or skipResync is true - use it
+        const cachedPlants = localStorageCache.data.plants || [];
+        
+        // ONLY use cache if it has BOTH occurrences AND plants
+        // If cache is empty, always fall through to load fresh data
+        if (cachedOccs.length > 0 && cachedPlants.length > 0) {
+          // Cache has valid data - use it
           setTodayTaskOccurrences(cachedOccs);
           setCompletionsByOcc(localStorageCache.data.completions || {});
-          setAllPlants(localStorageCache.data.plants || []);
+          setAllPlants(cachedPlants);
           setLoadingTasks(false);
 
           // Also update memory cache
@@ -516,17 +461,17 @@ export const GardenListPage: React.FC = () => {
             localStorageCache.timestamp &&
             now - localStorageCache.timestamp > LOCALSTORAGE_TASK_CACHE_TTL / 2
           ) {
-            // Cache is half-expired, refresh in background
             setTimeout(() => {
-              loadAllTodayOccurrences(
-                gardensOverride,
-                todayOverride,
-                skipResync,
-              );
+              loadAllTodayOccurrences(gardensOverride, todayOverride, skipResync);
             }, 100);
           }
           return;
         }
+        
+        // Cache is empty or invalid - clear it and fall through to load from DB
+        console.warn("[GardenList] Cache has no data, clearing and loading fresh");
+        clearLocalStorageCache(localStorageKey);
+        taskDataCacheRef.current = null;
       }
 
       setLoadingTasks(true);
@@ -1000,41 +945,19 @@ export const GardenListPage: React.FC = () => {
   }, [user?.id, clearLocalStorageCache, loadAllTodayOccurrences]);
 
   // Defer task loading until after gardens are displayed (non-blocking)
-  // OPTIMIZED: Show cached data first, then resync if needed
+  // Always do a proper load - the cache checks inside loadAllTodayOccurrences will handle optimization
   React.useEffect(() => {
     // Only load tasks after gardens are loaded AND we have serverToday
     const today = serverTodayRef.current ?? serverToday;
     if (!loading && gardens.length > 0 && today) {
-      let cancelled = false;
-
-      // Check if we have fresh cached data (memory or localStorage)
-      const cacheKey = `${today}::${gardens.map((g) => g.id).sort().join(",")}`;
-      const localStorageKey = `garden_tasks_cache_${cacheKey}`;
-      const memoryCache = taskDataCacheRef.current;
-      const localCache = getLocalStorageCache(localStorageKey);
-      
-      const now = Date.now();
-      const hasFreshMemoryCache = memoryCache && 
-        memoryCache.today === today && 
-        now - memoryCache.timestamp < TASK_DATA_CACHE_TTL &&
-        memoryCache.data?.occurrences?.length > 0;
-      const hasFreshLocalCache = localCache && 
-        localCache.data?.occurrences?.length > 0;
-      
-      if (hasFreshMemoryCache || hasFreshLocalCache) {
-        // FAST PATH: Use cached data, skip resync
-        loadAllTodayOccurrences(undefined, undefined, true).catch(() => {});
-      } else {
-        // FIRST LOAD or STALE CACHE: Do full resync to create occurrences
-        // This is necessary to populate task occurrences in the database
-        loadAllTodayOccurrences(undefined, undefined, false).catch(() => {});
-      }
-
-      return () => {
-        cancelled = true;
-      };
+      // Always do full load with resync on initial load
+      // The cache logic inside loadAllTodayOccurrences will return early if valid cache exists
+      // skipResync=false ensures occurrences are created in the database
+      loadAllTodayOccurrences(undefined, undefined, false).catch((err) => {
+        console.error("[GardenList] Failed to load tasks:", err);
+      });
     }
-  }, [loading, gardens.length, loadAllTodayOccurrences, serverToday, gardens, getLocalStorageCache]);
+  }, [loading, gardens.length, loadAllTodayOccurrences, serverToday, gardens]);
 
   React.useEffect(() => {
     let active = true;
