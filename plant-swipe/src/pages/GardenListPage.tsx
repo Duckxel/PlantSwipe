@@ -1000,52 +1000,41 @@ export const GardenListPage: React.FC = () => {
   }, [user?.id, clearLocalStorageCache, loadAllTodayOccurrences]);
 
   // Defer task loading until after gardens are displayed (non-blocking)
-  // OPTIMIZED: Show cached data first, then refresh in background
+  // OPTIMIZED: Show cached data first, then resync if needed
   React.useEffect(() => {
-    // Only load tasks after gardens are loaded
-    if (!loading && gardens.length > 0) {
+    // Only load tasks after gardens are loaded AND we have serverToday
+    const today = serverTodayRef.current ?? serverToday;
+    if (!loading && gardens.length > 0 && today) {
       let cancelled = false;
 
-      // FAST PATH: Load from cache immediately (skipResync=true for instant display)
-      // This shows cached data instantly without waiting for expensive sync
-      loadAllTodayOccurrences(undefined, undefined, true).then(() => {
-        if (cancelled) return;
-        
-        // SLOW PATH: Check if we need to resync in background
-        // Only resync if cache seems empty or stale
-        const today = serverTodayRef.current ?? serverToday;
-        if (!today) return;
-        
-        // Defer resync to not block initial render
-        const bgTimer = setTimeout(() => {
-          if (cancelled) return;
-          
-          // Check if any gardens need resync
-          const now = Date.now();
-          let needsResync = false;
-          for (const g of gardens) {
-            const cacheKey = `${g.id}::${today}`;
-            const lastSync = resyncCacheRef.current[cacheKey] || 0;
-            if (now - lastSync > CACHE_TTL) {
-              needsResync = true;
-              break;
-            }
-          }
-          
-          if (needsResync) {
-            // Resync in background, then reload data
-            loadAllTodayOccurrences(undefined, undefined, false).catch(() => {});
-          }
-        }, 100); // Small delay to let UI settle first
-
-        return () => clearTimeout(bgTimer);
-      }).catch(() => {});
+      // Check if we have fresh cached data (memory or localStorage)
+      const cacheKey = `${today}::${gardens.map((g) => g.id).sort().join(",")}`;
+      const localStorageKey = `garden_tasks_cache_${cacheKey}`;
+      const memoryCache = taskDataCacheRef.current;
+      const localCache = getLocalStorageCache(localStorageKey);
+      
+      const now = Date.now();
+      const hasFreshMemoryCache = memoryCache && 
+        memoryCache.today === today && 
+        now - memoryCache.timestamp < TASK_DATA_CACHE_TTL &&
+        memoryCache.data?.occurrences?.length > 0;
+      const hasFreshLocalCache = localCache && 
+        localCache.data?.occurrences?.length > 0;
+      
+      if (hasFreshMemoryCache || hasFreshLocalCache) {
+        // FAST PATH: Use cached data, skip resync
+        loadAllTodayOccurrences(undefined, undefined, true).catch(() => {});
+      } else {
+        // FIRST LOAD or STALE CACHE: Do full resync to create occurrences
+        // This is necessary to populate task occurrences in the database
+        loadAllTodayOccurrences(undefined, undefined, false).catch(() => {});
+      }
 
       return () => {
         cancelled = true;
       };
     }
-  }, [loading, gardens.length, loadAllTodayOccurrences, serverToday, gardens]);
+  }, [loading, gardens.length, loadAllTodayOccurrences, serverToday, gardens, getLocalStorageCache]);
 
   React.useEffect(() => {
     let active = true;
