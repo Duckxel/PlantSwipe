@@ -2,6 +2,8 @@ export type GardenRole = "owner" | "member"
 
 export type WaterFreqUnit = 'day' | 'week' | 'month' | 'year'
 
+export type GardenPrivacy = 'public' | 'friends_only' | 'private'
+
 export interface Garden {
   id: string
   name: string
@@ -9,7 +11,7 @@ export interface Garden {
   createdBy: string
   createdAt: string
   streak?: number
-  isPublic?: boolean
+  privacy: GardenPrivacy
 }
 
 export interface GardenMember {

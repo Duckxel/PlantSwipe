@@ -1214,17 +1214,34 @@ create table if not exists public.gardens (
   created_by uuid not null references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
   streak integer not null default 0,
-  is_public boolean not null default true
+  privacy text not null default 'public' check (privacy in ('public', 'friends_only', 'private'))
 );
 
--- Migration: Add is_public column if it doesn't exist (for existing databases)
+-- Migration: Add/migrate privacy column (for existing databases)
 do $$
 begin
-  if not exists (
+  -- If old is_public column exists, migrate data
+  if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'gardens' and column_name = 'is_public'
   ) then
-    alter table public.gardens add column is_public boolean not null default true;
+    -- Add privacy column if it doesn't exist
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'gardens' and column_name = 'privacy'
+    ) then
+      alter table public.gardens add column privacy text not null default 'public' check (privacy in ('public', 'friends_only', 'private'));
+      -- Migrate data: is_public=true -> 'public', is_public=false -> 'private'
+      update public.gardens set privacy = case when is_public then 'public' else 'private' end;
+    end if;
+    -- Drop old column
+    alter table public.gardens drop column if exists is_public;
+  elsif not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'gardens' and column_name = 'privacy'
+  ) then
+    -- Fresh install without is_public, just add privacy
+    alter table public.gardens add column privacy text not null default 'public' check (privacy in ('public', 'friends_only', 'private'));
   end if;
 end $$;
 

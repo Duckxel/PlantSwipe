@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { Garden, GardenMember, GardenPlant } from '@/types/garden'
+import type { Garden, GardenMember, GardenPlant, GardenPrivacy } from '@/types/garden'
 import type { GardenTaskRow } from '@/types/garden'
 import type { GardenPlantTask, GardenPlantTaskOccurrence, TaskType, TaskScheduleKind, TaskUnit } from '@/types/garden'
 import type { Plant } from '@/types/plant'
@@ -382,16 +382,17 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   if (gardenIds.length === 0) return []
   const { data: gardens, error: gerr } = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
     .in('id', gardenIds)
   if (gerr) throw new Error(gerr.message)
-  return (gardens || []).map((g: { id: string; name: string; cover_image_url: string | null; created_by: string; created_at: string }) => ({
+  return (gardens || []).map((g: any) => ({
     id: String(g.id),
     name: String(g.name),
     coverImageUrl: g.cover_image_url || null,
     createdBy: String(g.created_by),
     createdAt: String(g.created_at),
-    streak: Number((g as any).streak ?? 0),
+    streak: Number(g.streak ?? 0),
+    privacy: (g.privacy || 'public') as GardenPrivacy,
   }))
 }
 
@@ -400,7 +401,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
   const { data, error } = await supabase
     .from('gardens')
     .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId })
-    .select('id, name, cover_image_url, created_by, created_at')
+    .select('id, name, cover_image_url, created_by, created_at, privacy')
     .single()
   if (error) throw new Error(error.message)
   const garden: Garden = {
@@ -409,6 +410,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
     coverImageUrl: data.cover_image_url || null,
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
+    privacy: ((data as any).privacy || 'public') as GardenPrivacy,
   }
   // Add owner as member
   const { error: merr } = await supabase
@@ -419,25 +421,37 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
 }
 
 export async function getGarden(gardenId: string): Promise<Garden | null> {
-  // First try with is_public column (new schema)
+  // Try with new privacy column first
   let data: any = null
   let error: any = null
   
   const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak, is_public')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
     .eq('id', gardenId)
     .maybeSingle()
   
-  if (result.error && result.error.message?.includes('is_public')) {
-    // Column doesn't exist yet, fall back to old schema
-    const fallback = await supabase
+  if (result.error && result.error.message?.includes('privacy')) {
+    // New column doesn't exist, try old is_public column
+    const fallback1 = await supabase
       .from('gardens')
-      .select('id, name, cover_image_url, created_by, created_at, streak')
+      .select('id, name, cover_image_url, created_by, created_at, streak, is_public')
       .eq('id', gardenId)
       .maybeSingle()
-    data = fallback.data
-    error = fallback.error
+    
+    if (fallback1.error && fallback1.error.message?.includes('is_public')) {
+      // Neither column exists, use base schema
+      const fallback2 = await supabase
+        .from('gardens')
+        .select('id, name, cover_image_url, created_by, created_at, streak')
+        .eq('id', gardenId)
+        .maybeSingle()
+      data = fallback2.data
+      error = fallback2.error
+    } else {
+      data = fallback1.data
+      error = fallback1.error
+    }
   } else {
     data = result.data
     error = result.error
@@ -445,6 +459,15 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
   
   if (error) throw new Error(error.message)
   if (!data) return null
+  
+  // Determine privacy value from available data
+  let privacy: GardenPrivacy = 'public'
+  if (data.privacy) {
+    privacy = data.privacy as GardenPrivacy
+  } else if (data.is_public !== undefined) {
+    privacy = data.is_public ? 'public' : 'private'
+  }
+  
   return {
     id: String(data.id),
     name: String(data.name),
@@ -452,18 +475,18 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
     streak: Number((data as any).streak ?? 0),
-    isPublic: (data as any).is_public !== false, // Default to true if null/undefined
+    privacy,
   }
 }
 
-export async function updateGardenPrivacy(gardenId: string, isPublic: boolean): Promise<void> {
+export async function updateGardenPrivacy(gardenId: string, privacy: GardenPrivacy): Promise<void> {
   const { error } = await supabase
     .from('gardens')
-    .update({ is_public: isPublic })
+    .update({ privacy })
     .eq('id', gardenId)
   if (error) {
     // If the column doesn't exist yet, throw a user-friendly error
-    if (error.message?.includes('is_public')) {
+    if (error.message?.includes('privacy')) {
       throw new Error('Privacy feature not yet available. Please run database migration.')
     }
     throw new Error(error.message)

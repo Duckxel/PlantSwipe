@@ -18,10 +18,10 @@ import {
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { PlantDetails } from "@/components/plant/PlantDetails";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
-import type { Garden } from "@/types/garden";
+import type { Garden, GardenPrivacy } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import {
   getGarden,
@@ -149,6 +149,7 @@ export const GardenDashboardPage: React.FC = () => {
   >({});
   const [totalOnHand, setTotalOnHand] = React.useState(0);
   const [speciesOnHand, setSpeciesOnHand] = React.useState(0);
+  const [isFriendOfMember, setIsFriendOfMember] = React.useState(false);
 
   const [addOpen, setAddOpen] = React.useState(false);
   const [plantQuery, setPlantQuery] = React.useState("");
@@ -1379,17 +1380,38 @@ export const GardenDashboardPage: React.FC = () => {
       return false;
     }, [isMember, profile?.is_admin]);
 
-    // Can view at least the overview (public gardens or members)
+    // Can view at least the overview (based on privacy setting)
     const canViewOverview = React.useMemo(() => {
       if (profile?.is_admin) return true;
       if (isMember) return true;
-      if (garden?.isPublic !== false) return true; // Public by default
+      const privacy = garden?.privacy || 'public';
+      if (privacy === 'public') return true;
+      if (privacy === 'friends_only' && isFriendOfMember) return true;
       return false;
-    }, [isMember, garden?.isPublic, profile?.is_admin]);
+    }, [isMember, garden?.privacy, profile?.is_admin, isFriendOfMember]);
 
     React.useEffect(() => {
       load();
     }, [load]);
+
+    // Check if viewer is a friend of any garden member (for friends_only privacy)
+    React.useEffect(() => {
+      if (!user?.id || isMember || members.length === 0) {
+        setIsFriendOfMember(false);
+        return;
+      }
+      const checkFriends = async () => {
+        const memberIds = members.map(m => m.userId);
+        // Check if current user is friends with any member
+        const { data: friendships } = await supabase
+          .from('friends')
+          .select('friend_id')
+          .eq('user_id', user.id)
+          .in('friend_id', memberIds);
+        setIsFriendOfMember(Boolean(friendships && friendships.length > 0));
+      };
+      checkFriends();
+    }, [user?.id, members, isMember]);
 
     // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
     React.useEffect(() => {
@@ -2348,11 +2370,17 @@ export const GardenDashboardPage: React.FC = () => {
         <>
           <aside className={`${sidebarPanelBase} space-y-4`}>
             <div className="text-xl font-semibold">{garden.name}</div>
-            {/* Show privacy badge for public viewers */}
-            {!isMember && garden.isPublic !== false && (
+            {/* Show privacy badge for non-members */}
+            {!isMember && garden.privacy === 'public' && (
               <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-full px-3 py-1.5">
                 <Globe className="w-3.5 h-3.5" />
                 {t("gardenDashboard.publicGarden")}
+              </div>
+            )}
+            {!isMember && garden.privacy === 'friends_only' && (
+              <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full px-3 py-1.5">
+                <Users className="w-3.5 h-3.5" />
+                {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
             <nav className="flex flex-wrap md:flex-col gap-2">
@@ -4778,29 +4806,31 @@ function GardenPrivacyToggle({
   canEdit?: boolean;
 }) {
   const { t } = useTranslation("common");
-  const [isPublic, setIsPublic] = React.useState(garden.isPublic !== false);
+  const [privacy, setPrivacy] = React.useState<GardenPrivacy>(garden.privacy || 'public');
   const [submitting, setSubmitting] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    setIsPublic(garden.isPublic !== false);
-  }, [garden.isPublic]);
+    setPrivacy(garden.privacy || 'public');
+  }, [garden.privacy]);
 
-  const togglePrivacy = async () => {
-    if (submitting || !canEdit) return;
+  const handlePrivacyChange = async (newPrivacy: GardenPrivacy) => {
+    if (submitting || !canEdit || newPrivacy === privacy) return;
     setSubmitting(true);
     setErr(null);
     try {
-      const newValue = !isPublic;
-      await updateGardenPrivacy(garden.id, newValue);
-      setIsPublic(newValue);
+      await updateGardenPrivacy(garden.id, newPrivacy);
+      setPrivacy(newPrivacy);
       try {
+        const privacyLabels: Record<GardenPrivacy, string> = {
+          public: t("gardenDashboard.settingsSection.privacyChangedPublic"),
+          friends_only: t("gardenDashboard.settingsSection.privacyChangedFriendsOnly"),
+          private: t("gardenDashboard.settingsSection.privacyChangedPrivate"),
+        };
         await logGardenActivity({
           gardenId: garden.id,
           kind: "note" as any,
-          message: newValue
-            ? t("gardenDashboard.settingsSection.privacyMadePublic")
-            : t("gardenDashboard.settingsSection.privacyMadePrivate"),
+          message: privacyLabels[newPrivacy],
           actorColor: null,
         });
       } catch {}
@@ -4812,59 +4842,81 @@ function GardenPrivacyToggle({
     }
   };
 
+  const privacyOptions: Array<{
+    value: GardenPrivacy;
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+    bgClass: string;
+    textClass: string;
+  }> = [
+    {
+      value: 'public',
+      icon: <Globe className="w-5 h-5" />,
+      title: t("gardenDashboard.settingsSection.privacyPublicTitle"),
+      description: t("gardenDashboard.settingsSection.privacyPublicDescription"),
+      bgClass: "bg-emerald-100 dark:bg-emerald-900/30",
+      textClass: "text-emerald-600 dark:text-emerald-400",
+    },
+    {
+      value: 'friends_only',
+      icon: <Users className="w-5 h-5" />,
+      title: t("gardenDashboard.settingsSection.privacyFriendsOnlyTitle"),
+      description: t("gardenDashboard.settingsSection.privacyFriendsOnlyDescription"),
+      bgClass: "bg-blue-100 dark:bg-blue-900/30",
+      textClass: "text-blue-600 dark:text-blue-400",
+    },
+    {
+      value: 'private',
+      icon: <Lock className="w-5 h-5" />,
+      title: t("gardenDashboard.settingsSection.privacyPrivateTitle"),
+      description: t("gardenDashboard.settingsSection.privacyPrivateDescription"),
+      bgClass: "bg-stone-100 dark:bg-stone-800",
+      textClass: "text-stone-600 dark:text-stone-400",
+    },
+  ];
+
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-4">
-        <div
-          className={`flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center ${
-            isPublic
-              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-              : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400"
-          }`}
-        >
-          {isPublic ? <Globe className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-medium">
-            {isPublic
-              ? t("gardenDashboard.settingsSection.privacyPublicTitle")
-              : t("gardenDashboard.settingsSection.privacyPrivateTitle")}
-          </div>
-          <div className="text-sm text-muted-foreground mt-1">
-            {isPublic
-              ? t("gardenDashboard.settingsSection.privacyPublicDescription")
-              : t("gardenDashboard.settingsSection.privacyPrivateDescription")}
-          </div>
-        </div>
+      <div className="space-y-2">
+        {privacyOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => handlePrivacyChange(option.value)}
+            disabled={submitting || !canEdit}
+            className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
+              privacy === option.value
+                ? "border-emerald-500 dark:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-900/10"
+                : "border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600"
+            } ${!canEdit ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <div
+              className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${option.bgClass} ${option.textClass}`}
+            >
+              {option.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{option.title}</span>
+                {privacy === option.value && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+                    {t("gardenDashboard.settingsSection.privacyCurrent")}
+                  </span>
+                )}
+                {submitting && privacy !== option.value && (
+                  <Loader2 className="w-4 h-4 animate-spin text-stone-400" />
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                {option.description}
+              </div>
+            </div>
+          </button>
+        ))}
       </div>
 
       {err && <div className="text-sm text-red-600">{err}</div>}
-
-      <div className="flex justify-end">
-        <Button
-          variant={isPublic ? "secondary" : "default"}
-          className="rounded-2xl"
-          onClick={togglePrivacy}
-          disabled={submitting || !canEdit}
-        >
-          {submitting ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              {t("gardenDashboard.settingsSection.privacyUpdating")}
-            </>
-          ) : isPublic ? (
-            <>
-              <Lock className="w-4 h-4 mr-2" />
-              {t("gardenDashboard.settingsSection.privacyMakePrivate")}
-            </>
-          ) : (
-            <>
-              <Globe className="w-4 h-4 mr-2" />
-              {t("gardenDashboard.settingsSection.privacyMakePublic")}
-            </>
-          )}
-        </Button>
-      </div>
 
       {!canEdit && (
         <div className="text-xs text-muted-foreground">
