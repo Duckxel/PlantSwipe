@@ -28,11 +28,129 @@
     "result": "result",
     "results": "results",
     "allRightsReserved": "All rights reserved",
+    "pricing": "Pricing",
+    "membership": "Membership",
+    "returnToApp": "Return to app",
+    "landingFeatures": "Features",
+    "landingHowItWorks": "How it works",
+    "landingFaq": "FAQ",
+    "welcome": "Welcome",
     "footer": {
       "about": "About",
       "blog": "Blog",
       "contactUs": "Contact Us",
       "termsOfServices": "Terms of Services"
+    }
+  },
+  "pricing": {
+    "pageTitle": "Pricing – Aphylia",
+    "pageDescription": "Choose the plan that fits your garden. Aphylia is free forever with optional Plus features for serious plant parents.",
+    "hero": {
+      "badge": "Free forever, by design",
+      "title": "Simple, transparent pricing",
+      "subtitle": "Aphylia is built for plant lovers, not profit. Our core features are free and always will be. Plus is for those who want to go further."
+    },
+    "free": {
+      "name": "Free",
+      "description": "Everything you need to start your plant journey",
+      "price": "0",
+      "period": "/forever",
+      "features": [
+        "Up to 5 gardens",
+        "Unlimited plants per garden",
+        "Full plant library & encyclopedia",
+        "Care reminders & task tracking",
+        "Bookmark collections",
+        "Garden sharing with friends",
+        "Cross-device sync"
+      ],
+      "cta": "Get Started Free",
+      "ctaCurrent": "Current Plan"
+    },
+    "plus": {
+      "name": "Plus",
+      "description": "For dedicated plant parents who want it all",
+      "price": "5",
+      "period": "/month",
+      "badge": "Recommended",
+      "features": [
+        "Everything in Free",
+        "Unlimited gardens",
+        "Plant identification",
+        "Garden analytics & insights",
+        "Export your garden data",
+        "Priority support",
+        "Early access to new features",
+        "Support Aphylia's development"
+      ],
+      "cta": "Upgrade to Plus",
+      "cancelNote": "Cancel anytime. No questions asked."
+    },
+    "philosophy": {
+      "title": "Why we keep Aphylia free",
+      "p1": "We believe plant care should be accessible to everyone.",
+      "p1cont": "Whether you're nurturing your first succulent or managing a thriving indoor jungle, you deserve tools that help you succeed—without breaking the bank.",
+      "p2start": "That's why Aphylia's core features are",
+      "p2highlight": "free forever",
+      "p2end": ". No trials, no hidden limits that make the app unusable. Just genuine, useful tools for plant lovers.",
+      "p3question": "So why Plus?",
+      "p3answer": "Running Aphylia costs real money—servers, development, plant databases, identification systems. Plus lets passionate plant parents who want advanced features help us keep the lights on and continue building something special.",
+      "p3note": "Think of Plus as your way of supporting the Aphylia community while unlocking extra superpowers for your garden."
+    },
+    "comparison": {
+      "title": "Compare plans in detail",
+      "subtitle": "See exactly what you get with each plan",
+      "features": "Features",
+      "categories": {
+        "gardensPlants": "Gardens & Plants",
+        "coreFeatures": "Core Features",
+        "advancedSupport": "Advanced & Support"
+      },
+      "featureNames": {
+        "gardensCreate": "Gardens you can create",
+        "plantsPerGarden": "Plants per garden",
+        "plantId": "Plant identification",
+        "bookmarks": "Bookmark collections",
+        "plantLibrary": "Plant library & encyclopedia",
+        "careReminders": "Care reminders & tasks",
+        "taskTracking": "Task progress tracking",
+        "gardenSharing": "Garden sharing & collaboration",
+        "analytics": "Garden analytics & insights",
+        "exportData": "Export garden data",
+        "prioritySupport": "Priority support",
+        "earlyAccess": "Early access to features"
+      },
+      "values": {
+        "upTo5": "Up to 5",
+        "unlimited": "Unlimited"
+      }
+    },
+    "faq": {
+      "title": "Common questions",
+      "items": [
+        {
+          "q": "Can I use Aphylia completely free?",
+          "a": "Absolutely! Our free tier includes up to 5 gardens with unlimited plants each, care reminders, the full plant encyclopedia, bookmark collections, and more. No credit card required."
+        },
+        {
+          "q": "What happens if I reach 5 gardens?",
+          "a": "You'll see a friendly prompt to upgrade or manage your existing gardens. We never delete your gardens or plants. Your data is always safe."
+        },
+        {
+          "q": "Can I cancel Plus anytime?",
+          "a": "Yes, cancel with one click from your settings. You'll keep Plus features until your billing period ends, then seamlessly return to Free."
+        },
+        {
+          "q": "What is plant identification?",
+          "a": "Plus members can snap a photo of any plant and our system will identify the species and provide care recommendations. It's a powerful tool for discovering unknown plants."
+        }
+      ]
+    },
+    "bottomCta": {
+      "title": "Ready to grow with Aphylia?",
+      "subtitle": "Start free and upgrade when you're ready. Your plants will thank you.",
+      "ctaFree": "Start Free",
+      "ctaPlus": "Get Plus"
     }
   },
   "seo": {

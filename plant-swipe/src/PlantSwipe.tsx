@@ -46,12 +46,14 @@ const SettingsPageLazy = lazy(() => import("@/pages/SettingsPage"))
 const ContactUsPageLazy = lazy(() => import("@/pages/ContactUsPage"))
 const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
 const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
+const PricingPageLazy = lazy(() => import("@/pages/PricingPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
 const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
 const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
+const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -126,8 +128,9 @@ export default function PlantSwipe() {
   const location = useLocation()
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
-  const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
-    pathWithoutLang === "/" ? "discovery" :
+  const currentView: "landing" | "discovery" | "gardens" | "search" | "profile" | "create" =
+    pathWithoutLang === "/" ? "landing" :
+    pathWithoutLang === "/discovery" || pathWithoutLang.startsWith("/discovery/") ? "discovery" :
     pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
     pathWithoutLang.startsWith("/search") ? "search" :
     pathWithoutLang.startsWith("/profile") ? "profile" :
@@ -1053,6 +1056,102 @@ export default function PlantSwipe() {
       )
     }
 
+    // Landing page has its own layout, skip the app shell
+    // Show landing page for both logged out users AND logged in users visiting "/"
+    const isLandingPage = currentView === "landing"
+
+    if (isLandingPage) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <LandingPageLazy />
+                </Suspense>
+              }
+            />
+            <Route path="*" element={<Navigate to="/discovery" replace />} />
+          </Routes>
+          {/* Auth Dialog for landing page */}
+          <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
+            <DialogContent className="rounded-2xl">
+              <DialogHeader>
+                <DialogTitle>{authMode === 'login' ? t('auth.login') : t('auth.signup')}</DialogTitle>
+                <DialogDescription>
+                  {authMode === 'login' ? t('auth.loginDescription') : t('auth.signupDescription')}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                {authMode === 'signup' && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">{t('auth.displayName')}</Label>
+                    <Input id="name" type="text" placeholder={t('auth.displayNamePlaceholder')} value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
+                  </div>
+                )}
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="email">{t('auth.email')}</Label>
+                  <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="password">{t('auth.password')}</Label>
+                  <Input id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
+                </div>
+                {authMode === 'signup' && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
+                    <Input id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+                  </div>
+                )}
+                {authMode === 'signup' && (
+                  <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                    <input
+                      id="auth-accept-terms"
+                      type="checkbox"
+                      checked={authAcceptedTerms}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
+                      disabled={authSubmitting}
+                      className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                    />
+                    <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                      {t('auth.acceptTermsLabel')}{" "}
+                      <a
+                        href={termsPath}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                      >
+                        {t('auth.termsLinkLabel')}
+                      </a>.
+                    </Label>
+                  </div>
+                )}
+                {authError && <div className="text-sm text-red-600">{authError}</div>}
+                <Button className="w-full rounded-2xl" onClick={submitAuth} disabled={authSubmitting}>
+                  {authSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
+                </Button>
+                <div className="text-center text-sm">
+                  {authMode === 'login' ? (
+                    <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
+                  ) : (
+                    <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
+                  )}
+                </div>
+                <p className="text-[10px] text-center text-stone-400 dark:text-stone-500 mt-2">
+                  This site is protected by reCAPTCHA and the Google{' '}
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </AuthActionsProvider>
+      )
+    }
+
     return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
           <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-24 pt-2 md:px-8 md:pb-8 md:pt-4 overflow-y-visible">
@@ -1073,6 +1172,7 @@ export default function PlantSwipe() {
             onProfile={handleProfileNavigation}
             onLogout={handleLogoutNavigation}
             onLogin={openLogin}
+            onSignup={openSignup}
           />
 
           {/* Layout: grid only when search view (to avoid narrow column in other views) */}
@@ -1261,6 +1361,14 @@ export default function PlantSwipe() {
               }
             />
             <Route
+              path="/pricing"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PricingPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
               path="/terms"
               element={
                 <Suspense fallback={routeLoadingFallback}>
@@ -1405,7 +1513,7 @@ export default function PlantSwipe() {
               }
             />
             <Route
-              path="/"
+              path="/discovery"
               element={plants.length > 0 ? (
                 <Suspense fallback={routeLoadingFallback}>
                   <SwipePage
@@ -1440,6 +1548,18 @@ export default function PlantSwipe() {
                   )}
                 </>
               )}
+            />
+            <Route
+              path="/"
+              element={
+                user ? (
+                  <Navigate to="/discovery" replace />
+                ) : (
+                  <Suspense fallback={routeLoadingFallback}>
+                    <LandingPageLazy />
+                  </Suspense>
+                )
+              }
             />
             <Route
               path="/error/:code"
