@@ -2,7 +2,7 @@ import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, CreditCard } from "lucide-react"
+import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, CreditCard, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
@@ -14,6 +14,8 @@ interface MobileNavBarProps {
   onProfile?: () => void | Promise<void>
   onLogout?: () => void | Promise<void>
   onLogin?: () => void
+  /** When true, shows landing page variant: Encyclopedia only for logged-out, "Return to app" for logged-in */
+  landingMode?: boolean
 }
 
 const MOBILE_NAV_HOST_ATTR = "data-mobile-nav-root"
@@ -65,7 +67,7 @@ const useMobileNavHost = () => {
   return host
 }
 
-const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin }) => {
+const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin, landingMode }) => {
   const host = useMobileNavHost()
   const pathWithoutLang = usePathWithoutLanguage()
   const navigate = useLanguageNavigate()
@@ -115,9 +117,61 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             </Button>
           </div>
         )}
-        {/* Icon-only nav items - different for logged in vs logged out */}
+        {/* Icon-only nav items - different for logged in vs logged out, and landing mode */}
         <div className="flex items-center justify-around gap-8">
-          {user ? (
+          {landingMode ? (
+            // Landing page mode
+            user ? (
+              // Logged-in on landing: Encyclopedia, Pricing, Return to app
+              <>
+                <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                  <Link to="/search" aria-label="Encyclopedia" className="no-underline flex items-center justify-center">
+                    <Search className="h-6 w-6" />
+                  </Link>
+                </Button>
+                <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'pricing' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                  <Link to="/pricing" aria-label="Pricing" className="no-underline flex items-center justify-center">
+                    <CreditCard className="h-6 w-6" />
+                  </Link>
+                </Button>
+                <Button asChild variant={"default"} size={"icon"} className="h-12 w-12 rounded-2xl">
+                  <Link to="/discovery" aria-label={t('common.returnToApp', { defaultValue: 'Return to app' })} className="no-underline flex items-center justify-center">
+                    <Home className="h-6 w-6" />
+                  </Link>
+                </Button>
+              </>
+            ) : (
+              // Logged-out on landing: Encyclopedia, Pricing, Login
+              <>
+                <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                  <Link to="/search" aria-label="Encyclopedia" className="no-underline flex items-center justify-center">
+                    <Search className="h-6 w-6" />
+                  </Link>
+                </Button>
+                <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'pricing' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                  <Link to="/pricing" aria-label="Pricing" className="no-underline flex items-center justify-center">
+                    <CreditCard className="h-6 w-6" />
+                  </Link>
+                </Button>
+                <Button
+                  variant={"secondary"}
+                  size={"icon"}
+                  className="h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"
+                  type="button"
+                  onClick={() => {
+                    if (onLogin) {
+                      onLogin()
+                    } else {
+                      navigate('/')
+                    }
+                  }}
+                  aria-label={t('common.login')}
+                >
+                  <User className="h-6 w-6" />
+                </Button>
+              </>
+            )
+          ) : user ? (
             // Logged-in navigation: Discovery, Gardens, Search, Profile
             <>
               <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'discovery' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
