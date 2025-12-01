@@ -9629,6 +9629,7 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
 })
 
 app.get('/api/garden/:id/activity', async (req, res) => {
+  const QUERY_TIMEOUT = 8000
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
@@ -9644,24 +9645,29 @@ app.get('/api/garden/:id/activity', async (req, res) => {
 
     let rows = []
     if (sql) {
-      rows = await sql`
-        select
-          id::text as id,
-          garden_id::text as garden_id,
-          actor_id::text as actor_id,
-          actor_name,
-          actor_color,
-          kind,
-          message,
-          plant_name,
-          task_name,
-          occurred_at
-        from public.garden_activity_logs
-        where garden_id = ${gardenId}
-          and occurred_at >= ${start}
-          and occurred_at < ${endExclusive}
-        order by occurred_at desc
-      `
+      rows = await withTimeout(
+        sql`
+          select
+            id::text as id,
+            garden_id::text as garden_id,
+            actor_id::text as actor_id,
+            actor_name,
+            actor_color,
+            kind,
+            message,
+            plant_name,
+            task_name,
+            occurred_at
+          from public.garden_activity_logs
+          where garden_id = ${gardenId}
+            and occurred_at >= ${start}
+            and occurred_at < ${endExclusive}
+          order by occurred_at desc
+          limit 100
+        `.catch(() => []),
+        QUERY_TIMEOUT,
+        'Activity query timeout'
+      ).catch(() => [])
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
       const bearer = getAuthTokenFromRequest(req)
@@ -9710,6 +9716,7 @@ app.get('/api/garden/:id/activity', async (req, res) => {
   })
 
 app.get('/api/garden/:id/tasks', async (req, res) => {
+  const QUERY_TIMEOUT = 8000
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
@@ -9727,20 +9734,24 @@ app.get('/api/garden/:id/tasks', async (req, res) => {
 
     let rows = []
     if (sql) {
-      rows = await sql`
-        select
-          id::text as id,
-          garden_id::text as garden_id,
-          day,
-          task_type,
-          garden_plant_ids,
-          success
-        from public.garden_tasks
-        where garden_id = ${gardenId}
-          and day >= ${startDay}
-          and day <= ${endDay}
-        order by day asc
-      `
+      rows = await withTimeout(
+        sql`
+          select
+            id::text as id,
+            garden_id::text as garden_id,
+            day,
+            task_type,
+            garden_plant_ids,
+            success
+          from public.garden_tasks
+          where garden_id = ${gardenId}
+            and day >= ${startDay}
+            and day <= ${endDay}
+          order by day asc
+        `.catch(() => []),
+        QUERY_TIMEOUT,
+        'Tasks query timeout'
+      ).catch(() => [])
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
       const bearer = getAuthTokenFromRequest(req)
@@ -9854,8 +9865,9 @@ app.post('/api/garden/:id/activity', async (req, res) => {
   }
 })
 
-// Batched initial load for a garden
+// Batched initial load for a garden - OPTIMIZED: parallel queries with timeout
 app.get('/api/garden/:id/overview', async (req, res) => {
+  const QUERY_TIMEOUT = 8000 // 8 seconds per query
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
@@ -9869,175 +9881,127 @@ app.get('/api/garden/:id/overview', async (req, res) => {
     let members = []
     const serverNow = new Date().toISOString()
 
-    // First, fetch garden to check privacy
     if (sql) {
-      // Try with privacy column first, then progressively simpler fallbacks
-      let gRows = []
-      let gardenQuerySuccess = false
-      
-      // Attempt 1: Full query with privacy and streak
-      try {
-        console.log('[overview] Fetching garden', gardenId, '(attempt 1: full query)')
-        gRows = await sql`
-          select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy
-          from public.gardens where id = ${gardenId} limit 1
-        `
-        console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
-        gardenQuerySuccess = true
-      } catch (e1) {
-        console.error('[overview] Garden query failed (attempt 1):', e1?.message || e1)
-        
-        // Attempt 2: Without privacy column
-        try {
-          console.log('[overview] Fetching garden', gardenId, '(attempt 2: without privacy)')
-          gRows = await sql`
-            select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy
+      // Run all three queries in PARALLEL for faster response
+      const [gardenResult, plantsResult, membersResult] = await Promise.all([
+        // Garden query with timeout
+        withTimeout(
+          sql`
+            select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 
+                   coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy
             from public.gardens where id = ${gardenId} limit 1
-          `
-          console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
-          gardenQuerySuccess = true
-        } catch (e2) {
-          console.error('[overview] Garden query failed (attempt 2):', e2?.message || e2)
-          
-          // Attempt 3: Minimal query (basic columns only)
-          try {
-            console.log('[overview] Fetching garden', gardenId, '(attempt 3: minimal)')
-            gRows = await sql`
-              select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy
-              from public.gardens where id = ${gardenId} limit 1
-            `
-            console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
-            gardenQuerySuccess = true
-          } catch (e3) {
-            console.error('[overview] Garden query failed (attempt 3):', e3?.message || e3)
-            throw new Error('Failed to fetch garden after all attempts: ' + (e3?.message || 'Unknown error'))
-          }
-        }
-      }
-      
-      garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
-      console.log('[overview] Garden found:', !!garden, 'querySuccess:', gardenQuerySuccess)
-
-      // Fetch plants with try-catch
-      console.log('[overview] Fetching plants for garden', gardenId)
-      let gpRows = []
-      try {
-        gpRows = await sql`
-          select
-            gp.id::text as id,
-            gp.garden_id::text as garden_id,
-            gp.plant_id::text as plant_id,
-            gp.nickname,
-            gp.seeds_planted::int as seeds_planted,
-            gp.planted_at,
-            gp.expected_bloom_date,
-            gp.override_water_freq_unit,
-            gp.override_water_freq_value::int as override_water_freq_value,
-            gp.plants_on_hand::int as plants_on_hand,
-            gp.sort_index::int as sort_index,
-            p.id as p_id,
-            p.name as p_name,
-            p.scientific_name as p_scientific_name,
-            p.colors as p_colors,
-            p.seasons as p_seasons,
-            p.rarity as p_rarity,
-            p.meaning as p_meaning,
-            p.description as p_description,
-            p.image_url as p_image_url,
-            p.photos as p_photos,
-            p.level_sun as p_level_sun,
-            p.watering_type as p_watering_type,
-            p.soil as p_soil,
-            p.maintenance_level as p_maintenance_level,
-            p.seeds_available as p_seeds_available
-          from public.garden_plants gp
-          left join public.plants p on p.id = gp.plant_id
-          where gp.garden_id = ${gardenId}
-          order by gp.sort_index asc nulls last
-        `
-        console.log('[overview] Plants query succeeded, rows:', gpRows?.length || 0)
-      } catch (plantsErr) {
-        console.error('[overview] Plants query failed:', plantsErr?.message || plantsErr)
-        // Plants query failed, continue with empty plants (non-fatal)
-        gpRows = []
-      }
-      plants = (gpRows || []).map((r) => {
-          const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
-          const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
-          return {
-            id: String(r.id),
-            gardenId: String(r.garden_id),
-            plantId: String(r.plant_id),
-            nickname: r.nickname,
-            seedsPlanted: Number(r.seeds_planted || 0),
-            plantedAt: r.planted_at || null,
-            expectedBloomDate: r.expected_bloom_date || null,
-            overrideWaterFreqUnit: r.override_water_freq_unit || null,
-            overrideWaterFreqValue: (r.override_water_freq_value ?? null),
-            plantsOnHand: Number(r.plants_on_hand || 0),
-            sortIndex: (r.sort_index ?? null),
-            plant: r.p_id ? {
-              id: String(r.p_id),
-              name: String(r.p_name || ''),
-              scientificName: String(r.p_scientific_name || ''),
-              colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
-              seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
-              rarity: r.p_rarity,
-              meaning: r.p_meaning || '',
-              description: r.p_description || '',
-              photos: plantPhotos,
-              image: plantImage,
-                care: {
-                  sunlight: r.p_level_sun || null,
-                  water: Array.isArray(r.p_watering_type) ? r.p_watering_type.join(', ') : null,
-                  soil: Array.isArray(r.p_soil) ? r.p_soil.join(', ') : null,
-                  difficulty: r.p_maintenance_level || null,
-                },
-              seedsAvailable: Boolean(r.p_seeds_available ?? false),
-            } : null,
-          }
-        })
-
-      // Fetch members - try with auth.users first, fallback if access denied
-      console.log('[overview] Fetching members for garden', gardenId)
-      let mRows = []
-      try {
-        mRows = await sql`
-          select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
-                 p.display_name, p.accent_key,
-                 u.email
-          from public.garden_members gm
-          left join public.profiles p on p.id = gm.user_id
-          left join auth.users u on u.id = gm.user_id
-          where gm.garden_id = ${gardenId}
-        `
-        console.log('[overview] Members query with auth.users succeeded, rows:', mRows?.length || 0)
-      } catch (memberErr) {
-        console.error('[overview] members query with auth.users failed:', memberErr?.message || memberErr)
-        // Fallback: query without auth.users (email will be null)
-        try {
-          mRows = await sql`
+          `.catch(() => []),
+          QUERY_TIMEOUT,
+          'Garden query timeout'
+        ).catch(() => []),
+        
+        // Plants query with timeout - simplified JOIN
+        withTimeout(
+          sql`
+            select
+              gp.id::text as id,
+              gp.garden_id::text as garden_id,
+              gp.plant_id::text as plant_id,
+              gp.nickname,
+              gp.seeds_planted::int as seeds_planted,
+              gp.planted_at,
+              gp.expected_bloom_date,
+              gp.override_water_freq_unit,
+              gp.override_water_freq_value::int as override_water_freq_value,
+              gp.plants_on_hand::int as plants_on_hand,
+              gp.sort_index::int as sort_index,
+              p.id as p_id,
+              p.name as p_name,
+              p.scientific_name as p_scientific_name,
+              p.colors as p_colors,
+              p.seasons as p_seasons,
+              p.rarity as p_rarity,
+              p.meaning as p_meaning,
+              p.description as p_description,
+              p.image_url as p_image_url,
+              p.photos as p_photos,
+              p.level_sun as p_level_sun,
+              p.watering_type as p_watering_type,
+              p.soil as p_soil,
+              p.maintenance_level as p_maintenance_level,
+              p.seeds_available as p_seeds_available
+            from public.garden_plants gp
+            left join public.plants p on p.id = gp.plant_id
+            where gp.garden_id = ${gardenId}
+            order by gp.sort_index asc nulls last
+          `.catch(() => []),
+          QUERY_TIMEOUT,
+          'Plants query timeout'
+        ).catch(() => []),
+        
+        // Members query with timeout - skip auth.users join for speed
+        withTimeout(
+          sql`
             select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
                    p.display_name, p.accent_key
             from public.garden_members gm
             left join public.profiles p on p.id = gm.user_id
             where gm.garden_id = ${gardenId}
-          `
-          console.log('[overview] Members fallback query succeeded, rows:', mRows?.length || 0)
-        } catch (fallbackErr) {
-          console.error('[overview] members fallback query also failed:', fallbackErr?.message || fallbackErr)
+          `.catch(() => []),
+          QUERY_TIMEOUT,
+          'Members query timeout'
+        ).catch(() => [])
+      ])
+      
+      // Process garden result
+      const gRows = Array.isArray(gardenResult) ? gardenResult : []
+      garden = gRows[0] || null
+
+      // Process plants result
+      const gpRows = Array.isArray(plantsResult) ? plantsResult : []
+      plants = gpRows.map((r) => {
+        const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
+        const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
+        return {
+          id: String(r.id),
+          gardenId: String(r.garden_id),
+          plantId: String(r.plant_id),
+          nickname: r.nickname,
+          seedsPlanted: Number(r.seeds_planted || 0),
+          plantedAt: r.planted_at || null,
+          expectedBloomDate: r.expected_bloom_date || null,
+          overrideWaterFreqUnit: r.override_water_freq_unit || null,
+          overrideWaterFreqValue: (r.override_water_freq_value ?? null),
+          plantsOnHand: Number(r.plants_on_hand || 0),
+          sortIndex: (r.sort_index ?? null),
+          plant: r.p_id ? {
+            id: String(r.p_id),
+            name: String(r.p_name || ''),
+            scientificName: String(r.p_scientific_name || ''),
+            colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
+            seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
+            rarity: r.p_rarity,
+            meaning: r.p_meaning || '',
+            description: r.p_description || '',
+            photos: plantPhotos,
+            image: plantImage,
+            care: {
+              sunlight: r.p_level_sun || null,
+              water: Array.isArray(r.p_watering_type) ? r.p_watering_type.join(', ') : null,
+              soil: Array.isArray(r.p_soil) ? r.p_soil.join(', ') : null,
+              difficulty: r.p_maintenance_level || null,
+            },
+            seedsAvailable: Boolean(r.p_seeds_available ?? false),
+          } : null,
         }
-      }
-      members = (mRows || []).map((r) => ({
+      })
+
+      // Process members result
+      const mRows = Array.isArray(membersResult) ? membersResult : []
+      members = mRows.map((r) => ({
         gardenId: String(r.garden_id),
         userId: String(r.user_id),
         role: r.role,
         joinedAt: r.joined_at ? new Date(r.joined_at).toISOString() : null,
         displayName: r.display_name || null,
-        email: r.email || null,
+        email: null, // Skip email for speed - not critical for overview
         accentKey: r.accent_key || null,
       }))
-      console.log('[overview] Finished SQL queries for garden', gardenId)
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       console.log('[overview] Using Supabase REST API for garden', gardenId)
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }

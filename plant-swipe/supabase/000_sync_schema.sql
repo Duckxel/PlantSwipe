@@ -3931,6 +3931,15 @@ end $$;
 create index if not exists gp_garden_idx on public.garden_plants (garden_id);
 create index if not exists gm_garden_user_idx on public.garden_members (garden_id, user_id);
 create index if not exists gpt_garden_idx on public.garden_plant_tasks (garden_id);
+
+-- ========== Performance optimization indexes ==========
+-- These indexes significantly speed up garden overview and task queries
+create index if not exists gp_plant_idx on public.garden_plants (plant_id);
+create index if not exists gpto_task_due_idx on public.garden_plant_task_occurrences (task_id, due_at);
+create index if not exists gpto_garden_plant_idx on public.garden_plant_task_occurrences (garden_plant_id);
+create index if not exists gpto_due_at_idx on public.garden_plant_task_occurrences (due_at);
+create index if not exists gpt_garden_plant_idx on public.garden_plant_tasks (garden_plant_id);
+create index if not exists gal_garden_day_idx on public.garden_activity_logs (garden_id, occurred_at);
 -- Dedupe any accidental duplicate occurrences before enforcing uniqueness
 do $$
 declare r record; v_keep uuid; v_req int; v_done int; has_user_compl boolean; begin
