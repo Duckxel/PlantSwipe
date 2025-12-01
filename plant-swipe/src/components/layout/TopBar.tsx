@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, Home } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -12,15 +12,15 @@ interface TopBarProps {
   displayName?: string | null
   onProfile?: () => void | Promise<void>
   onLogout?: () => void | Promise<void>
-  /** When true, shows landing page variant: Encyclopedia only for logged-out, "Return to app" for logged-in */
-  landingMode?: boolean
+  /** When true and user is logged out, shows landing page section links (Features, FAQ, etc.) */
+  showLandingLinks?: boolean
 }
 
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 
-export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout, landingMode }) => {
+export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout, showLandingLinks }) => {
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const { profile } = useAuth()
@@ -98,38 +98,33 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       >
         {t('common.appName')}
       </Link>
-      <nav className="ml-4 hidden md:flex gap-2">
-        {landingMode ? (
-          // Landing page mode: Encyclopedia only (no Discovery/Gardens)
-          <>
-            <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
-            <NavPill to="/pricing" isActive={pathWithoutLang === '/pricing'} icon={<CreditCard className="h-4 w-4" />} label={t('common.pricing', { defaultValue: 'Pricing' })} />
-          </>
-        ) : user ? (
-          // Logged-in navigation: Discovery, Gardens, Encyclopedia
+      <nav className="ml-4 hidden md:flex gap-2 items-center">
+        {user ? (
+          // Logged-in navigation: Discovery, Gardens, Encyclopedia (always normal)
           <>
             <NavPill to="/discovery" isActive={pathWithoutLang === '/discovery' || pathWithoutLang.startsWith('/discovery/')} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
             <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished} />
             <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
           </>
         ) : (
-          // Logged-out navigation: Encyclopedia, Pricing
+          // Logged-out navigation: Encyclopedia, Pricing + optional landing links
           <>
             <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
             <NavPill to="/pricing" isActive={pathWithoutLang === '/pricing'} icon={<CreditCard className="h-4 w-4" />} label={t('common.pricing', { defaultValue: 'Pricing' })} />
+            {showLandingLinks && (
+              <>
+                <span className="mx-2 h-4 w-px bg-border" aria-hidden="true" />
+                <LandingSectionLink href="#features" label={t('common.landingFeatures', { defaultValue: 'Features' })} />
+                <LandingSectionLink href="#how-it-works" label={t('common.landingHowItWorks', { defaultValue: 'How it works' })} />
+                <LandingSectionLink href="#faq" label={t('common.landingFaq', { defaultValue: 'FAQ' })} />
+              </>
+            )}
           </>
         )}
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
-        {landingMode && user ? (
-          // Landing page with logged-in user: show "Return to app" button
-          <Button asChild className="rounded-2xl" variant="default">
-            <Link to="/discovery">
-              <Home className="h-4 w-4 mr-2" />
-              {t('common.returnToApp', { defaultValue: 'Return to app' })}
-            </Link>
-          </Button>
-        ) : !user ? (
+        {!user ? (
+          // Logged-out: show Sign up and Login buttons on all pages
           <>
             <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>
               <UserPlus className="h-4 w-4 mr-2" /> {t('common.signup')}
@@ -205,5 +200,26 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
         />
       )}
     </div>
+  )
+}
+
+function LandingSectionLink({ href, label }: { href: string; label: string }) {
+  const scrollToSection = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const id = href.replace('#', '')
+    const el = document.getElementById(id)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  return (
+    <a
+      href={href}
+      onClick={scrollToSection}
+      className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+    >
+      {label}
+    </a>
   )
 }

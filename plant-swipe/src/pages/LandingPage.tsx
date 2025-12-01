@@ -35,20 +35,19 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full bg-background overflow-x-hidden">
-      {/* Desktop Navigation - uses the real TopBar with landingMode */}
+      {/* Desktop Navigation - uses the real TopBar, with landing links for logged-out users */}
       <TopBar
         openLogin={openLogin}
         openSignup={openSignup}
         user={user}
         displayName={profile?.display_name || null}
-        landingMode={true}
+        showLandingLinks={!user}
       />
 
-      {/* Mobile Navigation - uses the real MobileNavBar with landingMode */}
+      {/* Mobile Navigation - uses the real MobileNavBar */}
       <MobileNavBar
         canCreate={false}
         onLogin={openLogin}
-        landingMode={true}
       />
 
       {/* Hero Section */}
