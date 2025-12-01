@@ -316,6 +316,8 @@ export const GardenDashboardPage: React.FC = () => {
         let hydratedPlants: any[] | null = null;
         let gpsLocal: any[] | null = null;
         let hydrated = false;
+        let hydratedGarden = false;
+        let hydratedMembers = false;
         try {
           const session = (await supabase.auth.getSession()).data.session;
           const token = session?.access_token;
@@ -330,7 +332,7 @@ export const GardenDashboardPage: React.FC = () => {
           if (resp.ok) {
             const data = await resp.json().catch(() => ({}));
             if (data?.ok) {
-              if (data.garden)
+              if (data.garden) {
                 setGarden({
                   id: String(data.garden.id),
                   name: String(data.garden.name),
@@ -340,6 +342,8 @@ export const GardenDashboardPage: React.FC = () => {
                   streak: Number(data.garden.streak || 0),
                   privacy: data.garden.privacy || 'public',
                 });
+                hydratedGarden = true;
+              }
               if (Array.isArray(data.plants)) {
                 // If server returned empty plants, don't mark as hydrated for plants
                 // This allows fallback to direct supabase query which may have correct RLS
@@ -350,7 +354,7 @@ export const GardenDashboardPage: React.FC = () => {
                   console.warn("[GardenDashboard] Server returned 0 plants, will try direct query");
                 }
               }
-              if (Array.isArray(data.members))
+              if (Array.isArray(data.members) && data.members.length > 0) {
                 setMembers(
                   data.members.map((m: any) => ({
                     userId: String(m.userId || m.user_id),
@@ -361,20 +365,30 @@ export const GardenDashboardPage: React.FC = () => {
                     accentKey: m.accentKey ?? null,
                   })),
                 );
+                hydratedMembers = true;
+              }
               if (data.serverNow) {
                 const todayIso = String(data.serverNow).slice(0, 10);
                 setServerToday(todayIso);
                 serverTodayRef.current = todayIso;
               }
-              // Only mark fully hydrated if we got plants
-              hydrated = hydratedPlants !== null && hydratedPlants.length > 0;
+              // Mark as fully hydrated if we got all data
+              hydrated = hydratedGarden && hydratedMembers && hydratedPlants !== null && hydratedPlants.length > 0;
             }
           }
         } catch {}
 
         let gardenCreatedDayIso: string | null = null;
         let todayLocal: string | null = null;
-        if (!hydrated) {
+        
+        // If server returned 0 plants but we got garden/members, only fetch plants
+        if (hydratedGarden && hydratedMembers && (hydratedPlants === null || hydratedPlants.length === 0)) {
+          const gpsRaw = await getGardenPlants(id, currentLang);
+          gpsLocal = gpsRaw;
+          setPlants(gpsRaw);
+          hydratedPlants = gpsRaw;
+        } else if (!hydrated) {
+          // Full fallback - fetch everything
           const [g0, gpsRaw, ms, nowIso] = await Promise.all([
             getGarden(id),
             getGardenPlants(id, currentLang),
