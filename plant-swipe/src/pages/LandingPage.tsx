@@ -4,6 +4,7 @@ import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { TopBar } from "@/components/layout/TopBar"
+import { Footer } from "@/components/layout/Footer"
 import MobileNavBar from "@/components/layout/MobileNavBar"
 import { useAuthActions } from "@/context/AuthActionsContext"
 import {
@@ -71,8 +72,8 @@ const LandingPage: React.FC = () => {
       {/* Final CTA */}
       <FinalCTASection />
 
-      {/* Footer */}
-      <LandingFooter />
+      {/* Footer - same as the rest of the app */}
+      <Footer />
     </div>
   )
 }
@@ -610,53 +611,6 @@ const FinalCTASection: React.FC = () => {
         </div>
       </div>
     </section>
-  )
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   FOOTER
-   ───────────────────────────────────────────────────────────────────────────── */
-const LandingFooter: React.FC = () => {
-  const { t } = useTranslation("Landing")
-
-  return (
-    <footer className="border-t border-border py-12">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          <Link to="/" className="flex items-center gap-2">
-            <img 
-              src="/icons/plant-swipe-icon.svg" 
-              alt="Aphylia" 
-              className="h-8 w-7 plant-icon-theme"
-              draggable="false"
-            />
-            <span className="font-brand text-xl font-semibold text-foreground">Aphylia</span>
-          </Link>
-
-          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
-            <Link to="/about" className="hover:text-foreground transition-colors">
-              {t("footer.about")}
-            </Link>
-            <Link to="/blog" className="hover:text-foreground transition-colors">
-              {t("footer.blog")}
-            </Link>
-            <Link to="/pricing" className="hover:text-foreground transition-colors">
-              {t("nav.pricing")}
-            </Link>
-            <Link to="/terms" className="hover:text-foreground transition-colors">
-              {t("footer.terms")}
-            </Link>
-            <Link to="/contact" className="hover:text-foreground transition-colors">
-              {t("footer.contact")}
-            </Link>
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Aphylia. {t("footer.allRightsReserved")}
-          </p>
-        </div>
-      </div>
-    </footer>
   )
 }
 
