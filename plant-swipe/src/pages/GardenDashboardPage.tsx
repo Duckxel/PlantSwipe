@@ -350,9 +350,8 @@ export const GardenDashboardPage: React.FC = () => {
                 if (data.plants.length > 0) {
                   setPlants(data.plants);
                   hydratedPlants = data.plants;
-                } else {
-                  console.warn("[GardenDashboard] Server returned 0 plants, will try direct query");
                 }
+                // Note: Empty plants from server is handled silently - fallback query will fetch them
               }
               if (Array.isArray(data.members) && data.members.length > 0) {
                 setMembers(
