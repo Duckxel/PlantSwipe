@@ -905,7 +905,26 @@
     },
     "timeline": {
       "title": "Chronologie saisonnière",
-      "hoverPrompt": "Survolez un mois"
+      "hoverPrompt": "Survolez un mois",
+      "months": {
+        "jan": "Janv",
+        "feb": "Févr",
+        "mar": "Mars",
+        "apr": "Avr",
+        "may": "Mai",
+        "jun": "Juin",
+        "jul": "Juil",
+        "aug": "Août",
+        "sep": "Sept",
+        "oct": "Oct",
+        "nov": "Nov",
+        "dec": "Déc"
+      },
+      "legend": {
+        "flowering": "Floraison",
+        "fruiting": "Fructification",
+        "sowing": "Semis"
+      }
     },
     "habitatMap": {
       "title": "Carte des habitats"

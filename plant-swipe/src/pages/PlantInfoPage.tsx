@@ -103,12 +103,11 @@ const MAP_PIN_POSITIONS = [
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
-const buildTimelineData = (plant: Plant) => {
+const buildTimelineData = (plant: Plant, monthLabels: string[]) => {
   const flowering = plant.growth?.floweringMonth || []
   const fruiting = plant.growth?.fruitingMonth || []
   const sowing = plant.growth?.sowingMonth || []
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  return months.map((label, idx) => ({
+  return monthLabels.map((label, idx) => ({
     month: label,
     flowering: flowering.includes(idx + 1) ? 1 : 0,
     fruiting: fruiting.includes(idx + 1) ? 1 : 0,
@@ -718,7 +717,23 @@ const PlantInfoSkeleton: React.FC<{ label?: string }> = ({ label = 'Loading...' 
 
 const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   const { t } = useTranslation('common')
-  const timelineData = React.useMemo(() => buildTimelineData(plant), [plant])
+  
+  const monthLabels = React.useMemo(() => [
+    t('moreInfo.timeline.months.jan'),
+    t('moreInfo.timeline.months.feb'),
+    t('moreInfo.timeline.months.mar'),
+    t('moreInfo.timeline.months.apr'),
+    t('moreInfo.timeline.months.may'),
+    t('moreInfo.timeline.months.jun'),
+    t('moreInfo.timeline.months.jul'),
+    t('moreInfo.timeline.months.aug'),
+    t('moreInfo.timeline.months.sep'),
+    t('moreInfo.timeline.months.oct'),
+    t('moreInfo.timeline.months.nov'),
+    t('moreInfo.timeline.months.dec'),
+  ], [t])
+  
+  const timelineData = React.useMemo(() => buildTimelineData(plant, monthLabels), [plant, monthLabels])
   const height = plant.growth?.height ?? null
   const wingspan = plant.growth?.wingspan ?? null
   const spacing = plant.growth?.separation ?? null
@@ -1100,20 +1115,26 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                     <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                     <YAxis hide domain={[0, 3]} />
-                    <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[8, 8, 0, 0]} />
+                    <RechartsTooltip content={<TimelineTooltip t={t} />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
+                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} shape={(props: any) => <RoundedBar {...props} dataKey="sowing" data={timelineData} />} />
+                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} shape={(props: any) => <RoundedBar {...props} dataKey="fruiting" data={timelineData} />} />
+                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} shape={(props: any) => <RoundedBar {...props} dataKey="flowering" data={timelineData} />} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
-                {Object.entries(TIMELINE_COLORS).map(([label, color]) => (
-                  <span key={label} className="flex items-center gap-1.5 sm:gap-2">
-                    <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                    {label.charAt(0).toUpperCase() + label.slice(1)}
-                  </span>
-                ))}
+                <span className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.flowering }} />
+                  {t('moreInfo.timeline.legend.flowering')}
+                </span>
+                <span className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.fruiting }} />
+                  {t('moreInfo.timeline.legend.fruiting')}
+                </span>
+                <span className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.sowing }} />
+                  {t('moreInfo.timeline.legend.sowing')}
+                </span>
               </div>
             </div>
           </section>
@@ -1260,27 +1281,79 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 }
 
 const TimelineTooltip = (
-  props: TooltipProps<number, string> & { payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number; month?: string } }> },
+  props: TooltipProps<number, string> & { 
+    payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number; month?: string } }>,
+    t: (key: string) => string
+  },
 ) => {
-  const { active, payload: tooltipPayload } = props
+  const { active, payload: tooltipPayload, t } = props
   const data = tooltipPayload && tooltipPayload.length > 0 ? tooltipPayload[0].payload : null
   if (!active || !data) return null
   const displayLabel = typeof data?.month === 'string' ? data.month : ''
+  
+  const translateKey = (key: string) => {
+    if (key === 'flowering') return t('moreInfo.timeline.legend.flowering')
+    if (key === 'fruiting') return t('moreInfo.timeline.legend.fruiting')
+    if (key === 'sowing') return t('moreInfo.timeline.legend.sowing')
+    return key
+  }
+  
   return (
     <div className="rounded-xl border border-sky-400/30 bg-white/95 px-3 py-2 text-xs text-stone-700 shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95 dark:text-stone-100">
       <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{displayLabel || '—'}</p>
       <div className="space-y-1 mt-1">
         {Object.entries(data).map(([key, value]) =>
-          value ? (
+          value && key !== 'month' ? (
             <div key={key} className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TIMELINE_COLORS[key as keyof typeof TIMELINE_COLORS] }} />
-              <span className="capitalize">{key}</span>
+              <span>{translateKey(key)}</span>
             </div>
           ) : null,
         )}
       </div>
     </div>
   )
+}
+
+// Custom bar shape that applies rounded corners only to the topmost bar in each stack
+const RoundedBar = (props: any) => {
+  const { x, y, width, height, fill, dataKey, data, index } = props
+  if (!height || height <= 0) return null
+  
+  // Determine if this bar is the topmost in the stack for this month
+  const monthData = data?.[index]
+  if (!monthData) return <rect x={x} y={y} width={width} height={height} fill={fill} />
+  
+  // Stack order from bottom to top: sowing -> fruiting -> flowering
+  const stackOrder = ['sowing', 'fruiting', 'flowering']
+  const currentIndex = stackOrder.indexOf(dataKey)
+  
+  // Check if any bar above this one has data
+  let isTopmost = true
+  for (let i = currentIndex + 1; i < stackOrder.length; i++) {
+    if (monthData[stackOrder[i]] > 0) {
+      isTopmost = false
+      break
+    }
+  }
+  
+  const radius = isTopmost ? 6 : 0
+  
+  if (radius === 0) {
+    return <rect x={x} y={y} width={width} height={height} fill={fill} />
+  }
+  
+  // Draw rounded rectangle for topmost bar
+  const path = `
+    M ${x},${y + radius}
+    Q ${x},${y} ${x + radius},${y}
+    L ${x + width - radius},${y}
+    Q ${x + width},${y} ${x + width},${y + radius}
+    L ${x + width},${y + height}
+    L ${x},${y + height}
+    Z
+  `
+  return <path d={path} fill={fill} />
 }
 
 const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string; className?: string }> = ({
