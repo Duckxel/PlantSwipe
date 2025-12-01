@@ -73,44 +73,99 @@ export const OverviewStatCardSkeleton: React.FC = () => {
 // Skeleton for Overview Section
 export const OverviewSectionSkeleton: React.FC = () => {
   return (
-    <div className="space-y-4">
-      {/* Stat cards row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <OverviewStatCardSkeleton />
-        <OverviewStatCardSkeleton />
-        <OverviewStatCardSkeleton />
+    <div className="space-y-6">
+      {/* Hero Section skeleton */}
+      <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-stone-100 via-stone-50 to-stone-100 dark:from-[#1a1a1a] dark:via-[#1f1f1f] dark:to-[#1a1a1a] min-h-[200px] p-8 md:p-10">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div className="space-y-4">
+            <Skeleton className="h-10 w-64" />
+            <div className="flex flex-wrap items-center gap-3">
+              <Skeleton className="h-9 w-32 rounded-full" />
+              <Skeleton className="h-9 w-28 rounded-full" />
+              <Skeleton className="h-9 w-24 rounded-full" />
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <Skeleton className="w-20 h-20 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-5 w-16" />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Today's Progress card skeleton */}
-      <Card className="rounded-2xl p-4">
-        <Skeleton className="h-5 w-32 mb-2" />
-        <Skeleton className="h-4 w-24 mb-3" />
-        <Skeleton className="h-3 w-full rounded-full" />
-      </Card>
-
-      {/* Last 30 Days calendar skeleton */}
-      <Card className="rounded-2xl p-4">
-        <Skeleton className="h-5 w-32 mb-3" />
-        <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
-          {Array.from({ length: 30 }).map((_, idx) => (
-            <div key={idx} className="flex flex-col items-center">
-              <Skeleton className="w-7 h-7 rounded-md" />
-              {idx === 29 && <Skeleton className="mt-1 h-0.5 w-5 rounded-full" />}
+      {/* Members Section skeleton */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="h-6 w-6 rounded" />
+          <Skeleton className="h-6 w-40" />
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className="flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 rounded-2xl px-3 py-2">
+              <Skeleton className="w-10 h-10 rounded-full" />
+              <div className="space-y-1">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
             </div>
           ))}
         </div>
       </Card>
 
-      {/* Activity Today card skeleton */}
-      <Card className="rounded-2xl p-4">
-        <Skeleton className="h-5 w-32 mb-2" />
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, idx) => (
-            <div key={idx} className="flex items-start gap-2">
-              <Skeleton className="h-4 w-12" />
-              <Skeleton className="h-4 w-2" />
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 flex-1" />
+      {/* Plants Gallery skeleton */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-6 w-6 rounded" />
+            <Skeleton className="h-6 w-36" />
+          </div>
+          <Skeleton className="h-8 w-20 rounded-xl" />
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <Skeleton key={idx} className="aspect-square rounded-2xl" />
+          ))}
+        </div>
+      </Card>
+
+      {/* 30-Day Calendar skeleton */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-6 w-6 rounded" />
+            <Skeleton className="h-6 w-32" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-16" />
+          </div>
+        </div>
+        <div className="grid grid-cols-7 md:grid-cols-10 gap-2">
+          {Array.from({ length: 30 }).map((_, idx) => (
+            <Skeleton key={idx} className="aspect-square rounded-xl" />
+          ))}
+        </div>
+      </Card>
+
+      {/* Activity Feed skeleton */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="h-6 w-6 rounded" />
+          <Skeleton className="h-6 w-32" />
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50">
+              <Skeleton className="w-8 h-8 rounded-full flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-40" />
+                </div>
+                <Skeleton className="h-3 w-16" />
+              </div>
             </div>
           ))}
         </div>

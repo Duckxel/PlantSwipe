@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { Garden, GardenMember, GardenPlant } from '@/types/garden'
+import type { Garden, GardenMember, GardenPlant, GardenPrivacy } from '@/types/garden'
 import type { GardenTaskRow } from '@/types/garden'
 import type { GardenPlantTask, GardenPlantTaskOccurrence, TaskType, TaskScheduleKind, TaskUnit } from '@/types/garden'
 import type { Plant } from '@/types/plant'
@@ -380,28 +380,64 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   if (memberErr) throw new Error(memberErr.message)
   const gardenIds = (memberRows || []).map((r: { garden_id: string }) => r.garden_id)
   if (gardenIds.length === 0) return []
-  const { data: gardens, error: gerr } = await supabase
+  
+  // Try with privacy column first, fallback if column doesn't exist
+  let gardens: any[] = []
+  let gerr: any = null
+  const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
     .in('id', gardenIds)
+  gardens = result.data || []
+  gerr = result.error
+  
+  // If error mentions privacy column, try without it
+  if (gerr && String(gerr.message || '').toLowerCase().includes('privacy')) {
+    const fallbackResult = await supabase
+      .from('gardens')
+      .select('id, name, cover_image_url, created_by, created_at, streak')
+      .in('id', gardenIds)
+    gardens = fallbackResult.data || []
+    gerr = fallbackResult.error
+  }
+  
   if (gerr) throw new Error(gerr.message)
-  return (gardens || []).map((g: { id: string; name: string; cover_image_url: string | null; created_by: string; created_at: string }) => ({
+  return gardens.map((g: any) => ({
     id: String(g.id),
     name: String(g.name),
     coverImageUrl: g.cover_image_url || null,
     createdBy: String(g.created_by),
     createdAt: String(g.created_at),
-    streak: Number((g as any).streak ?? 0),
+    streak: Number(g.streak ?? 0),
+    privacy: (g.privacy || 'public') as GardenPrivacy,
   }))
 }
 
 export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string }): Promise<Garden> {
   const { name, coverImageUrl = null, ownerUserId } = params
-  const { data, error } = await supabase
+  
+  // Try with privacy column first, fallback if column doesn't exist
+  let data: any = null
+  let error: any = null
+  const result = await supabase
     .from('gardens')
     .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId })
-    .select('id, name, cover_image_url, created_by, created_at')
+    .select('id, name, cover_image_url, created_by, created_at, privacy')
     .single()
+  data = result.data
+  error = result.error
+  
+  // If error mentions privacy column, try without it
+  if (error && String(error.message || '').toLowerCase().includes('privacy')) {
+    const fallbackResult = await supabase
+      .from('gardens')
+      .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId })
+      .select('id, name, cover_image_url, created_by, created_at')
+      .single()
+    data = fallbackResult.data
+    error = fallbackResult.error
+  }
+  
   if (error) throw new Error(error.message)
   const garden: Garden = {
     id: String(data.id),
@@ -409,6 +445,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
     coverImageUrl: data.cover_image_url || null,
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
+    privacy: ((data as any).privacy || 'public') as GardenPrivacy,
   }
   // Add owner as member
   const { error: merr } = await supabase
@@ -419,13 +456,53 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
 }
 
 export async function getGarden(gardenId: string): Promise<Garden | null> {
-  const { data, error } = await supabase
+  // Try with new privacy column first
+  let data: any = null
+  let error: any = null
+  
+  const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
     .eq('id', gardenId)
     .maybeSingle()
+  
+  if (result.error && result.error.message?.includes('privacy')) {
+    // New column doesn't exist, try old is_public column
+    const fallback1 = await supabase
+      .from('gardens')
+      .select('id, name, cover_image_url, created_by, created_at, streak, is_public')
+      .eq('id', gardenId)
+      .maybeSingle()
+    
+    if (fallback1.error && fallback1.error.message?.includes('is_public')) {
+      // Neither column exists, use base schema
+      const fallback2 = await supabase
+        .from('gardens')
+        .select('id, name, cover_image_url, created_by, created_at, streak')
+        .eq('id', gardenId)
+        .maybeSingle()
+      data = fallback2.data
+      error = fallback2.error
+    } else {
+      data = fallback1.data
+      error = fallback1.error
+    }
+  } else {
+    data = result.data
+    error = result.error
+  }
+  
   if (error) throw new Error(error.message)
   if (!data) return null
+  
+  // Determine privacy value from available data
+  let privacy: GardenPrivacy = 'public'
+  if (data.privacy) {
+    privacy = data.privacy as GardenPrivacy
+  } else if (data.is_public !== undefined) {
+    privacy = data.is_public ? 'public' : 'private'
+  }
+  
   return {
     id: String(data.id),
     name: String(data.name),
@@ -433,6 +510,21 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
     streak: Number((data as any).streak ?? 0),
+    privacy,
+  }
+}
+
+export async function updateGardenPrivacy(gardenId: string, privacy: GardenPrivacy): Promise<void> {
+  const { error } = await supabase
+    .from('gardens')
+    .update({ privacy })
+    .eq('id', gardenId)
+  if (error) {
+    // If the column doesn't exist yet, throw a user-friendly error
+    if (error.message?.includes('privacy')) {
+      throw new Error('Privacy feature not yet available. Please run database migration.')
+    }
+    throw new Error(error.message)
   }
 }
 
