@@ -419,11 +419,30 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
 }
 
 export async function getGarden(gardenId: string): Promise<Garden | null> {
-  const { data, error } = await supabase
+  // First try with is_public column (new schema)
+  let data: any = null
+  let error: any = null
+  
+  const result = await supabase
     .from('gardens')
     .select('id, name, cover_image_url, created_by, created_at, streak, is_public')
     .eq('id', gardenId)
     .maybeSingle()
+  
+  if (result.error && result.error.message?.includes('is_public')) {
+    // Column doesn't exist yet, fall back to old schema
+    const fallback = await supabase
+      .from('gardens')
+      .select('id, name, cover_image_url, created_by, created_at, streak')
+      .eq('id', gardenId)
+      .maybeSingle()
+    data = fallback.data
+    error = fallback.error
+  } else {
+    data = result.data
+    error = result.error
+  }
+  
   if (error) throw new Error(error.message)
   if (!data) return null
   return {
@@ -442,7 +461,13 @@ export async function updateGardenPrivacy(gardenId: string, isPublic: boolean): 
     .from('gardens')
     .update({ is_public: isPublic })
     .eq('id', gardenId)
-  if (error) throw new Error(error.message)
+  if (error) {
+    // If the column doesn't exist yet, throw a user-friendly error
+    if (error.message?.includes('is_public')) {
+      throw new Error('Privacy feature not yet available. Please run database migration.')
+    }
+    throw new Error(error.message)
+  }
 }
 
 export async function refreshGardenStreak(gardenId: string, anchorDayIso?: string | null): Promise<void> {
