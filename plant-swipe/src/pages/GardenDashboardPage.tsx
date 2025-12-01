@@ -422,24 +422,31 @@ export const GardenDashboardPage: React.FC = () => {
               );
             }
           }
-        // Ensure base streak is refreshed from server, at most once per session
-        try {
-          if (!streakRefreshedRef.current) {
-            streakRefreshedRef.current = true;
-            await refreshGardenStreak(
+        // OPTIMIZED: Refresh streak in background to not block initial render
+        // The streak is not critical for initial display
+        if (!streakRefreshedRef.current) {
+          streakRefreshedRef.current = true;
+          // Defer streak refresh to background
+          const refreshStreakBg = () => {
+            refreshGardenStreak(
               id,
               new Date(new Date(today).getTime() - 24 * 3600 * 1000)
                 .toISOString()
                 .slice(0, 10),
-            );
-            const g1 = await getGarden(id);
-            setGarden(g1);
-            // Prefer refreshed garden's createdAt if available
-            gardenCreatedDayIso = g1?.createdAt
-              ? new Date(g1.createdAt).toISOString().slice(0, 10)
-              : gardenCreatedDayIso;
+            ).then(() => {
+              // Update garden after streak refresh
+              getGarden(id).then((g1) => {
+                if (g1) setGarden(g1);
+              }).catch(() => {});
+            }).catch(() => {});
+          };
+          // Use requestIdleCallback if available
+          if ("requestIdleCallback" in window) {
+            window.requestIdleCallback(refreshStreakBg, { timeout: 3000 });
+          } else {
+            setTimeout(refreshStreakBg, 500);
           }
-        } catch {}
+        }
         // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
         const start = new Date(today);
         start.setDate(start.getDate() - 29);

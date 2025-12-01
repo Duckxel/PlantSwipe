@@ -109,10 +109,10 @@ export const GardenListPage: React.FC = () => {
     timestamp: number;
     today: string;
   } | null>(null);
-  const CACHE_TTL = 30 * 1000; // 30 seconds cache for resync
-  const TASK_DATA_CACHE_TTL = 10 * 1000; // 10 seconds cache for task data
-  const LOCALSTORAGE_TASK_CACHE_TTL = 60 * 1000; // 1 minute cache in localStorage
-  const LOCALSTORAGE_GARDEN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache for gardens
+  const CACHE_TTL = 2 * 60 * 1000; // 2 minutes cache for resync (was 30s)
+  const TASK_DATA_CACHE_TTL = 60 * 1000; // 1 minute cache for task data (was 10s)
+  const LOCALSTORAGE_TASK_CACHE_TTL = 3 * 60 * 1000; // 3 minutes cache in localStorage (was 1 min)
+  const LOCALSTORAGE_GARDEN_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache for gardens (was 5 min)
 
   // localStorage cache helpers
   const getLocalStorageCache = React.useCallback((key: string): any | null => {
@@ -274,23 +274,11 @@ export const GardenListPage: React.FC = () => {
                 .catch(() => {});
             }
 
-            // Fetch member counts for fresh gardens
+            // Fetch member counts for fresh gardens using optimized batch
             if (freshData.length > 0) {
               const gardenIds = freshData.map((g) => g.id);
-              supabase
-                .from("garden_members")
-                .select("garden_id")
-                .in("garden_id", gardenIds)
-                .then(({ data: memberRows }) => {
-                  if (memberRows) {
-                    const counts: Record<string, number> = {};
-                    for (const row of memberRows) {
-                      const gid = String(row.garden_id);
-                      counts[gid] = (counts[gid] || 0) + 1;
-                    }
-                    setMemberCountsByGarden(counts);
-                  }
-                })
+              getGardenMemberCountsBatch(gardenIds)
+                .then((counts) => setMemberCountsByGarden(counts))
                 .catch(() => {});
             }
           })
@@ -298,67 +286,33 @@ export const GardenListPage: React.FC = () => {
             // If background fetch fails, keep using cached data
           });
 
-        // Load progress for cached gardens - use DIRECT cache queries (FASTEST)
+        // Load progress and member counts in parallel for cached gardens
         const today =
           serverTodayRef.current ?? new Date().toISOString().slice(0, 10);
-        if (user?.id) {
-          getUserGardensTasksTodayCached(user.id, today)
-            .then((progMap) => {
-              const converted: Record<
-                string,
-                { due: number; completed: number }
-              > = {};
-              for (const [gid, prog] of Object.entries(progMap)) {
-                converted[gid] = { due: prog.due, completed: prog.completed };
-              }
-              setProgressByGarden(converted);
-            })
-            .catch(() => {
-              // On error, set empty progress
-              setProgressByGarden({});
-            });
-        } else {
-          getGardensTodayProgressBatchCached(
-            data.map((g) => g.id),
-            today,
-          )
-            .then((progMap) => {
-              setProgressByGarden(progMap);
-            })
-            .catch(() => {
-              setProgressByGarden({});
-            });
-        }
-
-        // Fetch member counts for cached gardens
-        if (data.length > 0) {
-          const gardenIds = data.map((g) => g.id);
-          supabase
-            .from("garden_members")
-            .select("garden_id")
-            .in("garden_id", gardenIds)
-            .then(({ data: memberRows }) => {
-              if (memberRows) {
-                const counts: Record<string, number> = {};
-                for (const row of memberRows) {
-                  const gid = String(row.garden_id);
-                  counts[gid] = (counts[gid] || 0) + 1;
-                }
-                setMemberCountsByGarden(counts);
-              }
-            })
-            .catch(() => {});
-        }
-
-        // Fetch member counts for cached gardens - use batch fetch
-        if (data.length > 0) {
-          const gardenIds = data.map((g) => g.id);
-          getGardenMemberCountsBatch(gardenIds)
-            .then((counts) => {
-              setMemberCountsByGarden(counts);
-            })
-            .catch(() => {});
-        }
+        const gardenIds = data.map((g) => g.id);
+        
+        // OPTIMIZED: Single parallel fetch for progress and member counts
+        Promise.all([
+          user?.id
+            ? getUserGardensTasksTodayCached(user.id, today)
+            : getGardensTodayProgressBatchCached(gardenIds, today),
+          gardenIds.length > 0 ? getGardenMemberCountsBatch(gardenIds) : Promise.resolve({})
+        ]).then(([progResult, counts]) => {
+          // Handle progress
+          if (user?.id && progResult) {
+            const converted: Record<string, { due: number; completed: number }> = {};
+            for (const [gid, prog] of Object.entries(progResult)) {
+              converted[gid] = { due: (prog as any).due, completed: (prog as any).completed };
+            }
+            setProgressByGarden(converted);
+          } else if (progResult) {
+            setProgressByGarden(progResult as Record<string, { due: number; completed: number }>);
+          }
+          // Handle member counts
+          if (counts) {
+            setMemberCountsByGarden(counts as Record<string, number>);
+          }
+        }).catch(() => {});
 
         return;
       }
@@ -394,62 +348,34 @@ export const GardenListPage: React.FC = () => {
         24 * 60 * 60 * 1000,
       ); // 24 hours
 
-      // Fetch member counts for all gardens - use batch fetch
-      if (data.length > 0) {
-        const gardenIds = data.map((g) => g.id);
-        getGardenMemberCountsBatch(gardenIds)
-          .then((counts) => {
-            setMemberCountsByGarden(counts);
-          })
-          .catch(() => {});
-      }
-
       // Set loading to false immediately so gardens render
       setLoading(false);
 
-      // Load progress using DIRECT cache table queries (INSTANT - no RPC overhead)
-      // This is the FASTEST approach - directly reads from cache tables
-      // Cache should already be populated by database triggers, so we just read it
-      if (user?.id) {
-        // Use direct cache query - fastest possible, no blocking operations
-        getUserGardensTasksTodayCached(user.id, today)
-          .then((progMap) => {
-            // Convert to the format expected by progressByGarden
-            const converted: Record<
-              string,
-              { due: number; completed: number }
-            > = {};
-            for (const [gid, prog] of Object.entries(progMap)) {
-              converted[gid] = { due: prog.due, completed: prog.completed };
-            }
-            setProgressByGarden(converted);
-          })
-          .catch(() => {
-            // On error, try fallback
-            getGardensTodayProgressBatchCached(
-              data.map((g) => g.id),
-              today,
-            )
-              .then((progMap) => {
-                setProgressByGarden(progMap);
-              })
-              .catch(() => {
-                setProgressByGarden({});
-              });
-          });
-      } else {
-        // For non-logged-in users, use garden-level cache
-        getGardensTodayProgressBatchCached(
-          data.map((g) => g.id),
-          today,
-        )
-          .then((progMap) => {
-            setProgressByGarden(progMap);
-          })
-          .catch(() => {
-            setProgressByGarden({});
-          });
-      }
+      // Load progress and member counts in parallel (non-blocking)
+      const gardenIds = data.map((g) => g.id);
+      Promise.all([
+        user?.id
+          ? getUserGardensTasksTodayCached(user.id, today)
+          : getGardensTodayProgressBatchCached(gardenIds, today),
+        gardenIds.length > 0 ? getGardenMemberCountsBatch(gardenIds) : Promise.resolve({})
+      ]).then(([progResult, counts]) => {
+        // Handle progress
+        if (user?.id && progResult) {
+          const converted: Record<string, { due: number; completed: number }> = {};
+          for (const [gid, prog] of Object.entries(progResult)) {
+            converted[gid] = { due: (prog as any).due, completed: (prog as any).completed };
+          }
+          setProgressByGarden(converted);
+        } else if (progResult) {
+          setProgressByGarden(progResult as Record<string, { due: number; completed: number }>);
+        }
+        // Handle member counts
+        if (counts) {
+          setMemberCountsByGarden(counts as Record<string, number>);
+        }
+      }).catch(() => {
+        setProgressByGarden({});
+      });
     } catch (e: any) {
       setError(e?.message || t("garden.failedToLoad"));
       setLoading(false);
@@ -627,18 +553,30 @@ export const GardenListPage: React.FC = () => {
           }
         }
 
-        // 2) Resync only if needed and not cached recently
-        // IMPORTANT: When skipResync=false, always resync to ensure task occurrences exist
+        // 2) Resync only if truly needed - this is expensive!
+        // Skip if we already synced recently (using resyncCacheRef)
+        // Only resync if explicitly requested AND cache is stale
+        const gardensNeedingResync: string[] = [];
         if (!skipResync) {
-          // Use optimized server-side batch resync
-          const gardenIdsToSync = gardensList.map((g) => g.id);
-          await resyncMultipleGardensTasks(gardenIdsToSync, startIso, endIso);
-
-          // Update cache timestamps
           const now = Date.now();
           for (const g of gardensList) {
             const cacheKey = `${g.id}::${today}`;
-            resyncCacheRef.current[cacheKey] = now;
+            const lastSync = resyncCacheRef.current[cacheKey] || 0;
+            // Only resync if last sync was more than CACHE_TTL ago
+            if (now - lastSync > CACHE_TTL) {
+              gardensNeedingResync.push(g.id);
+            }
+          }
+          
+          // Only call expensive resync if there are gardens that need it
+          if (gardensNeedingResync.length > 0) {
+            await resyncMultipleGardensTasks(gardensNeedingResync, startIso, endIso);
+            
+            // Update cache timestamps for synced gardens
+            for (const gid of gardensNeedingResync) {
+              const cacheKey = `${gid}::${today}`;
+              resyncCacheRef.current[cacheKey] = now;
+            }
           }
         }
 
@@ -1062,66 +1000,49 @@ export const GardenListPage: React.FC = () => {
   }, [user?.id, clearLocalStorageCache, loadAllTodayOccurrences]);
 
   // Defer task loading until after gardens are displayed (non-blocking)
-  // Use requestIdleCallback for better performance when browser is idle
+  // OPTIMIZED: Show cached data first, then refresh in background
   React.useEffect(() => {
     // Only load tasks after gardens are loaded
     if (!loading && gardens.length > 0) {
       let cancelled = false;
-      let backgroundTimer: ReturnType<typeof setTimeout> | null = null;
 
-      // Use requestIdleCallback if available, otherwise use setTimeout
-      const scheduleTask = (callback: () => void, delay: number = 0) => {
-        if ("requestIdleCallback" in window) {
-          return window.requestIdleCallback(callback, { timeout: delay + 100 });
-        }
-        return setTimeout(callback, delay);
-      };
-
-      // Load tasks immediately but skip resync for instant display
-      const timer = scheduleTask(() => {
+      // FAST PATH: Load from cache immediately (skipResync=true for instant display)
+      // This shows cached data instantly without waiting for expensive sync
+      loadAllTodayOccurrences(undefined, undefined, true).then(() => {
         if (cancelled) return;
-        // On initial load, always do resync to ensure task occurrences exist
-        loadAllTodayOccurrences(undefined, undefined, false); // skipResync = false to ensure occurrences are created
-
-        // Background refresh after initial load completes
-        setTimeout(() => {
+        
+        // SLOW PATH: Check if we need to resync in background
+        // Only resync if cache seems empty or stale
+        const today = serverTodayRef.current ?? serverToday;
+        if (!today) return;
+        
+        // Defer resync to not block initial render
+        const bgTimer = setTimeout(() => {
           if (cancelled) return;
-          const today = serverTodayRef.current ?? serverToday;
-          if (today && gardens.length > 0) {
-            // Refresh cache after resync completes
-            Promise.all(
-              gardens.map((g) => {
-                const cacheKey = `${g.id}::${today}`;
-                return refreshGardenTaskCache(g.id, today)
-                  .then(() => {
-                    if (!cancelled) {
-                      resyncCacheRef.current[cacheKey] = Date.now();
-                    }
-                  })
-                  .catch(() => {});
-              }),
-            )
-              .then(() => {
-                // Reload tasks after cache refresh
-                if (!cancelled) {
-                  loadAllTodayOccurrences(undefined, undefined, true).catch(
-                    () => {},
-                  );
-                }
-              })
-              .catch(() => {});
+          
+          // Check if any gardens need resync
+          const now = Date.now();
+          let needsResync = false;
+          for (const g of gardens) {
+            const cacheKey = `${g.id}::${today}`;
+            const lastSync = resyncCacheRef.current[cacheKey] || 0;
+            if (now - lastSync > CACHE_TTL) {
+              needsResync = true;
+              break;
+            }
           }
-        }, 500); // Wait for resync to complete
-      }, 0); // Start immediately when idle
+          
+          if (needsResync) {
+            // Resync in background, then reload data
+            loadAllTodayOccurrences(undefined, undefined, false).catch(() => {});
+          }
+        }, 100); // Small delay to let UI settle first
+
+        return () => clearTimeout(bgTimer);
+      }).catch(() => {});
 
       return () => {
         cancelled = true;
-        if (typeof timer === "number") {
-          clearTimeout(timer);
-        } else if ("cancelIdleCallback" in window) {
-          window.cancelIdleCallback(timer as number);
-        }
-        if (backgroundTimer) clearTimeout(backgroundTimer);
       };
     }
   }, [loading, gardens.length, loadAllTodayOccurrences, serverToday, gardens]);
