@@ -811,6 +811,77 @@
       "dec": "déc."
     }
   },
+  "plantDetails": {
+    "palette": "Palette",
+    "noImage": "Pas encore d'image",
+    "stats": {
+      "sunLevel": "Ensoleillement",
+      "wateringNeed": "Arrosage",
+      "humidity": "Humidité",
+      "maintenance": "Entretien",
+      "temperature": "Température",
+      "careIntensity": "Intensité des soins"
+    },
+    "values": {
+      "flexible": "Flexible",
+      "scheduled": "Planifié",
+      "every": "Chaque",
+      "adaptive": "Adaptatif",
+      "ambient": "Ambiant",
+      "stable": "Stable"
+    },
+    "viewer": {
+      "zoomIn": "Agrandir",
+      "zoomOut": "Réduire",
+      "reset": "Réinitialiser"
+    },
+    "plantType": {
+      "plant": "Plante",
+      "flower": "Fleur",
+      "bamboo": "Bambou",
+      "shrub": "Arbuste",
+      "tree": "Arbre",
+      "cactus": "Cactus",
+      "succulent": "Plante grasse"
+    },
+    "utility": {
+      "comestible": "Comestible",
+      "ornemental": "Ornementale",
+      "producefruit": "Fruitière",
+      "aromatic": "Aromatique",
+      "medicinal": "Médicinale",
+      "odorous": "Odorante",
+      "climbing": "Grimpante",
+      "cereal": "Céréale",
+      "spice": "Épice"
+    },
+    "seasons": {
+      "spring": "Printemps",
+      "summer": "Été",
+      "autumn": "Automne",
+      "fall": "Automne",
+      "winter": "Hiver"
+    },
+    "sunLevels": {
+      "lowlight": "Faible lumière",
+      "shade": "Ombre",
+      "partialsun": "Mi-ombre",
+      "fullsun": "Plein soleil"
+    },
+    "maintenanceLevels": {
+      "none": "Aucun",
+      "low": "Faible",
+      "moderate": "Modéré",
+      "heavy": "Élevé",
+      "high": "Élevé"
+    },
+    "timePeriods": {
+      "day": "jour",
+      "week": "semaine",
+      "month": "mois",
+      "year": "an"
+    }
+  },
   "moreInfo": {
     "header": {
       "eyebrow": "Aperçu immersif",

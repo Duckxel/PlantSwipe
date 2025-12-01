@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Plant, PlantWateringSchedule } from "@/types/plant"
+import { useTranslation } from "react-i18next"
 import {
     SunMedium,
     Droplets,
@@ -30,6 +31,7 @@ interface PlantDetailsProps {
 }
 
 export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
+  const { t } = useTranslation('common')
   const images = (plant.images || []).filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const activeImage = images[activeImageIndex] || null
@@ -160,59 +162,98 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   const utilityBadges = plant.utility?.length ? plant.utility : []
   const seasons = plant.identity?.season || plant.seasons || []
 
+  const translateUtility = (utility: string) => {
+    const key = `plantDetails.utility.${utility.toLowerCase().replace(/[_\s-]/g, '')}`
+    const translated = t(key, { defaultValue: '' })
+    return translated || utility.replace(/_/g, ' ')
+  }
+
+  const translateSeason = (season: string) => {
+    const key = `plantDetails.seasons.${season.toLowerCase()}`
+    const translated = t(key, { defaultValue: '' })
+    return translated || season
+  }
+
+  const translatePlantType = (type?: string) => {
+    if (!type) return t('plantDetails.plantType.plant')
+    const key = `plantDetails.plantType.${type.toLowerCase()}`
+    const translated = t(key, { defaultValue: '' })
+    return translated || type
+  }
+
+  const translateTimePeriod = (period: string) => {
+    const key = `plantDetails.timePeriods.${period.toLowerCase().replace(/[_-\s]/g, '')}`
+    const translated = t(key, { defaultValue: '' })
+    return translated || period.replace(/[_-]/g, " ").toLowerCase()
+  }
+
   const formatWateringNeed = (schedules?: PlantWateringSchedule[]) => {
-    if (!schedules?.length) return "Flexible"
+    if (!schedules?.length) return t('plantDetails.values.flexible')
     const schedule = schedules[0]
     const quantity = schedule.quantity ?? undefined
-    const timePeriod = schedule.timePeriod?.replace(/[_-]/g, " ").toLowerCase()
+    const timePeriod = schedule.timePeriod ? translateTimePeriod(schedule.timePeriod) : undefined
 
     if (quantity && timePeriod) return `${quantity} / ${timePeriod}`
     if (quantity) return `${quantity}x`
-    if (timePeriod) return `Every ${timePeriod}`
-    return "Scheduled"
+    if (timePeriod) return `${t('plantDetails.values.every')} ${timePeriod}`
+    return t('plantDetails.values.scheduled')
   }
 
     const maintenanceLevel =
       plant.identity?.maintenanceLevel || plant.plantCare?.maintenanceLevel || plant.care?.maintenanceLevel || undefined
 
+  const translateLevelSun = (levelSun?: string) => {
+    if (!levelSun) return t('plantDetails.values.adaptive')
+    const key = `plantDetails.sunLevels.${levelSun.toLowerCase().replace(/[_\s-]/g, '')}`
+    const translated = t(key, { defaultValue: '' })
+    return translated || levelSun
+  }
+
+  const translateMaintenance = (level?: string) => {
+    if (!level) return t('plantDetails.values.adaptive')
+    const key = `plantDetails.maintenanceLevels.${level.toLowerCase().replace(/[_\s-]/g, '')}`
+    const translated = t(key, { defaultValue: '' })
+    return translated || level
+  }
+
   const stats = [
     {
-      label: "Sun Level",
-      value: plant.plantCare?.levelSun || "Adaptive",
+      label: t('plantDetails.stats.sunLevel'),
+      value: translateLevelSun(plant.plantCare?.levelSun),
       gradient: "from-amber-400/90 to-orange-600",
       icon: <SunMedium className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible: Boolean(plant.plantCare?.levelSun),
     },
       {
-        label: "Watering Need",
+        label: t('plantDetails.stats.wateringNeed'),
         value: formatWateringNeed(plant.plantCare?.watering?.schedules),
         gradient: "from-blue-400/90 to-cyan-600",
         icon: <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
         visible: Boolean(plant.plantCare?.watering?.schedules?.length),
       },
     {
-      label: "Humidity",
-      value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : "Ambient",
+      label: t('plantDetails.stats.humidity'),
+      value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : t('plantDetails.values.ambient'),
       gradient: "from-cyan-400/90 to-teal-600",
       icon: <Droplets className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible: plant.plantCare?.hygrometry !== undefined,
     },
       {
-        label: "Maintenance",
-        value: maintenanceLevel ?? "Adaptive",
-        detail: "Care intensity",
+        label: t('plantDetails.stats.maintenance'),
+        value: translateMaintenance(maintenanceLevel),
+        detail: t('plantDetails.stats.careIntensity'),
         gradient: "from-emerald-400/90 to-lime-500",
         icon: <Wrench className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
         visible: Boolean(maintenanceLevel),
       },
     {
-      label: "Temperature",
+      label: t('plantDetails.stats.temperature'),
       value:
         plant.plantCare?.temperatureMin !== undefined && plant.plantCare?.temperatureMax !== undefined
           ? `${plant.plantCare.temperatureMin}°-${plant.plantCare.temperatureMax}°C`
           : plant.plantCare?.temperatureIdeal !== undefined
           ? `${plant.plantCare.temperatureIdeal}°C`
-          : "Stable",
+          : t('plantDetails.values.stable'),
       gradient: "from-red-400/90 to-pink-600",
       icon: <Thermometer className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible:
@@ -238,16 +279,16 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
           <div className="flex-1 space-y-3 sm:space-y-4">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <Badge variant="secondary" className="uppercase tracking-wide text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
-                {plant.plantType || "Plant"}
+                {translatePlantType(plant.plantType)}
               </Badge>
               {utilityBadges.map((u) => (
                 <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
-                  {u}
+                  {translateUtility(u)}
                 </Badge>
               ))}
               {seasons.length > 0 && (
                 <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
-                  {seasons.join(" • ")}
+                  {seasons.map(s => translateSeason(s)).join(" • ")}
                 </Badge>
               )}
             </div>
@@ -274,7 +315,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
             )}
             {heroColors.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Palette</span>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">{t('plantDetails.palette')}</span>
                 {heroColors.map((c) => (
                   <div key={c.id || c.hexCode} className="flex items-center gap-2 rounded-full border border-muted/50 bg-white/70 px-3 py-1 shadow-sm dark:bg-slate-900/50">
                     <span className="h-4 w-4 rounded-full border" style={{ backgroundColor: c.hexCode }} />
@@ -313,7 +354,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               </div>
             ) : (
               <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border border-dashed border-muted/60 bg-white/40 text-sm text-muted-foreground sm:w-80 lg:w-96">
-                No image yet
+                {t('plantDetails.noImage')}
               </div>
             )}
           </div>
@@ -356,15 +397,15 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
             <div className="mt-4 flex flex-wrap items-center gap-3 text-white">
               <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); adjustZoom(0.2) }}>
                 <ZoomIn className="mr-1 h-4 w-4" />
-                Zoom in
+                {t('plantDetails.viewer.zoomIn')}
               </Button>
               <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); adjustZoom(-0.2) }}>
                 <ZoomOut className="mr-1 h-4 w-4" />
-                Zoom out
+                {t('plantDetails.viewer.zoomOut')}
               </Button>
               <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); resetViewer() }}>
                 <RefreshCw className="mr-1 h-4 w-4" />
-                Reset
+                {t('plantDetails.viewer.reset')}
               </Button>
             </div>
           </div>
