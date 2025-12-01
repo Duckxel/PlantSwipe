@@ -655,6 +655,7 @@
     "garden": {
     "title": "Jardins",
     "yourGardens": "Vos jardins",
+    "addToGarden": "Ajouter au jardin",
     "create": "Créer un jardin",
     "createGarden": "Créer un jardin",
     "name": "Nom",
@@ -927,6 +928,404 @@
       "oct": "oct.",
       "nov": "nov.",
       "dec": "déc."
+    }
+  },
+  "plantDetails": {
+    "palette": "Palette",
+    "noImage": "Pas encore d'image",
+    "stats": {
+      "sunLevel": "Ensoleillement",
+      "wateringNeed": "Arrosage",
+      "humidity": "Humidité",
+      "maintenance": "Entretien",
+      "temperature": "Température",
+      "careIntensity": "Intensité des soins"
+    },
+    "values": {
+      "flexible": "Flexible",
+      "scheduled": "Planifié",
+      "every": "Chaque",
+      "adaptive": "Adaptatif",
+      "ambient": "Ambiant",
+      "stable": "Stable"
+    },
+    "viewer": {
+      "zoomIn": "Agrandir",
+      "zoomOut": "Réduire",
+      "reset": "Réinitialiser"
+    },
+    "plantType": {
+      "plant": "Plante",
+      "flower": "Fleur",
+      "bamboo": "Bambou",
+      "shrub": "Arbuste",
+      "tree": "Arbre",
+      "cactus": "Cactus",
+      "succulent": "Plante grasse"
+    },
+    "utility": {
+      "comestible": "Comestible",
+      "ornemental": "Ornementale",
+      "producefruit": "Fruitière",
+      "aromatic": "Aromatique",
+      "medicinal": "Médicinale",
+      "odorous": "Odorante",
+      "climbing": "Grimpante",
+      "cereal": "Céréale",
+      "spice": "Épice"
+    },
+    "seasons": {
+      "spring": "Printemps",
+      "summer": "Été",
+      "autumn": "Automne",
+      "fall": "Automne",
+      "winter": "Hiver"
+    },
+    "sunLevels": {
+      "lowlight": "Faible lumière",
+      "shade": "Ombre",
+      "partialsun": "Mi-ombre",
+      "fullsun": "Plein soleil"
+    },
+    "maintenanceLevels": {
+      "none": "Aucun",
+      "low": "Faible",
+      "moderate": "Modéré",
+      "heavy": "Élevé",
+      "high": "Élevé"
+    },
+    "timePeriods": {
+      "day": "jour",
+      "week": "semaine",
+      "month": "mois",
+      "year": "an"
+    }
+  },
+  "moreInfo": {
+    "header": {
+      "eyebrow": "Aperçu immersif",
+      "title": "Ressentez la plante avant de lire",
+      "subtitle": "Explorez le cube holographique, parcourez la chronologie saisonnière et découvrez les badges écologiques — puis plongez plus loin si vous le souhaitez."
+    },
+    "cube": {
+      "eyebrow": "Vue 3D",
+      "title": "Dimensions"
+    },
+    "dimensions": {
+      "height": "Hauteur",
+      "heightSub": "Croissance verticale",
+      "spread": "Envergure",
+      "spreadSub": "Étendue du feuillage",
+      "spacing": "Espacement",
+      "spacingSub": "Espacement au jardin"
+    },
+    "palette": {
+      "title": "Palette de couleurs"
+    },
+    "timeline": {
+      "title": "Chronologie saisonnière",
+      "hoverPrompt": "Survolez un mois",
+      "months": {
+        "jan": "Janv",
+        "feb": "Févr",
+        "mar": "Mars",
+        "apr": "Avr",
+        "may": "Mai",
+        "jun": "Juin",
+        "jul": "Juil",
+        "aug": "Août",
+        "sep": "Sept",
+        "oct": "Oct",
+        "nov": "Nov",
+        "dec": "Déc"
+      },
+      "legend": {
+        "flowering": "Floraison",
+        "fruiting": "Fructification",
+        "sowing": "Semis"
+      }
+    },
+    "habitatMap": {
+      "title": "Carte des habitats"
+    },
+    "recipes": {
+      "title": "Idées de recettes",
+      "subtitle": "Inspiration culinaire pour cette plante"
+    },
+    "gallery": {
+      "title": "Galerie d'images"
+    },
+    "sections": {
+      "careHighlights": "Soins essentiels",
+      "careDetails": "Détails d'entretien",
+      "usageFlavor": "Usage et saveurs",
+      "ecology": "Écologie",
+      "identityTraits": "Identité et traits",
+      "growthStructure": "Croissance et structure",
+      "riskStatus": "Risques et statut",
+      "recordsSources": "Historique et sources"
+    },
+    "labels": {
+      "water": "Eau",
+      "sunlight": "Ensoleillement",
+      "soilMix": "Mélange de sol",
+      "maintenance": "Entretien",
+      "temperature": "Température",
+      "humidity": "Humidité",
+      "origin": "Origine",
+      "wateringType": "Type d'arrosage",
+      "division": "Division",
+      "mulching": "Paillage",
+      "nutritionNeed": "Besoins nutritifs",
+      "fertilizer": "Engrais",
+      "soilAdvice": "Conseils sur le sol",
+      "mulchingAdvice": "Conseils de paillage",
+      "fertilizerAdvice": "Conseils sur l'engrais",
+      "utility": "Utilité",
+      "comestibleParts": "Parties comestibles",
+      "fruitType": "Type de fruit",
+      "medicinalNotes": "Notes médicinales",
+      "nutritionalIntake": "Apport nutritionnel",
+      "infusionFriendly": "Adapté à l'infusion",
+      "infusionNotes": "Notes d'infusion",
+      "infusionMix": "Mélange d'infusion",
+      "aromatherapy": "Aromathérapie",
+      "spiceMixes": "Mélanges d'épices",
+      "habitat": "Habitat",
+      "pollinators": "Pollinisateurs",
+      "groundEffect": "Effet sur le sol",
+      "melliferous": "Mellifère",
+      "greenManure": "Engrais vert",
+      "companions": "Plantes compagnes",
+      "tags": "Étiquettes",
+      "family": "Famille",
+      "lifeCycle": "Cycle de vie",
+      "foliage": "Feuillage",
+      "livingSpace": "Espace de vie",
+      "seasons": "Saisons",
+      "symbolism": "Symbolisme",
+      "allergens": "Allergènes",
+      "compositionUses": "Usages de composition",
+      "colorTraits": "Caractéristiques de couleur",
+      "fragrance": "Parfum",
+      "spiked": "Épineux",
+      "sowType": "Type de semis",
+      "needsSupport": "Besoin de support",
+      "supportNotes": "Notes de support",
+      "transplanting": "Repiquage",
+      "sowingNotes": "Notes de semis",
+      "cutType": "Type de taille",
+      "toxicityHuman": "Toxicité (humain)",
+      "toxicityPets": "Toxicité (animaux)",
+      "conservation": "Conservation",
+      "pests": "Ravageurs",
+      "diseases": "Maladies",
+      "adminCommentary": "Commentaires admin"
+    },
+    "values": {
+      "flexible": "Flexible",
+      "scheduled": "Planifié",
+      "adaptive": "Adaptatif",
+      "loamyBlend": "Mélange limoneux",
+      "ornamental": "Ornemental",
+      "gardenAdaptable": "Adaptable au jardin",
+      "beeFriendly": "Ami des abeilles",
+      "low": "Faible",
+      "stable": "Stable",
+      "temperate": "Tempéré",
+      "multicolor": "Multicolore",
+      "bicolor": "Bicolore",
+      "essentialOils": "Huiles essentielles",
+      "notForOils": "Pas pour les huiles",
+      "infusionReady": "Prêt pour l'infusion",
+      "notForInfusions": "Pas pour les infusions",
+      "pollinatorMagnet": "Attire les pollinisateurs",
+      "notMelliferous": "Non mellifère",
+      "feedsNeighbors": "Nourrit les voisins",
+      "neutralGroundEffect": "Effet neutre sur le sol",
+      "needsSupport": "Nécessite un support",
+      "selfSupporting": "Auto-portant",
+      "transplantRecommended": "Repiquage recommandé",
+      "noTransplantNeeded": "Pas de repiquage nécessaire",
+      "fragrant": "Parfumé",
+      "neutralScent": "Odeur neutre",
+      "hasThorns": "A des épines",
+      "smoothStems": "Tiges lisses"
+    },
+    "meta": {
+      "created": "Créé",
+      "updated": "Mis à jour",
+      "by": "Par",
+      "notRecorded": "Non enregistré",
+      "unknown": "Inconnu",
+      "sources": "Sources"
+    },
+    "enums": {
+      "habitat": {
+        "aquatic": "Aquatique",
+        "semiaquatic": "Semi-aquatique",
+        "wetland": "Zone humide",
+        "tropical": "Tropical",
+        "temperate": "Tempéré",
+        "arid": "Aride",
+        "mediterranean": "Méditerranéen",
+        "mountain": "Montagnard",
+        "grassland": "Prairie",
+        "forest": "Forêt",
+        "coastal": "Côtier",
+        "urban": "Urbain"
+      },
+      "livingSpace": {
+        "indoor": "Intérieur",
+        "outdoor": "Extérieur",
+        "both": "Intérieur & Extérieur"
+      },
+      "division": {
+        "seed": "Graine",
+        "cutting": "Bouturage",
+        "division": "Division",
+        "layering": "Marcottage",
+        "grafting": "Greffe",
+        "tissueseparation": "Séparation de tissus",
+        "bulbseparation": "Séparation de bulbes"
+      },
+      "soil": {
+        "vermiculite": "Vermiculite",
+        "perlite": "Perlite",
+        "sphagnummoss": "Mousse de sphaigne",
+        "rockwool": "Laine de roche",
+        "sand": "Sable",
+        "gravel": "Gravier",
+        "pottingsoil": "Terreau",
+        "peat": "Tourbe",
+        "claypebbles": "Billes d'argile",
+        "coconutfiber": "Fibre de coco"
+      },
+      "mulching": {
+        "bark": "Écorce",
+        "woodchips": "Copeaux de bois",
+        "greenmanure": "Engrais vert",
+        "cocoabeanhulls": "Coques de fèves de cacao",
+        "buckwheathulls": "Coques de sarrasin",
+        "cerealstraw": "Paille de céréales",
+        "hempstraw": "Paille de chanvre",
+        "wovenfabric": "Toile tissée",
+        "pozzolana": "Pouzzolane",
+        "crushedslate": "Ardoise pilée",
+        "claypellets": "Granulés d'argile"
+      },
+      "fertilizer": {
+        "nitrogen": "Azote",
+        "phosphorus": "Phosphore",
+        "potassium": "Potassium",
+        "calcium": "Calcium",
+        "magnesium": "Magnésium",
+        "sulfur": "Soufre",
+        "iron": "Fer",
+        "boron": "Bore",
+        "manganese": "Manganèse",
+        "molybene": "Molybdène",
+        "chlorine": "Chlore",
+        "copper": "Cuivre",
+        "zinc": "Zinc",
+        "granularfertilizer": "Engrais granulé",
+        "liquidfertilizer": "Engrais liquide",
+        "manure": "Fumier",
+        "guano": "Guano",
+        "coffeegrounds": "Marc de café",
+        "bananapeel": "Peau de banane",
+        "eggshell": "Coquille d'œuf"
+      },
+      "wateringType": {
+        "surface": "Surface",
+        "buried": "Enterré",
+        "hose": "Tuyau",
+        "drop": "Goutte à goutte",
+        "drench": "Trempage"
+      },
+      "sowType": {
+        "direct": "Direct",
+        "row": "En ligne",
+        "hill": "En butte",
+        "broadcast": "À la volée",
+        "seedtray": "En plateau",
+        "cell": "En cellule"
+      },
+      "polenizer": {
+        "bee": "Abeille",
+        "wasp": "Guêpe",
+        "ant": "Fourmi",
+        "butterfly": "Papillon",
+        "bird": "Oiseau",
+        "mosquito": "Moustique",
+        "fly": "Mouche",
+        "beetle": "Scarabée",
+        "ladybug": "Coccinelle",
+        "stagbeetle": "Lucane",
+        "cockchafer": "Hanneton",
+        "dungbeetle": "Bousier",
+        "weevil": "Charançon"
+      },
+      "conservationStatus": {
+        "stable": "Stable",
+        "endangered": "En danger",
+        "vulnerable": "Vulnérable",
+        "nearthreatened": "Quasi menacé",
+        "leastconcern": "Préoccupation mineure",
+        "criticallyendangered": "En danger critique"
+      },
+      "toxicity": {
+        "nontoxic": "Non toxique",
+        "midlyirritating": "Légèrement irritant",
+        "highlytoxic": "Très toxique",
+        "lethallytoxic": "Mortellement toxique"
+      },
+      "lifeCycle": {
+        "annual": "Annuelle",
+        "biennials": "Bisannuelle",
+        "perenials": "Vivace",
+        "ephemerals": "Éphémère",
+        "monocarpic": "Monocarpique",
+        "polycarpic": "Polycarpique"
+      },
+      "foliage": {
+        "deciduous": "Caduc",
+        "evergreen": "Persistant",
+        "semievergreen": "Semi-persistant",
+        "marcescent": "Marcescent"
+      },
+      "comestiblePart": {
+        "flower": "Fleur",
+        "fruit": "Fruit",
+        "seed": "Graine",
+        "leaf": "Feuille",
+        "stem": "Tige",
+        "root": "Racine",
+        "bulb": "Bulbe",
+        "bark": "Écorce",
+        "wood": "Bois"
+      },
+      "fruitType": {
+        "nut": "Noix",
+        "seed": "Graine",
+        "stone": "Fruit à noyau"
+      },
+      "nutritionNeed": {
+        "nitrogen": "Azote",
+        "phosphorus": "Phosphore",
+        "potassium": "Potassium",
+        "calcium": "Calcium",
+        "magnesium": "Magnésium",
+        "sulfur": "Soufre",
+        "iron": "Fer"
+      },
+      "composition": {
+        "flowerbed": "Massif",
+        "path": "Allée",
+        "hedge": "Haie",
+        "groundcover": "Couvre-sol",
+        "pot": "Pot"
+      }
     }
   },
   "gardenDashboard": {

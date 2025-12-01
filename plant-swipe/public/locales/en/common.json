@@ -655,6 +655,7 @@
     "garden": {
     "title": "Gardens",
     "yourGardens": "Your Gardens",
+    "addToGarden": "Add to Garden",
     "create": "Create Garden",
     "createGarden": "Create a Garden",
     "name": "Name",
@@ -927,6 +928,404 @@
       "oct": "Oct",
       "nov": "Nov",
       "dec": "Dec"
+    }
+  },
+  "plantDetails": {
+    "palette": "Palette",
+    "noImage": "No image yet",
+    "stats": {
+      "sunLevel": "Sun Level",
+      "wateringNeed": "Watering Need",
+      "humidity": "Humidity",
+      "maintenance": "Maintenance",
+      "temperature": "Temperature",
+      "careIntensity": "Care intensity"
+    },
+    "values": {
+      "flexible": "Flexible",
+      "scheduled": "Scheduled",
+      "every": "Every",
+      "adaptive": "Adaptive",
+      "ambient": "Ambient",
+      "stable": "Stable"
+    },
+    "viewer": {
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "reset": "Reset"
+    },
+    "plantType": {
+      "plant": "Plant",
+      "flower": "Flower",
+      "bamboo": "Bamboo",
+      "shrub": "Shrub",
+      "tree": "Tree",
+      "cactus": "Cactus",
+      "succulent": "Succulent"
+    },
+    "utility": {
+      "comestible": "Edible",
+      "ornemental": "Ornamental",
+      "producefruit": "Fruit Producing",
+      "aromatic": "Aromatic",
+      "medicinal": "Medicinal",
+      "odorous": "Fragrant",
+      "climbing": "Climbing",
+      "cereal": "Cereal",
+      "spice": "Spice"
+    },
+    "seasons": {
+      "spring": "Spring",
+      "summer": "Summer",
+      "autumn": "Autumn",
+      "fall": "Fall",
+      "winter": "Winter"
+    },
+    "sunLevels": {
+      "lowlight": "Low Light",
+      "shade": "Shade",
+      "partialsun": "Partial Sun",
+      "fullsun": "Full Sun"
+    },
+    "maintenanceLevels": {
+      "none": "None",
+      "low": "Low",
+      "moderate": "Moderate",
+      "heavy": "Heavy",
+      "high": "High"
+    },
+    "timePeriods": {
+      "day": "day",
+      "week": "week",
+      "month": "month",
+      "year": "year"
+    }
+  },
+  "moreInfo": {
+    "header": {
+      "eyebrow": "Immersive overview",
+      "title": "Feel the plant before the paragraphs",
+      "subtitle": "Play with the holographic cube, skim the seasonal timeline, and glance at ecology badges—then dive deeper if you want."
+    },
+    "cube": {
+      "eyebrow": "3D View",
+      "title": "Dimensions"
+    },
+    "dimensions": {
+      "height": "Height",
+      "heightSub": "Vertical growth",
+      "spread": "Spread",
+      "spreadSub": "Canopy reach",
+      "spacing": "Spacing",
+      "spacingSub": "Garden spacing"
+    },
+    "palette": {
+      "title": "Color Moodboard"
+    },
+    "timeline": {
+      "title": "Seasonal Timeline",
+      "hoverPrompt": "Hover a month",
+      "months": {
+        "jan": "Jan",
+        "feb": "Feb",
+        "mar": "Mar",
+        "apr": "Apr",
+        "may": "May",
+        "jun": "Jun",
+        "jul": "Jul",
+        "aug": "Aug",
+        "sep": "Sep",
+        "oct": "Oct",
+        "nov": "Nov",
+        "dec": "Dec"
+      },
+      "legend": {
+        "flowering": "Flowering",
+        "fruiting": "Fruiting",
+        "sowing": "Sowing"
+      }
+    },
+    "habitatMap": {
+      "title": "Habitat Map"
+    },
+    "recipes": {
+      "title": "Recipe Ideas",
+      "subtitle": "Culinary inspiration for this plant"
+    },
+    "gallery": {
+      "title": "Image Gallery"
+    },
+    "sections": {
+      "careHighlights": "Care Highlights",
+      "careDetails": "Care Details",
+      "usageFlavor": "Usage & Flavor",
+      "ecology": "Ecology",
+      "identityTraits": "Identity & Traits",
+      "growthStructure": "Growth & Structure",
+      "riskStatus": "Risk & Status",
+      "recordsSources": "Records & Sources"
+    },
+    "labels": {
+      "water": "Water",
+      "sunlight": "Sunlight",
+      "soilMix": "Soil Mix",
+      "maintenance": "Maintenance",
+      "temperature": "Temperature",
+      "humidity": "Humidity",
+      "origin": "Origin",
+      "wateringType": "Watering Type",
+      "division": "Division",
+      "mulching": "Mulching",
+      "nutritionNeed": "Nutrition Need",
+      "fertilizer": "Fertilizer",
+      "soilAdvice": "Soil Advice",
+      "mulchingAdvice": "Mulching Advice",
+      "fertilizerAdvice": "Fertilizer Advice",
+      "utility": "Utility",
+      "comestibleParts": "Comestible Parts",
+      "fruitType": "Fruit Type",
+      "medicinalNotes": "Medicinal Notes",
+      "nutritionalIntake": "Nutritional Intake",
+      "infusionFriendly": "Infusion Friendly",
+      "infusionNotes": "Infusion Notes",
+      "infusionMix": "Infusion Mix",
+      "aromatherapy": "Aromatherapy",
+      "spiceMixes": "Spice Mixes",
+      "habitat": "Habitat",
+      "pollinators": "Pollinators",
+      "groundEffect": "Ground Effect",
+      "melliferous": "Melliferous",
+      "greenManure": "Green Manure",
+      "companions": "Companions",
+      "tags": "Tags",
+      "family": "Family",
+      "lifeCycle": "Life Cycle",
+      "foliage": "Foliage",
+      "livingSpace": "Living Space",
+      "seasons": "Seasons",
+      "symbolism": "Symbolism",
+      "allergens": "Allergens",
+      "compositionUses": "Composition Uses",
+      "colorTraits": "Color Traits",
+      "fragrance": "Fragrance",
+      "spiked": "Spiked",
+      "sowType": "Sow Type",
+      "needsSupport": "Needs Support",
+      "supportNotes": "Support Notes",
+      "transplanting": "Transplanting",
+      "sowingNotes": "Sowing Notes",
+      "cutType": "Cut Type",
+      "toxicityHuman": "Toxicity (Human)",
+      "toxicityPets": "Toxicity (Pets)",
+      "conservation": "Conservation",
+      "pests": "Pests",
+      "diseases": "Diseases",
+      "adminCommentary": "Admin Commentary"
+    },
+    "values": {
+      "flexible": "Flexible",
+      "scheduled": "Scheduled",
+      "adaptive": "Adaptive",
+      "loamyBlend": "Loamy blend",
+      "ornamental": "Ornamental",
+      "gardenAdaptable": "Garden adaptable",
+      "beeFriendly": "Bee friendly",
+      "low": "Low",
+      "stable": "Stable",
+      "temperate": "Temperate",
+      "multicolor": "Multicolor",
+      "bicolor": "Bicolor",
+      "essentialOils": "Essential oils",
+      "notForOils": "Not for oils",
+      "infusionReady": "Infusion ready",
+      "notForInfusions": "Not for infusions",
+      "pollinatorMagnet": "Pollinator magnet",
+      "notMelliferous": "Not melliferous",
+      "feedsNeighbors": "Feeds neighbors",
+      "neutralGroundEffect": "Neutral ground effect",
+      "needsSupport": "Needs support",
+      "selfSupporting": "Self-supporting",
+      "transplantRecommended": "Transplant recommended",
+      "noTransplantNeeded": "No transplant needed",
+      "fragrant": "Fragrant",
+      "neutralScent": "Neutral scent",
+      "hasThorns": "Has thorns",
+      "smoothStems": "Smooth stems"
+    },
+    "meta": {
+      "created": "Created",
+      "updated": "Updated",
+      "by": "By",
+      "notRecorded": "Not recorded",
+      "unknown": "Unknown",
+      "sources": "Sources"
+    },
+    "enums": {
+      "habitat": {
+        "aquatic": "Aquatic",
+        "semiaquatic": "Semi-aquatic",
+        "wetland": "Wetland",
+        "tropical": "Tropical",
+        "temperate": "Temperate",
+        "arid": "Arid",
+        "mediterranean": "Mediterranean",
+        "mountain": "Mountain",
+        "grassland": "Grassland",
+        "forest": "Forest",
+        "coastal": "Coastal",
+        "urban": "Urban"
+      },
+      "livingSpace": {
+        "indoor": "Indoor",
+        "outdoor": "Outdoor",
+        "both": "Indoor & Outdoor"
+      },
+      "division": {
+        "seed": "Seed",
+        "cutting": "Cutting",
+        "division": "Division",
+        "layering": "Layering",
+        "grafting": "Grafting",
+        "tissueseparation": "Tissue separation",
+        "bulbseparation": "Bulb separation"
+      },
+      "soil": {
+        "vermiculite": "Vermiculite",
+        "perlite": "Perlite",
+        "sphagnummoss": "Sphagnum moss",
+        "rockwool": "Rock wool",
+        "sand": "Sand",
+        "gravel": "Gravel",
+        "pottingsoil": "Potting soil",
+        "peat": "Peat",
+        "claypebbles": "Clay pebbles",
+        "coconutfiber": "Coconut fiber"
+      },
+      "mulching": {
+        "bark": "Bark",
+        "woodchips": "Wood chips",
+        "greenmanure": "Green manure",
+        "cocoabeanhulls": "Cocoa bean hulls",
+        "buckwheathulls": "Buckwheat hulls",
+        "cerealstraw": "Cereal straw",
+        "hempstraw": "Hemp straw",
+        "wovenfabric": "Woven fabric",
+        "pozzolana": "Pozzolana",
+        "crushedslate": "Crushed slate",
+        "claypellets": "Clay pellets"
+      },
+      "fertilizer": {
+        "nitrogen": "Nitrogen",
+        "phosphorus": "Phosphorus",
+        "potassium": "Potassium",
+        "calcium": "Calcium",
+        "magnesium": "Magnesium",
+        "sulfur": "Sulfur",
+        "iron": "Iron",
+        "boron": "Boron",
+        "manganese": "Manganese",
+        "molybene": "Molybdenum",
+        "chlorine": "Chlorine",
+        "copper": "Copper",
+        "zinc": "Zinc",
+        "granularfertilizer": "Granular fertilizer",
+        "liquidfertilizer": "Liquid fertilizer",
+        "manure": "Manure",
+        "guano": "Guano",
+        "coffeegrounds": "Coffee grounds",
+        "bananapeel": "Banana peel",
+        "eggshell": "Eggshell"
+      },
+      "wateringType": {
+        "surface": "Surface",
+        "buried": "Buried",
+        "hose": "Hose",
+        "drop": "Drip",
+        "drench": "Drench"
+      },
+      "sowType": {
+        "direct": "Direct",
+        "row": "Row",
+        "hill": "Hill",
+        "broadcast": "Broadcast",
+        "seedtray": "Seed tray",
+        "cell": "Cell"
+      },
+      "polenizer": {
+        "bee": "Bee",
+        "wasp": "Wasp",
+        "ant": "Ant",
+        "butterfly": "Butterfly",
+        "bird": "Bird",
+        "mosquito": "Mosquito",
+        "fly": "Fly",
+        "beetle": "Beetle",
+        "ladybug": "Ladybug",
+        "stagbeetle": "Stag beetle",
+        "cockchafer": "Cockchafer",
+        "dungbeetle": "Dung beetle",
+        "weevil": "Weevil"
+      },
+      "conservationStatus": {
+        "stable": "Stable",
+        "endangered": "Endangered",
+        "vulnerable": "Vulnerable",
+        "nearthreatened": "Near Threatened",
+        "leastconcern": "Least Concern",
+        "criticallyendangered": "Critically Endangered"
+      },
+      "toxicity": {
+        "nontoxic": "Non-toxic",
+        "midlyirritating": "Mildly irritating",
+        "highlytoxic": "Highly toxic",
+        "lethallytoxic": "Lethally toxic"
+      },
+      "lifeCycle": {
+        "annual": "Annual",
+        "biennials": "Biennial",
+        "perenials": "Perennial",
+        "ephemerals": "Ephemeral",
+        "monocarpic": "Monocarpic",
+        "polycarpic": "Polycarpic"
+      },
+      "foliage": {
+        "deciduous": "Deciduous",
+        "evergreen": "Evergreen",
+        "semievergreen": "Semi-evergreen",
+        "marcescent": "Marcescent"
+      },
+      "comestiblePart": {
+        "flower": "Flower",
+        "fruit": "Fruit",
+        "seed": "Seed",
+        "leaf": "Leaf",
+        "stem": "Stem",
+        "root": "Root",
+        "bulb": "Bulb",
+        "bark": "Bark",
+        "wood": "Wood"
+      },
+      "fruitType": {
+        "nut": "Nut",
+        "seed": "Seed",
+        "stone": "Stone fruit"
+      },
+      "nutritionNeed": {
+        "nitrogen": "Nitrogen",
+        "phosphorus": "Phosphorus",
+        "potassium": "Potassium",
+        "calcium": "Calcium",
+        "magnesium": "Magnesium",
+        "sulfur": "Sulfur",
+        "iron": "Iron"
+      },
+      "composition": {
+        "flowerbed": "Flowerbed",
+        "path": "Path",
+        "hedge": "Hedge",
+        "groundcover": "Ground cover",
+        "pot": "Pot"
+      }
     }
   },
   "gardenDashboard": {
