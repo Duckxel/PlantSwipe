@@ -1213,8 +1213,20 @@ create table if not exists public.gardens (
   cover_image_url text,
   created_by uuid not null references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
-  streak integer not null default 0
+  streak integer not null default 0,
+  is_public boolean not null default true
 );
+
+-- Migration: Add is_public column if it doesn't exist (for existing databases)
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'gardens' and column_name = 'is_public'
+  ) then
+    alter table public.gardens add column is_public boolean not null default true;
+  end if;
+end $$;
 
 create table if not exists public.garden_members (
   garden_id uuid not null references public.gardens(id) on delete cascade,
