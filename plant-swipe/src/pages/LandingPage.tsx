@@ -35,15 +35,17 @@ const LandingPage: React.FC = () => {
   })
 
   return (
-    <div className="min-h-screen w-full bg-background overflow-x-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-24 pt-2 md:px-8 md:pb-8 md:pt-4 overflow-x-hidden overflow-y-visible">
       {/* Desktop Navigation - uses the real TopBar, with landing links for logged-out users */}
-      <TopBar
-        openLogin={openLogin}
-        openSignup={openSignup}
-        user={user}
-        displayName={profile?.display_name || null}
-        showLandingLinks={!user}
-      />
+      <div className="overflow-y-visible">
+        <TopBar
+          openLogin={openLogin}
+          openSignup={openSignup}
+          user={user}
+          displayName={profile?.display_name || null}
+          showLandingLinks={!user}
+        />
+      </div>
 
       {/* Mobile Navigation - uses the real MobileNavBar */}
       <MobileNavBar
