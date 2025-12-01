@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -12,15 +12,13 @@ interface TopBarProps {
   displayName?: string | null
   onProfile?: () => void | Promise<void>
   onLogout?: () => void | Promise<void>
-  /** When true and user is logged out, shows landing page section links (Features, FAQ, etc.) */
-  showLandingLinks?: boolean
 }
 
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 
-export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout, showLandingLinks }) => {
+export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const { profile } = useAuth()
@@ -107,18 +105,13 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
           </>
         ) : (
-          // Logged-out navigation: Encyclopedia, Pricing + optional landing links
+          // Logged-out navigation: Features, How it works, FAQ, Encyclopedia, Pricing (same on all pages)
           <>
+            <NavPillAnchor to="/#features" icon={<LayoutGrid className="h-4 w-4" />} label={t('common.landingFeatures', { defaultValue: 'Features' })} />
+            <NavPillAnchor to="/#how-it-works" icon={<Route className="h-4 w-4" />} label={t('common.landingHowItWorks', { defaultValue: 'How it works' })} />
+            <NavPillAnchor to="/#faq" icon={<HelpCircle className="h-4 w-4" />} label={t('common.landingFaq', { defaultValue: 'FAQ' })} />
             <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
             <NavPill to="/pricing" isActive={pathWithoutLang === '/pricing'} icon={<CreditCard className="h-4 w-4" />} label={t('common.pricing', { defaultValue: 'Pricing' })} />
-            {showLandingLinks && (
-              <>
-                <span className="mx-2 h-4 w-px bg-border" aria-hidden="true" />
-                <LandingSectionLink href="#features" label={t('common.landingFeatures', { defaultValue: 'Features' })} />
-                <LandingSectionLink href="#how-it-works" label={t('common.landingHowItWorks', { defaultValue: 'How it works' })} />
-                <LandingSectionLink href="#faq" label={t('common.landingFaq', { defaultValue: 'FAQ' })} />
-              </>
-            )}
           </>
         )}
       </nav>
@@ -203,23 +196,47 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
   )
 }
 
-function LandingSectionLink({ href, label }: { href: string; label: string }) {
-  const scrollToSection = (e: React.MouseEvent) => {
+/** NavPillAnchor - like NavPill but for anchor links that navigate to landing page sections */
+function NavPillAnchor({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+  const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
+  
+  const handleClick = (e: React.MouseEvent) => {
     e.preventDefault()
-    const id = href.replace('#', '')
-    const el = document.getElementById(id)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const [path, hash] = to.split('#')
+    const targetPath = path || '/'
+    
+    // If we're already on the landing page, just scroll to the section
+    if (pathWithoutLang === '/' || pathWithoutLang === '') {
+      const el = document.getElementById(hash)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    } else {
+      // Navigate to landing page with hash
+      navigate(targetPath)
+      // After navigation, scroll to section (need small delay for page to load)
+      setTimeout(() => {
+        const el = document.getElementById(hash)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 100)
     }
   }
 
   return (
-    <a
-      href={href}
-      onClick={scrollToSection}
-      className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
-    >
-      {label}
-    </a>
+    <div className="relative inline-block align-middle overflow-visible">
+      <Button
+        variant="secondary"
+        className="rounded-2xl bg-white dark:bg-[#252526] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#2d2d30] hover:text-black dark:hover:text-white"
+        onClick={handleClick}
+      >
+        <span className="inline-flex items-center gap-2">
+          {icon}
+          <span>{label}</span>
+        </span>
+      </Button>
+    </div>
   )
 }
