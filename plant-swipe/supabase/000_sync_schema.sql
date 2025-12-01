@@ -3908,13 +3908,41 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare v_actor uuid := (select auth.uid()); v_name text; begin
+declare v_actor uuid := (select auth.uid()); v_name text; v_email text; begin
   select display_name into v_name from public.profiles where id = v_actor;
+  -- Fallback to email username if display_name is not set
+  if v_name is null or v_name = '' then
+    select email into v_email from auth.users where id = v_actor;
+    v_name := coalesce(split_part(v_email, '@', 1), 'User');
+  end if;
   insert into public.garden_activity_logs (garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at)
   values (_garden_id, v_actor, v_name, nullif(_actor_color,''), _kind, _message, nullif(_plant_name,''), nullif(_task_name,''), now());
 end; $$;
 
 grant execute on function public.log_garden_activity(uuid, text, text, text, text, text) to anon, authenticated;
+
+-- Fix existing activity logs with null actor_name by populating from profiles/auth.users
+do $$
+declare r record; v_name text; begin
+  for r in (
+    select id, actor_id from public.garden_activity_logs
+    where actor_id is not null and (actor_name is null or actor_name = '')
+  ) loop
+    -- Try display_name first
+    select display_name into v_name from public.profiles where id = r.actor_id;
+    -- Fallback to email username
+    if v_name is null or v_name = '' then
+      select split_part(email, '@', 1) into v_name from auth.users where id = r.actor_id;
+    end if;
+    -- Update if we found a name
+    if v_name is not null and v_name <> '' then
+      update public.garden_activity_logs set actor_name = v_name where id = r.id;
+    end if;
+  end loop;
+exception when others then
+  -- Ignore errors (table might not exist yet during first run)
+  null;
+end $$;
 
 -- ========== Realtime support indexes (merged from 999_realtime_indexes.sql) ==========
 -- Keep these idempotent to safely re-run during sync

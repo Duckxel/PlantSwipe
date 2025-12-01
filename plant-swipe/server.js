@@ -9801,8 +9801,17 @@ app.post('/api/garden/:id/activity', async (req, res) => {
     if (sql) {
       let actorName = null
       try {
-        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${user.id} limit 1`
-        if (Array.isArray(nameRows) && nameRows[0]) actorName = nameRows[0].name || null
+        // First try profiles table for display_name
+        const nameRows = await sql`select display_name from public.profiles where id = ${user.id} limit 1`
+        if (Array.isArray(nameRows) && nameRows[0]?.display_name) {
+          actorName = nameRows[0].display_name
+        } else {
+          // Fallback to email username from auth.users
+          const emailRows = await sql`select email from auth.users where id = ${user.id} limit 1`
+          if (Array.isArray(emailRows) && emailRows[0]?.email) {
+            actorName = emailRows[0].email.split('@')[0] || null
+          }
+        }
       } catch {}
       const nowIso = new Date().toISOString()
       await sql`
@@ -9850,21 +9859,36 @@ app.get('/api/garden/:id/overview', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
-    const user = await getUserFromRequest(req)
-    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
-    const member = await isGardenMember(req, gardenId, user.id)
-    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+    
+    // Try to get user (may be null for unauthenticated requests)
+    const user = await getUserFromRequest(req).catch(() => null)
+    const isMember = user?.id ? await isGardenMember(req, gardenId, user.id).catch(() => false) : false
 
     let garden = null
     let plants = []
     let members = []
     const serverNow = new Date().toISOString()
 
+    // First, fetch garden to check privacy
     if (sql) {
-      const gRows = await sql`
-        select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak
-        from public.gardens where id = ${gardenId} limit 1
-      `
+      // Try with privacy column first, fallback if column doesn't exist
+      let gRows = []
+      try {
+        gRows = await sql`
+          select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy
+          from public.gardens where id = ${gardenId} limit 1
+        `
+      } catch (e) {
+        // Privacy column might not exist yet, try without it
+        if (String(e?.message || '').includes('privacy')) {
+          gRows = await sql`
+            select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy
+            from public.gardens where id = ${gardenId} limit 1
+          `
+        } else {
+          throw e
+        }
+      }
       garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
 
         const gpRows = await sql`
@@ -9960,13 +9984,13 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
 
-      // Garden
-      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak&limit=1`
+      // Garden (include privacy field if available)
+      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy&limit=1`
       const gResp = await fetch(gUrl, { headers })
       if (gResp.ok) {
         const arr = await gResp.json().catch(() => [])
         const row = Array.isArray(arr) && arr[0] ? arr[0] : null
-        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0) }
+        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public' }
       }
 
       // Garden plants
@@ -10053,7 +10077,17 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       createdBy: String(garden.created_by || garden.createdBy || ''),
       createdAt: garden.created_at ? new Date(garden.created_at).toISOString() : (garden.createdAt || null),
       streak: Number(garden.streak ?? 0),
+      privacy: garden.privacy || 'public',
     } : null
+    
+    // Check access: members always allowed, otherwise check privacy
+    const gardenPrivacy = garden?.privacy || 'public'
+    if (!isMember && gardenPrivacy === 'private') {
+      res.status(403).json({ ok: false, error: 'This garden is private' })
+      return
+    }
+    // TODO: For friends_only, would need to check friend status with members
+    
     res.json({ ok: true, garden: gardenOut, plants, members, serverNow })
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message || 'overview failed' })

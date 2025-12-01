@@ -338,7 +338,8 @@ export const GardenDashboardPage: React.FC = () => {
                   createdBy: String(data.garden.createdBy || ""),
                   createdAt: String(data.garden.createdAt || ""),
                   streak: Number(data.garden.streak || 0),
-                } as any);
+                  privacy: data.garden.privacy || 'public',
+                });
               if (Array.isArray(data.plants)) {
                 setPlants(data.plants);
                 hydratedPlants = data.plants;
@@ -3847,9 +3848,11 @@ function OverviewSection({
               const color = getMemberColor(member);
               const isOwner = member.role === "owner";
               return (
-                <div
+                <button
                   key={member.userId}
-                  className="group flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 rounded-2xl px-3 py-2 transition-all hover:bg-stone-100 dark:hover:bg-stone-800 hover:shadow-md cursor-pointer"
+                  type="button"
+                  onClick={() => navigate(`/profile/${member.userId}`)}
+                  className="group flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 rounded-2xl px-3 py-2 transition-all hover:bg-stone-100 dark:hover:bg-stone-800 hover:shadow-md cursor-pointer text-left"
                   title={member.displayName || member.email || "Member"}
                 >
                   <div className="relative">
@@ -3868,8 +3871,8 @@ function OverviewSection({
                       </div>
                     )}
                     {isOwner && (
-                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-stone-800">
-                        <span className="text-[10px]">👑</span>
+                      <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-gradient-to-br from-amber-300 to-orange-400 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-stone-800 shadow-md">
+                        <span className="text-[11px] drop-shadow-sm">👑</span>
                       </div>
                     )}
                   </div>
@@ -3883,7 +3886,7 @@ function OverviewSection({
                         : t("gardenDashboard.settingsSection.member")}
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
