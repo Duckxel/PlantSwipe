@@ -196,7 +196,7 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
   )
 }
 
-/** NavPillAnchor - like NavPill but for anchor links that navigate to landing page sections */
+/** NavPillAnchor - exactly like NavPill but for anchor links that navigate to landing page sections */
 function NavPillAnchor({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
@@ -225,17 +225,20 @@ function NavPillAnchor({ to, icon, label }: { to: string; icon: React.ReactNode;
     }
   }
 
+  // Use exact same styling as NavPill (inactive state)
   return (
     <div className="relative inline-block align-middle overflow-visible">
       <Button
-        variant="secondary"
+        asChild
+        variant={'secondary'}
         className="rounded-2xl bg-white dark:bg-[#252526] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#2d2d30] hover:text-black dark:hover:text-white"
-        onClick={handleClick}
       >
-        <span className="inline-flex items-center gap-2">
-          {icon}
-          <span>{label}</span>
-        </span>
+        <a href={to} onClick={handleClick} className="no-underline">
+          <span className="inline-flex items-center gap-2">
+            {icon}
+            <span>{label}</span>
+          </span>
+        </a>
       </Button>
     </div>
   )

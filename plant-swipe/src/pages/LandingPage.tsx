@@ -7,6 +7,7 @@ import { TopBar } from "@/components/layout/TopBar"
 import { Footer } from "@/components/layout/Footer"
 import MobileNavBar from "@/components/layout/MobileNavBar"
 import { useAuthActions } from "@/context/AuthActionsContext"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
 import {
   Leaf,
   Droplets,
@@ -26,8 +27,18 @@ import {
 // Lightweight landing page - no heavy dependencies for fast LCP
 const LandingPage: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { user, profile } = useAuth()
+  const { user, profile, signOut } = useAuth()
   const { openLogin, openSignup } = useAuthActions()
+  const navigate = useLanguageNavigate()
+
+  const handleProfileNavigation = React.useCallback(() => {
+    navigate('/profile')
+  }, [navigate])
+
+  const handleLogout = React.useCallback(async () => {
+    await signOut()
+    navigate('/')
+  }, [signOut, navigate])
 
   usePageMetadata({
     title: "Aphylia – " + t("hero.badge"),
@@ -43,6 +54,8 @@ const LandingPage: React.FC = () => {
           openSignup={openSignup}
           user={user}
           displayName={profile?.display_name || null}
+          onProfile={handleProfileNavigation}
+          onLogout={handleLogout}
         />
       </div>
 
@@ -50,6 +63,8 @@ const LandingPage: React.FC = () => {
       <MobileNavBar
         canCreate={false}
         onLogin={openLogin}
+        onProfile={handleProfileNavigation}
+        onLogout={handleLogout}
       />
 
       {/* Hero Section */}
