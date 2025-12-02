@@ -2588,6 +2588,157 @@ app.options('/api/*', (_req, res) => {
 // Supabase service client disabled to avoid using service-role env vars
 const supabaseAdmin = null
 
+// ============================================================================
+// ADMIN STATS CACHE - Background refresh for instant responses
+// ============================================================================
+const adminStatsCache = {
+  stats: { profilesCount: 0, authUsersCount: null, plantsCount: null },
+  visitors: { currentUniqueVisitors10m: 0, uniqueIpsLast30m: 0, uniqueIpsLast60m: 0, visitsLast60m: 0, uniqueIps7d: 0, series7d: [] },
+  sources: { topCountries: [], otherCountries: {}, topReferrers: [], otherReferrers: {} },
+  onlineUsers: { count: 0 },
+  lastUpdated: { stats: 0, visitors: 0, sources: 0, onlineUsers: 0 },
+  refreshing: { stats: false, visitors: false, sources: false, onlineUsers: false },
+}
+
+const CACHE_TTL = 30000 // 30 seconds - data refreshes in background
+const CACHE_STALE_TTL = 120000 // 2 minutes - serve stale data if refresh fails
+
+// Background refresh function for stats
+async function refreshStatsCache() {
+  if (adminStatsCache.refreshing.stats) return
+  adminStatsCache.refreshing.stats = true
+  try {
+    let profilesCount = 0, authUsersCount = null, plantsCount = null
+    if (sql) {
+      const [p, a, pl] = await Promise.all([
+        sql`select count(*)::int as count from public.profiles`.catch(() => []),
+        sql`select count(*)::int as count from auth.users`.catch(() => []),
+        sql`select count(*)::int as count from public.plants`.catch(() => []),
+      ])
+      profilesCount = p?.[0]?.count ?? 0
+      authUsersCount = a?.[0]?.count ?? null
+      plantsCount = pl?.[0]?.count ?? 0
+    }
+    adminStatsCache.stats = { profilesCount, authUsersCount, plantsCount }
+    adminStatsCache.lastUpdated.stats = Date.now()
+  } catch (e) {
+    console.warn('[cache] Failed to refresh stats:', e?.message)
+  } finally {
+    adminStatsCache.refreshing.stats = false
+  }
+}
+
+// Background refresh for visitors
+async function refreshVisitorsCache() {
+  if (adminStatsCache.refreshing.visitors) return
+  adminStatsCache.refreshing.visitors = true
+  try {
+    if (sql) {
+      const days = 7
+      const [r10m, r30m, r60u, r60v, rNd] = await Promise.all([
+        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '10 minutes'`).catch(() => []),
+        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '30 minutes'`).catch(() => []),
+        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => []),
+        sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`).catch(() => []),
+        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and timezone('utc', occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`).catch(() => []),
+      ])
+      const series = await sql.unsafe(`
+        with days as (select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d)
+        select to_char(d, 'YYYY-MM-DD') as date, coalesce((select count(distinct ip_address) from ${VISITS_TABLE_SQL_IDENT} where (timezone('utc', occurred_at))::date = d), 0)::int as unique_visitors from days order by d asc
+      `).catch(() => [])
+      adminStatsCache.visitors = {
+        currentUniqueVisitors10m: r10m?.[0]?.c ?? 0,
+        uniqueIpsLast30m: r30m?.[0]?.c ?? 0,
+        uniqueIpsLast60m: r60u?.[0]?.c ?? 0,
+        visitsLast60m: r60v?.[0]?.c ?? 0,
+        uniqueIps7d: rNd?.[0]?.c ?? 0,
+        series7d: (series || []).map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors || 0) })),
+      }
+      adminStatsCache.lastUpdated.visitors = Date.now()
+    }
+  } catch (e) {
+    console.warn('[cache] Failed to refresh visitors:', e?.message)
+  } finally {
+    adminStatsCache.refreshing.visitors = false
+  }
+}
+
+// Background refresh for sources
+async function refreshSourcesCache() {
+  if (adminStatsCache.refreshing.sources) return
+  adminStatsCache.refreshing.sources = true
+  try {
+    if (sql) {
+      const days = 7
+      const [countries, referrers] = await Promise.all([
+        sql`select * from public.get_top_countries(${days}, ${10000})`.catch(() => []),
+        sql`select * from public.get_top_referrers(${days}, ${10})`.catch(() => []),
+      ])
+      const allCountries = (countries || []).map(r => ({ country: r.country || '', visits: Number(r.visits || 0) })).filter(c => c.country).sort((a, b) => b.visits - a.visits)
+      const allReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })).sort((a, b) => b.visits - a.visits)
+      adminStatsCache.sources = {
+        topCountries: allCountries.slice(0, 5),
+        otherCountries: { count: allCountries.slice(5).length, visits: allCountries.slice(5).reduce((s, c) => s + c.visits, 0), codes: allCountries.slice(5).map(c => c.country), items: allCountries.slice(5) },
+        topReferrers: allReferrers.slice(0, 5),
+        otherReferrers: { count: allReferrers.slice(5).length, visits: allReferrers.slice(5).reduce((s, r) => s + r.visits, 0) },
+      }
+      adminStatsCache.lastUpdated.sources = Date.now()
+    }
+  } catch (e) {
+    console.warn('[cache] Failed to refresh sources:', e?.message)
+  } finally {
+    adminStatsCache.refreshing.sources = false
+  }
+}
+
+// Background refresh for online users
+async function refreshOnlineUsersCache() {
+  if (adminStatsCache.refreshing.onlineUsers) return
+  adminStatsCache.refreshing.onlineUsers = true
+  try {
+    if (sql) {
+      const rows = await sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => [])
+      adminStatsCache.onlineUsers = { count: rows?.[0]?.c ?? 0 }
+      adminStatsCache.lastUpdated.onlineUsers = Date.now()
+    }
+  } catch (e) {
+    console.warn('[cache] Failed to refresh online users:', e?.message)
+  } finally {
+    adminStatsCache.refreshing.onlineUsers = false
+  }
+}
+
+// Start background refresh interval (runs every 30 seconds)
+function startAdminStatsCacheRefresh() {
+  // Initial refresh
+  setTimeout(() => {
+    refreshStatsCache()
+    refreshVisitorsCache()
+    refreshSourcesCache()
+    refreshOnlineUsersCache()
+  }, 2000) // Wait 2s after startup
+  
+  // Periodic refresh
+  setInterval(() => {
+    refreshStatsCache()
+    refreshOnlineUsersCache()
+  }, CACHE_TTL)
+  
+  // Visitors and sources refresh less frequently (every 60s)
+  setInterval(() => {
+    refreshVisitorsCache()
+    refreshSourcesCache()
+  }, CACHE_TTL * 2)
+}
+
+// Helper to check if cache is fresh enough
+function isCacheFresh(key) {
+  const lastUpdated = adminStatsCache.lastUpdated[key] || 0
+  return (Date.now() - lastUpdated) < CACHE_STALE_TTL
+}
+
+// ============================================================================
+
 // Simple ping - no database, instant response
 app.get('/api/ping', (_req, res) => {
   res.status(200).json({ ok: true, ts: Date.now() })
@@ -6202,97 +6353,43 @@ app.post('/api/send-automatic-email', async (req, res) => {
   }
 })
 
-  // Admin: global stats (bypass RLS via server connection)
-  // Uses timeouts to prevent hanging when database is slow/unresponsive
+  // Admin: global stats - INSTANT from cache, background refresh
   app.get('/api/admin/stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
-  const STATS_QUERY_TIMEOUT = 2000 // 2 seconds - fail fast
-  const STATS_FETCH_TIMEOUT = 2000 // 2 seconds for REST calls
+  
+  // Return cached data instantly
+  if (isCacheFresh('stats')) {
+    const { profilesCount, authUsersCount, plantsCount } = adminStatsCache.stats
+    res.json({ ok: true, profilesCount, authUsersCount, plantsCount, cached: true, age: Date.now() - adminStatsCache.lastUpdated.stats })
+    // Trigger background refresh if getting stale
+    if (Date.now() - adminStatsCache.lastUpdated.stats > CACHE_TTL) {
+      refreshStatsCache()
+    }
+    return
+  }
+  
+  // Cache is stale/empty - do a quick fetch with short timeout
   try {
-    let profilesCount = 0
-    let authUsersCount = null
-    let plantsCount = null
-
+    let profilesCount = 0, authUsersCount = null, plantsCount = null
     if (sql) {
-      try {
-        const profilesRows = await withTimeout(
-          sql`select count(*)::int as count from public.profiles`,
-          STATS_QUERY_TIMEOUT,
-          'PROFILES_COUNT_TIMEOUT'
-        )
-        profilesCount = Array.isArray(profilesRows) && profilesRows[0] ? Number(profilesRows[0].count) : 0
-      } catch {}
-      try {
-        const authRows = await withTimeout(
-          sql`select count(*)::int as count from auth.users`,
-          STATS_QUERY_TIMEOUT,
-          'AUTH_USERS_COUNT_TIMEOUT'
-        )
-        authUsersCount = Array.isArray(authRows) && authRows[0] ? Number(authRows[0].count) : null
-      } catch {}
-      try {
-        const plantsRows = await withTimeout(
-          sql`select count(*)::int as count from public.plants`,
-          STATS_QUERY_TIMEOUT,
-          'PLANTS_COUNT_TIMEOUT'
-        )
-        plantsCount = Array.isArray(plantsRows) && plantsRows[0] ? Number(plantsRows[0].count) : 0
-      } catch {}
+      const [p, a, pl] = await Promise.all([
+        withTimeout(sql`select count(*)::int as count from public.profiles`, 1500, 'PROFILES_TIMEOUT').catch(() => []),
+        withTimeout(sql`select count(*)::int as count from auth.users`, 1500, 'AUTH_TIMEOUT').catch(() => []),
+        withTimeout(sql`select count(*)::int as count from public.plants`, 1500, 'PLANTS_TIMEOUT').catch(() => []),
+      ])
+      profilesCount = p?.[0]?.count ?? 0
+      authUsersCount = a?.[0]?.count ?? null
+      plantsCount = pl?.[0]?.count ?? 0
+      // Update cache
+      adminStatsCache.stats = { profilesCount, authUsersCount, plantsCount }
+      adminStatsCache.lastUpdated.stats = Date.now()
     }
-
-    // Fallback via Supabase REST RPC if DB connection not available
-    if (!sql && supabaseUrlEnv && supabaseAnonKey) {
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
-      try {
-        const pr = await withTimeout(
-          fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_profiles_total`, {
-            method: 'POST',
-            headers: baseHeaders,
-            body: '{}',
-          }),
-          STATS_FETCH_TIMEOUT,
-          'REST_PROFILES_TIMEOUT'
-        )
-        if (pr.ok) {
-          const val = await pr.json().catch(() => 0)
-          if (typeof val === 'number' && Number.isFinite(val)) profilesCount = val
-        }
-      } catch {}
-      try {
-        const ar = await withTimeout(
-          fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_auth_users_total`, {
-            method: 'POST',
-            headers: baseHeaders,
-            body: '{}',
-          }),
-          STATS_FETCH_TIMEOUT,
-          'REST_AUTH_TIMEOUT'
-        )
-        if (ar.ok) {
-          const val = await ar.json().catch(() => null)
-          if (typeof val === 'number' && Number.isFinite(val)) authUsersCount = val
-        }
-      } catch {}
-      try {
-        const pr = await withTimeout(
-          fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, {
-            headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
-          }),
-          STATS_FETCH_TIMEOUT,
-          'REST_PLANTS_TIMEOUT'
-        )
-        if (pr.ok) {
-          const contentRange = pr.headers.get('content-range') || ''
-          const match = contentRange.match(/\/(\d+)$/)
-          if (match) plantsCount = Number(match[1])
-        }
-      } catch {}
-    }
-
     res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
   } catch (e) {
-    res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
+    // Return stale cache if available
+    const { profilesCount, authUsersCount, plantsCount } = adminStatsCache.stats
+    res.json({ ok: true, profilesCount, authUsersCount, plantsCount, stale: true, error: e?.message })
   }
 })
 
@@ -8606,11 +8703,22 @@ app.post('/api/account/delete', async (req, res) => {
   }
 })
 
-// Admin: unique visitors stats (past 10m and 7 days)
-// Uses timeouts to prevent hanging when database is slow/unresponsive
+// Admin: unique visitors stats - INSTANT from cache
 app.get('/api/admin/visitors-stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
+  
+  // Return cached data instantly if fresh
+  if (isCacheFresh('visitors')) {
+    const data = adminStatsCache.visitors
+    res.json({ ok: true, ...data, via: 'cache', cached: true, age: Date.now() - adminStatsCache.lastUpdated.visitors, days: 7 })
+    // Trigger background refresh if getting stale
+    if (Date.now() - adminStatsCache.lastUpdated.visitors > CACHE_TTL) {
+      refreshVisitorsCache()
+    }
+    return
+  }
+  
   const QUERY_TIMEOUT = 2000 // 2 seconds - fail fast and use memory fallback
   // Helper that always succeeds using in-memory analytics
   const respondFromMemory = (extra = {}) => {
@@ -8789,12 +8897,23 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
   }
 })
 
-// Admin: breakdown of where visitors come from (top countries and top referrers)
-// Uses timeouts to prevent hanging when database is slow/unresponsive
+// Admin: breakdown of where visitors come from - INSTANT from cache
 app.get('/api/admin/sources-breakdown', async (req, res) => {
   const uid = "public"
   if (!uid) return
-  const QUERY_TIMEOUT = 2000 // 5 seconds for aggregation queries
+  
+  // Return cached data instantly if fresh
+  if (isCacheFresh('sources')) {
+    const data = adminStatsCache.sources
+    res.json({ ok: true, ...data, via: 'cache', cached: true, age: Date.now() - adminStatsCache.lastUpdated.sources, days: 7 })
+    // Trigger background refresh if getting stale
+    if (Date.now() - adminStatsCache.lastUpdated.sources > CACHE_TTL) {
+      refreshSourcesCache()
+    }
+    return
+  }
+  
+  const QUERY_TIMEOUT = 2000 // 2 seconds - fail fast
   try {
     // Memory fallback cannot easily yield breakdowns; prefer DB or Supabase REST
     if (sql) {
@@ -8937,12 +9056,22 @@ app.get('/api/admin/online-ips', async (req, res) => {
   }
 })
 
-// Admin: simple online users count (unique IPs past 60 minutes)
-// Uses timeouts to prevent hanging when database is slow/unresponsive
+// Admin: simple online users count - INSTANT from cache
 app.get('/api/admin/online-users', async (req, res) => {
   const uid = "public"
   if (!uid) return
-  const QUERY_TIMEOUT = 2000 // 3 seconds
+  
+  // Return cached data instantly if fresh
+  if (isCacheFresh('onlineUsers')) {
+    res.json({ ok: true, onlineUsers: adminStatsCache.onlineUsers.count, via: 'cache', cached: true, age: Date.now() - adminStatsCache.lastUpdated.onlineUsers })
+    // Trigger background refresh if getting stale
+    if (Date.now() - adminStatsCache.lastUpdated.onlineUsers > CACHE_TTL) {
+      refreshOnlineUsersCache()
+    }
+    return
+  }
+  
+  const QUERY_TIMEOUT = 2000 // 2 seconds - fail fast
   const respondFromMemory = (extra = {}) => {
     try {
       const ipCount = memAnalytics.getUniqueIpCountInLastMinutes(60)
@@ -11704,10 +11833,9 @@ if (shouldListen) {
     ensureBroadcastTable().catch(() => {})
     ensureNotificationTables().catch(() => {})
     scheduleNotificationWorker()
-    // Non-blocking warmup of database connection pool
-    if (sql) {
-      sql`SELECT 1`.catch(() => {})
-    }
+    // Start background cache refresh for admin stats
+    startAdminStatsCacheRefresh()
+    console.log('[server] Admin stats cache refresh started (30s interval)')
   })
 } else {
   ensureNotificationTables().catch(() => {})
