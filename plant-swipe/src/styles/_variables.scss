@@ -250,6 +250,25 @@
   --tt-color-text-red-contrast: hsla(0, 67%, 60%, 0.25);
 }
 
+/* Text colors for editor */
+:root {
+  --tt-text-color-red: #dc2626;
+  --tt-text-color-orange: #ea580c;
+  --tt-text-color-green: #16a34a;
+  --tt-text-color-blue: #2563eb;
+  --tt-text-color-purple: #9333ea;
+  --tt-text-color-gray: #6b7280;
+}
+
+.dark {
+  --tt-text-color-red: #ef4444;
+  --tt-text-color-orange: #f97316;
+  --tt-text-color-green: #22c55e;
+  --tt-text-color-blue: #3b82f6;
+  --tt-text-color-purple: #a855f7;
+  --tt-text-color-gray: #9ca3af;
+}
+
 /* Highlight colors */
 :root {
   --tt-color-highlight-yellow: #fef9c3;

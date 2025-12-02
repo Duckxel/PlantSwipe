@@ -1,0 +1,30 @@
+.tiptap-button-text-color {
+  --text-color: currentColor;
+
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &::before {
+    content: "A";
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--text-color);
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background-color: var(--text-color);
+    border-radius: 1px;
+  }
+}
