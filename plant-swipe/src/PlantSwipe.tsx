@@ -708,7 +708,19 @@ export default function PlantSwipe() {
   const openLogin = React.useCallback(() => { setAuthMode("login"); setAuthOpen(true) }, [])
   const openSignup = React.useCallback(() => { setAuthMode("signup"); setAuthOpen(true) }, [])
   const handleProfileNavigation = React.useCallback(() => { navigate('/profile') }, [navigate])
-  const handleLogoutNavigation = React.useCallback(async () => { await signOut(); navigate('/') }, [signOut, navigate])
+  const handleLogoutNavigation = React.useCallback(async () => {
+    await signOut()
+    // Stay on current page unless it requires authentication
+    // Protected routes that require user to be logged in:
+    const protectedPrefixes = ['/profile', '/friends', '/settings', '/admin', '/create']
+    const isOnProtectedPage = protectedPrefixes.some(prefix => 
+      pathWithoutLang === prefix || pathWithoutLang.startsWith(prefix + '/')
+    ) || pathWithoutLang.match(/^\/plants\/[^/]+\/edit$/)
+    
+    if (isOnProtectedPage) {
+      navigate('/')
+    }
+  }, [signOut, navigate, pathWithoutLang])
 
   const submitAuth = async () => {
     if (authSubmitting) return

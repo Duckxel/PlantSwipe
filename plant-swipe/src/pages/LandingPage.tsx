@@ -7,7 +7,7 @@ import { TopBar } from "@/components/layout/TopBar"
 import { Footer } from "@/components/layout/Footer"
 import MobileNavBar from "@/components/layout/MobileNavBar"
 import { useAuthActions } from "@/context/AuthActionsContext"
-import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
 import {
   Leaf,
   Droplets,
@@ -31,6 +31,7 @@ const LandingPage: React.FC = () => {
   const { user, profile, signOut } = useAuth()
   const { openLogin, openSignup } = useAuthActions()
   const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
 
   const handleProfileNavigation = React.useCallback(() => {
     navigate('/profile')
@@ -38,8 +39,16 @@ const LandingPage: React.FC = () => {
 
   const handleLogout = React.useCallback(async () => {
     await signOut()
-    navigate('/')
-  }, [signOut, navigate])
+    // Stay on current page unless it requires authentication
+    const protectedPrefixes = ['/profile', '/friends', '/settings', '/admin', '/create']
+    const isOnProtectedPage = protectedPrefixes.some(prefix => 
+      pathWithoutLang === prefix || pathWithoutLang.startsWith(prefix + '/')
+    ) || pathWithoutLang.match(/^\/plants\/[^/]+\/edit$/)
+    
+    if (isOnProtectedPage) {
+      navigate('/')
+    }
+  }, [signOut, navigate, pathWithoutLang])
 
   usePageMetadata({
     title: "Aphylia – " + t("hero.badge"),
