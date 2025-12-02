@@ -93,18 +93,27 @@ export default defineConfig({
   envPrefix: ['VITE_'],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   build: {
+    // Disable gzip size reporting - saves memory and speeds up builds
+    reportCompressedSize: false,
     rollupOptions: {
       output: {
+        // Split large dependencies into separate chunks to reduce peak memory usage
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'recharts': ['recharts'],
           'three': ['three'],
           'supabase': ['@supabase/supabase-js'],
           'ui-components': ['@radix-ui/react-dialog', '@radix-ui/react-label', '@radix-ui/react-slot'],
+          'framer': ['framer-motion'],
+          'i18n': ['i18next', 'react-i18next'],
         },
       },
     },
     chunkSizeWarningLimit: 1000,
+    // Use esbuild for minification - 10-100x faster and uses less memory than Terser
+    minify: 'esbuild',
+    // Disable sourcemaps for production builds to reduce memory usage
+    sourcemap: false,
   },
   server: {
     host: process.env.VITE_DEV_HOST || '127.0.0.1',
