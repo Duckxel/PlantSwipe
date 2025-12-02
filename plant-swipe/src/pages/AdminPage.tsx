@@ -557,18 +557,19 @@ export const AdminPage: React.FC = () => {
   }, []);
 
   // Helper function to retry API calls with exponential backoff
+  // Uses short timeouts for fast feedback - server cache provides instant responses
   const fetchWithRetry = React.useCallback(
     async (
       url: string,
       options: RequestInit = {},
-      maxRetries: number = 2,
+      maxRetries: number = 1, // Reduced retries - server cache should respond instantly
     ): Promise<Response> => {
       let lastError: Error | null = null;
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout per attempt (reduced from 30s)
+          const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout - fast feedback
 
           try {
             const response = await fetch(url, {
@@ -585,9 +586,9 @@ export const AdminPage: React.FC = () => {
               return response;
             }
 
-            // Server error (5xx) - retry
+            // Server error (5xx) - retry once quickly
             if (response.status >= 500 && attempt < maxRetries) {
-              const delay = Math.min(500 * Math.pow(2, attempt), 3000); // Exponential backoff, max 3s (reduced)
+              const delay = 500; // Quick 500ms retry
               await new Promise((resolve) => setTimeout(resolve, delay));
               continue;
             }
@@ -600,7 +601,7 @@ export const AdminPage: React.FC = () => {
         } catch (error: any) {
           lastError = error;
 
-          // Network error or timeout - retry
+          // Network error or timeout - one quick retry
           if (
             attempt < maxRetries &&
             (error.name === "AbortError" ||
@@ -608,7 +609,7 @@ export const AdminPage: React.FC = () => {
               error.message?.includes("fetch") ||
               !error.message?.includes("4"))
           ) {
-            const delay = Math.min(500 * Math.pow(2, attempt), 3000); // Reduced backoff
+            const delay = 500; // Quick 500ms retry
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
@@ -1810,7 +1811,7 @@ export const AdminPage: React.FC = () => {
           if (staticToken) headers["X-Admin-Token"] = staticToken;
         } catch {}
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout for fast ping
         try {
           const resp = await fetch(url, {
             headers,
