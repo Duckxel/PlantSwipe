@@ -1169,10 +1169,17 @@ export const AdminEmailTemplatePage: React.FC = () => {
           
           {/* Email Content Styles */}
           <style>{`
+            /* Text color support - respect inline styles */
+            .email-preview-body [style*="color"] {
+              color: inherit;
+            }
+            .email-preview-body span[style*="color"] {
+              color: var(--inline-color, inherit);
+            }
             .email-preview-body h1 {
               font-size: 32px !important;
               font-weight: 700 !important;
-              color: #111827 !important;
+              color: #111827;
               margin: 0 0 20px 0 !important;
               line-height: 1.2 !important;
               letter-spacing: -0.5px !important;
@@ -1180,27 +1187,27 @@ export const AdminEmailTemplatePage: React.FC = () => {
             .email-preview-body h2 {
               font-size: 26px !important;
               font-weight: 700 !important;
-              color: #1f2937 !important;
+              color: #1f2937;
               margin: 32px 0 16px 0 !important;
               line-height: 1.3 !important;
             }
             .email-preview-body h3 {
               font-size: 22px !important;
               font-weight: 600 !important;
-              color: #374151 !important;
+              color: #374151;
               margin: 28px 0 12px 0 !important;
               line-height: 1.4 !important;
             }
             .email-preview-body h4 {
               font-size: 18px !important;
               font-weight: 600 !important;
-              color: #4b5563 !important;
+              color: #4b5563;
               margin: 24px 0 10px 0 !important;
             }
             .email-preview-body p {
               margin: 0 0 16px 0 !important;
               line-height: 1.75 !important;
-              color: #374151 !important;
+              color: #374151;
             }
             .email-preview-body a {
               color: #059669 !important;

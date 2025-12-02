@@ -115,12 +115,15 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
     /* Base */
     body { margin: 0 !important; padding: 0 !important; width: 100% !important; background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%); min-height: 100vh; }
     
-    /* Typography */
+    /* Typography - colors not using !important to allow inline styles */
     h1 { font-size: 32px; font-weight: 700; color: #111827; margin: 0 0 20px 0; line-height: 1.2; letter-spacing: -0.5px; }
     h2 { font-size: 26px; font-weight: 700; color: #1f2937; margin: 32px 0 16px 0; line-height: 1.3; }
     h3 { font-size: 22px; font-weight: 600; color: #374151; margin: 28px 0 12px 0; line-height: 1.4; }
     h4 { font-size: 18px; font-weight: 600; color: #4b5563; margin: 24px 0 10px 0; }
     p { margin: 0 0 16px 0; line-height: 1.75; color: #374151; }
+    
+    /* Text colors - preserve inline color styles */
+    span[style*="color"] { color: inherit; }
     
     /* Links */
     a { color: #059669; text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
