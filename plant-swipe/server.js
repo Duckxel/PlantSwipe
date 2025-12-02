@@ -1308,6 +1308,9 @@ async function isAdminUserId(userId) {
   return false
 }
 
+// Timeout for auth verification (prevents hanging on Supabase issues)
+const AUTH_VERIFY_TIMEOUT = 3000 // 3 seconds
+
 // Resolve user (id/email) from request. Uses Supabase if available, otherwise
 // decodes the JWT locally. Returns null if no valid bearer token.
 async function getUserFromRequest(req) {
@@ -1321,12 +1324,18 @@ async function getUserFromRequest(req) {
     if (!token) return null
     if (supabaseServer) {
       try {
-        const { data, error } = await supabaseServer.auth.getUser(token)
+        // Add timeout to prevent hanging on Supabase issues
+        const { data, error } = await withTimeout(
+          supabaseServer.auth.getUser(token),
+          AUTH_VERIFY_TIMEOUT,
+          'AUTH_TIMEOUT'
+        )
         if (!error && data?.user?.id) {
           return { id: data.user.id, email: data.user.email || null }
         }
       } catch {}
     }
+    // Fallback: decode JWT locally (fast, no network)
     try {
       const parts = token.split('.')
       if (parts.length >= 2) {
@@ -1360,7 +1369,12 @@ async function getUserFromRequestOrToken(req) {
   const qToken = getTokenFromQuery(req)
   if (qToken && supabaseServer) {
     try {
-      const { data, error } = await supabaseServer.auth.getUser(qToken)
+      // Add timeout to prevent hanging on Supabase issues
+      const { data, error } = await withTimeout(
+        supabaseServer.auth.getUser(qToken),
+        AUTH_VERIFY_TIMEOUT,
+        'AUTH_TOKEN_TIMEOUT'
+      )
       if (!error && data?.user?.id) {
         return { id: data.user.id, email: data.user.email || null }
       }
@@ -1386,6 +1400,9 @@ function getBearerTokenFromRequest(req) {
 function getAuthTokenFromRequest(req) {
   return getBearerTokenFromRequest(req) || getTokenFromQuery(req)
 }
+// Timeout for admin authentication queries (prevents hangs on DB issues)
+const ADMIN_AUTH_TIMEOUT = 5000 // 5 seconds
+
 async function isAdminFromRequest(req) {
   try {
     // Allow explicit public mode for maintenance
@@ -1398,15 +1415,19 @@ async function isAdminFromRequest(req) {
     const user = await getUserFromRequest(req)
     if (!user?.id) return false
     let isAdmin = false
-    // Prefer DB flag
+    // Prefer DB flag - with timeout to prevent hanging
     if (sql) {
       try {
-        const exists = await sql`select 1 from information_schema.tables where table_schema='public' and table_name='profiles'`
-        if (exists?.length) {
-          const rows = await sql`select is_admin from public.profiles where id = ${user.id} limit 1`
-          isAdmin = !!(rows?.[0]?.is_admin)
-        }
-      } catch {}
+        const rows = await withTimeout(
+          sql`select is_admin from public.profiles where id = ${user.id} limit 1`,
+          ADMIN_AUTH_TIMEOUT,
+          'ADMIN_DB_TIMEOUT'
+        )
+        isAdmin = !!(rows?.[0]?.is_admin)
+      } catch (e) {
+        // DB timeout or error - fall through to REST fallback
+        console.warn('[isAdminFromRequest] DB query failed:', e?.message || 'unknown')
+      }
     }
     // Supabase REST fallback: allow any authenticated user whose profile row has is_admin = true
     if (!isAdmin && supabaseUrlEnv && supabaseAnonKey) {
@@ -1415,11 +1436,19 @@ async function isAdminFromRequest(req) {
         const bearer = getBearerTokenFromRequest(req)
         if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
         const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin&limit=1`
-        const resp = await fetch(url, { headers })
-        if (resp.ok) {
-          const arr = await resp.json().catch(() => [])
-          const flag = Array.isArray(arr) && arr[0] ? (arr[0].is_admin === true) : false
-          if (flag) isAdmin = true
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), ADMIN_AUTH_TIMEOUT)
+        try {
+          const resp = await fetch(url, { headers, signal: controller.signal })
+          clearTimeout(timeoutId)
+          if (resp.ok) {
+            const arr = await resp.json().catch(() => [])
+            const flag = Array.isArray(arr) && arr[0] ? (arr[0].is_admin === true) : false
+            if (flag) isAdmin = true
+          }
+        } catch (fetchErr) {
+          clearTimeout(timeoutId)
+          console.warn('[isAdminFromRequest] REST fallback failed:', fetchErr?.message || 'unknown')
         }
       } catch {}
     }
@@ -2183,12 +2212,12 @@ const connectionString = buildConnectionString()
 
 // Prefer SSL for non-local databases even if URL lacks sslmode; honor custom CA
 // Note: postgres.js options are different from pg options
-// connect_timeout is passed via the connection string, not here
 let postgresOptions = {
   // Connection pool settings optimized for fast response
   max: 10,              // Max connections in pool (default is 10)
   idle_timeout: 20,     // Close idle connections after 20 seconds
   max_lifetime: 60 * 30, // Max connection lifetime: 30 minutes
+  connect_timeout: 10,  // Connection timeout: 10 seconds (prevents indefinite hangs)
 }
 try {
   if (connectionString) {
