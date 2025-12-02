@@ -10152,7 +10152,58 @@ app.get('/api/garden/:id/overview', async (req, res) => {
     }
     // TODO: For friends_only, would need to check friend status with members
     
-    res.json({ ok: true, garden: gardenOut, plants, members, serverNow })
+    // Calculate today's progress and stats server-side to avoid round-trips
+    const today = new Date().toISOString().slice(0, 10)
+    const startIso = `${today}T00:00:00.000Z`
+    const endIso = `${today}T23:59:59.999Z`
+    
+    let todayProgress = { due: 0, completed: 0 }
+    let totalOnHand = 0
+    let speciesCount = 0
+    
+    // Calculate species count and totalOnHand from plants
+    const seenSpecies = new Set()
+    for (const p of plants) {
+      const c = Number(p.plantsOnHand || 0)
+      totalOnHand += c
+      if (p.plantId) seenSpecies.add(String(p.plantId))
+    }
+    speciesCount = seenSpecies.size
+    
+    // Calculate today's task progress
+    if (sql && gardenId) {
+      try {
+        const progressRows = await sql`
+          SELECT 
+            COALESCE(SUM(GREATEST(1, o.required_count)), 0)::int as due,
+            COALESCE(SUM(LEAST(GREATEST(1, o.required_count), o.completed_count)), 0)::int as completed
+          FROM garden_plant_task_occurrences o
+          JOIN garden_plant_tasks t ON t.id = o.task_id
+          WHERE t.garden_id = ${gardenId}
+            AND o.due_at >= ${startIso}::timestamptz
+            AND o.due_at <= ${endIso}::timestamptz
+        `
+        if (progressRows && progressRows[0]) {
+          todayProgress = {
+            due: Number(progressRows[0].due || 0),
+            completed: Number(progressRows[0].completed || 0),
+          }
+        }
+      } catch (progressErr) {
+        console.warn('[overview] Progress query failed:', progressErr?.message || progressErr)
+      }
+    }
+    
+    res.json({ 
+      ok: true, 
+      garden: gardenOut, 
+      plants, 
+      members, 
+      serverNow,
+      todayProgress,
+      totalOnHand,
+      speciesCount,
+    })
   } catch (e) {
     console.error('[overview] Error for garden', req.params.id, ':', e?.message || e)
     console.error('[overview] Stack:', e?.stack || 'No stack')
