@@ -2,15 +2,20 @@ import hmac
 import hashlib
 import os
 import subprocess
+import time
 from typing import Set, Optional
 
 from flask import Flask, request, abort, jsonify, Response
 from pathlib import Path
-import os
 from dotenv import load_dotenv
-from pathlib import Path
 import shlex
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+
+# Import requests at module level for efficiency
+try:
+    import requests as _requests_lib
+except ImportError:
+    _requests_lib = None
 
 
 def _get_env_var(name: str, default: Optional[str] = None) -> str:
@@ -78,8 +83,9 @@ app = Flask(__name__)
 
 # Optional: forward admin actions to Node app for centralized logging
 def _log_admin_action(action: str, target: str = "", detail: dict | None = None) -> None:
+    if not _requests_lib:
+        return
     try:
-        import requests
         node_url = os.environ.get("NODE_APP_URL", "http://127.0.0.1:3000")
         token = request.headers.get("Authorization", "")
         headers = {"Accept": "application/json"}
@@ -93,7 +99,7 @@ def _log_admin_action(action: str, target: str = "", detail: dict | None = None)
         url = f"{node_url}/api/admin/log-action"
         payload = {"action": action, "target": target or None, "detail": detail or {}}
         try:
-            requests.post(url, json=payload, headers=headers, timeout=2)
+            _requests_lib.post(url, json=payload, headers=headers, timeout=1)
         except Exception:
             pass
     except Exception:
@@ -255,16 +261,38 @@ def _psql_available() -> bool:
         return False
 
 
+# Cache for branch list to avoid slow git remote operations
+_branches_cache = {"branches": [], "current": "", "lastUpdateTime": None, "cached_at": 0}
+_BRANCHES_CACHE_TTL = 60  # Cache for 60 seconds
+
 @app.get("/admin/branches")
 def list_branches():
     _verify_request()
+    
+    # Check cache first (unless ?refresh=true is passed)
+    now = time.time()
+    force_refresh = request.args.get("refresh", "").lower() in ("true", "1", "yes")
+    if not force_refresh and _branches_cache["cached_at"] > 0 and (now - _branches_cache["cached_at"]) < _BRANCHES_CACHE_TTL:
+        return jsonify({
+            "branches": _branches_cache["branches"],
+            "current": _branches_cache["current"],
+            "lastUpdateTime": _branches_cache["lastUpdateTime"],
+            "cached": True
+        })
+    
     repo_root = _get_repo_root()
     git_base = f'git -c "safe.directory={repo_root}" -C "{repo_root}"'
     try:
-        # Prune remotes quickly; ignore failures
-        subprocess.run(shlex.split(f"{git_base} remote update --prune"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-        # List remote branches
-        res = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/remotes/origin"), capture_output=True, text=True, timeout=30, check=False)
+        # Skip slow remote update unless explicitly requested - use local refs only
+        # The remote refs are updated when pull-code runs anyway
+        if force_refresh:
+            # Only fetch if explicitly requested, with short timeout
+            subprocess.run(shlex.split(f"{git_base} remote update --prune"), 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        
+        # List remote branches (uses local cache of remote refs)
+        res = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/remotes/origin"), 
+                           capture_output=True, text=True, timeout=5, check=False)
         # Normalize remote ref names and exclude non-branch entries
         branches = []
         for raw in (res.stdout or "").split("\n"):
@@ -278,9 +306,11 @@ def list_branches():
             branches.append(name)
         if not branches:
             # fallback to local
-            res_local = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/heads"), capture_output=True, text=True, timeout=30, check=False)
+            res_local = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/heads"), 
+                                      capture_output=True, text=True, timeout=5, check=False)
             branches = [s.strip() for s in (res_local.stdout or "").split("\n") if s.strip()]
-        cur = subprocess.run(shlex.split(f"{git_base} rev-parse --abbrev-ref HEAD"), capture_output=True, text=True, timeout=10, check=False)
+        cur = subprocess.run(shlex.split(f"{git_base} rev-parse --abbrev-ref HEAD"), 
+                           capture_output=True, text=True, timeout=3, check=False)
         current = (cur.stdout or "").strip()
         branches = sorted(set(branches))
         
@@ -293,6 +323,12 @@ def list_branches():
         except Exception:
             # TIME file doesn't exist or can't be read, which is fine
             pass
+        
+        # Update cache
+        _branches_cache["branches"] = branches
+        _branches_cache["current"] = current
+        _branches_cache["lastUpdateTime"] = last_update_time
+        _branches_cache["cached_at"] = now
         
         return jsonify({"branches": branches, "current": current, "lastUpdateTime": last_update_time})
     except Exception as e:
