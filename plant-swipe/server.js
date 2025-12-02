@@ -6186,69 +6186,96 @@ app.post('/api/send-automatic-email', async (req, res) => {
 })
 
   // Admin: global stats (bypass RLS via server connection)
+  // Uses timeouts to prevent hanging when database is slow/unresponsive
   app.get('/api/admin/stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
+  const STATS_QUERY_TIMEOUT = 3000 // 3 seconds per query
+  const STATS_FETCH_TIMEOUT = 2000 // 2 seconds for REST calls
   try {
     let profilesCount = 0
     let authUsersCount = null
-      let plantsCount = null
+    let plantsCount = null
 
     if (sql) {
       try {
-        const profilesRows = await sql`select count(*)::int as count from public.profiles`
+        const profilesRows = await withTimeout(
+          sql`select count(*)::int as count from public.profiles`,
+          STATS_QUERY_TIMEOUT,
+          'PROFILES_COUNT_TIMEOUT'
+        )
         profilesCount = Array.isArray(profilesRows) && profilesRows[0] ? Number(profilesRows[0].count) : 0
       } catch {}
       try {
-        const authRows = await sql`select count(*)::int as count from auth.users`
+        const authRows = await withTimeout(
+          sql`select count(*)::int as count from auth.users`,
+          STATS_QUERY_TIMEOUT,
+          'AUTH_USERS_COUNT_TIMEOUT'
+        )
         authUsersCount = Array.isArray(authRows) && authRows[0] ? Number(authRows[0].count) : null
-        } catch {}
-        try {
-          const plantsRows = await sql`select count(*)::int as count from public.plants`
-          plantsCount = Array.isArray(plantsRows) && plantsRows[0] ? Number(plantsRows[0].count) : 0
-        } catch {}
+      } catch {}
+      try {
+        const plantsRows = await withTimeout(
+          sql`select count(*)::int as count from public.plants`,
+          STATS_QUERY_TIMEOUT,
+          'PLANTS_COUNT_TIMEOUT'
+        )
+        plantsCount = Array.isArray(plantsRows) && plantsRows[0] ? Number(plantsRows[0].count) : 0
+      } catch {}
     }
 
     // Fallback via Supabase REST RPC if DB connection not available
     if (!sql && supabaseUrlEnv && supabaseAnonKey) {
       const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       try {
-        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_profiles_total`, {
-          method: 'POST',
-          headers: baseHeaders,
-          body: '{}',
-        })
+        const pr = await withTimeout(
+          fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_profiles_total`, {
+            method: 'POST',
+            headers: baseHeaders,
+            body: '{}',
+          }),
+          STATS_FETCH_TIMEOUT,
+          'REST_PROFILES_TIMEOUT'
+        )
         if (pr.ok) {
           const val = await pr.json().catch(() => 0)
           if (typeof val === 'number' && Number.isFinite(val)) profilesCount = val
         }
       } catch {}
       try {
-        const ar = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_auth_users_total`, {
-          method: 'POST',
-          headers: baseHeaders,
-          body: '{}',
-        })
+        const ar = await withTimeout(
+          fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_auth_users_total`, {
+            method: 'POST',
+            headers: baseHeaders,
+            body: '{}',
+          }),
+          STATS_FETCH_TIMEOUT,
+          'REST_AUTH_TIMEOUT'
+        )
         if (ar.ok) {
           const val = await ar.json().catch(() => null)
           if (typeof val === 'number' && Number.isFinite(val)) authUsersCount = val
         }
-        } catch {}
-        try {
-          const pr = await fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, {
+      } catch {}
+      try {
+        const pr = await withTimeout(
+          fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, {
             headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
-          })
-          if (pr.ok) {
-            const contentRange = pr.headers.get('content-range') || ''
-            const match = contentRange.match(/\/(\d+)$/)
-            if (match) plantsCount = Number(match[1])
-          }
-        } catch {}
+          }),
+          STATS_FETCH_TIMEOUT,
+          'REST_PLANTS_TIMEOUT'
+        )
+        if (pr.ok) {
+          const contentRange = pr.headers.get('content-range') || ''
+          const match = contentRange.match(/\/(\d+)$/)
+          if (match) plantsCount = Number(match[1])
+        }
+      } catch {}
     }
 
-      res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
+    res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
   } catch (e) {
-      res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
+    res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
   }
 })
 
@@ -8563,9 +8590,11 @@ app.post('/api/account/delete', async (req, res) => {
 })
 
 // Admin: unique visitors stats (past 10m and 7 days)
+// Uses timeouts to prevent hanging when database is slow/unresponsive
 app.get('/api/admin/visitors-stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
+  const QUERY_TIMEOUT = 5000 // 5 seconds for aggregation queries
   // Helper that always succeeds using in-memory analytics
   const respondFromMemory = (extra = {}) => {
     try {
@@ -8597,12 +8626,12 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
           const days = (daysParam === 30 ? 30 : 7)
 
           const [c10, c30, c60u, c60v, uN, sN] = await Promise.all([
-            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 10 }) }),
-            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 30 }) }),
-            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }),
-            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_visits_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }),
-            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, { method: 'POST', headers, body: JSON.stringify({ _days: days }) }),
-            fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_visitors_series_days`, { method: 'POST', headers, body: JSON.stringify({ _days: days }) }),
+            withTimeout(fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 10 }) }), QUERY_TIMEOUT, 'REST_10M_TIMEOUT'),
+            withTimeout(fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 30 }) }), QUERY_TIMEOUT, 'REST_30M_TIMEOUT'),
+            withTimeout(fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }), QUERY_TIMEOUT, 'REST_60M_TIMEOUT'),
+            withTimeout(fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_visits_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }), QUERY_TIMEOUT, 'REST_VISITS_TIMEOUT'),
+            withTimeout(fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, { method: 'POST', headers, body: JSON.stringify({ _days: days }) }), QUERY_TIMEOUT, 'REST_DAYS_TIMEOUT'),
+            withTimeout(fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_visitors_series_days`, { method: 'POST', headers, body: JSON.stringify({ _days: days }) }), QUERY_TIMEOUT, 'REST_SERIES_TIMEOUT'),
           ])
 
           const [c10v, c30v, c60uv, c60vv, uNv, sNv] = await Promise.all([
@@ -8640,15 +8669,15 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     const daysParam = Number(req.query.days || 7)
     const days = (daysParam === 30 ? 30 : 7)
     const [rows10m, rows30m, rows60mUnique, rows60mRaw, rowsNdUnique] = await Promise.all([
-      sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`),
-      sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`),
-      sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`),
-      sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`),
+      withTimeout(sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`), QUERY_TIMEOUT, 'DB_10M_TIMEOUT'),
+      withTimeout(sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`), QUERY_TIMEOUT, 'DB_30M_TIMEOUT'),
+      withTimeout(sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`), QUERY_TIMEOUT, 'DB_60M_TIMEOUT'),
+      withTimeout(sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`), QUERY_TIMEOUT, 'DB_VISITS_TIMEOUT'),
       // Unique IPs across the last N calendar days in UTC
-      sql.unsafe(`select count(distinct v.ip_address)::int as c
+      withTimeout(sql.unsafe(`select count(distinct v.ip_address)::int as c
                   from ${VISITS_TABLE_SQL_IDENT} v
                   where v.ip_address is not null
-                    and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`)
+                    and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`), QUERY_TIMEOUT, 'DB_DAYS_TIMEOUT')
     ])
 
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
@@ -8657,7 +8686,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     const visitsLast60m = rows60mRaw?.[0]?.c ?? 0
     const uniqueIps7d = rowsNdUnique?.[0]?.c ?? 0
 
-    const rows7 = await sql.unsafe(
+    const rows7 = await withTimeout(sql.unsafe(
       `with days as (
          select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
        )
@@ -8668,7 +8697,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
                 where (timezone('utc', v.occurred_at))::date = d
               ), 0)::int as unique_visitors
        from days
-       order by d asc`)
+       order by d asc`), QUERY_TIMEOUT, 'DB_SERIES_TIMEOUT')
     const series7d = (rows7 || []).map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors || 0) }))
 
     res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'database', days })
@@ -8681,9 +8710,11 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
 })
 
 // Admin: total unique visitors across last 7 days (distinct IPs, UTC calendar days)
+// Uses timeouts to prevent hanging when database is slow/unresponsive
 app.get('/api/admin/visitors-unique-7d', async (req, res) => {
   const uid = "public"
   if (!uid) return
+  const QUERY_TIMEOUT = 5000 // 5 seconds for aggregation queries
   const respondFromMemory = (extra = {}) => {
     try {
       const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
@@ -8695,11 +8726,15 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
   }
   try {
     if (sql) {
-      const rows = await sql.unsafe(
-        `select count(distinct v.ip_address)::int as c
-         from ${VISITS_TABLE_SQL_IDENT} v
-         where v.ip_address is not null
-           and (timezone('utc', v.occurred_at))::date >= ((now() at time zone 'utc')::date - interval '6 days')`
+      const rows = await withTimeout(
+        sql.unsafe(
+          `select count(distinct v.ip_address)::int as c
+           from ${VISITS_TABLE_SQL_IDENT} v
+           where v.ip_address is not null
+             and (timezone('utc', v.occurred_at))::date >= ((now() at time zone 'utc')::date - interval '6 days')`
+        ),
+        QUERY_TIMEOUT,
+        'VISITORS_7D_TIMEOUT'
       )
       const uniqueIps7d = rows?.[0]?.c ?? 0
       res.json({ ok: true, uniqueIps7d, via: 'database' })
@@ -8711,11 +8746,15 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
       const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
-      const r = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ _days: 7 }),
-      })
+      const r = await withTimeout(
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ _days: 7 }),
+        }),
+        QUERY_TIMEOUT,
+        'REST_VISITORS_7D_TIMEOUT'
+      )
       if (r.ok) {
         const val = await r.json().catch(() => 0)
         const uniqueIps7d = Number(val) || 0
@@ -8734,17 +8773,19 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
 })
 
 // Admin: breakdown of where visitors come from (top countries and top referrers)
+// Uses timeouts to prevent hanging when database is slow/unresponsive
 app.get('/api/admin/sources-breakdown', async (req, res) => {
   const uid = "public"
   if (!uid) return
+  const QUERY_TIMEOUT = 5000 // 5 seconds for aggregation queries
   try {
     // Memory fallback cannot easily yield breakdowns; prefer DB or Supabase REST
     if (sql) {
       const daysParam = Number(req.query.days || 30)
       const days = (daysParam === 7 ? 7 : 30)
       const [countries, referrers] = await Promise.all([
-        sql`select * from public.get_top_countries(${days}, ${10000})`,
-        sql`select * from public.get_top_referrers(${days}, ${10})`,
+        withTimeout(sql`select * from public.get_top_countries(${days}, ${10000})`, QUERY_TIMEOUT, 'COUNTRIES_TIMEOUT'),
+        withTimeout(sql`select * from public.get_top_referrers(${days}, ${10})`, QUERY_TIMEOUT, 'REFERRERS_TIMEOUT'),
       ])
       const allCountries = (countries || []).map(r => ({ country: (r.country || ''), visits: Number(r.visits || 0) })).filter(c => c.country)
       const allReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
@@ -8773,8 +8814,8 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       const days = (daysParam === 7 ? 7 : 30)
       // Prefer RPCs for reliable grouping
       const [cr, rr] = await Promise.all([
-        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_countries`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10000 }) }),
-        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_referrers`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10 }) }),
+        withTimeout(fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_countries`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10000 }) }), QUERY_TIMEOUT, 'REST_COUNTRIES_TIMEOUT'),
+        withTimeout(fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_referrers`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10 }) }), QUERY_TIMEOUT, 'REST_REFERRERS_TIMEOUT'),
       ])
       const cData = cr.ok ? await cr.json().catch(() => []) : []
       const rData = rr.ok ? await rr.json().catch(() => []) : []
@@ -8804,9 +8845,11 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
 })
 
 // Admin: list unique IP addresses connected in the last N minutes (default 60)
+// Uses timeouts to prevent hanging when database is slow/unresponsive
 app.get('/api/admin/online-ips', async (req, res) => {
   const uid = "public"
   if (!uid) return
+  const QUERY_TIMEOUT = 3000 // 3 seconds
   const minutesParam = Number(req.query.minutes || req.query.window || 60)
   const windowMinutes = Number.isFinite(minutesParam) && minutesParam > 0 ? Math.min(24 * 60, Math.floor(minutesParam)) : 60
 
@@ -8832,13 +8875,13 @@ app.get('/api/admin/online-ips', async (req, res) => {
 
   try {
     if (sql) {
-      const rows = await sql`
+      const rows = await withTimeout(sql`
         select distinct v.ip_address as ip
         from ${VISITS_TABLE_SQL_IDENT} v
         where v.ip_address is not null
           and v.occurred_at >= now() - interval '${windowMinutes} minutes'
         order by ip asc
-      `
+      `, QUERY_TIMEOUT, 'ONLINE_IPS_TIMEOUT')
       const ips = Array.isArray(rows) ? rows.map(r => String(r.ip)).filter(Boolean) : []
       res.json({ ok: true, ips, via: 'database', windowMinutes, count: ips.length, updatedAt: Date.now() })
       return
@@ -8854,7 +8897,7 @@ app.get('/api/admin/online-ips', async (req, res) => {
       try {
         const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
         const url = `${supabaseUrlEnv}/rest/v1/${tablePath}?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`
-        const resp = await withTimeout(fetch(url, { headers }), 1200, 'REST_TIMEOUT')
+        const resp = await withTimeout(fetch(url, { headers }), QUERY_TIMEOUT, 'REST_ONLINE_IPS_TIMEOUT')
         if (resp.ok) {
           const arr = await resp.json().catch(() => [])
           const uniq = new Set((Array.isArray(arr) ? arr : []).map(r => String(r.ip_address || '')).filter(Boolean))
@@ -8878,9 +8921,11 @@ app.get('/api/admin/online-ips', async (req, res) => {
 })
 
 // Admin: simple online users count (unique IPs past 60 minutes)
+// Uses timeouts to prevent hanging when database is slow/unresponsive
 app.get('/api/admin/online-users', async (req, res) => {
   const uid = "public"
   if (!uid) return
+  const QUERY_TIMEOUT = 3000 // 3 seconds
   const respondFromMemory = (extra = {}) => {
     try {
       const ipCount = memAnalytics.getUniqueIpCountInLastMinutes(60)
@@ -8893,7 +8938,11 @@ app.get('/api/admin/online-users', async (req, res) => {
   try {
     if (sql) {
       const [ipRows] = await Promise.all([
-        sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`),
+        withTimeout(
+          sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`),
+          QUERY_TIMEOUT,
+          'ONLINE_USERS_TIMEOUT'
+        ),
       ])
       const ipCount = ipRows?.[0]?.c ?? 0
       res.json({ ok: true, onlineUsers: ipCount, via: 'database' })
@@ -8905,11 +8954,15 @@ app.get('/api/admin/online-users', async (req, res) => {
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
-      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ _minutes: 60 }),
-      })
+      const resp = await withTimeout(
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ _minutes: 60 }),
+        }),
+        QUERY_TIMEOUT,
+        'REST_ONLINE_USERS_TIMEOUT'
+      )
       if (resp.ok) {
         const val = await resp.json().catch(() => 0)
         const ipCount = Number(val) || 0
