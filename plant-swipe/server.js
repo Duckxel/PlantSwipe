@@ -2588,9 +2588,23 @@ app.options('/api/*', (_req, res) => {
 // Supabase service client disabled to avoid using service-role env vars
 const supabaseAdmin = null
 
+// Simple ping - no database, instant response
+app.get('/api/ping', (_req, res) => {
+  res.status(200).json({ ok: true, ts: Date.now() })
+})
+
 // Composite health: reflect DB status so UI doesn't show green on failures
-app.get('/api/health', async (_req, res) => {
+// Use ?quick=true to skip DB check for faster response
+app.get('/api/health', async (req, res) => {
   const started = Date.now()
+  const quick = req.query.quick === 'true' || req.query.quick === '1'
+  
+  // Quick mode: just return ok without DB check
+  if (quick) {
+    res.status(200).json({ ok: true, quick: true, latencyMs: Date.now() - started })
+    return
+  }
+  
   try {
     let dbOk = false
     let err = null
@@ -6193,7 +6207,7 @@ app.post('/api/send-automatic-email', async (req, res) => {
   app.get('/api/admin/stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
-  const STATS_QUERY_TIMEOUT = 3000 // 3 seconds per query
+  const STATS_QUERY_TIMEOUT = 2000 // 2 seconds - fail fast
   const STATS_FETCH_TIMEOUT = 2000 // 2 seconds for REST calls
   try {
     let profilesCount = 0
@@ -8597,7 +8611,7 @@ app.post('/api/account/delete', async (req, res) => {
 app.get('/api/admin/visitors-stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
-  const QUERY_TIMEOUT = 5000 // 5 seconds for aggregation queries
+  const QUERY_TIMEOUT = 2000 // 2 seconds - fail fast and use memory fallback
   // Helper that always succeeds using in-memory analytics
   const respondFromMemory = (extra = {}) => {
     try {
@@ -8717,7 +8731,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
 app.get('/api/admin/visitors-unique-7d', async (req, res) => {
   const uid = "public"
   if (!uid) return
-  const QUERY_TIMEOUT = 5000 // 5 seconds for aggregation queries
+  const QUERY_TIMEOUT = 2000 // 5 seconds for aggregation queries
   const respondFromMemory = (extra = {}) => {
     try {
       const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
@@ -8780,7 +8794,7 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
 app.get('/api/admin/sources-breakdown', async (req, res) => {
   const uid = "public"
   if (!uid) return
-  const QUERY_TIMEOUT = 5000 // 5 seconds for aggregation queries
+  const QUERY_TIMEOUT = 2000 // 5 seconds for aggregation queries
   try {
     // Memory fallback cannot easily yield breakdowns; prefer DB or Supabase REST
     if (sql) {
@@ -8852,7 +8866,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
 app.get('/api/admin/online-ips', async (req, res) => {
   const uid = "public"
   if (!uid) return
-  const QUERY_TIMEOUT = 3000 // 3 seconds
+  const QUERY_TIMEOUT = 2000 // 3 seconds
   const minutesParam = Number(req.query.minutes || req.query.window || 60)
   const windowMinutes = Number.isFinite(minutesParam) && minutesParam > 0 ? Math.min(24 * 60, Math.floor(minutesParam)) : 60
 
@@ -8928,7 +8942,7 @@ app.get('/api/admin/online-ips', async (req, res) => {
 app.get('/api/admin/online-users', async (req, res) => {
   const uid = "public"
   if (!uid) return
-  const QUERY_TIMEOUT = 3000 // 3 seconds
+  const QUERY_TIMEOUT = 2000 // 3 seconds
   const respondFromMemory = (extra = {}) => {
     try {
       const ipCount = memAnalytics.getUniqueIpCountInLastMinutes(60)

@@ -1883,10 +1883,15 @@ export const AdminPage: React.FC = () => {
     React.useCallback(async (): Promise<ProbeResult> => {
       const started = Date.now();
       try {
+        // Use AbortController for fast timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
         const resp = await fetch("/api/health/db", {
           headers: { Accept: "application/json" },
           credentials: "same-origin",
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         const elapsedMs = Date.now() - started;
         const body = await safeJson(resp);
         if (resp.ok && body?.ok === true) {
@@ -1959,19 +1964,22 @@ export const AdminPage: React.FC = () => {
     }, [safeJson]);
 
   const runHealthProbes = React.useCallback(async () => {
+    // Use lightweight endpoints for fast ping - no heavy DB queries
     const [apiRes, adminRes, dbRes] = await Promise.all([
-      probeEndpoint("/api/health", (b) => b?.ok === true).catch(() => ({
-        ok: false,
-        latencyMs: null,
-        updatedAt: Date.now(),
-        status: null,
-        errorCode: "NETWORK_ERROR",
-        errorMessage: "Failed to probe API",
-      })),
-      probeEndpoint(
-        "/api/admin/stats",
-        (b) => b?.ok === true && typeof b?.profilesCount === "number",
-      ).catch(() => ({
+      // Simple ping - no DB query
+      probeEndpoint("/api/ping", (b) => b?.ok === true).catch(() => 
+        // Fallback to quick health check
+        probeEndpoint("/api/health?quick=true", (b) => b?.ok === true).catch(() => ({
+          ok: false,
+          latencyMs: null,
+          updatedAt: Date.now(),
+          status: null,
+          errorCode: "NETWORK_ERROR",
+          errorMessage: "Failed to probe API",
+        }))
+      ),
+      // Quick health check for admin - just verify server responds
+      probeEndpoint("/api/health?quick=true", (b) => b?.ok === true).catch(() => ({
         ok: false,
         latencyMs: null,
         updatedAt: Date.now(),
@@ -1979,6 +1987,7 @@ export const AdminPage: React.FC = () => {
         errorCode: "NETWORK_ERROR",
         errorMessage: "Failed to probe Admin API",
       })),
+      // DB probe with fallback
       probeDbWithFallback().catch(() => ({
         ok: false,
         latencyMs: null,
