@@ -37,14 +37,30 @@ export async function requestNotificationPermission(): Promise<boolean> {
 async function syncSubscriptionWithServer(subscription: PushSubscription): Promise<void> {
   const session = (await supabase.auth.getSession()).data.session
   const token = session?.access_token
+  if (!token) {
+    throw new Error('You must be signed in to enable push notifications')
+  }
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (token) headers.Authorization = `Bearer ${token}`
-  await fetch('/api/push/subscribe', {
+  headers.Authorization = `Bearer ${token}`
+  
+  const response = await fetch('/api/push/subscribe', {
     method: 'POST',
     headers,
     credentials: 'same-origin',
     body: JSON.stringify({ subscription: subscription.toJSON() }),
   })
+  
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    const errorMessage = data?.error || `Failed to register push subscription (${response.status})`
+    console.error('[push] Failed to sync subscription with server:', errorMessage)
+    throw new Error(errorMessage)
+  }
+  
+  const data = await response.json().catch(() => ({}))
+  if (!data.pushConfigured) {
+    console.warn('[push] Push notifications are registered but server VAPID keys are not configured - notifications may not be delivered')
+  }
 }
 
 export async function registerPushSubscription(force = false): Promise<PushSubscription> {
