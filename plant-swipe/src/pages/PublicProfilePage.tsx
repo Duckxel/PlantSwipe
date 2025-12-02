@@ -61,6 +61,17 @@ export default function PublicProfilePage() {
   const { t } = useTranslation('common')
   const displayParam = String(params.username || '')
 
+  // Handle logout - stay on page unless it requires authentication
+  const handleLogout = React.useCallback(async () => {
+    await signOut()
+    // If viewing /u/_me (which requires auth to resolve), redirect to home
+    // Otherwise stay on the current profile page (public profiles are viewable by anyone)
+    if (displayParam === '_me') {
+      navigate('/')
+    }
+    // For all other profile pages (/u/USERNAME), stay on the page
+  }, [signOut, navigate, displayParam])
+
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [pp, setPp] = React.useState<PublicProfile | null>(null)
@@ -842,7 +853,7 @@ export default function PublicProfilePage() {
                       {menuOpen && menuPos && createPortal(
                         <div ref={menuRef} className="w-40 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await signOut(); navigate('/') }}>{t('profile.logout')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await handleLogout() }}>{t('profile.logout')}</button>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>{t('profile.deleteAccount')}</button>
                         </div>,
                         document.body
