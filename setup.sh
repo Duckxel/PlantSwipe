@@ -1517,13 +1517,35 @@ log "Installing systemd units…"
 # Admin API unit from repo
 ADMIN_SERVICE_FILE="/etc/systemd/system/$SERVICE_ADMIN.service"
 $SUDO install -m 0644 -D "$REPO_DIR/admin_api/admin-api.service" "$ADMIN_SERVICE_FILE"
-# Ensure Admin API also loads service env
+# Ensure Admin API also loads service env and ADMIN_STATIC_TOKEN
 $SUDO mkdir -p "/etc/systemd/system/$SERVICE_ADMIN.service.d"
-$SUDO bash -c "cat > '/etc/systemd/system/$SERVICE_ADMIN.service.d/10-env.conf' <<EOF
+
+# Read ADMIN_STATIC_TOKEN from .env files if not already set
+if [[ -z "${ADMIN_STATIC_TOKEN:-}" ]]; then
+  ADMIN_STATIC_TOKEN="$(read_env_kv "$NODE_DIR/.env" ADMIN_STATIC_TOKEN)"
+fi
+if [[ -z "${ADMIN_STATIC_TOKEN:-}" ]]; then
+  ADMIN_STATIC_TOKEN="$(read_env_kv "$NODE_DIR/.env" VITE_ADMIN_STATIC_TOKEN)"
+fi
+
+# Create drop-in config with service env file and explicit ADMIN_STATIC_TOKEN
+if [[ -n "${ADMIN_STATIC_TOKEN:-}" ]]; then
+  log "Configuring Admin API with ADMIN_STATIC_TOKEN from .env"
+  $SUDO bash -c "cat > '/etc/systemd/system/$SERVICE_ADMIN.service.d/10-env.conf' <<EOF
+[Service]
+EnvironmentFile=$SERVICE_ENV_FILE
+Environment=\"ADMIN_STATIC_TOKEN=$ADMIN_STATIC_TOKEN\"
+EOF
+"
+else
+  log "[WARN] ADMIN_STATIC_TOKEN not found in .env files. Admin API authentication may fail."
+  log "[INFO] Add VITE_ADMIN_STATIC_TOKEN and ADMIN_STATIC_TOKEN to your .env file."
+  $SUDO bash -c "cat > '/etc/systemd/system/$SERVICE_ADMIN.service.d/10-env.conf' <<EOF
 [Service]
 EnvironmentFile=$SERVICE_ENV_FILE
 EOF
 "
+fi
 
 # Node API unit (WorkingDirectory points to the repo copy)
 NODE_SERVICE_FILE="/etc/systemd/system/$SERVICE_NODE.service"
