@@ -47,7 +47,7 @@ import { Link } from "@/components/i18n/Link";
 import { GardenListSkeleton } from "@/components/garden/GardenSkeletons";
 
 export const GardenListPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { openLogin } = useAuthActions();
   const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
@@ -1621,10 +1621,13 @@ export const GardenListPage: React.FC = () => {
     if (!name.trim() || submitting) return;
     setSubmitting(true);
     try {
+      // Private users should have their gardens set to friends_only by default
+      const defaultPrivacy = profile?.is_private ? 'friends_only' : 'public';
       const garden = await createGarden({
         name: name.trim(),
         coverImageUrl: imageUrl.trim() || null,
         ownerUserId: user.id,
+        privacy: defaultPrivacy as any,
       });
       setOpen(false);
       setName("");

@@ -413,15 +413,15 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   }))
 }
 
-export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string }): Promise<Garden> {
-  const { name, coverImageUrl = null, ownerUserId } = params
+export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string; privacy?: GardenPrivacy }): Promise<Garden> {
+  const { name, coverImageUrl = null, ownerUserId, privacy = 'public' } = params
   
   // Try with privacy column first, fallback if column doesn't exist
   let data: any = null
   let error: any = null
   const result = await supabase
     .from('gardens')
-    .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId })
+    .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId, privacy })
     .select('id, name, cover_image_url, created_by, created_at, privacy')
     .single()
   data = result.data
@@ -445,7 +445,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
     coverImageUrl: data.cover_image_url || null,
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
-    privacy: ((data as any).privacy || 'public') as GardenPrivacy,
+    privacy: ((data as any).privacy || privacy) as GardenPrivacy,
   }
   // Add owner as member
   const { error: merr } = await supabase

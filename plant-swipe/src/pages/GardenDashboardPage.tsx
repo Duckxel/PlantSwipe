@@ -2870,6 +2870,7 @@ export const GardenDashboardPage: React.FC = () => {
                           garden={garden}
                           onSaved={load}
                           canEdit={viewerIsOwner}
+                          ownerIsPrivate={profile?.is_private || false}
                         />
                       </Card>
                     </div>
@@ -5039,19 +5040,29 @@ function GardenPrivacyToggle({
   garden,
   onSaved,
   canEdit,
+  ownerIsPrivate = false,
 }: {
   garden: Garden;
   onSaved: () => Promise<void>;
   canEdit?: boolean;
+  ownerIsPrivate?: boolean; // If true, hide the 'public' option
 }) {
   const { t } = useTranslation("common");
-  const [privacy, setPrivacy] = React.useState<GardenPrivacy>(garden.privacy || 'public');
+  // For private users, default to 'friends_only' if current privacy is 'public'
+  const effectivePrivacy = ownerIsPrivate && garden.privacy === 'public' 
+    ? 'friends_only' 
+    : (garden.privacy || 'public');
+  const [privacy, setPrivacy] = React.useState<GardenPrivacy>(effectivePrivacy);
   const [submitting, setSubmitting] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    setPrivacy(garden.privacy || 'public');
-  }, [garden.privacy]);
+    // For private users, don't allow 'public' privacy
+    const newPrivacy = ownerIsPrivate && garden.privacy === 'public' 
+      ? 'friends_only' 
+      : (garden.privacy || 'public');
+    setPrivacy(newPrivacy);
+  }, [garden.privacy, ownerIsPrivate]);
 
   const handlePrivacyChange = async (newPrivacy: GardenPrivacy) => {
     if (submitting || !canEdit || newPrivacy === privacy) return;
@@ -5081,7 +5092,7 @@ function GardenPrivacyToggle({
     }
   };
 
-  const privacyOptions: Array<{
+  const allPrivacyOptions: Array<{
     value: GardenPrivacy;
     icon: React.ReactNode;
     title: string;
@@ -5114,6 +5125,11 @@ function GardenPrivacyToggle({
       textClass: "text-stone-600 dark:text-stone-400",
     },
   ];
+  
+  // For private users, hide the 'public' option
+  const privacyOptions = ownerIsPrivate 
+    ? allPrivacyOptions.filter(opt => opt.value !== 'public')
+    : allPrivacyOptions;
 
   return (
     <div className="space-y-4">

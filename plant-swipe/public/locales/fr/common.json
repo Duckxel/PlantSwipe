@@ -1335,7 +1335,8 @@
     }
   },
   "bookmarks": {
-    "plants": "plantes"
+    "plants": "plantes",
+    "privateOnlyNote": "En tant qu'utilisateur privé, vos favoris ne sont visibles que par vos amis."
   },
   "gardenDashboard": {
     "loading": "Chargement...",

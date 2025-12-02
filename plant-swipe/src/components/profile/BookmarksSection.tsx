@@ -10,9 +10,11 @@ import type { Bookmark } from '@/types/bookmark'
 interface BookmarksSectionProps {
   userId: string
   isOwner: boolean
+  isFriend?: boolean // Whether the viewer is a friend of the profile owner
+  userIsPrivate?: boolean // Whether the profile owner has a private profile
 }
 
-export const BookmarksSection: React.FC<BookmarksSectionProps> = ({ userId, isOwner }) => {
+export const BookmarksSection: React.FC<BookmarksSectionProps> = ({ userId, isOwner, isFriend = false, userIsPrivate = false }) => {
   const { t } = useTranslation('common')
   const [bookmarks, setBookmarks] = React.useState<Bookmark[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -23,13 +25,22 @@ export const BookmarksSection: React.FC<BookmarksSectionProps> = ({ userId, isOw
     setLoading(true)
     try {
       const data = await getUserBookmarks(userId)
-      setBookmarks(data)
+      // Filter based on viewer relationship:
+      // - Owner sees all bookmarks
+      // - Friends see public + private bookmarks
+      // - Others see only public bookmarks
+      const filteredData = isOwner 
+        ? data 
+        : isFriend 
+          ? data // Friends can see all (including private)
+          : data.filter(b => b.visibility === 'public')
+      setBookmarks(filteredData)
     } catch (e) {
       console.error(e)
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [userId, isOwner, isFriend])
 
   React.useEffect(() => {
     fetchBookmarks()
@@ -119,6 +130,7 @@ export const BookmarksSection: React.FC<BookmarksSectionProps> = ({ userId, isOw
         userId={userId} 
         onSaved={fetchBookmarks}
         existingBookmark={editBookmark}
+        userIsPrivate={userIsPrivate}
       />
     </div>
   )

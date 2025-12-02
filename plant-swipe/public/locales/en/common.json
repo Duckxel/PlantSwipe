@@ -1335,7 +1335,8 @@
     }
   },
   "bookmarks": {
-    "plants": "plants"
+    "plants": "plants",
+    "privateOnlyNote": "As a private user, your bookmarks are only visible to friends."
   },
   "gardenDashboard": {
     "loading": "Loading...",

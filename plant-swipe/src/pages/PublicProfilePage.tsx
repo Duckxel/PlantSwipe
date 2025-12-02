@@ -1003,7 +1003,7 @@ export default function PublicProfilePage() {
           
           <PublicGardensSection userId={pp.id} isOwner={isOwner} />
           
-          <BookmarksSection userId={pp.id} isOwner={isOwner} />
+          <BookmarksSection userId={pp.id} isOwner={isOwner} isFriend={friendStatus === 'friends'} userIsPrivate={pp.is_private || false} />
             </>
           )}
 
