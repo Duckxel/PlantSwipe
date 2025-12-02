@@ -2940,13 +2940,13 @@ app.get('/api/admin/admin-logs', async (req, res) => {
       res.json({ ok: true, logs: Array.isArray(arr) ? arr : [], via: 'supabase' })
       return
     }
-    const rows = await sql`
+    const rows = await withTimeout(sql`
       select occurred_at, admin_id, admin_name, action, target, detail
       from public.admin_activity_logs
       where occurred_at >= (now() - make_interval(days => ${days}))
       order by occurred_at desc
       limit 2000
-    `
+    `, 5000) // 5 second timeout
     res.json({ ok: true, logs: Array.isArray(rows) ? rows : [], via: 'database' })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
@@ -6805,19 +6805,20 @@ app.get('/api/admin/member', async (req, res) => {
     if (!sql) return await lookupViaRest()
 
     // SQL path (preferred when server DB connection is configured)
+    const USER_LOOKUP_TIMEOUT = 3000 // 3 second timeout for user lookup
     let user
     try {
       let users
       if (email) {
-        users = await sql`select id, email, created_at, email_confirmed_at, last_sign_in_at from auth.users where lower(email) = ${email} limit 1`
+        users = await withTimeout(sql`select id, email, created_at, email_confirmed_at, last_sign_in_at from auth.users where lower(email) = ${email} limit 1`, USER_LOOKUP_TIMEOUT)
       } else {
-        users = await sql`
+        users = await withTimeout(sql`
           select u.id, u.email, u.created_at, u.email_confirmed_at, u.last_sign_in_at
           from auth.users u
           join public.profiles p on p.id = u.id
           where lower(p.display_name) = ${qLower}
           limit 1
-        `
+        `, USER_LOOKUP_TIMEOUT)
       }
       if (!Array.isArray(users) || users.length === 0) {
         // Try REST fallback if not found in DB
@@ -6825,7 +6826,7 @@ app.get('/api/admin/member', async (req, res) => {
       }
       user = users[0]
     } catch (e) {
-      // DB failure: fallback to REST path
+      // DB failure or timeout: fallback to REST path
       return await lookupViaRest()
     }
     let profile = null
@@ -6866,8 +6867,9 @@ app.get('/api/admin/member', async (req, res) => {
     let bannedAt = null
     let bannedIps = []
     let plantsTotal = 0
+    const MEMBER_QUERY_TIMEOUT = 3000 // 3 second timeout for member queries
     try {
-      const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null order by ip asc`, [user.id])
+      const ipRows = await withTimeout(sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null order by ip asc limit 100`, [user.id]), MEMBER_QUERY_TIMEOUT).catch(() => [])
       ips = (ipRows || []).map(r => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean)
     } catch {}
     let lastCountry = null
@@ -6896,8 +6898,8 @@ app.get('/api/admin/member', async (req, res) => {
     }
     try {
       const [vcRows, uipRows] = await Promise.all([
-        sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1`, [user.id]),
-        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [user.id]),
+        withTimeout(sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1`, [user.id]), MEMBER_QUERY_TIMEOUT).catch(() => []),
+        withTimeout(sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [user.id]), MEMBER_QUERY_TIMEOUT).catch(() => []),
       ])
       visitsCount = vcRows?.[0]?.c ?? 0
       uniqueIpsCount = uipRows?.[0]?.c ?? 0
@@ -7155,17 +7157,18 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
       return
     }
     // Prefer direct DB when available
+    const IP_QUERY_TIMEOUT = 5000 // 5 second timeout for IP lookup queries
     if (sql) {
       try {
         const [aggRows, rows, refRows, uaRows, lastCountryRow, rpmRow] = await Promise.all([
-          sql`
+          withTimeout(sql`
             select count(*)::int as connections_count,
                    max(occurred_at) as last_seen_at,
                    count(distinct user_id)::int as users_count
             from ${sql ? sql`` : ''} public.web_visits
             where ip_address = ${ip}::inet
-          `,
-          sql`
+          `, IP_QUERY_TIMEOUT).catch(() => []),
+          withTimeout(sql`
             select v.user_id as id,
                    u.email,
                    p.display_name,
@@ -7176,8 +7179,9 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
             where v.ip_address = ${ip}::inet and v.user_id is not null
             group by v.user_id, u.email, p.display_name
             order by last_seen_at desc
-          `,
-          sql`
+            limit 100
+          `, IP_QUERY_TIMEOUT).catch(() => []),
+          withTimeout(sql`
             select source, visits from (
               select case
                        when v.referrer is null or v.referrer = '' then 'direct'
@@ -7192,8 +7196,8 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
             ) s
             order by visits desc
             limit 10
-          `,
-          sql`
+          `, IP_QUERY_TIMEOUT).catch(() => []),
+          withTimeout(sql`
             select v.user_agent, count(*)::int as visits
             from ${sql ? sql`` : ''} public.web_visits v
             where v.ip_address = ${ip}::inet
@@ -7201,9 +7205,9 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
             group by v.user_agent
             order by visits desc
             limit 200
-          `,
-          sql.unsafe(`select geo_country from ${VISITS_TABLE_SQL_IDENT} where ip_address = $1::inet and geo_country is not null and geo_country <> '' order by occurred_at desc limit 1`, [ip]),
-          sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address = $1::inet and occurred_at >= now() - interval '5 minutes'`, [ip]),
+          `, IP_QUERY_TIMEOUT).catch(() => []),
+          withTimeout(sql.unsafe(`select geo_country from ${VISITS_TABLE_SQL_IDENT} where ip_address = $1::inet and geo_country is not null and geo_country <> '' order by occurred_at desc limit 1`, [ip]), IP_QUERY_TIMEOUT).catch(() => []),
+          withTimeout(sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address = $1::inet and occurred_at >= now() - interval '5 minutes'`, [ip]), IP_QUERY_TIMEOUT).catch(() => []),
         ])
         const users = (Array.isArray(rows) ? rows : []).map(r => ({
           id: String(r.id),
@@ -7402,9 +7406,10 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
     }
 
     // SQL (preferred) - use same pattern as global visits graph
+    const VISITS_SERIES_TIMEOUT = 5000 // 5 second timeout
     if (sql) {
       try {
-        const rows = await sql.unsafe(`
+        const rows = await withTimeout(sql.unsafe(`
           with days as (
             select generate_series(((now() at time zone 'utc')::date - interval '29 days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
           )
@@ -7417,7 +7422,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
                  ), 0)::int as visits
           from days
           order by d asc
-        `, [targetUserId])
+        `, [targetUserId]), VISITS_SERIES_TIMEOUT)
         const series30d = (rows || []).map(r => ({ date: String(r.date), visits: Number(r.visits || 0) }))
         const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
         res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'database' })
@@ -7541,6 +7546,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
 
 // Admin: paginated member list (newest first, 20 per page by default)
 app.get('/api/admin/member-list', async (req, res) => {
+  const MEMBER_LIST_TIMEOUT = 5000 // 5 second timeout
   try {
     const caller = await ensureAdmin(req, res)
     if (!caller) return
@@ -7577,14 +7583,43 @@ app.get('/api/admin/member-list', async (req, res) => {
     }
 
     if (sql) {
+      // For non-RPM sorts, use a fast query without the expensive lateral join
+      // Only compute RPM when explicitly requested (sort=rpm)
+      if (sort !== 'rpm') {
+        const orderClause = sort === 'oldest' ? 'u.created_at asc' : 'u.created_at desc'
+        const rows = await withTimeout(sql.unsafe(
+          `
+          select
+            u.id,
+            u.email,
+            u.created_at,
+            p.display_name,
+            p.is_admin,
+            null::numeric as rpm5m
+          from auth.users u
+          left join public.profiles p on p.id = u.id
+          order by ${orderClause}
+          limit $1
+          offset $2
+          `,
+          [fetchSize, offset],
+        ), MEMBER_LIST_TIMEOUT, 'MEMBER_LIST_TIMEOUT')
+        const normalized = normalizeRows(rows)
+        const hasMore = normalized.length > limit
+        const members = hasMore ? normalized.slice(0, limit) : normalized
+        res.json({
+          ok: true,
+          members,
+          hasMore,
+          nextOffset: offset + members.length,
+          via: 'database',
+        })
+        return
+      }
+
+      // RPM sort - use the expensive lateral join but with timeout
       const visitsTableSql = buildVisitsTableIdentifier()
-      const orderClause =
-        sort === 'rpm'
-          ? 'rpm5m desc nulls last, u.created_at desc'
-          : sort === 'oldest'
-            ? 'u.created_at asc'
-            : 'u.created_at desc'
-      const rows = await sql.unsafe(
+      const rows = await withTimeout(sql.unsafe(
         `
         select
           u.id,
@@ -7601,12 +7636,12 @@ app.get('/api/admin/member-list', async (req, res) => {
           where v.user_id = u.id
             and v.occurred_at >= now() - interval '5 minutes'
         ) rpm on true
-        order by ${orderClause}
+        order by rpm5m desc nulls last, u.created_at desc
         limit $1
         offset $2
         `,
         [fetchSize, offset],
-      )
+      ), MEMBER_LIST_TIMEOUT, 'MEMBER_LIST_RPM_TIMEOUT')
       const normalized = normalizeRows(rows)
       const hasMore = normalized.length > limit
       const members = hasMore ? normalized.slice(0, limit) : normalized
@@ -7669,17 +7704,18 @@ app.get('/api/admin/member-suggest', async (req, res) => {
     const seenIds = new Set()
     const seenEmails = new Set()
     const seenDisplay = new Set()
+    const SUGGEST_TIMEOUT = 3000 // 3 second timeout for suggest queries
     try {
       if (sql) {
         // Email matches
-        const emailRows = await sql`
+        const emailRows = await withTimeout(sql`
           select u.id, u.email, u.created_at, p.display_name
           from auth.users u
           left join public.profiles p on p.id = u.id
           where lower(u.email) like ${q + '%'}
           order by u.created_at desc
           limit 7
-        `
+        `, SUGGEST_TIMEOUT).catch(() => [])
         if (Array.isArray(emailRows)) {
           for (const r of emailRows) {
             const idKey = String(r.id)
@@ -7692,14 +7728,14 @@ app.get('/api/admin/member-suggest', async (req, res) => {
           }
         }
         // Display name matches
-        const nameRows = await sql`
+        const nameRows = await withTimeout(sql`
           select u.id, u.email, u.created_at, p.display_name
           from public.profiles p
           join auth.users u on u.id = p.id
           where lower(p.display_name) like ${q + '%'}
           order by u.created_at desc
           limit 7
-        `
+        `, SUGGEST_TIMEOUT).catch(() => [])
         if (Array.isArray(nameRows)) {
           for (const r of nameRows) {
             const idKey = String(r.id)
