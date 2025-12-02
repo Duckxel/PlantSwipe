@@ -1328,6 +1328,9 @@
       }
     }
   },
+  "bookmarks": {
+    "plants": "plants"
+  },
   "gardenDashboard": {
     "loading": "Loading...",
     "overview": "Overview",
