@@ -697,6 +697,11 @@
     "streak": "série",
     "failedToLoad": "Échec du chargement des jardins"
   },
+  "gardens": {
+    "publicGardensTitle": "Jardins publics",
+    "plant": "plante",
+    "plants": "plantes"
+  },
   "createPlant": {
     "title": "Ajouter une plante",
     "simplified": "Simplifié",

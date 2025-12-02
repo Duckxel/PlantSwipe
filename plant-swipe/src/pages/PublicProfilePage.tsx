@@ -14,6 +14,7 @@ import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { BookmarksSection } from "@/components/profile/BookmarksSection"
+import { PublicGardensSection } from "@/components/profile/PublicGardensSection"
 
 type PublicProfile = {
   id: string
@@ -999,6 +1000,8 @@ export default function PublicProfilePage() {
               </CardContent>
             </Card>
           </div>
+          
+          <PublicGardensSection userId={pp.id} isOwner={isOwner} />
           
           <BookmarksSection userId={pp.id} isOwner={isOwner} />
             </>

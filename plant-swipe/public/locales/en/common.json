@@ -697,6 +697,11 @@
     "streak": "streak",
     "failedToLoad": "Failed to load gardens"
   },
+  "gardens": {
+    "publicGardensTitle": "Public Gardens",
+    "plant": "plant",
+    "plants": "plants"
+  },
   "createPlant": {
     "title": "Add plant",
     "simplified": "Simplified",
