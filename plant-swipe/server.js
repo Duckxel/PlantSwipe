@@ -2185,7 +2185,15 @@ if (!connectionString) {
 }
 
 // Prefer SSL for non-local databases even if URL lacks sslmode; honor custom CA
-let postgresOptions = {}
+let postgresOptions = {
+  // Connection pool settings for better performance
+  max: 10,                    // Maximum connections in pool
+  idle_timeout: 20,           // Close idle connections after 20 seconds
+  connect_timeout: 10,        // Connection timeout in seconds
+  max_lifetime: 60 * 30,      // Max connection lifetime (30 minutes)
+  // Prepare statements for better query performance
+  prepare: true,
+}
 try {
   if (connectionString) {
     const u = new URL(connectionString)
@@ -2193,7 +2201,7 @@ try {
     if (!isLocal) {
       const allowInsecure = String(process.env.ALLOW_INSECURE_DB_TLS || 'false').toLowerCase() === 'true'
       if (allowInsecure) {
-        postgresOptions = { ssl: { rejectUnauthorized: false } }
+        postgresOptions.ssl = { rejectUnauthorized: false }
       } else {
         const candidates = [
         process.env.PGSSLROOTCERT,
@@ -2211,7 +2219,7 @@ try {
           } catch {}
         }
         if (!ssl) ssl = true
-        postgresOptions = { ssl }
+        postgresOptions.ssl = ssl
       }
     }
   }
@@ -11680,13 +11688,29 @@ const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase()
 if (shouldListen) {
   const port = process.env.PORT || 3000
   const host = process.env.HOST || '127.0.0.1' // Bind to localhost only for security
-  app.listen(port, host, () => {
-    console.log(`[server] listening on http://${host}:${port}`)
-    // Best-effort ensure ban tables are present at startup
-    ensureBanTables().catch(() => {})
-    ensureBroadcastTable().catch(() => {})
-    ensureNotificationTables().catch(() => {})
-    scheduleNotificationWorker()
+  
+  // Warm up database connection BEFORE accepting requests to avoid cold-start latency
+  const startupWarmup = async () => {
+    if (sql) {
+      const started = Date.now()
+      try {
+        await sql`SELECT 1 as startup_warmup`
+        console.log(`[server] Database connection ready in ${Date.now() - started}ms`)
+      } catch (err) {
+        console.warn(`[server] Database warmup failed:`, err?.message || err)
+      }
+    }
+  }
+  
+  startupWarmup().finally(() => {
+    app.listen(port, host, () => {
+      console.log(`[server] listening on http://${host}:${port}`)
+      // Best-effort ensure ban tables are present at startup (non-blocking)
+      ensureBanTables().catch(() => {})
+      ensureBroadcastTable().catch(() => {})
+      ensureNotificationTables().catch(() => {})
+      scheduleNotificationWorker()
+    })
   })
 } else {
   ensureNotificationTables().catch(() => {})
