@@ -2535,25 +2535,6 @@ export const GardenDashboardPage: React.FC = () => {
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
-            {/* Share button for public/friends-only gardens */}
-            {(garden.privacy === 'public' || garden.privacy === 'friends_only') && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="rounded-xl gap-1.5 w-full shadow-sm"
-                onClick={handleShare}
-                aria-label={t('common.share', { defaultValue: 'Share' })}
-              >
-                <Share2 className="h-4 w-4" />
-                {shareStatus === 'copied' ? (
-                  <span className="text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
-                ) : shareStatus === 'error' ? (
-                  <span className="text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
-                ) : (
-                  <span className="text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
-                )}
-              </Button>
-            )}
             <nav className="flex flex-wrap md:flex-col gap-2">
               {(
                 canViewFullGarden
@@ -3954,6 +3935,27 @@ function OverviewSection({
     <div className="space-y-6">
       {/* Hero Section with Cover Image */}
       <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+        {/* Share button - top right corner (for public/friends-only gardens) */}
+        {garden && (garden.privacy === 'public' || garden.privacy === 'friends_only') && (
+          <div className="absolute top-4 right-4 z-20">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-xl gap-1.5 shadow-md backdrop-blur-sm bg-white/90 dark:bg-black/70 hover:bg-white dark:hover:bg-black/80"
+              onClick={handleShare}
+              aria-label={t('common.share', { defaultValue: 'Share' })}
+            >
+              <Share2 className="h-4 w-4" />
+              {shareStatus === 'copied' ? (
+                <span className="text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
+              ) : shareStatus === 'error' ? (
+                <span className="text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
+              ) : (
+                <span className="hidden sm:inline text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
+              )}
+            </Button>
+          </div>
+        )}
         {garden?.coverImageUrl ? (
           <>
             <div className="absolute inset-0">

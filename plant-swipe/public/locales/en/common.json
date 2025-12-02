@@ -1340,7 +1340,10 @@
   },
   "bookmarks": {
     "plants": "plants",
-    "privateOnlyNote": "As a private user, your bookmarks are only visible to friends."
+    "privateOnlyNote": "As a private user, your bookmarks are only visible to friends.",
+    "viewAll": "View all",
+    "showLess": "Show less",
+    "more": "more"
   },
   "gardenDashboard": {
     "loading": "Loading...",

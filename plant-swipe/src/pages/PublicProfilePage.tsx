@@ -843,25 +843,6 @@ export default function PublicProfilePage() {
                 <div className="absolute -top-6 -right-8 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/15 blur-3xl" />
                 <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/10 blur-3xl" />
               </div>
-              {/* Share button - top right corner */}
-              <div className="absolute top-4 right-4 z-20">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="rounded-xl gap-1.5 shadow-sm"
-                  onClick={handleShare}
-                  aria-label={t('common.share', { defaultValue: 'Share' })}
-                >
-                  <Share2 className="h-4 w-4" />
-                  {shareStatus === 'copied' ? (
-                    <span className="text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
-                  ) : shareStatus === 'error' ? (
-                    <span className="text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
-                  ) : (
-                    <span className="hidden sm:inline text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
-                  )}
-                </Button>
-              </div>
               <CardContent className="relative z-10 p-6 md:p-8 space-y-4">
               <div className="flex items-start gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
@@ -901,6 +882,22 @@ export default function PublicProfilePage() {
                   )}
                 </div>
                 <div className="ml-auto flex items-center gap-2" ref={anchorRef}>
+                  {/* Share button - always visible */}
+                  <Button 
+                    className="rounded-2xl" 
+                    variant="secondary" 
+                    onClick={handleShare}
+                    aria-label={t('common.share', { defaultValue: 'Share' })}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    {shareStatus === 'copied' ? (
+                      <span className="ml-1.5 text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
+                    ) : shareStatus === 'error' ? (
+                      <span className="ml-1.5 text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
+                    ) : (
+                      <span className="hidden sm:inline ml-1.5 text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
+                    )}
+                  </Button>
                   {isOwner ? (
                     <>
                       <Button className="rounded-2xl" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
