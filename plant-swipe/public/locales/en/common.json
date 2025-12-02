@@ -40,7 +40,8 @@
       "blog": "Blog",
       "contactUs": "Contact Us",
       "termsOfServices": "Terms of Services"
-    }
+    },
+    "share": "Share"
   },
   "pricing": {
     "pageTitle": "Pricing – Aphylia",
@@ -697,6 +698,14 @@
     "streak": "streak",
     "failedToLoad": "Failed to load gardens"
   },
+  "gardens": {
+    "publicGardensTitle": "Public Gardens",
+    "plant": "plant",
+    "plants": "plants",
+    "viewAll": "View all",
+    "showLess": "Show less",
+    "more": "more"
+  },
   "createPlant": {
     "title": "Add plant",
     "simplified": "Simplified",
@@ -1350,7 +1359,11 @@
     }
   },
   "bookmarks": {
-    "plants": "plants"
+    "plants": "plants",
+    "privateOnlyNote": "As a private user, your bookmarks are only visible to friends.",
+    "viewAll": "View all",
+    "showLess": "Show less",
+    "more": "more"
   },
   "gardenDashboard": {
     "loading": "Loading...",

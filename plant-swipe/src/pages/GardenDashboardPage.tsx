@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { PlantDetails } from "@/components/plant/PlantDetails";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2 } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails } from "@/lib/bookmarks";
@@ -209,6 +209,40 @@ export const GardenDashboardPage: React.FC = () => {
   const [userBookmarks, setUserBookmarks] = React.useState<BookmarkType[]>([]);
   const [bookmarksLoading, setBookmarksLoading] = React.useState(false);
   const [importingFromBookmark, setImportingFromBookmark] = React.useState(false);
+
+  // Share button state
+  const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'error'>('idle');
+  const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current);
+    };
+  }, []);
+
+  const handleShare = React.useCallback(async () => {
+    if (typeof window === 'undefined' || !garden) return;
+    const shareUrl = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: garden.name,
+          url: shareUrl,
+        });
+        setShareStatus('copied');
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareStatus('copied');
+      } else {
+        setShareStatus('error');
+      }
+    } catch {
+      // User cancelled or error
+      setShareStatus('error');
+    }
+    if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current);
+    shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500);
+  }, [garden]);
 
   React.useEffect(() => {
     if (addDetailsOpen) {
@@ -2547,6 +2581,8 @@ export const GardenDashboardPage: React.FC = () => {
                     totalOnHand={totalOnHand}
                     speciesOnHand={speciesOnHand}
                     baseStreak={garden.streak || 0}
+                    handleShare={handleShare}
+                    shareStatus={shareStatus}
                   />
                 }
               />
@@ -2870,6 +2906,7 @@ export const GardenDashboardPage: React.FC = () => {
                           garden={garden}
                           onSaved={load}
                           canEdit={viewerIsOwner}
+                          ownerIsPrivate={profile?.is_private || false}
                         />
                       </Card>
                     </div>
@@ -3702,6 +3739,8 @@ function OverviewSection({
   totalOnHand,
   speciesOnHand,
   baseStreak,
+  handleShare,
+  shareStatus,
 }: {
   gardenId: string;
   activityRev?: number;
@@ -3725,6 +3764,8 @@ function OverviewSection({
   totalOnHand: number;
   speciesOnHand: number;
   baseStreak: number;
+  handleShare: () => Promise<void>;
+  shareStatus: 'idle' | 'copied' | 'error';
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
@@ -3900,6 +3941,27 @@ function OverviewSection({
     <div className="space-y-6">
       {/* Hero Section with Cover Image */}
       <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+        {/* Share button - top right corner (for public/friends-only gardens) */}
+        {garden && (garden.privacy === 'public' || garden.privacy === 'friends_only') && (
+          <div className="absolute top-4 right-4 z-20">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-xl gap-1.5 shadow-md backdrop-blur-sm bg-white/90 dark:bg-black/70 hover:bg-white dark:hover:bg-black/80"
+              onClick={handleShare}
+              aria-label={t('common.share', { defaultValue: 'Share' })}
+            >
+              <Share2 className="h-4 w-4" />
+              {shareStatus === 'copied' ? (
+                <span className="text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
+              ) : shareStatus === 'error' ? (
+                <span className="text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
+              ) : (
+                <span className="hidden sm:inline text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
+              )}
+            </Button>
+          </div>
+        )}
         {garden?.coverImageUrl ? (
           <>
             <div className="absolute inset-0">
@@ -5039,19 +5101,29 @@ function GardenPrivacyToggle({
   garden,
   onSaved,
   canEdit,
+  ownerIsPrivate = false,
 }: {
   garden: Garden;
   onSaved: () => Promise<void>;
   canEdit?: boolean;
+  ownerIsPrivate?: boolean; // If true, hide the 'public' option
 }) {
   const { t } = useTranslation("common");
-  const [privacy, setPrivacy] = React.useState<GardenPrivacy>(garden.privacy || 'public');
+  // For private users, default to 'friends_only' if current privacy is 'public'
+  const effectivePrivacy = ownerIsPrivate && garden.privacy === 'public' 
+    ? 'friends_only' 
+    : (garden.privacy || 'public');
+  const [privacy, setPrivacy] = React.useState<GardenPrivacy>(effectivePrivacy);
   const [submitting, setSubmitting] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    setPrivacy(garden.privacy || 'public');
-  }, [garden.privacy]);
+    // For private users, don't allow 'public' privacy
+    const newPrivacy = ownerIsPrivate && garden.privacy === 'public' 
+      ? 'friends_only' 
+      : (garden.privacy || 'public');
+    setPrivacy(newPrivacy);
+  }, [garden.privacy, ownerIsPrivate]);
 
   const handlePrivacyChange = async (newPrivacy: GardenPrivacy) => {
     if (submitting || !canEdit || newPrivacy === privacy) return;
@@ -5081,7 +5153,7 @@ function GardenPrivacyToggle({
     }
   };
 
-  const privacyOptions: Array<{
+  const allPrivacyOptions: Array<{
     value: GardenPrivacy;
     icon: React.ReactNode;
     title: string;
@@ -5114,6 +5186,11 @@ function GardenPrivacyToggle({
       textClass: "text-stone-600 dark:text-stone-400",
     },
   ];
+  
+  // For private users, hide the 'public' option
+  const privacyOptions = ownerIsPrivate 
+    ? allPrivacyOptions.filter(opt => opt.value !== 'public')
+    : allPrivacyOptions;
 
   return (
     <div className="space-y-4">

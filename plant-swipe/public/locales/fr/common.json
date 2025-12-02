@@ -40,7 +40,8 @@
       "blog": "Blog",
       "contactUs": "Nous contacter",
       "termsOfServices": "Conditions d'utilisation"
-    }
+    },
+    "share": "Partager"
   },
   "pricing": {
     "pageTitle": "Tarifs – Aphylia",
@@ -697,6 +698,14 @@
     "streak": "série",
     "failedToLoad": "Échec du chargement des jardins"
   },
+  "gardens": {
+    "publicGardensTitle": "Jardins publics",
+    "plant": "plante",
+    "plants": "plantes",
+    "viewAll": "Voir tout",
+    "showLess": "Voir moins",
+    "more": "de plus"
+  },
   "createPlant": {
     "title": "Ajouter une plante",
     "simplified": "Simplifié",
@@ -1350,7 +1359,11 @@
     }
   },
   "bookmarks": {
-    "plants": "plantes"
+    "plants": "plantes",
+    "privateOnlyNote": "En tant qu'utilisateur privé, vos favoris ne sont visibles que par vos amis.",
+    "viewAll": "Voir tout",
+    "showLess": "Voir moins",
+    "more": "de plus"
   },
   "gardenDashboard": {
     "loading": "Chargement...",

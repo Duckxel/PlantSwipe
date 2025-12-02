@@ -14,6 +14,7 @@ interface CreateBookmarkDialogProps {
   userId: string
   onSaved?: () => void
   existingBookmark?: Bookmark | null // If provided, we are editing
+  userIsPrivate?: boolean // If true, only allow private visibility
 }
 
 export const CreateBookmarkDialog: React.FC<CreateBookmarkDialogProps> = ({ 
@@ -21,24 +22,28 @@ export const CreateBookmarkDialog: React.FC<CreateBookmarkDialogProps> = ({
   onOpenChange, 
   userId, 
   onSaved,
-  existingBookmark 
+  existingBookmark,
+  userIsPrivate = false
 }) => {
   const { t } = useTranslation('common')
   const [name, setName] = React.useState('')
-  const [visibility, setVisibility] = React.useState<BookmarkVisibility>('public')
+  // Private users can only create private bookmarks
+  const defaultVisibility: BookmarkVisibility = userIsPrivate ? 'private' : 'public'
+  const [visibility, setVisibility] = React.useState<BookmarkVisibility>(defaultVisibility)
   const [loading, setLoading] = React.useState(false)
 
   React.useEffect(() => {
     if (open) {
       if (existingBookmark) {
         setName(existingBookmark.name)
-        setVisibility(existingBookmark.visibility)
+        // For private users, force visibility to private even for existing bookmarks
+        setVisibility(userIsPrivate ? 'private' : existingBookmark.visibility)
       } else {
         setName('')
-        setVisibility('public')
+        setVisibility(userIsPrivate ? 'private' : 'public')
       }
     }
-  }, [open, existingBookmark])
+  }, [open, existingBookmark, userIsPrivate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -84,36 +89,45 @@ export const CreateBookmarkDialog: React.FC<CreateBookmarkDialogProps> = ({
           
           <div className="space-y-3">
             <Label>{t('bookmarks.visibility', { defaultValue: 'Visibility' })}</Label>
-            <div className="flex gap-4">
-              <div className="flex items-center space-x-2">
-                <input 
-                  type="radio" 
-                  value="public" 
-                  id="vis-public" 
-                  checked={visibility === 'public'}
-                  onChange={(e) => setVisibility(e.target.value as BookmarkVisibility)}
-                  className="accent-black dark:accent-white"
-                />
-                <Label htmlFor="vis-public" className="cursor-pointer">{t('bookmarks.public', { defaultValue: 'Public' })}</Label>
+            {userIsPrivate ? (
+              // Private users can only create private bookmarks
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-stone-100 dark:bg-stone-800 text-sm text-stone-600 dark:text-stone-400">
+                <span>{t('bookmarks.privateOnlyNote', { defaultValue: 'As a private user, your bookmarks are only visible to friends.' })}</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <input 
-                  type="radio" 
-                  value="private" 
-                  id="vis-private" 
-                  checked={visibility === 'private'}
-                  onChange={(e) => setVisibility(e.target.value as BookmarkVisibility)}
-                  className="accent-black dark:accent-white"
-                />
-                <Label htmlFor="vis-private" className="cursor-pointer">{t('bookmarks.private', { defaultValue: 'Private' })}</Label>
+            ) : (
+              <div className="flex gap-4">
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="radio" 
+                    value="public" 
+                    id="vis-public" 
+                    checked={visibility === 'public'}
+                    onChange={(e) => setVisibility(e.target.value as BookmarkVisibility)}
+                    className="accent-black dark:accent-white"
+                  />
+                  <Label htmlFor="vis-public" className="cursor-pointer">{t('bookmarks.public', { defaultValue: 'Public' })}</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="radio" 
+                    value="private" 
+                    id="vis-private" 
+                    checked={visibility === 'private'}
+                    onChange={(e) => setVisibility(e.target.value as BookmarkVisibility)}
+                    className="accent-black dark:accent-white"
+                  />
+                  <Label htmlFor="vis-private" className="cursor-pointer">{t('bookmarks.private', { defaultValue: 'Private' })}</Label>
+                </div>
               </div>
-            </div>
-            <p className="text-xs text-stone-500">
-              {visibility === 'public' 
-                ? t('bookmarks.publicDesc', { defaultValue: 'Anyone can see this folder on your profile.' })
-                : t('bookmarks.privateDesc', { defaultValue: 'Only you can see this folder.' })
-              }
-            </p>
+            )}
+            {!userIsPrivate && (
+              <p className="text-xs text-stone-500">
+                {visibility === 'public' 
+                  ? t('bookmarks.publicDesc', { defaultValue: 'Anyone can see this folder on your profile.' })
+                  : t('bookmarks.privateDesc', { defaultValue: 'Only you can see this folder.' })
+                }
+              </p>
+            )}
           </div>
 
           <DialogFooter>

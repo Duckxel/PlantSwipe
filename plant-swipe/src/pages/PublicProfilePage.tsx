@@ -8,12 +8,13 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, Search as SearchIcon, Loader2, UserCheck } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, Search as SearchIcon, Loader2, UserCheck, Share2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { BookmarksSection } from "@/components/profile/BookmarksSection"
+import { PublicGardensSection } from "@/components/profile/PublicGardensSection"
 
 type PublicProfile = {
   id: string
@@ -412,6 +413,40 @@ export default function PublicProfilePage() {
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null)
+
+  // Share button state
+  const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'error'>('idle')
+  const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    return () => {
+      if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    }
+  }, [])
+
+  const handleShare = React.useCallback(async () => {
+    if (typeof window === 'undefined') return
+    const shareUrl = window.location.href
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: preferredDisplayName || t('profile.member'),
+          url: shareUrl,
+        })
+        setShareStatus('copied')
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+        setShareStatus('copied')
+      } else {
+        setShareStatus('error')
+      }
+    } catch {
+      // User cancelled or error
+      setShareStatus('error')
+    }
+    if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500)
+  }, [preferredDisplayName, t])
 
   const [editOpen, setEditOpen] = React.useState(false)
   const [editSubmitting, setEditSubmitting] = React.useState(false)
@@ -847,6 +882,22 @@ export default function PublicProfilePage() {
                   )}
                 </div>
                 <div className="ml-auto flex items-center gap-2" ref={anchorRef}>
+                  {/* Share button - always visible */}
+                  <Button 
+                    className="rounded-2xl" 
+                    variant="secondary" 
+                    onClick={handleShare}
+                    aria-label={t('common.share', { defaultValue: 'Share' })}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    {shareStatus === 'copied' ? (
+                      <span className="ml-1.5 text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
+                    ) : shareStatus === 'error' ? (
+                      <span className="ml-1.5 text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
+                    ) : (
+                      <span className="hidden sm:inline ml-1.5 text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
+                    )}
+                  </Button>
                   {isOwner ? (
                     <>
                       <Button className="rounded-2xl" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
@@ -1000,7 +1051,9 @@ export default function PublicProfilePage() {
             </Card>
           </div>
           
-          <BookmarksSection userId={pp.id} isOwner={isOwner} />
+          <PublicGardensSection userId={pp.id} isOwner={isOwner} />
+          
+          <BookmarksSection userId={pp.id} isOwner={isOwner} isFriend={friendStatus === 'friends'} userIsPrivate={pp.is_private || false} />
             </>
           )}
 
