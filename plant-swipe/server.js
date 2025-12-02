@@ -2186,13 +2186,8 @@ if (!connectionString) {
 
 // Prefer SSL for non-local databases even if URL lacks sslmode; honor custom CA
 let postgresOptions = {
-  // Connection pool settings for better performance
-  max: 10,                    // Maximum connections in pool
-  idle_timeout: 20,           // Close idle connections after 20 seconds
-  connect_timeout: 10,        // Connection timeout in seconds
-  max_lifetime: 60 * 30,      // Max connection lifetime (30 minutes)
-  // Prepare statements for better query performance
-  prepare: true,
+  // Connection pool settings - keep defaults, just add reasonable timeout
+  connect_timeout: 3,         // Connection timeout in seconds (fail fast)
 }
 try {
   if (connectionString) {
@@ -11688,29 +11683,17 @@ const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase()
 if (shouldListen) {
   const port = process.env.PORT || 3000
   const host = process.env.HOST || '127.0.0.1' // Bind to localhost only for security
-  
-  // Warm up database connection BEFORE accepting requests to avoid cold-start latency
-  const startupWarmup = async () => {
+  app.listen(port, host, () => {
+    console.log(`[server] listening on http://${host}:${port}`)
+    // Best-effort ensure ban tables are present at startup (non-blocking)
+    ensureBanTables().catch(() => {})
+    ensureBroadcastTable().catch(() => {})
+    ensureNotificationTables().catch(() => {})
+    scheduleNotificationWorker()
+    // Non-blocking warmup of database connection pool
     if (sql) {
-      const started = Date.now()
-      try {
-        await sql`SELECT 1 as startup_warmup`
-        console.log(`[server] Database connection ready in ${Date.now() - started}ms`)
-      } catch (err) {
-        console.warn(`[server] Database warmup failed:`, err?.message || err)
-      }
+      sql`SELECT 1`.catch(() => {})
     }
-  }
-  
-  startupWarmup().finally(() => {
-    app.listen(port, host, () => {
-      console.log(`[server] listening on http://${host}:${port}`)
-      // Best-effort ensure ban tables are present at startup (non-blocking)
-      ensureBanTables().catch(() => {})
-      ensureBroadcastTable().catch(() => {})
-      ensureNotificationTables().catch(() => {})
-      scheduleNotificationWorker()
-    })
   })
 } else {
   ensureNotificationTables().catch(() => {})
