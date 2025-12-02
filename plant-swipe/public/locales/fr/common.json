@@ -543,7 +543,7 @@
     "namePlaceholder": "Mon jardin de balcon",
     "coverImageUrl": "URL de l'image de couverture (optionnel)",
     "coverImageUrlPlaceholder": "https://?",
-    "creating": "Création ?",
+    "creating": "Création...",
     "noGardens": "Aucun jardin pour le moment",
     "createFirst": "Créez votre premier jardin pour commencer !",
     "created": "Créé",
@@ -574,7 +574,10 @@
     },
     "member": "membre",
     "members": "membres",
+    "plants": "plantes",
+    "species": "espèces",
     "streak": "série",
+    "completing": "En cours...",
     "failedToLoad": "Échec du chargement des jardins"
   },
   "createPlant": {

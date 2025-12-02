@@ -543,7 +543,7 @@
     "namePlaceholder": "My balcony garden",
     "coverImageUrl": "Cover image URL (optional)",
     "coverImageUrlPlaceholder": "https://?",
-    "creating": "Creating?",
+    "creating": "Creating...",
     "noGardens": "No gardens yet",
     "createFirst": "Create your first garden to get started!",
     "created": "Created",
@@ -574,7 +574,10 @@
     },
     "member": "member",
     "members": "members",
+    "plants": "plants",
+    "species": "species",
     "streak": "streak",
+    "completing": "Completing...",
     "failedToLoad": "Failed to load gardens"
   },
   "createPlant": {
