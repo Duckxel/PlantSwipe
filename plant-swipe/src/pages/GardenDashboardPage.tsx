@@ -2581,6 +2581,8 @@ export const GardenDashboardPage: React.FC = () => {
                     totalOnHand={totalOnHand}
                     speciesOnHand={speciesOnHand}
                     baseStreak={garden.streak || 0}
+                    handleShare={handleShare}
+                    shareStatus={shareStatus}
                   />
                 }
               />
@@ -3737,6 +3739,8 @@ function OverviewSection({
   totalOnHand,
   speciesOnHand,
   baseStreak,
+  handleShare,
+  shareStatus,
 }: {
   gardenId: string;
   activityRev?: number;
@@ -3760,6 +3764,8 @@ function OverviewSection({
   totalOnHand: number;
   speciesOnHand: number;
   baseStreak: number;
+  handleShare: () => Promise<void>;
+  shareStatus: 'idle' | 'copied' | 'error';
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
