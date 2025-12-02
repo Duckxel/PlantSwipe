@@ -2606,20 +2606,45 @@ const CACHE_STALE_TTL = 120000 // 2 minutes - serve stale data if refresh fails
 // Background refresh function for stats
 async function refreshStatsCache() {
   if (adminStatsCache.refreshing.stats) return
-  if (!sql) {
-    console.warn('[cache] Cannot refresh stats - no database connection')
-    return
-  }
   adminStatsCache.refreshing.stats = true
   try {
-    const [p, a, pl] = await Promise.all([
-      sql`select count(*)::int as count from public.profiles`.catch((e) => { console.warn('[cache] profiles query failed:', e?.message); return [] }),
-      sql`select count(*)::int as count from auth.users`.catch((e) => { console.warn('[cache] auth.users query failed:', e?.message); return [] }),
-      sql`select count(*)::int as count from public.plants`.catch((e) => { console.warn('[cache] plants query failed:', e?.message); return [] }),
-    ])
-    const profilesCount = p?.[0]?.count ?? 0
-    const authUsersCount = a?.[0]?.count ?? null
-    const plantsCount = pl?.[0]?.count ?? 0
+    let profilesCount = 0, authUsersCount = null, plantsCount = null
+    
+    // Try direct SQL first
+    if (sql) {
+      const [p, a, pl] = await Promise.all([
+        sql`select count(*)::int as count from public.profiles`.catch(() => []),
+        sql`select count(*)::int as count from auth.users`.catch(() => []),
+        sql`select count(*)::int as count from public.plants`.catch(() => []),
+      ])
+      profilesCount = p?.[0]?.count ?? 0
+      authUsersCount = a?.[0]?.count ?? null
+      plantsCount = pl?.[0]?.count ?? 0
+    } 
+    // Fallback to Supabase REST
+    else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const [pr, ar, plr] = await Promise.all([
+        fetch(`${supabaseUrlEnv}/rest/v1/profiles?select=id`, { headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' } }).catch(() => null),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_auth_users_total`, { method: 'POST', headers, body: '{}' }).catch(() => null),
+        fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, { headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' } }).catch(() => null),
+      ])
+      if (pr?.ok) {
+        const range = pr.headers.get('content-range') || ''
+        const match = range.match(/\/(\d+)$/)
+        if (match) profilesCount = Number(match[1])
+      }
+      if (ar?.ok) {
+        const val = await ar.json().catch(() => null)
+        if (typeof val === 'number') authUsersCount = val
+      }
+      if (plr?.ok) {
+        const range = plr.headers.get('content-range') || ''
+        const match = range.match(/\/(\d+)$/)
+        if (match) plantsCount = Number(match[1])
+      }
+    }
+    
     adminStatsCache.stats = { profilesCount, authUsersCount, plantsCount }
     adminStatsCache.lastUpdated.stats = Date.now()
     console.log('[cache] Stats refreshed:', { profilesCount, authUsersCount, plantsCount })
@@ -2633,31 +2658,69 @@ async function refreshStatsCache() {
 // Background refresh for visitors
 async function refreshVisitorsCache() {
   if (adminStatsCache.refreshing.visitors) return
-  if (!sql) return
   adminStatsCache.refreshing.visitors = true
   try {
     const days = 7
-    const [r10m, r30m, r60u, r60v, rNd] = await Promise.all([
-      sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '10 minutes'`).catch(() => []),
-      sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '30 minutes'`).catch(() => []),
-      sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => []),
-      sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`).catch(() => []),
-      sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and timezone('utc', occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`).catch(() => []),
-    ])
-    const series = await sql.unsafe(`
-      with days as (select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d)
-      select to_char(d, 'YYYY-MM-DD') as date, coalesce((select count(distinct ip_address) from ${VISITS_TABLE_SQL_IDENT} where (timezone('utc', occurred_at))::date = d), 0)::int as unique_visitors from days order by d asc
-    `).catch(() => [])
-    adminStatsCache.visitors = {
-      currentUniqueVisitors10m: r10m?.[0]?.c ?? 0,
-      uniqueIpsLast30m: r30m?.[0]?.c ?? 0,
-      uniqueIpsLast60m: r60u?.[0]?.c ?? 0,
-      visitsLast60m: r60v?.[0]?.c ?? 0,
-      uniqueIps7d: rNd?.[0]?.c ?? 0,
-      series7d: (series || []).map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors || 0) })),
+    let data = { currentUniqueVisitors10m: 0, uniqueIpsLast30m: 0, uniqueIpsLast60m: 0, visitsLast60m: 0, uniqueIps7d: 0, series7d: [] }
+    
+    // Try direct SQL first
+    if (sql) {
+      const [r10m, r30m, r60u, r60v, rNd] = await Promise.all([
+        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '10 minutes'`).catch(() => []),
+        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '30 minutes'`).catch(() => []),
+        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => []),
+        sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`).catch(() => []),
+        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and timezone('utc', occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`).catch(() => []),
+      ])
+      const series = await sql.unsafe(`
+        with days as (select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d)
+        select to_char(d, 'YYYY-MM-DD') as date, coalesce((select count(distinct ip_address) from ${VISITS_TABLE_SQL_IDENT} where (timezone('utc', occurred_at))::date = d), 0)::int as unique_visitors from days order by d asc
+      `).catch(() => [])
+      data = {
+        currentUniqueVisitors10m: r10m?.[0]?.c ?? 0,
+        uniqueIpsLast30m: r30m?.[0]?.c ?? 0,
+        uniqueIpsLast60m: r60u?.[0]?.c ?? 0,
+        visitsLast60m: r60v?.[0]?.c ?? 0,
+        uniqueIps7d: rNd?.[0]?.c ?? 0,
+        series7d: (series || []).map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors || 0) })),
+      }
     }
+    // Fallback to Supabase REST RPCs
+    else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const [c10, c30, c60u, c60v, uN, sN] = await Promise.all([
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 10 }) }).catch(() => null),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 30 }) }).catch(() => null),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }).catch(() => null),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_visits_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }).catch(() => null),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, { method: 'POST', headers, body: JSON.stringify({ _days: days }) }).catch(() => null),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_visitors_series_days`, { method: 'POST', headers, body: JSON.stringify({ _days: days }) }).catch(() => null),
+      ])
+      data.currentUniqueVisitors10m = c10?.ok ? Number(await c10.json().catch(() => 0)) || 0 : 0
+      data.uniqueIpsLast30m = c30?.ok ? Number(await c30.json().catch(() => 0)) || 0 : 0
+      data.uniqueIpsLast60m = c60u?.ok ? Number(await c60u.json().catch(() => 0)) || 0 : 0
+      data.visitsLast60m = c60v?.ok ? Number(await c60v.json().catch(() => 0)) || 0 : 0
+      data.uniqueIps7d = uN?.ok ? Number(await uN.json().catch(() => 0)) || 0 : 0
+      if (sN?.ok) {
+        const arr = await sN.json().catch(() => [])
+        data.series7d = Array.isArray(arr) ? arr.map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors ?? 0) })) : []
+      }
+    }
+    // Fallback to in-memory analytics
+    else {
+      data = {
+        currentUniqueVisitors10m: memAnalytics.getUniqueIpCountInLastMinutes(10),
+        uniqueIpsLast30m: memAnalytics.getUniqueIpCountInLastMinutes(30),
+        uniqueIpsLast60m: memAnalytics.getUniqueIpCountInLastMinutes(60),
+        visitsLast60m: memAnalytics.getVisitCountInLastMinutes(60),
+        uniqueIps7d: memAnalytics.getUniqueIpCountInLastDays(days),
+        series7d: memAnalytics.getDailySeries(days),
+      }
+    }
+    
+    adminStatsCache.visitors = data
     adminStatsCache.lastUpdated.visitors = Date.now()
-    console.log('[cache] Visitors refreshed:', { uniqueIps7d: adminStatsCache.visitors.uniqueIps7d, seriesLength: adminStatsCache.visitors.series7d.length })
+    console.log('[cache] Visitors refreshed:', { uniqueIps7d: data.uniqueIps7d, seriesLength: data.series7d.length })
   } catch (e) {
     console.warn('[cache] Failed to refresh visitors:', e?.message)
   } finally {
@@ -2668,16 +2731,40 @@ async function refreshVisitorsCache() {
 // Background refresh for sources
 async function refreshSourcesCache() {
   if (adminStatsCache.refreshing.sources) return
-  if (!sql) return
   adminStatsCache.refreshing.sources = true
   try {
     const days = 7
-    const [countries, referrers] = await Promise.all([
-      sql`select * from public.get_top_countries(${days}, ${10000})`.catch(() => []),
-      sql`select * from public.get_top_referrers(${days}, ${10})`.catch(() => []),
-    ])
-    const allCountries = (countries || []).map(r => ({ country: r.country || '', visits: Number(r.visits || 0) })).filter(c => c.country).sort((a, b) => b.visits - a.visits)
-    const allReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })).sort((a, b) => b.visits - a.visits)
+    let allCountries = [], allReferrers = []
+    
+    // Try direct SQL first
+    if (sql) {
+      const [countries, referrers] = await Promise.all([
+        sql`select * from public.get_top_countries(${days}, ${10000})`.catch(() => []),
+        sql`select * from public.get_top_referrers(${days}, ${10})`.catch(() => []),
+      ])
+      allCountries = (countries || []).map(r => ({ country: r.country || '', visits: Number(r.visits || 0) })).filter(c => c.country)
+      allReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
+    }
+    // Fallback to Supabase REST RPCs
+    else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const [cr, rr] = await Promise.all([
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_countries`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10000 }) }).catch(() => null),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_referrers`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10 }) }).catch(() => null),
+      ])
+      if (cr?.ok) {
+        const data = await cr.json().catch(() => [])
+        allCountries = (Array.isArray(data) ? data : []).map(r => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter(c => c.country)
+      }
+      if (rr?.ok) {
+        const data = await rr.json().catch(() => [])
+        allReferrers = (Array.isArray(data) ? data : []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
+      }
+    }
+    
+    allCountries.sort((a, b) => b.visits - a.visits)
+    allReferrers.sort((a, b) => b.visits - a.visits)
+    
     adminStatsCache.sources = {
       topCountries: allCountries.slice(0, 5),
       otherCountries: { count: allCountries.slice(5).length, visits: allCountries.slice(5).reduce((s, c) => s + c.visits, 0), codes: allCountries.slice(5).map(c => c.country), items: allCountries.slice(5) },
@@ -2696,11 +2783,29 @@ async function refreshSourcesCache() {
 // Background refresh for online users
 async function refreshOnlineUsersCache() {
   if (adminStatsCache.refreshing.onlineUsers) return
-  if (!sql) return
   adminStatsCache.refreshing.onlineUsers = true
   try {
-    const rows = await sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => [])
-    adminStatsCache.onlineUsers = { count: rows?.[0]?.c ?? 0 }
+    let count = 0
+    
+    // Try direct SQL first
+    if (sql) {
+      const rows = await sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => [])
+      count = rows?.[0]?.c ?? 0
+    }
+    // Fallback to Supabase REST RPC
+    else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }).catch(() => null)
+      if (resp?.ok) {
+        count = Number(await resp.json().catch(() => 0)) || 0
+      }
+    }
+    // Fallback to in-memory
+    else {
+      count = memAnalytics.getUniqueIpCountInLastMinutes(60)
+    }
+    
+    adminStatsCache.onlineUsers = { count }
     adminStatsCache.lastUpdated.onlineUsers = Date.now()
   } catch (e) {
     console.warn('[cache] Failed to refresh online users:', e?.message)
