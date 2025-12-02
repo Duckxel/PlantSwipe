@@ -14,6 +14,7 @@ import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
 import net from 'net'
+import dns from 'dns'
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { zodResponseFormat } from 'openai/helpers/zod'
@@ -21,6 +22,10 @@ import multer from 'multer'
 import sharp from 'sharp'
 import webpush from 'web-push'
 import cron from 'node-cron'
+
+// Force IPv4 DNS resolution to avoid ENETUNREACH errors on networks without IPv6 support
+// Fixes "connect ENETUNREACH" errors when the server doesn't have IPv6 connectivity
+dns.setDefaultResultOrder('ipv4first')
 
 dotenv.config()
 // Optionally load server-only secrets from .env.server (ignored if missing)
