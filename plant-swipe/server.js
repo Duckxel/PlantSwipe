@@ -1477,6 +1477,21 @@ async function ensureAdmin(req, res) {
   }
 }
 
+/**
+ * Converts admin identifier to a valid UUID for database storage.
+ * Returns null for non-UUID identifiers like 'static-admin' or 'public'.
+ * @param {string} adminId - The admin identifier from ensureAdmin()
+ * @returns {string|null} - Valid UUID string or null
+ */
+function toAdminUuid(adminId) {
+  if (!adminId || adminId === 'static-admin' || adminId === 'public') {
+    return null
+  }
+  // Basic UUID format check
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  return uuidRegex.test(adminId) ? adminId : null
+}
+
 const disallowedImageKeys = new Set(['image', 'imageurl', 'image_url', 'imageURL', 'thumbnail', 'photo', 'picture'])
 const disallowedFieldKeys = new Set(['externalids'])
 const metadataKeys = new Set(['type', 'description', 'options', 'items', 'additionalProperties', 'examples', 'format'])
@@ -4800,6 +4815,7 @@ app.post('/api/admin/notifications', async (req, res) => {
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
   const timezone = campaignTimezone
   const state = deliveryMode === 'scheduled' ? 'scheduled' : 'draft'
+  const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       insert into public.notification_campaigns (
@@ -4823,8 +4839,8 @@ app.post('/api/admin/notifications', async (req, res) => {
         ${parsed.ctaUrl || null},
         ${customIds.length ? sql.array(customIds) : sql.array([])},
         0,
-        ${adminId},
-        ${adminId},
+        ${adminUuid},
+        ${adminUuid},
         ${nextRunAt},
         now(),
         now()
@@ -4958,6 +4974,7 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
   const timezone = campaignTimezone
   const nextState = deliveryMode === 'scheduled' ? (existingRows[0].state === 'paused' ? 'paused' : 'scheduled') : 'draft'
+  const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       update public.notification_campaigns
@@ -4974,7 +4991,7 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
           schedule_interval = ${scheduleInterval},
           cta_url = ${parsed.ctaUrl || null},
           custom_user_ids = ${customIds.length ? sql.array(customIds) : sql.array([])},
-          updated_by = ${adminId},
+          updated_by = ${adminUuid},
           next_run_at = ${nextRunAt},
           updated_at = now()
       where id = ${notificationId}
@@ -5001,12 +5018,13 @@ app.delete('/api/admin/notifications/:id', async (req, res) => {
     res.status(400).json({ error: 'Missing notification id' })
     return
   }
+  const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       update public.notification_campaigns
       set deleted_at = now(),
           state = 'cancelled',
-          updated_by = ${adminId},
+          updated_by = ${adminUuid},
           updated_at = now()
       where id = ${notificationId}
       returning *
@@ -5036,12 +5054,13 @@ app.post('/api/admin/notifications/:id/trigger', async (req, res) => {
     res.status(400).json({ error: 'Missing notification id' })
     return
   }
+  const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       update public.notification_campaigns
       set next_run_at = now(),
           state = case when delivery_mode = 'scheduled' then 'scheduled' else 'draft' end,
-          updated_by = ${adminId},
+          updated_by = ${adminUuid},
           updated_at = now()
       where id = ${notificationId} and deleted_at is null
       returning *
@@ -5079,12 +5098,13 @@ app.post('/api/admin/notifications/:id/state', async (req, res) => {
     res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
     return
   }
+  const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       update public.notification_campaigns
       set state = ${parsed.state},
           next_run_at = case when ${parsed.state} = 'scheduled' and next_run_at is null then now() else next_run_at end,
-          updated_by = ${adminId},
+          updated_by = ${adminUuid},
           updated_at = now()
       where id = ${notificationId} and deleted_at is null
       returning *
@@ -5250,6 +5270,7 @@ app.post('/api/admin/email-templates', async (req, res) => {
     parsed.bodyJson === null || parsed.bodyJson === undefined ? null : sql.json(parsed.bodyJson)
   const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
   const isActive = parsed.isActive !== false
+  const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       insert into public.admin_email_templates (
@@ -5265,8 +5286,8 @@ app.post('/api/admin/email-templates', async (req, res) => {
         ${bodyJsonFragment},
         ${variables},
         ${isActive},
-        ${adminId},
-        ${adminId},
+        ${adminUuid},
+        ${adminUuid},
         now(),
         now()
       )
@@ -5317,6 +5338,7 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
     const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
     const isActive =
       parsed.isActive === undefined ? current.is_active !== false : parsed.isActive
+    const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
       update public.admin_email_templates
@@ -5328,7 +5350,7 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
           body_json = ${bodyJsonFragment},
           variables = ${variables},
           is_active = ${isActive},
-          updated_by = ${adminId},
+          updated_by = ${adminUuid},
           updated_at = now()
       where id = ${templateId}
       returning *
@@ -5483,6 +5505,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
 
     const testMode = parsed.testMode === true
     const testEmail = testMode && parsed.testEmail ? parsed.testEmail : null
+    const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
       insert into public.admin_email_campaigns (
@@ -5526,8 +5549,8 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         0,
         ${testMode},
         ${testEmail},
-        ${adminId},
-        ${adminId},
+        ${adminUuid},
+        ${adminUuid},
         now(),
         now()
       )
@@ -5647,6 +5670,7 @@ app.put('/api/admin/email-campaigns/:id', async (req, res) => {
       status = 'scheduled'
     }
     const bodyJsonFragment = bodyJsonSnapshot == null ? null : sql.json(bodyJsonSnapshot)
+    const adminUuid = toAdminUuid(adminId)
 
     const updated = await sql`
       update public.admin_email_campaigns
@@ -5662,7 +5686,7 @@ app.put('/api/admin/email-campaigns/:id', async (req, res) => {
           timezone = ${timezone},
           scheduled_for = ${scheduledFor},
           status = ${status},
-          updated_by = ${adminId},
+          updated_by = ${adminUuid},
           updated_at = now()
       where id = ${campaignId}
       returning *
@@ -5725,12 +5749,13 @@ app.post('/api/admin/email-campaigns/:id/cancel', async (req, res) => {
     res.status(400).json({ error: 'Missing campaign id' })
     return
   }
+  const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       update public.admin_email_campaigns
       set status = 'cancelled',
           send_error = 'Cancelled by admin',
-          updated_by = ${adminId},
+          updated_by = ${adminUuid},
           updated_at = now()
       where id = ${campaignId}
         and status in ('draft','scheduled')
