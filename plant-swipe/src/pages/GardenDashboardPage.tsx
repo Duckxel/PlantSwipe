@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { PlantDetails } from "@/components/plant/PlantDetails";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2 } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails } from "@/lib/bookmarks";
@@ -209,6 +209,40 @@ export const GardenDashboardPage: React.FC = () => {
   const [userBookmarks, setUserBookmarks] = React.useState<BookmarkType[]>([]);
   const [bookmarksLoading, setBookmarksLoading] = React.useState(false);
   const [importingFromBookmark, setImportingFromBookmark] = React.useState(false);
+
+  // Share button state
+  const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'error'>('idle');
+  const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current);
+    };
+  }, []);
+
+  const handleShare = React.useCallback(async () => {
+    if (typeof window === 'undefined' || !garden) return;
+    const shareUrl = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: garden.name,
+          url: shareUrl,
+        });
+        setShareStatus('copied');
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareStatus('copied');
+      } else {
+        setShareStatus('error');
+      }
+    } catch {
+      // User cancelled or error
+      setShareStatus('error');
+    }
+    if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current);
+    shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500);
+  }, [garden]);
 
   React.useEffect(() => {
     if (addDetailsOpen) {
@@ -2500,6 +2534,25 @@ export const GardenDashboardPage: React.FC = () => {
                 <Users className="w-3.5 h-3.5" />
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
+            )}
+            {/* Share button for public/friends-only gardens */}
+            {(garden.privacy === 'public' || garden.privacy === 'friends_only') && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="rounded-xl gap-1.5 w-full shadow-sm"
+                onClick={handleShare}
+                aria-label={t('common.share', { defaultValue: 'Share' })}
+              >
+                <Share2 className="h-4 w-4" />
+                {shareStatus === 'copied' ? (
+                  <span className="text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
+                ) : shareStatus === 'error' ? (
+                  <span className="text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
+                ) : (
+                  <span className="text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
+                )}
+              </Button>
             )}
             <nav className="flex flex-wrap md:flex-col gap-2">
               {(

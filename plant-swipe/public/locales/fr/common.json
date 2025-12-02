@@ -40,7 +40,8 @@
       "blog": "Blog",
       "contactUs": "Nous contacter",
       "termsOfServices": "Conditions d'utilisation"
-    }
+    },
+    "share": "Partager"
   },
   "pricing": {
     "pageTitle": "Tarifs – Aphylia",

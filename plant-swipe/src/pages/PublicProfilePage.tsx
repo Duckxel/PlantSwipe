@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, Search as SearchIcon, Loader2, UserCheck } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, Search as SearchIcon, Loader2, UserCheck, Share2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
@@ -414,6 +414,40 @@ export default function PublicProfilePage() {
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null)
 
+  // Share button state
+  const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'error'>('idle')
+  const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    return () => {
+      if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    }
+  }, [])
+
+  const handleShare = React.useCallback(async () => {
+    if (typeof window === 'undefined') return
+    const shareUrl = window.location.href
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: preferredDisplayName || t('profile.member'),
+          url: shareUrl,
+        })
+        setShareStatus('copied')
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+        setShareStatus('copied')
+      } else {
+        setShareStatus('error')
+      }
+    } catch {
+      // User cancelled or error
+      setShareStatus('error')
+    }
+    if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500)
+  }, [preferredDisplayName, t])
+
   const [editOpen, setEditOpen] = React.useState(false)
   const [editSubmitting, setEditSubmitting] = React.useState(false)
   const [editError, setEditError] = React.useState<string | null>(null)
@@ -808,6 +842,25 @@ export default function PublicProfilePage() {
               <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute -top-6 -right-8 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/15 blur-3xl" />
                 <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/10 blur-3xl" />
+              </div>
+              {/* Share button - top right corner */}
+              <div className="absolute top-4 right-4 z-20">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-xl gap-1.5 shadow-sm"
+                  onClick={handleShare}
+                  aria-label={t('common.share', { defaultValue: 'Share' })}
+                >
+                  <Share2 className="h-4 w-4" />
+                  {shareStatus === 'copied' ? (
+                    <span className="text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
+                  ) : shareStatus === 'error' ? (
+                    <span className="text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
+                  ) : (
+                    <span className="hidden sm:inline text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
+                  )}
+                </Button>
               </div>
               <CardContent className="relative z-10 p-6 md:p-8 space-y-4">
               <div className="flex items-start gap-4">

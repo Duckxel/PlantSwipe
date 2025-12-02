@@ -40,7 +40,8 @@
       "blog": "Blog",
       "contactUs": "Contact Us",
       "termsOfServices": "Terms of Services"
-    }
+    },
+    "share": "Share"
   },
   "pricing": {
     "pageTitle": "Pricing – Aphylia",
