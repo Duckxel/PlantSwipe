@@ -1169,13 +1169,9 @@ export const AdminEmailTemplatePage: React.FC = () => {
           
           {/* Email Content Styles */}
           <style>{`
-            /* Text color support - respect inline styles */
-            .email-preview-body [style*="color"] {
-              color: inherit;
-            }
-            .email-preview-body span[style*="color"] {
-              color: var(--inline-color, inherit);
-            }
+            /* Text colors - inline styles from editor take precedence automatically */
+            /* Colored text spans will display their inline color attribute */
+            
             .email-preview-body h1 {
               font-size: 32px !important;
               font-weight: 700 !important;

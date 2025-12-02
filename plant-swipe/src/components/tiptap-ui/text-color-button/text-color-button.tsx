@@ -54,7 +54,7 @@ export const TextColorButton = forwardRef<
     } = useTextColor({
       editor,
       textColor,
-      label: text || `Set text color (${textColor})`,
+      label: text || `Set text color`,
       hideWhenUnavailable,
       onApplied,
     })
@@ -68,13 +68,16 @@ export const TextColorButton = forwardRef<
       [handleSetTextColor, onClick]
     )
 
+    // For "inherit" (default), show black circle
+    const displayColor = textColor === "inherit" ? "#000000" : textColor
+
     const buttonStyle = useMemo(
       () =>
         ({
           ...style,
-          "--text-color": textColor,
+          "--text-color": displayColor,
         }) as React.CSSProperties,
-      [textColor, style]
+      [displayColor, style]
     )
 
     if (!isVisible) {
@@ -99,15 +102,12 @@ export const TextColorButton = forwardRef<
         ref={ref}
       >
         {children ?? (
-          <>
-            <span
-              className="tiptap-button-text-color"
-              style={
-                { "--text-color": textColor } as React.CSSProperties
-              }
-            />
-            {text && <span className="tiptap-button-text">{text}</span>}
-          </>
+          <span
+            className="tiptap-button-color-circle"
+            style={
+              { "--text-color": displayColor } as React.CSSProperties
+            }
+          />
         )}
       </Button>
     )
