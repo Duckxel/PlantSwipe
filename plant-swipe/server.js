@@ -7,7 +7,7 @@ import fs from 'fs/promises'
 import fsSync from 'fs'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { fileURLToPath } from 'url'
-import { exec as execCb, spawn as spawnChild } from 'child_process'
+import { exec as execCb, execSync, spawn as spawnChild } from 'child_process'
 import { promisify } from 'util'
 
 import zlib from 'zlib'
@@ -2194,26 +2194,50 @@ function buildConnectionString() {
     }
   }
   
-  // Priority 5: Auto-derive Supabase DB host when only project URL and DB password are provided
-  // Check if USE_SUPABASE_POOLER is set to prefer pooler connection (port 6543)
+  // Priority 5: Auto-derive Supabase connection from project URL and DB password
+  // IMPORTANT: Uses connection pooler by default (port 6543) because direct connections
+  // (db.*.supabase.co) only have IPv6 addresses which may not be reachable.
+  // The pooler (aws-*.pooler.supabase.com) has IPv4 addresses.
   if (!cs && supabaseUrlEnv && (process.env.SUPABASE_DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD)) {
     try {
       const u = new URL(supabaseUrlEnv)
       const projectRef = u.hostname.split('.')[0] // e.g., lxnkcguwewrskqnyzjwi
-      const usePooler = String(process.env.USE_SUPABASE_POOLER || 'true').toLowerCase() === 'true'
-      // Pooler uses aws-0-us-west-1.pooler.supabase.com format, but for simplicity use direct
-      // For now, use direct connection but with optimized settings
-      const host = `db.${projectRef}.supabase.co`
-      const user = process.env.SUPABASE_DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'postgres'
       const pass = process.env.SUPABASE_DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || ''
-      const port = process.env.SUPABASE_DB_PORT || process.env.PGPORT || process.env.POSTGRES_PORT || '5432'
       const database = process.env.SUPABASE_DB_NAME || process.env.PGDATABASE || process.env.POSTGRES_DB || 'postgres'
-      if (host && pass) {
+      
+      // Determine if we should use direct connection or pooler
+      // Default to pooler because direct connection (db.*.supabase.co) is IPv6-only
+      const useDirect = String(process.env.SUPABASE_USE_DIRECT || 'false').toLowerCase() === 'true'
+      
+      if (useDirect) {
+        // Direct connection (IPv6 only - may not work on all networks)
+        const host = `db.${projectRef}.supabase.co`
+        const user = process.env.SUPABASE_DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'postgres'
+        const port = process.env.SUPABASE_DB_PORT || process.env.PGPORT || process.env.POSTGRES_PORT || '5432'
         const encUser = encodeURIComponent(user)
         const encPass = encodeURIComponent(pass)
         cs = `postgresql://${encUser}:${encPass}@${host}:${port}/${database}`
+        console.log(`[server] Using Supabase DIRECT connection (IPv6) - set SUPABASE_USE_DIRECT=false if you get ENETUNREACH errors`)
+      } else {
+        // Connection pooler (IPv4 available - recommended for most deployments)
+        // Format: postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+        // 
+        // IMPORTANT: Set SUPABASE_REGION to your project's region. Find it in Supabase Dashboard:
+        // Project Settings > Database > Connection string > "Connection pooling" mode
+        // Common regions: us-east-1, us-west-1, eu-west-1, eu-central-1, ap-southeast-1
+        const region = process.env.SUPABASE_REGION || process.env.AWS_REGION || 'us-east-1'
+        const poolerHost = `aws-0-${region}.pooler.supabase.com`
+        const poolerUser = `postgres.${projectRef}` // Pooler uses project ref in username
+        const port = '6543' // Pooler always uses port 6543
+        const encUser = encodeURIComponent(poolerUser)
+        const encPass = encodeURIComponent(pass)
+        cs = `postgresql://${encUser}:${encPass}@${poolerHost}:${port}/${database}`
+        console.log(`[server] Using Supabase POOLER (IPv4) via ${poolerHost}`)
+        console.log(`[server] If connection fails, set SUPABASE_REGION to your project's region`)
       }
-    } catch {}
+    } catch (e) {
+      console.error(`[server] Failed to build Supabase connection string: ${e?.message || e}`)
+    }
   }
   
   // Add required parameters for remote connections
