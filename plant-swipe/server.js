@@ -2606,21 +2606,23 @@ const CACHE_STALE_TTL = 120000 // 2 minutes - serve stale data if refresh fails
 // Background refresh function for stats
 async function refreshStatsCache() {
   if (adminStatsCache.refreshing.stats) return
+  if (!sql) {
+    console.warn('[cache] Cannot refresh stats - no database connection')
+    return
+  }
   adminStatsCache.refreshing.stats = true
   try {
-    let profilesCount = 0, authUsersCount = null, plantsCount = null
-    if (sql) {
-      const [p, a, pl] = await Promise.all([
-        sql`select count(*)::int as count from public.profiles`.catch(() => []),
-        sql`select count(*)::int as count from auth.users`.catch(() => []),
-        sql`select count(*)::int as count from public.plants`.catch(() => []),
-      ])
-      profilesCount = p?.[0]?.count ?? 0
-      authUsersCount = a?.[0]?.count ?? null
-      plantsCount = pl?.[0]?.count ?? 0
-    }
+    const [p, a, pl] = await Promise.all([
+      sql`select count(*)::int as count from public.profiles`.catch((e) => { console.warn('[cache] profiles query failed:', e?.message); return [] }),
+      sql`select count(*)::int as count from auth.users`.catch((e) => { console.warn('[cache] auth.users query failed:', e?.message); return [] }),
+      sql`select count(*)::int as count from public.plants`.catch((e) => { console.warn('[cache] plants query failed:', e?.message); return [] }),
+    ])
+    const profilesCount = p?.[0]?.count ?? 0
+    const authUsersCount = a?.[0]?.count ?? null
+    const plantsCount = pl?.[0]?.count ?? 0
     adminStatsCache.stats = { profilesCount, authUsersCount, plantsCount }
     adminStatsCache.lastUpdated.stats = Date.now()
+    console.log('[cache] Stats refreshed:', { profilesCount, authUsersCount, plantsCount })
   } catch (e) {
     console.warn('[cache] Failed to refresh stats:', e?.message)
   } finally {
@@ -2631,31 +2633,31 @@ async function refreshStatsCache() {
 // Background refresh for visitors
 async function refreshVisitorsCache() {
   if (adminStatsCache.refreshing.visitors) return
+  if (!sql) return
   adminStatsCache.refreshing.visitors = true
   try {
-    if (sql) {
-      const days = 7
-      const [r10m, r30m, r60u, r60v, rNd] = await Promise.all([
-        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '10 minutes'`).catch(() => []),
-        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '30 minutes'`).catch(() => []),
-        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => []),
-        sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`).catch(() => []),
-        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and timezone('utc', occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`).catch(() => []),
-      ])
-      const series = await sql.unsafe(`
-        with days as (select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d)
-        select to_char(d, 'YYYY-MM-DD') as date, coalesce((select count(distinct ip_address) from ${VISITS_TABLE_SQL_IDENT} where (timezone('utc', occurred_at))::date = d), 0)::int as unique_visitors from days order by d asc
-      `).catch(() => [])
-      adminStatsCache.visitors = {
-        currentUniqueVisitors10m: r10m?.[0]?.c ?? 0,
-        uniqueIpsLast30m: r30m?.[0]?.c ?? 0,
-        uniqueIpsLast60m: r60u?.[0]?.c ?? 0,
-        visitsLast60m: r60v?.[0]?.c ?? 0,
-        uniqueIps7d: rNd?.[0]?.c ?? 0,
-        series7d: (series || []).map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors || 0) })),
-      }
-      adminStatsCache.lastUpdated.visitors = Date.now()
+    const days = 7
+    const [r10m, r30m, r60u, r60v, rNd] = await Promise.all([
+      sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '10 minutes'`).catch(() => []),
+      sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '30 minutes'`).catch(() => []),
+      sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => []),
+      sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`).catch(() => []),
+      sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and timezone('utc', occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`).catch(() => []),
+    ])
+    const series = await sql.unsafe(`
+      with days as (select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d)
+      select to_char(d, 'YYYY-MM-DD') as date, coalesce((select count(distinct ip_address) from ${VISITS_TABLE_SQL_IDENT} where (timezone('utc', occurred_at))::date = d), 0)::int as unique_visitors from days order by d asc
+    `).catch(() => [])
+    adminStatsCache.visitors = {
+      currentUniqueVisitors10m: r10m?.[0]?.c ?? 0,
+      uniqueIpsLast30m: r30m?.[0]?.c ?? 0,
+      uniqueIpsLast60m: r60u?.[0]?.c ?? 0,
+      visitsLast60m: r60v?.[0]?.c ?? 0,
+      uniqueIps7d: rNd?.[0]?.c ?? 0,
+      series7d: (series || []).map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors || 0) })),
     }
+    adminStatsCache.lastUpdated.visitors = Date.now()
+    console.log('[cache] Visitors refreshed:', { uniqueIps7d: adminStatsCache.visitors.uniqueIps7d, seriesLength: adminStatsCache.visitors.series7d.length })
   } catch (e) {
     console.warn('[cache] Failed to refresh visitors:', e?.message)
   } finally {
@@ -2666,24 +2668,24 @@ async function refreshVisitorsCache() {
 // Background refresh for sources
 async function refreshSourcesCache() {
   if (adminStatsCache.refreshing.sources) return
+  if (!sql) return
   adminStatsCache.refreshing.sources = true
   try {
-    if (sql) {
-      const days = 7
-      const [countries, referrers] = await Promise.all([
-        sql`select * from public.get_top_countries(${days}, ${10000})`.catch(() => []),
-        sql`select * from public.get_top_referrers(${days}, ${10})`.catch(() => []),
-      ])
-      const allCountries = (countries || []).map(r => ({ country: r.country || '', visits: Number(r.visits || 0) })).filter(c => c.country).sort((a, b) => b.visits - a.visits)
-      const allReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })).sort((a, b) => b.visits - a.visits)
-      adminStatsCache.sources = {
-        topCountries: allCountries.slice(0, 5),
-        otherCountries: { count: allCountries.slice(5).length, visits: allCountries.slice(5).reduce((s, c) => s + c.visits, 0), codes: allCountries.slice(5).map(c => c.country), items: allCountries.slice(5) },
-        topReferrers: allReferrers.slice(0, 5),
-        otherReferrers: { count: allReferrers.slice(5).length, visits: allReferrers.slice(5).reduce((s, r) => s + r.visits, 0) },
-      }
-      adminStatsCache.lastUpdated.sources = Date.now()
+    const days = 7
+    const [countries, referrers] = await Promise.all([
+      sql`select * from public.get_top_countries(${days}, ${10000})`.catch(() => []),
+      sql`select * from public.get_top_referrers(${days}, ${10})`.catch(() => []),
+    ])
+    const allCountries = (countries || []).map(r => ({ country: r.country || '', visits: Number(r.visits || 0) })).filter(c => c.country).sort((a, b) => b.visits - a.visits)
+    const allReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })).sort((a, b) => b.visits - a.visits)
+    adminStatsCache.sources = {
+      topCountries: allCountries.slice(0, 5),
+      otherCountries: { count: allCountries.slice(5).length, visits: allCountries.slice(5).reduce((s, c) => s + c.visits, 0), codes: allCountries.slice(5).map(c => c.country), items: allCountries.slice(5) },
+      topReferrers: allReferrers.slice(0, 5),
+      otherReferrers: { count: allReferrers.slice(5).length, visits: allReferrers.slice(5).reduce((s, r) => s + r.visits, 0) },
     }
+    adminStatsCache.lastUpdated.sources = Date.now()
+    console.log('[cache] Sources refreshed:', { countriesCount: allCountries.length, referrersCount: allReferrers.length })
   } catch (e) {
     console.warn('[cache] Failed to refresh sources:', e?.message)
   } finally {
@@ -2694,13 +2696,12 @@ async function refreshSourcesCache() {
 // Background refresh for online users
 async function refreshOnlineUsersCache() {
   if (adminStatsCache.refreshing.onlineUsers) return
+  if (!sql) return
   adminStatsCache.refreshing.onlineUsers = true
   try {
-    if (sql) {
-      const rows = await sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => [])
-      adminStatsCache.onlineUsers = { count: rows?.[0]?.c ?? 0 }
-      adminStatsCache.lastUpdated.onlineUsers = Date.now()
-    }
+    const rows = await sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => [])
+    adminStatsCache.onlineUsers = { count: rows?.[0]?.c ?? 0 }
+    adminStatsCache.lastUpdated.onlineUsers = Date.now()
   } catch (e) {
     console.warn('[cache] Failed to refresh online users:', e?.message)
   } finally {
@@ -2731,10 +2732,11 @@ function startAdminStatsCacheRefresh() {
   }, CACHE_TTL * 2)
 }
 
-// Helper to check if cache is fresh enough
+// Helper to check if cache is fresh enough (must have been updated at least once)
 function isCacheFresh(key) {
   const lastUpdated = adminStatsCache.lastUpdated[key] || 0
-  return (Date.now() - lastUpdated) < CACHE_STALE_TTL
+  // Cache must have been updated at least once AND be within stale TTL
+  return lastUpdated > 0 && (Date.now() - lastUpdated) < CACHE_STALE_TTL
 }
 
 // ============================================================================
