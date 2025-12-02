@@ -4083,7 +4083,11 @@ function OverviewSection({
                 <button
                   key={member.userId}
                   type="button"
-                  onClick={() => navigate(`/profile/${member.userId}`)}
+                  onClick={() => {
+                    if (member.displayName) {
+                      navigate(`/u/${encodeURIComponent(member.displayName)}`);
+                    }
+                  }}
                   className="group flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 rounded-2xl px-3 py-2 transition-all hover:bg-stone-100 dark:hover:bg-stone-800 hover:shadow-md cursor-pointer text-left"
                   title={member.displayName || member.email || "Member"}
                 >
