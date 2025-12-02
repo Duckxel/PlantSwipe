@@ -22,6 +22,7 @@ drop policy if exists "Service role only" on public.admin_secrets;
 create policy "Service role only" on public.admin_secrets for all using (false);
 
 -- ========== Helper: Invoke Edge Function ==========
+drop function if exists public.invoke_edge_function(text, jsonb);
 create or replace function public.invoke_edge_function(
   function_name text,
   payload jsonb default '{}'::jsonb
