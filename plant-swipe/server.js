@@ -2151,7 +2151,16 @@ function removeExternalIds(node) {
 
 
 function buildConnectionString() {
-  let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.SUPABASE_DB_URL
+  // Priority 1: Use Supabase pooler URL if available (best performance for serverless/remote)
+  // The pooler uses pgbouncer on port 6543 with transaction-mode pooling
+  let cs = process.env.SUPABASE_POOLER_URL || process.env.DATABASE_POOLER_URL
+  
+  // Priority 2: Direct database URLs
+  if (!cs) {
+    cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.SUPABASE_DB_URL
+  }
+  
+  // Priority 3: Build from individual PG* environment variables
   if (!cs) {
     const host = process.env.PGHOST || process.env.POSTGRES_HOST
     const user = process.env.PGUSER || process.env.POSTGRES_USER
@@ -2165,7 +2174,8 @@ function buildConnectionString() {
       cs = `postgresql://${auth}@${host}:${port}/${database}`
     }
   }
-  // Fallback: support explicit Supabase DB host credentials if provided
+  
+  // Priority 4: Support explicit Supabase DB host credentials if provided
   if (!cs) {
     const sbHost = process.env.SUPABASE_DB_HOST
     const sbUser = process.env.SUPABASE_DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'postgres'
@@ -2178,11 +2188,16 @@ function buildConnectionString() {
       cs = `postgresql://${encUser}:${encPass}@${sbHost}:${sbPort}/${sbDb}`
     }
   }
-  // Auto-derive Supabase DB host when only project URL and DB password are provided
+  
+  // Priority 5: Auto-derive Supabase DB host when only project URL and DB password are provided
+  // Check if USE_SUPABASE_POOLER is set to prefer pooler connection (port 6543)
   if (!cs && supabaseUrlEnv && (process.env.SUPABASE_DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD)) {
     try {
       const u = new URL(supabaseUrlEnv)
       const projectRef = u.hostname.split('.')[0] // e.g., lxnkcguwewrskqnyzjwi
+      const usePooler = String(process.env.USE_SUPABASE_POOLER || 'true').toLowerCase() === 'true'
+      // Pooler uses aws-0-us-west-1.pooler.supabase.com format, but for simplicity use direct
+      // For now, use direct connection but with optimized settings
       const host = `db.${projectRef}.supabase.co`
       const user = process.env.SUPABASE_DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'postgres'
       const pass = process.env.SUPABASE_DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || ''
@@ -2195,7 +2210,8 @@ function buildConnectionString() {
       }
     } catch {}
   }
-  // Intentionally avoid deriving connection string from Supabase-specific envs
+  
+  // Add required parameters for remote connections
   if (cs) {
     try {
       const url = new URL(cs)
@@ -2213,11 +2229,13 @@ const connectionString = buildConnectionString()
 // Prefer SSL for non-local databases even if URL lacks sslmode; honor custom CA
 // Note: postgres.js options are different from pg options
 let postgresOptions = {
-  // Connection pool settings optimized for fast response
-  max: 10,              // Max connections in pool (default is 10)
-  idle_timeout: 20,     // Close idle connections after 20 seconds
-  max_lifetime: 60 * 30, // Max connection lifetime: 30 minutes
+  // Connection pool settings optimized for remote databases (Supabase, etc.)
+  max: 20,              // Increase pool size for better concurrency
+  idle_timeout: 60,     // Keep connections alive longer (60 seconds) to avoid reconnection overhead
+  max_lifetime: 60 * 60, // Max connection lifetime: 1 hour (longer to amortize SSL handshake cost)
   connect_timeout: 10,  // Connection timeout: 10 seconds (prevents indefinite hangs)
+  // Performance optimizations for remote databases
+  prepare: false,       // Disable prepared statements (better for connection poolers like pgbouncer)
 }
 try {
   if (connectionString) {
@@ -2255,12 +2273,33 @@ const sql = connectionString ? postgres(connectionString, postgresOptions) : nul
 if (connectionString) {
   try {
     const u = new URL(connectionString)
-    console.log(`[server] Database configured: ${u.hostname}:${u.port || 5432} (SSL: ${JSON.stringify(postgresOptions.ssl) === 'true' || (typeof postgresOptions.ssl === 'object' && postgresOptions.ssl.rejectUnauthorized === false) ? 'insecure' : 'secure'})`)
+    const isPooler = u.hostname.includes('pooler') || u.port === '6543'
+    const sslMode = JSON.stringify(postgresOptions.ssl) === 'true' || (typeof postgresOptions.ssl === 'object' && postgresOptions.ssl.rejectUnauthorized === false) ? 'insecure' : 'secure'
+    console.log(`[server] Database configured: ${u.hostname}:${u.port || 5432}`)
+    console.log(`[server]   Mode: ${isPooler ? 'pooler (pgbouncer)' : 'direct'}, SSL: ${sslMode}`)
+    console.log(`[server]   Pool: max=${postgresOptions.max}, idle_timeout=${postgresOptions.idle_timeout}s, prepare=${postgresOptions.prepare}`)
   } catch {
     console.log('[server] Database URL configured (could not parse for logging)')
   }
 } else {
   console.warn('[server] DATABASE_URL not configured — API will error on queries')
+}
+
+// Test database connection at startup
+if (sql) {
+  (async () => {
+    try {
+      const start = Date.now()
+      await sql`SELECT 1 as test`
+      const latency = Date.now() - start
+      console.log(`[server] Database connection test: OK (${latency}ms)`)
+      if (latency > 100) {
+        console.warn(`[server] ⚠️  Database latency is high (${latency}ms). Consider using Supabase pooler or check network.`)
+      }
+    } catch (err) {
+      console.error(`[server] Database connection test: FAILED - ${err?.message || err}`)
+    }
+  })()
 }
 
 let adminMediaUploadsEnsured = false
@@ -3292,7 +3331,30 @@ app.get('/api/health/db', async (_req, res) => {
     // Use timeout to fail fast if DB is slow
     const rows = await withTimeout(sql`select 1 as one`, DB_PING_TIMEOUT, 'DB_PING_TIMEOUT')
     const ok = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
-    res.status(200).json({ ok, latencyMs: Date.now() - started })
+    const latencyMs = Date.now() - started
+    
+    // Provide connection info for diagnostics
+    let connectionInfo = {}
+    try {
+      const u = new URL(connectionString)
+      connectionInfo = {
+        host: u.hostname,
+        port: u.port || '5432',
+        isPooler: u.hostname.includes('pooler') || u.port === '6543',
+        poolSettings: {
+          max: postgresOptions.max,
+          idle_timeout: postgresOptions.idle_timeout,
+          prepare: postgresOptions.prepare,
+        }
+      }
+    } catch {}
+    
+    res.status(200).json({ 
+      ok, 
+      latencyMs, 
+      ...connectionInfo,
+      warning: latencyMs > 100 ? 'High latency detected. Consider using SUPABASE_POOLER_URL for better performance.' : undefined
+    })
   } catch (e) {
     res.status(200).json({
       ok: false,
