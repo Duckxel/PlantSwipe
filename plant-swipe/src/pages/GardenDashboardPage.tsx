@@ -156,8 +156,18 @@ export const GardenDashboardPage: React.FC = () => {
   const [instanceCounts, setInstanceCounts] = React.useState<
     Record<string, number>
   >({});
-  const [totalOnHand, setTotalOnHand] = React.useState(0);
-  const [speciesOnHand, setSpeciesOnHand] = React.useState(0);
+  // Derive totalOnHand and speciesOnHand from plants to avoid flashing
+  // (previously these were useState that got updated multiple times during load)
+  const { totalOnHand, speciesOnHand } = React.useMemo(() => {
+    let total = 0;
+    const seenSpecies = new Set<string>();
+    for (const gp of plants) {
+      const c = Number(gp.plantsOnHand || 0);
+      total += c;
+      if (gp.plantId) seenSpecies.add(String(gp.plantId));
+    }
+    return { totalOnHand: total, speciesOnHand: seenSpecies.size };
+  }, [plants]);
   const [isFriendOfMember, setIsFriendOfMember] = React.useState(false);
 
   const [addOpen, setAddOpen] = React.useState(false);
@@ -402,12 +412,7 @@ export const GardenDashboardPage: React.FC = () => {
                   });
                 }
               }
-              if (typeof data.totalOnHand === 'number') {
-                setTotalOnHand(data.totalOnHand);
-              }
-              if (typeof data.speciesCount === 'number') {
-                setSpeciesOnHand(data.speciesCount);
-              }
+              // totalOnHand and speciesOnHand are now derived via useMemo from plants state
               // Mark as fully hydrated if we got all data
               hydrated = hydratedGarden && hydratedMembers && hydratedPlants !== null && hydratedPlants.length > 0;
             }
@@ -662,24 +667,16 @@ export const GardenDashboardPage: React.FC = () => {
         }
 
         // Load inventory counts for display
-        // Compute per-instance counts and totals from garden_plants instances, not species-level inventory
+        // Compute per-instance counts from garden_plants instances
         const perInstanceCounts: Record<string, number> = {};
-        let total = 0;
-        const seenSpecies = new Set<string>();
         const plantsLocal = (hydratedPlants ?? gpsLocal ?? plants) as any[];
         for (const gp of plantsLocal) {
           const c = Number(gp.plantsOnHand || 0);
           perInstanceCounts[String(gp.plantId)] =
             (perInstanceCounts[String(gp.plantId)] || 0) + c;
-          total += c;
-          // Count species: every unique plantId is a species
-          seenSpecies.add(String(gp.plantId));
         }
-        // Species count = number of unique plant IDs (species) in the garden
-        const species = seenSpecies.size;
         setInstanceCounts(perInstanceCounts);
-        setTotalOnHand(total);
-        setSpeciesOnHand(species);
+        // totalOnHand and speciesOnHand are derived via useMemo from plants state
         // Build last-30-days success using garden_tasks (fast, no occurrences)
         try {
             const statsStart = new Date(today);
@@ -1301,21 +1298,13 @@ export const GardenDashboardPage: React.FC = () => {
 
           // Update inventory counts
           const perInstanceCounts: Record<string, number> = {};
-          let total = 0;
-          const seenSpecies = new Set<string>();
           for (const gp of gpsRaw) {
             const c = Number(gp.plantsOnHand || 0);
             perInstanceCounts[String(gp.plantId)] =
               (perInstanceCounts[String(gp.plantId)] || 0) + c;
-            total += c;
-            // Count species: every unique plantId is a species
-            seenSpecies.add(String(gp.plantId));
           }
-          // Species count = number of unique plant IDs (species) in the garden
-          const species = seenSpecies.size;
           setInstanceCounts(perInstanceCounts);
-          setTotalOnHand(total);
-          setSpeciesOnHand(species);
+          // totalOnHand and speciesOnHand are derived via useMemo from plants state
         }
 
         if (kind === "members" || kind === "general") {
