@@ -2816,13 +2816,15 @@ async function refreshOnlineUsersCache() {
 
 // Start background refresh interval (runs every 30 seconds)
 function startAdminStatsCacheRefresh() {
-  // Initial refresh
+  // Initial refresh - run quickly after DB warmup (500ms)
+  // This ensures cache is populated before first admin page load
   setTimeout(() => {
+    console.log('[cache] Starting initial cache population...')
     refreshStatsCache()
     refreshVisitorsCache()
     refreshSourcesCache()
     refreshOnlineUsersCache()
-  }, 2000) // Wait 2s after startup
+  }, 500) // Reduced from 2s - DB warmup runs immediately now
   
   // Periodic refresh
   setInterval(() => {
@@ -11935,6 +11937,14 @@ if (shouldListen) {
   const host = process.env.HOST || '127.0.0.1' // Bind to localhost only for security
   app.listen(port, host, () => {
     console.log(`[server] listening on http://${host}:${port}`)
+    
+    // Warm up database connection pool immediately (non-blocking)
+    // This ensures first requests don't wait for connection establishment
+    if (sql) {
+      sql`SELECT 1`.catch(() => {})
+      console.log('[server] Database connection pool warmup initiated')
+    }
+    
     // Best-effort ensure ban tables are present at startup (non-blocking)
     ensureBanTables().catch(() => {})
     ensureBroadcastTable().catch(() => {})
