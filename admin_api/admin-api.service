@@ -7,7 +7,12 @@ User=www-data
 Group=www-data
 EnvironmentFile=/etc/admin-api/env
 WorkingDirectory=/opt/admin
-ExecStart=/opt/admin/venv/bin/gunicorn -b 127.0.0.1:5001 app:app --workers 2 --timeout 30 --access-logfile - --error-logfile -
+# Performance optimizations:
+# - 4 workers (was 2) for better concurrency
+# - preload app to warm up before accepting requests
+# - keep-alive with 2s timeout for connection reuse
+# - graceful timeout of 10s (was 30s) to fail faster
+ExecStart=/opt/admin/venv/bin/gunicorn -b 127.0.0.1:5001 app:app --workers 4 --timeout 30 --graceful-timeout 10 --keep-alive 2 --preload --access-logfile - --error-logfile -
 Restart=always
 RestartSec=3s
 StartLimitIntervalSec=60

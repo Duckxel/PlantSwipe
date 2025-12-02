@@ -561,14 +561,14 @@ export const AdminPage: React.FC = () => {
     async (
       url: string,
       options: RequestInit = {},
-      maxRetries: number = 3,
+      maxRetries: number = 2,
     ): Promise<Response> => {
       let lastError: Error | null = null;
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout per attempt
+          const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout per attempt (reduced from 30s)
 
           try {
             const response = await fetch(url, {
@@ -587,7 +587,7 @@ export const AdminPage: React.FC = () => {
 
             // Server error (5xx) - retry
             if (response.status >= 500 && attempt < maxRetries) {
-              const delay = Math.min(1000 * Math.pow(2, attempt), 10000); // Exponential backoff, max 10s
+              const delay = Math.min(500 * Math.pow(2, attempt), 3000); // Exponential backoff, max 3s (reduced)
               await new Promise((resolve) => setTimeout(resolve, delay));
               continue;
             }
@@ -608,7 +608,7 @@ export const AdminPage: React.FC = () => {
               error.message?.includes("fetch") ||
               !error.message?.includes("4"))
           ) {
-            const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+            const delay = Math.min(500 * Math.pow(2, attempt), 3000); // Reduced backoff
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
