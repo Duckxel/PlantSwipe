@@ -104,9 +104,20 @@ export const TextColorButton = forwardRef<
         {children ?? (
           <span
             className="tiptap-button-color-circle"
-            style={
-              { "--text-color": displayColor } as React.CSSProperties
-            }
+            style={{
+              display: "block",
+              width: "18px",
+              height: "18px",
+              minWidth: "18px",
+              minHeight: "18px",
+              borderRadius: "50%",
+              backgroundColor: displayColor,
+              border: "2px solid rgba(255, 255, 255, 0.9)",
+              boxShadow: isActive 
+                ? `0 0 0 2px ${displayColor}, 0 0 0 4px rgba(0, 0, 0, 0.1)`
+                : "0 0 0 1px rgba(0, 0, 0, 0.15)",
+              flexShrink: 0,
+            }}
           />
         )}
       </Button>
