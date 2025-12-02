@@ -700,7 +700,10 @@
   "gardens": {
     "publicGardensTitle": "Public Gardens",
     "plant": "plant",
-    "plants": "plants"
+    "plants": "plants",
+    "viewAll": "View all",
+    "showLess": "Show less",
+    "more": "more"
   },
   "createPlant": {
     "title": "Add plant",
