@@ -2180,14 +2180,15 @@ function buildConnectionString() {
 }
 
 const connectionString = buildConnectionString()
-if (!connectionString) {
-  console.warn('[server] DATABASE_URL not configured — API will error on queries')
-}
 
 // Prefer SSL for non-local databases even if URL lacks sslmode; honor custom CA
+// Note: postgres.js options are different from pg options
+// connect_timeout is passed via the connection string, not here
 let postgresOptions = {
-  // Connection pool settings - keep defaults, just add reasonable timeout
-  connect_timeout: 3,         // Connection timeout in seconds (fail fast)
+  // Connection pool settings optimized for fast response
+  max: 10,              // Max connections in pool (default is 10)
+  idle_timeout: 20,     // Close idle connections after 20 seconds
+  max_lifetime: 60 * 30, // Max connection lifetime: 30 minutes
 }
 try {
   if (connectionString) {
@@ -2220,6 +2221,18 @@ try {
   }
 } catch {}
 const sql = connectionString ? postgres(connectionString, postgresOptions) : null
+
+// Log database configuration status (without exposing credentials)
+if (connectionString) {
+  try {
+    const u = new URL(connectionString)
+    console.log(`[server] Database configured: ${u.hostname}:${u.port || 5432} (SSL: ${JSON.stringify(postgresOptions.ssl) === 'true' || (typeof postgresOptions.ssl === 'object' && postgresOptions.ssl.rejectUnauthorized === false) ? 'insecure' : 'secure'})`)
+  } catch {
+    console.log('[server] Database URL configured (could not parse for logging)')
+  }
+} else {
+  console.warn('[server] DATABASE_URL not configured — API will error on queries')
+}
 
 let adminMediaUploadsEnsured = false
 async function ensureAdminMediaUploadsTable() {
@@ -2607,15 +2620,16 @@ const CACHE_STALE_TTL = 120000 // 2 minutes - serve stale data if refresh fails
 async function refreshStatsCache() {
   if (adminStatsCache.refreshing.stats) return
   adminStatsCache.refreshing.stats = true
+  const REFRESH_TIMEOUT = 5000 // 5 second timeout for background refresh
   try {
     let profilesCount = 0, authUsersCount = null, plantsCount = null
     
     // Try direct SQL first
     if (sql) {
       const [p, a, pl] = await Promise.all([
-        sql`select count(*)::int as count from public.profiles`.catch(() => []),
-        sql`select count(*)::int as count from auth.users`.catch(() => []),
-        sql`select count(*)::int as count from public.plants`.catch(() => []),
+        withTimeout(sql`select count(*)::int as count from public.profiles`, REFRESH_TIMEOUT).catch(() => []),
+        withTimeout(sql`select count(*)::int as count from auth.users`, REFRESH_TIMEOUT).catch(() => []),
+        withTimeout(sql`select count(*)::int as count from public.plants`, REFRESH_TIMEOUT).catch(() => []),
       ])
       profilesCount = p?.[0]?.count ?? 0
       authUsersCount = a?.[0]?.count ?? null
@@ -2659,6 +2673,7 @@ async function refreshStatsCache() {
 async function refreshVisitorsCache() {
   if (adminStatsCache.refreshing.visitors) return
   adminStatsCache.refreshing.visitors = true
+  const REFRESH_TIMEOUT = 8000 // 8 second timeout for visitor queries (they're heavier)
   try {
     const days = 7
     let data = { currentUniqueVisitors10m: 0, uniqueIpsLast30m: 0, uniqueIpsLast60m: 0, visitsLast60m: 0, uniqueIps7d: 0, series7d: [] }
@@ -2666,16 +2681,16 @@ async function refreshVisitorsCache() {
     // Try direct SQL first
     if (sql) {
       const [r10m, r30m, r60u, r60v, rNd] = await Promise.all([
-        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '10 minutes'`).catch(() => []),
-        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '30 minutes'`).catch(() => []),
-        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => []),
-        sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`).catch(() => []),
-        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and timezone('utc', occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`).catch(() => []),
+        withTimeout(sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '10 minutes'`), REFRESH_TIMEOUT).catch(() => []),
+        withTimeout(sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '30 minutes'`), REFRESH_TIMEOUT).catch(() => []),
+        withTimeout(sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`), REFRESH_TIMEOUT).catch(() => []),
+        withTimeout(sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`), REFRESH_TIMEOUT).catch(() => []),
+        withTimeout(sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and timezone('utc', occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`), REFRESH_TIMEOUT).catch(() => []),
       ])
-      const series = await sql.unsafe(`
+      const series = await withTimeout(sql.unsafe(`
         with days as (select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d)
         select to_char(d, 'YYYY-MM-DD') as date, coalesce((select count(distinct ip_address) from ${VISITS_TABLE_SQL_IDENT} where (timezone('utc', occurred_at))::date = d), 0)::int as unique_visitors from days order by d asc
-      `).catch(() => [])
+      `), REFRESH_TIMEOUT).catch(() => [])
       data = {
         currentUniqueVisitors10m: r10m?.[0]?.c ?? 0,
         uniqueIpsLast30m: r30m?.[0]?.c ?? 0,
@@ -2732,6 +2747,7 @@ async function refreshVisitorsCache() {
 async function refreshSourcesCache() {
   if (adminStatsCache.refreshing.sources) return
   adminStatsCache.refreshing.sources = true
+  const REFRESH_TIMEOUT = 5000 // 5 second timeout for sources queries
   try {
     const days = 7
     let allCountries = [], allReferrers = []
@@ -2739,8 +2755,8 @@ async function refreshSourcesCache() {
     // Try direct SQL first
     if (sql) {
       const [countries, referrers] = await Promise.all([
-        sql`select * from public.get_top_countries(${days}, ${10000})`.catch(() => []),
-        sql`select * from public.get_top_referrers(${days}, ${10})`.catch(() => []),
+        withTimeout(sql`select * from public.get_top_countries(${days}, ${10000})`, REFRESH_TIMEOUT).catch(() => []),
+        withTimeout(sql`select * from public.get_top_referrers(${days}, ${10})`, REFRESH_TIMEOUT).catch(() => []),
       ])
       allCountries = (countries || []).map(r => ({ country: r.country || '', visits: Number(r.visits || 0) })).filter(c => c.country)
       allReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
@@ -2784,12 +2800,13 @@ async function refreshSourcesCache() {
 async function refreshOnlineUsersCache() {
   if (adminStatsCache.refreshing.onlineUsers) return
   adminStatsCache.refreshing.onlineUsers = true
+  const REFRESH_TIMEOUT = 3000 // 3 second timeout for online users query
   try {
     let count = 0
     
     // Try direct SQL first
     if (sql) {
-      const rows = await sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`).catch(() => [])
+      const rows = await withTimeout(sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address is not null and occurred_at >= now() - interval '60 minutes'`), REFRESH_TIMEOUT).catch(() => [])
       count = rows?.[0]?.c ?? 0
     }
     // Fallback to Supabase REST RPC
@@ -3219,12 +3236,17 @@ app.options('/api/admin/log-action', (_req, res) => {
 // Database health: returns ok along with latency; always 200 for easier probes
 app.get('/api/health/db', async (_req, res) => {
   const started = Date.now()
+  const DB_PING_TIMEOUT = 2000 // 2 second timeout for DB ping
   try {
     if (!sql) {
       // Fallback: try Supabase reachability via anon client
       if (supabaseServer) {
         try {
-          const { error } = await supabaseServer.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
+          const { error } = await withTimeout(
+            supabaseServer.from('plants').select('id', { head: true, count: 'exact' }).limit(1),
+            DB_PING_TIMEOUT,
+            'SUPABASE_TIMEOUT'
+          )
           const ok = !error
           res.status(200).json({ ok, latencyMs: Date.now() - started, via: 'supabase' })
           return
@@ -3238,7 +3260,8 @@ app.get('/api/health/db', async (_req, res) => {
       })
       return
     }
-    const rows = await sql`select 1 as one`
+    // Use timeout to fail fast if DB is slow
+    const rows = await withTimeout(sql`select 1 as one`, DB_PING_TIMEOUT, 'DB_PING_TIMEOUT')
     const ok = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
     res.status(200).json({ ok, latencyMs: Date.now() - started })
   } catch (e) {
