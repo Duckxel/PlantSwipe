@@ -40,6 +40,11 @@ import {
   Heart,
   Share2,
   Bookmark,
+  AlertTriangle,
+  Skull,
+  ShieldCheck,
+  User,
+  PawPrint,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -1264,6 +1269,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </section>
         )}
 
+      {/* Prominent Toxicity Warning Banner - Placed before detailed info cards */}
+        <ToxicityWarningBanner
+          toxicityHuman={plant.identity?.toxicityHuman}
+          toxicityPets={plant.identity?.toxicityPets}
+          t={t}
+        />
+
       {/* Info Cards Section - Full width for better mobile experience */}
         <div className="space-y-3 sm:space-y-4">
           <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
@@ -1480,6 +1492,246 @@ const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
       <div className="mb-1 sm:mb-1.5 h-8 sm:h-10 w-full rounded-md shadow-inner" style={{ backgroundImage: gradient }} />
       <div className="text-[7px] sm:text-[9px] uppercase tracking-[0.3em] text-stone-500 dark:text-stone-400">{category}</div>
       <div className="text-[10px] sm:text-[11px] font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
+    </div>
+  )
+}
+
+type ToxicityLevel = 'Non-Toxic' | 'Midly Irritating' | 'Highly Toxic' | 'Lethally Toxic' | undefined
+
+const getToxicityConfig = (level: ToxicityLevel) => {
+  const normalized = level?.toLowerCase().replace(/[_\s-]/g, '') || ''
+  switch (normalized) {
+    case 'nontoxic':
+      return {
+        severity: 'safe' as const,
+        color: 'emerald',
+        bgGradient: 'from-emerald-50 via-green-50 to-emerald-100 dark:from-emerald-950/50 dark:via-green-950/40 dark:to-emerald-900/30',
+        borderColor: 'border-emerald-300 dark:border-emerald-600',
+        iconBg: 'bg-emerald-500 dark:bg-emerald-600',
+        textColor: 'text-emerald-800 dark:text-emerald-200',
+        labelColor: 'text-emerald-700 dark:text-emerald-300',
+        Icon: ShieldCheck,
+        key: 'nontoxic',
+      }
+    case 'midlyirritating':
+      return {
+        severity: 'mild' as const,
+        color: 'amber',
+        bgGradient: 'from-amber-50 via-yellow-50 to-orange-50 dark:from-amber-950/50 dark:via-yellow-950/40 dark:to-orange-900/30',
+        borderColor: 'border-amber-400 dark:border-amber-500',
+        iconBg: 'bg-amber-500 dark:bg-amber-600',
+        textColor: 'text-amber-800 dark:text-amber-200',
+        labelColor: 'text-amber-700 dark:text-amber-300',
+        Icon: AlertTriangle,
+        key: 'midlyirritating',
+      }
+    case 'highlytoxic':
+      return {
+        severity: 'high' as const,
+        color: 'orange',
+        bgGradient: 'from-orange-50 via-red-50 to-orange-100 dark:from-orange-950/50 dark:via-red-950/40 dark:to-orange-900/30',
+        borderColor: 'border-orange-500 dark:border-orange-500',
+        iconBg: 'bg-orange-600 dark:bg-orange-600',
+        textColor: 'text-orange-900 dark:text-orange-200',
+        labelColor: 'text-orange-700 dark:text-orange-300',
+        Icon: AlertTriangle,
+        key: 'highlytoxic',
+      }
+    case 'lethallytoxic':
+      return {
+        severity: 'lethal' as const,
+        color: 'red',
+        bgGradient: 'from-red-100 via-rose-100 to-red-200 dark:from-red-950/60 dark:via-rose-950/50 dark:to-red-900/40',
+        borderColor: 'border-red-500 dark:border-red-500',
+        iconBg: 'bg-red-600 dark:bg-red-600',
+        textColor: 'text-red-900 dark:text-red-100',
+        labelColor: 'text-red-700 dark:text-red-300',
+        Icon: Skull,
+        key: 'lethallytoxic',
+      }
+    default:
+      return null
+  }
+}
+
+const ToxicityWarningBanner: React.FC<{
+  toxicityHuman: ToxicityLevel
+  toxicityPets: ToxicityLevel
+  t: (key: string) => string
+}> = ({ toxicityHuman, toxicityPets, t }) => {
+  const humanConfig = getToxicityConfig(toxicityHuman)
+  const petsConfig = getToxicityConfig(toxicityPets)
+  
+  // Determine overall severity for the banner
+  const severityOrder = { safe: 0, mild: 1, high: 2, lethal: 3 }
+  const humanSeverity = humanConfig?.severity || 'safe'
+  const petsSeverity = petsConfig?.severity || 'safe'
+  const maxSeverity = severityOrder[humanSeverity] >= severityOrder[petsSeverity] ? humanSeverity : petsSeverity
+  
+  // If both are safe or unknown, show a simpler safe banner
+  const bothSafe = humanConfig?.severity === 'safe' && petsConfig?.severity === 'safe'
+  const neitherKnown = !humanConfig && !petsConfig
+  
+  if (neitherKnown) {
+    return (
+      <div className="rounded-2xl sm:rounded-3xl border-2 border-dashed border-stone-300 dark:border-stone-600 bg-stone-50/80 dark:bg-stone-900/50 p-4 sm:p-6">
+        <div className="flex items-center gap-3">
+          <div className="flex-shrink-0 h-12 w-12 sm:h-14 sm:w-14 rounded-xl bg-stone-200 dark:bg-stone-700 flex items-center justify-center">
+            <Info className="h-6 w-6 sm:h-7 sm:w-7 text-stone-500 dark:text-stone-400" />
+          </div>
+          <div>
+            <p className="text-sm sm:text-base font-medium text-stone-600 dark:text-stone-400">
+              {t('moreInfo.toxicityBanner.unknownToxicity')}
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  if (bothSafe) {
+    return (
+      <div className="rounded-2xl sm:rounded-3xl border-2 border-emerald-300 dark:border-emerald-600 bg-gradient-to-r from-emerald-50 via-green-50 to-teal-50 dark:from-emerald-950/40 dark:via-green-950/30 dark:to-teal-950/30 p-4 sm:p-6 shadow-lg shadow-emerald-100/50 dark:shadow-emerald-900/20">
+        <div className="flex items-center gap-4">
+          <div className="flex-shrink-0 h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-emerald-500 dark:bg-emerald-600 flex items-center justify-center shadow-lg">
+            <ShieldCheck className="h-8 w-8 sm:h-9 sm:w-9 text-white" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg sm:text-xl font-bold text-emerald-800 dark:text-emerald-200">
+              {t('moreInfo.toxicityBanner.safeForAll')}
+            </h3>
+            <div className="flex flex-wrap gap-3 mt-2">
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                <User className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-sm sm:text-base font-medium">{t('moreInfo.toxicityBanner.humans')}: {t('moreInfo.toxicityBanner.levels.nontoxic')}</span>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                <PawPrint className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-sm sm:text-base font-medium">{t('moreInfo.toxicityBanner.pets')}: {t('moreInfo.toxicityBanner.levels.nontoxic')}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  // Determine banner styling based on max severity
+  const bannerConfig = {
+    mild: {
+      bg: 'from-amber-50 via-yellow-50 to-amber-100 dark:from-amber-950/50 dark:via-yellow-950/40 dark:to-amber-900/30',
+      border: 'border-amber-400 dark:border-amber-500',
+      shadow: 'shadow-amber-100/50 dark:shadow-amber-900/20',
+      titleColor: 'text-amber-900 dark:text-amber-100',
+    },
+    high: {
+      bg: 'from-orange-50 via-red-50 to-orange-100 dark:from-orange-950/50 dark:via-red-950/40 dark:to-orange-900/30',
+      border: 'border-orange-500 dark:border-orange-500',
+      shadow: 'shadow-orange-100/50 dark:shadow-orange-900/20',
+      titleColor: 'text-orange-900 dark:text-orange-100',
+    },
+    lethal: {
+      bg: 'from-red-100 via-rose-100 to-red-200 dark:from-red-950/60 dark:via-rose-950/50 dark:to-red-900/40',
+      border: 'border-red-500 dark:border-red-500',
+      shadow: 'shadow-red-200/50 dark:shadow-red-900/20',
+      titleColor: 'text-red-900 dark:text-red-100',
+    },
+    safe: {
+      bg: 'from-emerald-50 via-green-50 to-emerald-100 dark:from-emerald-950/40 dark:via-green-950/30 dark:to-emerald-900/30',
+      border: 'border-emerald-300 dark:border-emerald-600',
+      shadow: 'shadow-emerald-100/50 dark:shadow-emerald-900/20',
+      titleColor: 'text-emerald-900 dark:text-emerald-100',
+    },
+  }
+  
+  const bannerStyle = bannerConfig[maxSeverity]
+  
+  const renderToxicityCard = (
+    config: ReturnType<typeof getToxicityConfig>,
+    type: 'human' | 'pets',
+    label: string
+  ) => {
+    if (!config) {
+      return (
+        <div className="flex-1 rounded-xl sm:rounded-2xl border-2 border-dashed border-stone-300 dark:border-stone-600 bg-stone-50/80 dark:bg-stone-800/50 p-3 sm:p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-stone-200 dark:bg-stone-700 flex items-center justify-center flex-shrink-0">
+              {type === 'human' ? (
+                <User className="h-5 w-5 sm:h-6 sm:w-6 text-stone-500 dark:text-stone-400" />
+              ) : (
+                <PawPrint className="h-5 w-5 sm:h-6 sm:w-6 text-stone-500 dark:text-stone-400" />
+              )}
+            </div>
+            <div>
+              <p className="text-[10px] sm:text-xs uppercase tracking-wider font-semibold text-stone-500 dark:text-stone-400">{label}</p>
+              <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">{t('moreInfo.toxicityBanner.unknownToxicity')}</p>
+            </div>
+          </div>
+        </div>
+      )
+    }
+    
+    const IconComponent = config.Icon
+    
+    return (
+      <div className={`flex-1 rounded-xl sm:rounded-2xl border-2 ${config.borderColor} bg-gradient-to-br ${config.bgGradient} p-3 sm:p-4 shadow-md`}>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className={`h-12 w-12 sm:h-14 sm:w-14 rounded-xl ${config.iconBg} flex items-center justify-center flex-shrink-0 shadow-lg`}>
+            {type === 'human' ? (
+              <User className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+            ) : (
+              <PawPrint className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`text-[10px] sm:text-xs uppercase tracking-wider font-bold ${config.labelColor}`}>{label}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${config.textColor} flex-shrink-0`} />
+              <p className={`text-base sm:text-lg font-bold ${config.textColor}`}>
+                {t(`moreInfo.toxicityBanner.levels.${config.key}`)}
+              </p>
+            </div>
+            <p className={`text-[10px] sm:text-xs ${config.labelColor} mt-0.5`}>
+              {t(`moreInfo.toxicityBanner.descriptions.${config.key}`)}
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  return (
+    <div className={`rounded-2xl sm:rounded-3xl border-2 ${bannerStyle.border} bg-gradient-to-r ${bannerStyle.bg} p-4 sm:p-6 shadow-lg ${bannerStyle.shadow}`}>
+      <div className="space-y-4">
+        {/* Header with warning icon */}
+        <div className="flex items-center gap-3">
+          <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            maxSeverity === 'lethal' ? 'bg-red-600 dark:bg-red-600' :
+            maxSeverity === 'high' ? 'bg-orange-600 dark:bg-orange-600' :
+            'bg-amber-500 dark:bg-amber-600'
+          } shadow-lg animate-pulse`}>
+            {maxSeverity === 'lethal' ? (
+              <Skull className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+            ) : (
+              <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+            )}
+          </div>
+          <div>
+            <h3 className={`text-lg sm:text-xl font-bold ${bannerStyle.titleColor}`}>
+              {t('moreInfo.toxicityBanner.title')}
+            </h3>
+            <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">
+              {t('moreInfo.toxicityBanner.subtitle')}
+            </p>
+          </div>
+        </div>
+        
+        {/* Two-column toxicity cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          {renderToxicityCard(humanConfig, 'human', t('moreInfo.toxicityBanner.humans'))}
+          {renderToxicityCard(petsConfig, 'pets', t('moreInfo.toxicityBanner.pets'))}
+        </div>
+      </div>
     </div>
   )
 }

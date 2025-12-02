@@ -1153,6 +1153,26 @@
       "hasThorns": "Has thorns",
       "smoothStems": "Smooth stems"
     },
+    "toxicityBanner": {
+      "title": "Toxicity Warning",
+      "subtitle": "Important safety information",
+      "humans": "Humans",
+      "pets": "Pets",
+      "safeForAll": "This plant is safe for both humans and pets",
+      "unknownToxicity": "Toxicity information not available",
+      "levels": {
+        "nontoxic": "Safe",
+        "midlyirritating": "Mild Risk",
+        "highlytoxic": "Dangerous",
+        "lethallytoxic": "Lethal"
+      },
+      "descriptions": {
+        "nontoxic": "No known toxicity",
+        "midlyirritating": "May cause mild irritation",
+        "highlytoxic": "Can cause severe harm",
+        "lethallytoxic": "Can be fatal if ingested"
+      }
+    },
     "meta": {
       "created": "Created",
       "updated": "Updated",

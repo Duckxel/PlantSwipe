@@ -1153,6 +1153,26 @@
       "hasThorns": "A des épines",
       "smoothStems": "Tiges lisses"
     },
+    "toxicityBanner": {
+      "title": "Avertissement de toxicité",
+      "subtitle": "Informations de sécurité importantes",
+      "humans": "Humains",
+      "pets": "Animaux",
+      "safeForAll": "Cette plante est sans danger pour les humains et les animaux",
+      "unknownToxicity": "Informations de toxicité non disponibles",
+      "levels": {
+        "nontoxic": "Sans danger",
+        "midlyirritating": "Risque léger",
+        "highlytoxic": "Dangereux",
+        "lethallytoxic": "Mortel"
+      },
+      "descriptions": {
+        "nontoxic": "Aucune toxicité connue",
+        "midlyirritating": "Peut causer une légère irritation",
+        "highlytoxic": "Peut causer des dommages graves",
+        "lethallytoxic": "Peut être fatal en cas d'ingestion"
+      }
+    },
     "meta": {
       "created": "Créé",
       "updated": "Mis à jour",
