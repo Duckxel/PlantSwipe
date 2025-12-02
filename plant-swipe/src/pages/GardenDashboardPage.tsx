@@ -16,11 +16,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { PlantDetails } from "@/components/plant/PlantDetails";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
+import { getUserBookmarks, getBookmarkDetails } from "@/lib/bookmarks";
+import type { Bookmark as BookmarkType } from "@/types/bookmark";
+import { motion } from "framer-motion";
 import type { Garden, GardenPrivacy } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import {
@@ -185,6 +194,12 @@ export const GardenDashboardPage: React.FC = () => {
   >(undefined);
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
 
+  // Bookmark import state
+  const [bookmarkDialogOpen, setBookmarkDialogOpen] = React.useState(false);
+  const [userBookmarks, setUserBookmarks] = React.useState<BookmarkType[]>([]);
+  const [bookmarksLoading, setBookmarksLoading] = React.useState(false);
+  const [importingFromBookmark, setImportingFromBookmark] = React.useState(false);
+
   React.useEffect(() => {
     if (addDetailsOpen) {
       const t = setTimeout(() => {
@@ -224,7 +239,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false);
   // Track if any modal is open to pause reloads
   const anyModalOpen =
-    addOpen || addDetailsOpen || scheduleOpen || taskOpen || inviteOpen;
+    addOpen || addDetailsOpen || scheduleOpen || taskOpen || inviteOpen || bookmarkDialogOpen;
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -1990,6 +2005,78 @@ export const GardenDashboardPage: React.FC = () => {
     }
   };
 
+  // Fetch user bookmarks when dialog opens
+  const openBookmarkDialog = React.useCallback(async () => {
+    if (!user?.id) return;
+    setBookmarkDialogOpen(true);
+    setBookmarksLoading(true);
+    try {
+      const bookmarks = await getUserBookmarks(user.id);
+      setUserBookmarks(bookmarks);
+    } catch (e) {
+      console.error("Failed to fetch bookmarks:", e);
+      setUserBookmarks([]);
+    } finally {
+      setBookmarksLoading(false);
+    }
+  }, [user?.id]);
+
+  // Import all plants from a bookmark
+  const importPlantsFromBookmark = React.useCallback(async (bookmarkId: string) => {
+    if (!id || !user?.id) return;
+    setImportingFromBookmark(true);
+    try {
+      // Fetch bookmark details with full plant data
+      const bookmark = await getBookmarkDetails(bookmarkId);
+      const items = bookmark.items || [];
+      
+      if (items.length === 0) {
+        setBookmarkDialogOpen(false);
+        setImportingFromBookmark(false);
+        return;
+      }
+
+      let importedCount = 0;
+      for (const item of items) {
+        if (!item.plant_id) continue;
+        try {
+          // Add each plant with plantsOnHand = 1
+          await addPlantToGarden({
+            gardenId: id,
+            plantId: item.plant_id,
+            plantsOnHand: 1,
+          });
+          importedCount++;
+        } catch (e) {
+          // Skip plants that fail (e.g., duplicates if there's a constraint)
+          console.error(`Failed to add plant ${item.plant_id}:`, e);
+        }
+      }
+
+      // Log activity
+      try {
+        const actorColorCss = getActorColorCss();
+        await logGardenActivity({
+          gardenId: id,
+          kind: "plant_added" as any,
+          message: `imported ${importedCount} plant(s) from bookmark "${bookmark.name}"`,
+          actorColor: actorColorCss || null,
+        });
+        setActivityRev((r) => r + 1);
+      } catch {}
+
+      // Close dialog and refresh
+      setBookmarkDialogOpen(false);
+      setImportingFromBookmark(false);
+      emitGardenRealtime("plants");
+      await load();
+    } catch (e: any) {
+      console.error("Failed to import plants from bookmark:", e);
+      setError(e?.message || t("gardenDashboard.plantsSection.importFailed"));
+      setImportingFromBookmark(false);
+    }
+  }, [id, user?.id, t]);
+
   const openEditSchedule = async (gardenPlant: any) => {
     try {
       const schedule = await getGardenPlantSchedule(gardenPlant.id);
@@ -2463,12 +2550,30 @@ export const GardenDashboardPage: React.FC = () => {
                       <div className="text-lg font-medium">
                         {t("gardenDashboard.plantsSection.plantsInGarden")}
                       </div>
-                      <Button
-                        className="rounded-2xl"
-                        onClick={() => setAddOpen(true)}
-                      >
-                        {t("gardenDashboard.plantsSection.addPlant")}
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button className="rounded-2xl gap-1">
+                            {t("gardenDashboard.plantsSection.addPlant")}
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem
+                            onClick={() => setAddOpen(true)}
+                            className="cursor-pointer"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            {t("gardenDashboard.plantsSection.addPlant")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={openBookmarkDialog}
+                            className="cursor-pointer"
+                          >
+                            <Bookmark className="h-4 w-4 mr-2" />
+                            {t("gardenDashboard.plantsSection.addFromBookmarks")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {plants.map((gp: any, idx: number) => (
@@ -2982,6 +3087,102 @@ export const GardenDashboardPage: React.FC = () => {
                     {t("gardenDashboard.plantsSection.add")}
                   </Button>
                 </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Bookmark Selection Dialog */}
+          <Dialog open={bookmarkDialogOpen} onOpenChange={setBookmarkDialogOpen}>
+            <DialogContent
+              className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
+              aria-describedby={undefined}
+            >
+              <DialogHeader>
+                <DialogTitle>
+                  {t("gardenDashboard.plantsSection.selectBookmark")}
+                </DialogTitle>
+                <DialogDescription>
+                  {t("gardenDashboard.plantsSection.selectBookmarkDescription")}
+                </DialogDescription>
+              </DialogHeader>
+              
+              {importingFromBookmark ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  >
+                    <Leaf className="h-12 w-12 text-emerald-500" />
+                  </motion.div>
+                  <span className="text-stone-500 dark:text-stone-400 text-sm">
+                    {t("gardenDashboard.plantsSection.importingPlants")}
+                  </span>
+                </div>
+              ) : bookmarksLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  >
+                    <Leaf className="h-12 w-12 text-emerald-500" />
+                  </motion.div>
+                  <span className="text-stone-400 text-sm">{t('common.loading', { defaultValue: 'Loading...' })}</span>
+                </div>
+              ) : userBookmarks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="flex items-center justify-center w-16 h-16 rounded-full bg-stone-100 dark:bg-stone-800">
+                    <Bookmark className="h-8 w-8 text-stone-400" />
+                  </div>
+                  <p className="text-stone-500 dark:text-stone-400 text-center">
+                    {t("gardenDashboard.plantsSection.noBookmarksFound")}
+                  </p>
+                  <p className="text-stone-400 dark:text-stone-500 text-sm text-center">
+                    {t("gardenDashboard.plantsSection.createBookmarkHint")}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {userBookmarks.map((bookmark) => (
+                    <button
+                      key={bookmark.id}
+                      onClick={() => importPlantsFromBookmark(bookmark.id)}
+                      className="w-full text-left p-4 rounded-2xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30] transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        {bookmark.preview_images && bookmark.preview_images.length > 0 ? (
+                          <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800">
+                            <img
+                              src={bookmark.preview_images[0]}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+                            <Leaf className="h-6 w-6 text-emerald-500" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{bookmark.name}</div>
+                          <div className="text-sm text-stone-500 dark:text-stone-400">
+                            {bookmark.plant_count || 0} {t('bookmarks.plants', { defaultValue: 'plants' })}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              <div className="flex justify-end pt-2">
+                <Button
+                  variant="secondary"
+                  className="rounded-2xl"
+                  onClick={() => setBookmarkDialogOpen(false)}
+                  disabled={importingFromBookmark}
+                >
+                  {t("common.cancel")}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
