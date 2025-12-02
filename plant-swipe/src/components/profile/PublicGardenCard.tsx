@@ -19,7 +19,7 @@ export const PublicGardenCard: React.FC<PublicGardenCardProps> = ({ garden }) =>
 
   return (
     <Link 
-      to={`/gardens/${garden.id}`} 
+      to={`/garden/${garden.id}`} 
       className="block group relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
