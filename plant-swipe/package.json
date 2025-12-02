@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run generate:sitemap && node --max-old-space-size=6144 ./node_modules/typescript/bin/tsc -b && node --max-old-space-size=6144 ./node_modules/vite/bin/vite.js build",
+    "build": "npm run generate:sitemap && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "serve": "node server.js",

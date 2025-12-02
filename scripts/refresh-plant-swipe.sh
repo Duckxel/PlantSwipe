@@ -565,10 +565,6 @@ fi
 # Install and build Node app
 log "Installing Node dependencies…"
 cd "$NODE_DIR"
-# Ensure a clean install: remove node_modules if present to avoid permission issues
-if [[ -d "$NODE_DIR/node_modules" ]]; then
-  rm -rf "$NODE_DIR/node_modules" || true
-fi
 # Use a writable per-repo npm cache to avoid /var/www/.npm permission issues
 CACHE_DIR="$NODE_DIR/.npm-cache"
 mkdir -p "$CACHE_DIR" || true
@@ -577,21 +573,46 @@ chmod -R u+rwX "$CACHE_DIR" || true
 if [[ -n "$REPO_OWNER" ]]; then
   chown -R "$REPO_OWNER:$REPO_OWNER" "$CACHE_DIR" || true
 fi
-# Always run npm as the repo owner to keep ownership consistent
-if [[ "$REPO_OWNER" != "" ]]; then
-  if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
-  elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
-    if $SUDO -n true >/dev/null 2>&1; then
-      $SUDO -u "$REPO_OWNER" -H npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+
+# Check if we can skip npm install by comparing package-lock.json hash
+LOCK_HASH_FILE="$NODE_DIR/.npm-lock-hash"
+CURRENT_LOCK_HASH=""
+if [[ -f "$NODE_DIR/package-lock.json" ]]; then
+  CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/package-lock.json" 2>/dev/null | cut -d' ' -f1 || md5sum "$NODE_DIR/package-lock.json" 2>/dev/null | cut -d' ' -f1 || true)"
+fi
+CACHED_LOCK_HASH=""
+if [[ -f "$LOCK_HASH_FILE" ]]; then
+  CACHED_LOCK_HASH="$(cat "$LOCK_HASH_FILE" 2>/dev/null || true)"
+fi
+
+SKIP_NPM_INSTALL=false
+if [[ -n "$CURRENT_LOCK_HASH" && "$CURRENT_LOCK_HASH" == "$CACHED_LOCK_HASH" && -d "$NODE_DIR/node_modules" ]]; then
+  log "package-lock.json unchanged — skipping npm install"
+  SKIP_NPM_INSTALL=true
+fi
+
+if [[ "$SKIP_NPM_INSTALL" != "true" ]]; then
+  log "Running npm ci…"
+  # Always run npm as the repo owner to keep ownership consistent
+  if [[ "$REPO_OWNER" != "" ]]; then
+    if [[ "$EUID" -eq 0 ]]; then
+      sudo -u "$REPO_OWNER" -H npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+    elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
+      if $SUDO -n true >/dev/null 2>&1; then
+        $SUDO -u "$REPO_OWNER" -H npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+      else
+        npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+      fi
     else
       npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
     fi
   else
     npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
   fi
-else
-  npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+  # Save the lock hash for next time
+  if [[ -n "$CURRENT_LOCK_HASH" ]]; then
+    echo "$CURRENT_LOCK_HASH" > "$LOCK_HASH_FILE" || true
+  fi
 fi
 
 log "Building application…"
