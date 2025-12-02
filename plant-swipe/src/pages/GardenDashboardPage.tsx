@@ -371,6 +371,28 @@ export const GardenDashboardPage: React.FC = () => {
                 setServerToday(todayIso);
                 serverTodayRef.current = todayIso;
               }
+              // Use pre-calculated stats from server if available (avoids additional round-trips)
+              if (data.todayProgress && typeof data.todayProgress.due === 'number') {
+                const { due, completed } = data.todayProgress;
+                const today = String(data.serverNow || '').slice(0, 10);
+                if (today) {
+                  setDailyStats((prev) => {
+                    const existing = prev.find(d => d.date === today);
+                    if (existing) {
+                      return prev.map(d => 
+                        d.date === today ? { ...d, due, completed, success: due === 0 || completed >= due } : d
+                      );
+                    }
+                    return [...prev, { date: today, due, completed, success: due === 0 || completed >= due }];
+                  });
+                }
+              }
+              if (typeof data.totalOnHand === 'number') {
+                setTotalOnHand(data.totalOnHand);
+              }
+              if (typeof data.speciesCount === 'number') {
+                setSpeciesOnHand(data.speciesCount);
+              }
               // Mark as fully hydrated if we got all data
               hydrated = hydratedGarden && hydratedMembers && hydratedPlants !== null && hydratedPlants.length > 0;
             }
@@ -628,7 +650,6 @@ export const GardenDashboardPage: React.FC = () => {
         // Compute per-instance counts and totals from garden_plants instances, not species-level inventory
         const perInstanceCounts: Record<string, number> = {};
         let total = 0;
-        let species = 0;
         const seenSpecies = new Set<string>();
         const plantsLocal = (hydratedPlants ?? gpsLocal ?? plants) as any[];
         for (const gp of plantsLocal) {
@@ -636,11 +657,11 @@ export const GardenDashboardPage: React.FC = () => {
           perInstanceCounts[String(gp.plantId)] =
             (perInstanceCounts[String(gp.plantId)] || 0) + c;
           total += c;
-          if (c > 0 && !seenSpecies.has(String(gp.plantId))) {
-            seenSpecies.add(String(gp.plantId));
-            species += 1;
-          }
+          // Count species: every unique plantId is a species
+          seenSpecies.add(String(gp.plantId));
         }
+        // Species count = number of unique plant IDs (species) in the garden
+        const species = seenSpecies.size;
         setInstanceCounts(perInstanceCounts);
         setTotalOnHand(total);
         setSpeciesOnHand(species);
@@ -1266,18 +1287,17 @@ export const GardenDashboardPage: React.FC = () => {
           // Update inventory counts
           const perInstanceCounts: Record<string, number> = {};
           let total = 0;
-          let species = 0;
           const seenSpecies = new Set<string>();
           for (const gp of gpsRaw) {
             const c = Number(gp.plantsOnHand || 0);
             perInstanceCounts[String(gp.plantId)] =
               (perInstanceCounts[String(gp.plantId)] || 0) + c;
             total += c;
-            if (c > 0 && !seenSpecies.has(String(gp.plantId))) {
-              seenSpecies.add(String(gp.plantId));
-              species += 1;
-            }
+            // Count species: every unique plantId is a species
+            seenSpecies.add(String(gp.plantId));
           }
+          // Species count = number of unique plant IDs (species) in the garden
+          const species = seenSpecies.size;
           setInstanceCounts(perInstanceCounts);
           setTotalOnHand(total);
           setSpeciesOnHand(species);

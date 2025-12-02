@@ -685,6 +685,7 @@
     "completed": "Terminé",
     "doneBy": "Fait par",
     "someone": "Quelqu'un",
+    "completing": "En cours...",
     "activity": {
       "completedTask": "a terminé la tâche \"{{taskType}}\" sur \"{{plantName}}\"",
       "progressedTask": "a progressé la tâche \"{{taskType}}\" sur \"{{plantName}}\" ({{completed}}/{{required}})",

@@ -3969,6 +3969,12 @@ end $$;
 drop index if exists gpto_task_due_idx;
 create unique index if not exists gpto_task_due_unq on public.garden_plant_task_occurrences (task_id, due_at);
 
+-- Performance index for date range queries on task occurrences (speeds up daily/weekly progress queries)
+create index if not exists idx_gpto_due_at_task on public.garden_plant_task_occurrences (due_at, task_id);
+
+-- Composite index for garden plants lookup by garden (speeds up species count and plant listing)
+create index if not exists idx_garden_plants_garden_sort on public.garden_plants (garden_id, sort_index NULLS LAST);
+
 -- ========== Friends system ==========
 -- Friend requests table
 create table if not exists public.friend_requests (

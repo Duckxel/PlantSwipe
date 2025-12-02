@@ -685,6 +685,7 @@
     "completed": "Completed",
     "doneBy": "Done by",
     "someone": "Someone",
+    "completing": "Completing...",
     "activity": {
       "completedTask": "has completed \"{{taskType}}\" Task on \"{{plantName}}\"",
       "progressedTask": "has progressed \"{{taskType}}\" Task on \"{{plantName}}\" ({{completed}}/{{required}})",
