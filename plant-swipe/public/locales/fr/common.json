@@ -1329,6 +1329,9 @@
       }
     }
   },
+  "bookmarks": {
+    "plants": "plantes"
+  },
   "gardenDashboard": {
     "loading": "Chargement...",
     "overview": "Aperçu",
