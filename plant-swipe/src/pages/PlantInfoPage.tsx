@@ -1086,13 +1086,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </p>
         </div>
       
-        {/* Prominent Toxicity Warning Banner */}
-        <ToxicityWarningBanner
-          toxicityHuman={plant.identity?.toxicityHuman}
-          toxicityPets={plant.identity?.toxicityPets}
-          t={t}
-        />
-      
         {/* Dynamic Grid Layout */}
         <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)] items-stretch">
           {(height !== null || wingspan !== null || spacing !== null) && (
@@ -1275,6 +1268,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </div>
           </section>
         )}
+
+      {/* Prominent Toxicity Warning Banner - Placed before detailed info cards */}
+        <ToxicityWarningBanner
+          toxicityHuman={plant.identity?.toxicityHuman}
+          toxicityPets={plant.identity?.toxicityPets}
+          t={t}
+        />
 
       {/* Info Cards Section - Full width for better mobile experience */}
         <div className="space-y-3 sm:space-y-4">
