@@ -32,7 +32,6 @@ import type {
 } from "@/components/tiptap-ui/text-color-button"
 import {
   TextColorButton,
-  pickTextColorsByValue,
   useTextColor,
 } from "@/components/tiptap-ui/text-color-button"
 
@@ -83,15 +82,18 @@ export const TextColorPopoverButton = forwardRef<
 
 TextColorPopoverButton.displayName = "TextColorPopoverButton"
 
+// Predefined color options for the popover
+const DEFAULT_TEXT_COLORS: TextColor[] = [
+  { label: "Red", value: "#d62828", hex: "#d62828" },
+  { label: "Yellow", value: "#ffb703", hex: "#ffb703" },
+  { label: "Purple", value: "#8338ec", hex: "#8338ec" },
+  { label: "Blue", value: "#0a9396", hex: "#0a9396" },
+  { label: "Green", value: "#6a994e", hex: "#6a994e" },
+]
+
 export function TextColorPopoverContent({
   editor,
-  colors = pickTextColorsByValue([
-    "#d62828", // Red
-    "#ffb703", // Yellow
-    "#8338ec", // Purple
-    "#0a9396", // Blue
-    "#6a994e", // Green
-  ]),
+  colors = DEFAULT_TEXT_COLORS,
 }: TextColorPopoverContentProps) {
   const { handleRemoveTextColor } = useTextColor({ editor })
   const isMobile = useIsBreakpoint()
@@ -162,13 +164,7 @@ export function TextColorPopoverContent({
 
 export function TextColorPopover({
   editor: providedEditor,
-  colors = pickTextColorsByValue([
-    "#d62828", // Red
-    "#ffb703", // Yellow
-    "#8338ec", // Purple
-    "#0a9396", // Blue
-    "#6a994e", // Green
-  ]),
+  colors = DEFAULT_TEXT_COLORS,
   hideWhenUnavailable = false,
   onApplied,
   ...props

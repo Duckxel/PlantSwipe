@@ -331,13 +331,14 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
     return (
       <div
         className={cn(
-          "rounded-3xl border border-stone-200/80 bg-white/90 p-0 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f11]",
+          "rounded-3xl border border-stone-200/80 bg-white/90 p-0 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f11] relative",
           className,
         )}
       >
         <EditorContext.Provider value={{ editor }}>
           <Toolbar
             ref={toolbarRef}
+            className="sticky top-0 z-20 rounded-t-3xl bg-white/95 backdrop-blur-sm dark:bg-[#0f0f11]/95"
             style={
               isMobile
                 ? ({
