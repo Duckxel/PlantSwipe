@@ -620,8 +620,8 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   })
 }
 
-export async function addPlantToGarden(params: { gardenId: string; plantId: string; nickname?: string | null; seedsPlanted?: number; plantedAt?: string | null; expectedBloomDate?: string | null }): Promise<GardenPlant> {
-  const { gardenId, plantId, nickname = null, seedsPlanted = 0, plantedAt = null, expectedBloomDate = null } = params
+export async function addPlantToGarden(params: { gardenId: string; plantId: string; nickname?: string | null; seedsPlanted?: number; plantedAt?: string | null; expectedBloomDate?: string | null; plantsOnHand?: number }): Promise<GardenPlant> {
+  const { gardenId, plantId, nickname = null, seedsPlanted = 0, plantedAt = null, expectedBloomDate = null, plantsOnHand = 0 } = params
   // Determine next sort_index to append to bottom
   const { data: maxRow } = await supabase
     .from('garden_plants')
@@ -633,7 +633,7 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
   const nextIndex = Number((maxRow as any)?.sort_index ?? -1) + 1
   const { data, error } = await supabase
     .from('garden_plants')
-    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, plants_on_hand: 0, sort_index: nextIndex })
+    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, plants_on_hand: plantsOnHand, sort_index: nextIndex })
     .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, plants_on_hand, sort_index')
     .single()
   if (error) throw new Error(error.message)
