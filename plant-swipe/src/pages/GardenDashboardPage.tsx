@@ -2550,30 +2550,31 @@ export const GardenDashboardPage: React.FC = () => {
                       <div className="text-lg font-medium">
                         {t("gardenDashboard.plantsSection.plantsInGarden")}
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button className="rounded-2xl gap-1">
-                            {t("gardenDashboard.plantsSection.addPlant")}
-                            <ChevronDown className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem
-                            onClick={() => setAddOpen(true)}
-                            className="cursor-pointer"
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            {t("gardenDashboard.plantsSection.addPlant")}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={openBookmarkDialog}
-                            className="cursor-pointer"
-                          >
-                            <Bookmark className="h-4 w-4 mr-2" />
-                            {t("gardenDashboard.plantsSection.addFromBookmarks")}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center">
+                        <Button
+                          className="rounded-l-2xl rounded-r-none border-r-0"
+                          onClick={() => setAddOpen(true)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          {t("gardenDashboard.plantsSection.addPlant")}
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button className="rounded-l-none rounded-r-2xl px-2">
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem
+                              onClick={openBookmarkDialog}
+                              className="cursor-pointer"
+                            >
+                              <Bookmark className="h-4 w-4 mr-2" />
+                              {t("gardenDashboard.plantsSection.addFromBookmarks")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {plants.map((gp: any, idx: number) => (
