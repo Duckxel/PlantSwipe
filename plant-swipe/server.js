@@ -2605,7 +2605,7 @@ const supabaseAdmin = null
 // ADMIN STATS CACHE - Background refresh for instant responses
 // ============================================================================
 const adminStatsCache = {
-  stats: { profilesCount: 0, authUsersCount: null, plantsCount: null },
+  stats: { profilesCount: 0, authUsersCount: null, plantsCount: 0 },
   visitors: { currentUniqueVisitors10m: 0, uniqueIpsLast30m: 0, uniqueIpsLast60m: 0, visitsLast60m: 0, uniqueIps7d: 0, series7d: [] },
   sources: { topCountries: [], otherCountries: {}, topReferrers: [], otherReferrers: {} },
   onlineUsers: { count: 0 },
@@ -2622,7 +2622,7 @@ async function refreshStatsCache() {
   adminStatsCache.refreshing.stats = true
   const REFRESH_TIMEOUT = 5000 // 5 second timeout for background refresh
   try {
-    let profilesCount = 0, authUsersCount = null, plantsCount = null
+    let profilesCount = 0, authUsersCount = null, plantsCount = 0
     
     // Try direct SQL first
     if (sql) {
@@ -6503,7 +6503,7 @@ app.post('/api/send-automatic-email', async (req, res) => {
   
   // Cache is stale/empty - do a quick fetch with short timeout
   try {
-    let profilesCount = 0, authUsersCount = null, plantsCount = null
+    let profilesCount = 0, authUsersCount = null, plantsCount = 0
     if (sql) {
       const [p, a, pl] = await Promise.all([
         withTimeout(sql`select count(*)::int as count from public.profiles`, 1500, 'PROFILES_TIMEOUT').catch(() => []),

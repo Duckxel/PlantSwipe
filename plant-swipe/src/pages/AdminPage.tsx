@@ -2175,16 +2175,14 @@ export const AdminPage: React.FC = () => {
       } catch (e) {
         console.error("[AdminPage] Failed to load branches:", e);
         // Don't clear existing data on error - keep what we have
-        // Only clear on initial load if we have no data yet
-        if (isInitial && branchOptions.length === 0) {
-          // Only clear if we truly have no data
-        }
       } finally {
         if (isInitial) setBranchesLoading(false);
         else setBranchesRefreshing(false);
       }
     },
-    [safeJson, fetchWithRetry, branchOptions.length],
+    // Note: intentionally omitting branchOptions from deps to avoid re-triggering on data change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [safeJson, fetchWithRetry],
   );
 
   React.useEffect(() => {
