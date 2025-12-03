@@ -528,6 +528,36 @@ export async function updateGardenPrivacy(gardenId: string, privacy: GardenPriva
   }
 }
 
+/**
+ * Deletes a garden and its cover image from storage.
+ * This calls the server endpoint which handles both the database row deletion
+ * and the storage cleanup for the cover image.
+ */
+export async function deleteGarden(gardenId: string): Promise<{ ok: boolean; coverDeleted?: boolean }> {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData?.session?.access_token
+  if (!token) {
+    throw new Error('You must be signed in to delete a garden')
+  }
+  
+  const resp = await fetch(`/api/garden/${encodeURIComponent(gardenId)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}))
+    throw new Error(body?.error || `Failed to delete garden (status ${resp.status})`)
+  }
+  
+  const result = await resp.json()
+  return { ok: Boolean(result.ok), coverDeleted: Boolean(result.coverDeleted) }
+}
+
 export async function refreshGardenStreak(gardenId: string, anchorDayIso?: string | null): Promise<void> {
   // Anchor defaults to yesterday in UTC if not provided
   let anchor = anchorDayIso
@@ -699,6 +729,33 @@ export async function addGardenMember(params: { gardenId: string; userId: string
 
 export async function updateGardenMemberRole(params: { gardenId: string; userId: string; role: 'member' | 'owner' }): Promise<void> {
   const { gardenId, userId, role } = params
+  
+  // If demoting an owner to member, check if this is the last owner
+  // If so, delete the garden properly (including cover image cleanup)
+  if (role === 'member') {
+    const { data: currentMember } = await supabase
+      .from('garden_members')
+      .select('role')
+      .eq('garden_id', gardenId)
+      .eq('user_id', userId)
+      .maybeSingle()
+    
+    if (currentMember?.role === 'owner') {
+      const { count } = await supabase
+        .from('garden_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('garden_id', gardenId)
+        .eq('role', 'owner')
+      
+      if ((count ?? 0) <= 1) {
+        // This is the last owner - delete the garden via server endpoint
+        // which handles cover image cleanup
+        await deleteGarden(gardenId)
+        return
+      }
+    }
+  }
+  
   const { error } = await supabase
     .from('garden_members')
     .update({ role })
@@ -709,6 +766,31 @@ export async function updateGardenMemberRole(params: { gardenId: string; userId:
 
 export async function removeGardenMember(params: { gardenId: string; userId: string }): Promise<void> {
   const { gardenId, userId } = params
+  
+  // Check if the member being removed is the last owner
+  // If so, delete the garden properly (including cover image cleanup)
+  const { data: memberData } = await supabase
+    .from('garden_members')
+    .select('role')
+    .eq('garden_id', gardenId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  
+  if (memberData?.role === 'owner') {
+    const { count } = await supabase
+      .from('garden_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('garden_id', gardenId)
+      .eq('role', 'owner')
+    
+    if ((count ?? 0) <= 1) {
+      // This is the last owner - delete the garden via server endpoint
+      // which handles cover image cleanup
+      await deleteGarden(gardenId)
+      return
+    }
+  }
+  
   const { error } = await supabase
     .from('garden_members')
     .delete()

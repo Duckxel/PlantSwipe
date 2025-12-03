@@ -8503,6 +8503,7 @@ app.post('/api/account/delete', async (req, res) => {
 
     let deletedGardens = 0
     let deletedGardenIds = []
+    let deletedCoverImages = 0
     try {
       const { data: ownerMemberships, error: ownerErr } = await supabaseServiceClient
         .from('garden_members')
@@ -8518,6 +8519,16 @@ app.post('/api/account/delete', async (req, res) => {
         ),
       )
       if (gardenIds.length > 0) {
+        // 1. Get cover image URLs for all gardens before deleting
+        const { data: gardensWithCovers } = await supabaseServiceClient
+          .from('gardens')
+          .select('id, cover_image_url')
+          .in('id', gardenIds)
+        const coverUrls = (gardensWithCovers || [])
+          .map((g) => g?.cover_image_url)
+          .filter((url) => typeof url === 'string' && url.length > 0)
+
+        // 2. Delete the garden rows (cascade will delete related rows)
         const { data: deletedRows, error: deleteGardensErr } = await supabaseServiceClient
           .from('gardens')
           .delete()
@@ -8526,6 +8537,16 @@ app.post('/api/account/delete', async (req, res) => {
         if (deleteGardensErr) throw deleteGardensErr
         deletedGardenIds = (deletedRows || []).map((row) => row?.id).filter(Boolean)
         deletedGardens = deletedGardenIds.length
+
+        // 3. Delete cover images from storage (best-effort, don't fail account deletion)
+        for (const coverUrl of coverUrls) {
+          try {
+            const result = await deleteGardenCoverObject(coverUrl)
+            if (result.deleted) deletedCoverImages++
+          } catch (coverErr) {
+            console.warn('[account-delete] Failed to delete cover image', coverUrl, coverErr?.message)
+          }
+        }
       }
     } catch (gardenErr) {
       console.error('[account-delete] Failed to delete owned gardens', gardenErr)
@@ -8554,6 +8575,7 @@ app.post('/api/account/delete', async (req, res) => {
       ok: true,
       deletedGardens,
       deletedGardenIds,
+      deletedCoverImages,
       deletedUser: true,
     })
   } catch (err) {
@@ -9625,6 +9647,71 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
     res.json({ ok: true, deleted: Boolean(result.deleted), reason: result.reason })
   } catch (err) {
     res.status(500).json({ error: err?.message || 'Failed to delete cover image' })
+  }
+})
+
+// DELETE a garden (and its cover image from storage)
+app.delete('/api/garden/:id', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(503).json({ error: 'Garden deletion is not configured on this server' })
+    return
+  }
+  const gardenId = String(req.params.id || '').trim()
+  if (!gardenId) {
+    res.status(400).json({ error: 'Garden id is required' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const canDelete = await isGardenOwner(req, gardenId, user.id)
+  if (!canDelete) {
+    res.status(403).json({ error: 'Forbidden - only garden owners can delete a garden' })
+    return
+  }
+
+  try {
+    // 1. Get the garden's cover image URL before deleting
+    const gardenRow = await getGardenCoverRow(gardenId)
+    const coverImageUrl = gardenRow?.cover_image_url || null
+
+    // 2. Delete the garden row (cascade will delete related rows)
+    const { error: deleteErr } = await supabaseServiceClient
+      .from('gardens')
+      .delete()
+      .eq('id', gardenId)
+
+    if (deleteErr) {
+      console.error('[garden-delete] Failed to delete garden row', deleteErr)
+      res.status(500).json({ error: 'Failed to delete garden' })
+      return
+    }
+
+    // 3. Delete the cover image from storage if it exists
+    let coverDeleted = false
+    let coverDeleteReason = 'no_cover'
+    if (coverImageUrl) {
+      try {
+        const result = await deleteGardenCoverObject(coverImageUrl)
+        coverDeleted = Boolean(result.deleted)
+        coverDeleteReason = result.reason || (coverDeleted ? 'deleted' : 'unknown')
+      } catch (coverErr) {
+        console.error('[garden-delete] Failed to delete cover image from storage', coverErr)
+        coverDeleteReason = coverErr?.message || 'delete_failed'
+      }
+    }
+
+    res.json({
+      ok: true,
+      gardenId,
+      coverDeleted,
+      coverDeleteReason,
+    })
+  } catch (err) {
+    console.error('[garden-delete] Unexpected error', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete garden' })
   }
 })
 
