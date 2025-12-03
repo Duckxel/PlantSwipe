@@ -8577,33 +8577,113 @@ app.post('/api/account/delete', async (req, res) => {
 
     let deletedGardens = 0
     let deletedGardenIds = []
+    let deletedCoverImages = 0
+    let promotedMembers = 0
+    let leftGardens = 0
     try {
-      const { data: ownerMemberships, error: ownerErr } = await supabaseServiceClient
+      // Get all gardens where the user is a member (any role)
+      const { data: userMemberships, error: memberErr } = await supabaseServiceClient
         .from('garden_members')
-        .select('garden_id')
+        .select('garden_id, role')
         .eq('user_id', userId)
-        .eq('role', 'owner')
-      if (ownerErr) throw ownerErr
+      if (memberErr) throw memberErr
+
       const gardenIds = Array.from(
         new Set(
-          (ownerMemberships || [])
+          (userMemberships || [])
             .map((row) => row?.garden_id)
             .filter((gid) => typeof gid === 'string' && gid.length > 0),
         ),
       )
-      if (gardenIds.length > 0) {
-        const { data: deletedRows, error: deleteGardensErr } = await supabaseServiceClient
-          .from('gardens')
-          .delete()
-          .in('id', gardenIds)
-          .select('id')
-        if (deleteGardensErr) throw deleteGardensErr
-        deletedGardenIds = (deletedRows || []).map((row) => row?.id).filter(Boolean)
-        deletedGardens = deletedGardenIds.length
+
+      for (const gardenId of gardenIds) {
+        const userRole = (userMemberships || []).find((m) => m.garden_id === gardenId)?.role
+
+        // Get all members of this garden
+        const { data: allMembers } = await supabaseServiceClient
+          .from('garden_members')
+          .select('user_id, role')
+          .eq('garden_id', gardenId)
+
+        const otherMembers = (allMembers || []).filter((m) => m.user_id !== userId)
+        const otherOwners = otherMembers.filter((m) => m.role === 'owner')
+
+        if (userRole === 'owner' && otherOwners.length === 0) {
+          // User is the only owner
+          if (otherMembers.length > 0) {
+            // There are other members - promote one to owner and remove user
+            const newOwner = otherMembers[0]
+            const { error: promoteErr } = await supabaseServiceClient
+              .from('garden_members')
+              .update({ role: 'owner' })
+              .eq('garden_id', gardenId)
+              .eq('user_id', newOwner.user_id)
+            if (promoteErr) {
+              console.warn('[account-delete] Failed to promote member', gardenId, promoteErr?.message)
+            } else {
+              promotedMembers++
+            }
+            // Remove the user from the garden
+            const { error: removeErr } = await supabaseServiceClient
+              .from('garden_members')
+              .delete()
+              .eq('garden_id', gardenId)
+              .eq('user_id', userId)
+            if (removeErr) {
+              console.warn('[account-delete] Failed to remove user from garden', gardenId, removeErr?.message)
+            } else {
+              leftGardens++
+            }
+          } else {
+            // No other members - delete the garden entirely
+            // First get the cover image URL
+            const { data: gardenRow } = await supabaseServiceClient
+              .from('gardens')
+              .select('cover_image_url')
+              .eq('id', gardenId)
+              .maybeSingle()
+            const coverUrl = gardenRow?.cover_image_url || null
+
+            // Delete the garden
+            const { error: deleteErr } = await supabaseServiceClient
+              .from('gardens')
+              .delete()
+              .eq('id', gardenId)
+            if (deleteErr) {
+              console.warn('[account-delete] Failed to delete garden', gardenId, deleteErr?.message)
+            } else {
+              deletedGardens++
+              deletedGardenIds.push(gardenId)
+
+              // Delete cover image from storage
+              if (coverUrl) {
+                try {
+                  const result = await deleteGardenCoverObject(coverUrl)
+                  if (result.deleted) deletedCoverImages++
+                } catch (coverErr) {
+                  console.warn('[account-delete] Failed to delete cover image', coverUrl, coverErr?.message)
+                }
+              }
+            }
+          }
+        } else {
+          // User is not the only owner (either not an owner, or there are other owners)
+          // Just remove the user from the garden
+          const { error: removeErr } = await supabaseServiceClient
+            .from('garden_members')
+            .delete()
+            .eq('garden_id', gardenId)
+            .eq('user_id', userId)
+          if (removeErr) {
+            console.warn('[account-delete] Failed to remove user from garden', gardenId, removeErr?.message)
+          } else {
+            leftGardens++
+          }
+        }
       }
     } catch (gardenErr) {
-      console.error('[account-delete] Failed to delete owned gardens', gardenErr)
-      res.status(500).json({ error: 'Failed to delete owned gardens' })
+      console.error('[account-delete] Failed to process gardens', gardenErr)
+      res.status(500).json({ error: 'Failed to process gardens' })
       return
     }
 
@@ -8628,6 +8708,9 @@ app.post('/api/account/delete', async (req, res) => {
       ok: true,
       deletedGardens,
       deletedGardenIds,
+      deletedCoverImages,
+      promotedMembers,
+      leftGardens,
       deletedUser: true,
     })
   } catch (err) {
@@ -9699,6 +9782,71 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
     res.json({ ok: true, deleted: Boolean(result.deleted), reason: result.reason })
   } catch (err) {
     res.status(500).json({ error: err?.message || 'Failed to delete cover image' })
+  }
+})
+
+// DELETE a garden (and its cover image from storage)
+app.delete('/api/garden/:id', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(503).json({ error: 'Garden deletion is not configured on this server' })
+    return
+  }
+  const gardenId = String(req.params.id || '').trim()
+  if (!gardenId) {
+    res.status(400).json({ error: 'Garden id is required' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const canDelete = await isGardenOwner(req, gardenId, user.id)
+  if (!canDelete) {
+    res.status(403).json({ error: 'Forbidden - only garden owners can delete a garden' })
+    return
+  }
+
+  try {
+    // 1. Get the garden's cover image URL before deleting
+    const gardenRow = await getGardenCoverRow(gardenId)
+    const coverImageUrl = gardenRow?.cover_image_url || null
+
+    // 2. Delete the garden row (cascade will delete related rows)
+    const { error: deleteErr } = await supabaseServiceClient
+      .from('gardens')
+      .delete()
+      .eq('id', gardenId)
+
+    if (deleteErr) {
+      console.error('[garden-delete] Failed to delete garden row', deleteErr)
+      res.status(500).json({ error: 'Failed to delete garden' })
+      return
+    }
+
+    // 3. Delete the cover image from storage if it exists
+    let coverDeleted = false
+    let coverDeleteReason = 'no_cover'
+    if (coverImageUrl) {
+      try {
+        const result = await deleteGardenCoverObject(coverImageUrl)
+        coverDeleted = Boolean(result.deleted)
+        coverDeleteReason = result.reason || (coverDeleted ? 'deleted' : 'unknown')
+      } catch (coverErr) {
+        console.error('[garden-delete] Failed to delete cover image from storage', coverErr)
+        coverDeleteReason = coverErr?.message || 'delete_failed'
+      }
+    }
+
+    res.json({
+      ok: true,
+      gardenId,
+      coverDeleted,
+      coverDeleteReason,
+    })
+  } catch (err) {
+    console.error('[garden-delete] Unexpected error', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete garden' })
   }
 })
 
