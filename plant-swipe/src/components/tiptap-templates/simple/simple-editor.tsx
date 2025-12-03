@@ -268,6 +268,7 @@ export function SimpleEditor() {
       <EditorContext.Provider value={{ editor }}>
         <Toolbar
           ref={toolbarRef}
+          className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm dark:bg-[#0e0e10]/95"
           style={{
             ...(isMobile
               ? {

@@ -1000,26 +1000,29 @@ export const AdminEmailTemplatePage: React.FC = () => {
           </div>
 
           {/* Editor Section */}
-          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-stone-100 dark:border-[#2a2a2d] flex items-center justify-between">
+          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] shadow-sm flex flex-col" style={{ maxHeight: "calc(100vh - 200px)", minHeight: "600px" }}>
+            <div className="px-5 py-3 border-b border-stone-100 dark:border-[#2a2a2d] flex items-center justify-between bg-white dark:bg-[#1e1e20] rounded-t-2xl flex-shrink-0">
               <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Email Content</span>
               {templateForm.bodyHtml.length > 0 && (
                 <span className="text-xs text-stone-400">{templateForm.bodyHtml.length} characters</span>
               )}
             </div>
             
-            <BlogEditor
-              key={templateEditorKey}
-              ref={templateEditorRef}
-              initialHtml={initialBody.html}
-              initialDocument={initialBody.doc}
-              uploadFolder="email-templates"
-              extraExtensions={[VariableHighlighter]}
-              className="min-h-[600px]"
-              onUpdate={({ html, doc }) =>
-                setTemplateForm((prev) => ({ ...prev, bodyHtml: html, bodyDoc: doc }))
-              }
-            />
+            <div className="flex-1 overflow-y-auto">
+              <BlogEditor
+                key={templateEditorKey}
+                ref={templateEditorRef}
+                initialHtml={initialBody.html}
+                initialDocument={initialBody.doc}
+                uploadFolder="email-templates"
+                extraExtensions={[VariableHighlighter]}
+                variant="embedded"
+                className="min-h-[500px]"
+                onUpdate={({ html, doc }) =>
+                  setTemplateForm((prev) => ({ ...prev, bodyHtml: html, bodyDoc: doc }))
+                }
+              />
+            </div>
           </div>
         </div>
         </div>
@@ -1169,13 +1172,9 @@ export const AdminEmailTemplatePage: React.FC = () => {
           
           {/* Email Content Styles */}
           <style>{`
-            /* Text color support - respect inline styles */
-            .email-preview-body [style*="color"] {
-              color: inherit;
-            }
-            .email-preview-body span[style*="color"] {
-              color: var(--inline-color, inherit);
-            }
+            /* Text colors - inline styles from editor take precedence automatically */
+            /* Colored text spans will display their inline color attribute */
+            
             .email-preview-body h1 {
               font-size: 32px !important;
               font-weight: 700 !important;

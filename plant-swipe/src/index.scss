@@ -177,28 +177,11 @@
 .blog-article-content {
   @apply text-stone-700 dark:text-stone-100;
   
-  /* Preserve inline text colors from the editor */
-  span[style*="color"] {
-    color: inherit;
-  }
-  
-  /* Text color CSS variables support */
-  --tt-text-color-red: #dc2626;
-  --tt-text-color-orange: #ea580c;
-  --tt-text-color-green: #16a34a;
-  --tt-text-color-blue: #2563eb;
-  --tt-text-color-purple: #9333ea;
-  --tt-text-color-gray: #6b7280;
+  /* Inline text colors from the editor are preserved automatically via style attribute */
+  /* No override needed - inline styles have highest specificity */
 }
 
-.dark .blog-article-content {
-  --tt-text-color-red: #ef4444;
-  --tt-text-color-orange: #f97316;
-  --tt-text-color-green: #22c55e;
-  --tt-text-color-blue: #3b82f6;
-  --tt-text-color-purple: #a855f7;
-  --tt-text-color-gray: #9ca3af;
-}
+/* Dark mode text colors inherit from inline styles - no override needed */
 .blog-article-content h1 {
   @apply text-4xl font-bold mt-8 mb-4 text-stone-900 dark:text-stone-50;
 }

@@ -12,34 +12,40 @@ import { isMarkInSchema, isNodeTypeSelected } from "@/lib/tiptap-utils"
 // --- Icons ---
 import { TypeIcon } from "@/components/tiptap-icons/type-icon"
 
+/**
+ * Predefined text colors for the editor
+ * Using hex values for maximum email client compatibility
+ */
 export const TEXT_COLORS = [
   {
     label: "Default",
     value: "inherit",
+    hex: "#000000",
   },
   {
     label: "Red",
-    value: "var(--tt-text-color-red)",
+    value: "#d62828",
+    hex: "#d62828",
   },
   {
-    label: "Orange",
-    value: "var(--tt-text-color-orange)",
-  },
-  {
-    label: "Green",
-    value: "var(--tt-text-color-green)",
-  },
-  {
-    label: "Blue",
-    value: "var(--tt-text-color-blue)",
+    label: "Yellow",
+    value: "#ffb703",
+    hex: "#ffb703",
   },
   {
     label: "Purple",
-    value: "var(--tt-text-color-purple)",
+    value: "#8338ec",
+    hex: "#8338ec",
   },
   {
-    label: "Gray",
-    value: "var(--tt-text-color-gray)",
+    label: "Blue",
+    value: "#0a9396",
+    hex: "#0a9396",
+  },
+  {
+    label: "Green",
+    value: "#6a994e",
+    hex: "#6a994e",
   },
 ]
 

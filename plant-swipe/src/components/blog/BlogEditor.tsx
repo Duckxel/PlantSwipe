@@ -89,6 +89,8 @@ type BlogEditorProps = {
   onUpdate?: (payload: { html: string; doc: JSONContent | null; plainText: string }) => void
   extraExtensions?: Extension[]
   toolbarAppend?: ReactNode
+  /** Use 'embedded' variant when editor is inside another container with borders */
+  variant?: "default" | "embedded"
 }
 
 const DEFAULT_CONTENT =
@@ -204,7 +206,7 @@ const MobileToolbarContent: React.FC<{
 )
 
 export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
-  ({ initialHtml, initialDocument, className, uploadFolder, onUpdate, extraExtensions, toolbarAppend }, ref) => {
+  ({ initialHtml, initialDocument, className, uploadFolder, onUpdate, extraExtensions, toolbarAppend, variant = "default" }, ref) => {
     const isMobile = useIsBreakpoint()
     const { height } = useWindowSize()
     const toolbarRef = useRef<HTMLDivElement>(null)
@@ -328,16 +330,23 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
       setWordCount(editor.storage?.characterCount?.words?.() ?? 0)
     }, [editor])
 
+    const isEmbedded = variant === "embedded"
+    
     return (
       <div
         className={cn(
-          "rounded-3xl border border-stone-200/80 bg-white/90 p-0 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f11]",
+          "relative",
+          !isEmbedded && "rounded-3xl border border-stone-200/80 bg-white/90 p-0 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f11]",
           className,
         )}
       >
         <EditorContext.Provider value={{ editor }}>
           <Toolbar
             ref={toolbarRef}
+            className={cn(
+              "sticky top-0 z-20 bg-white/95 backdrop-blur-sm dark:bg-[#0f0f11]/95",
+              !isEmbedded && "rounded-t-3xl"
+            )}
             style={
               isMobile
                 ? ({
@@ -367,10 +376,12 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           <EditorContent editor={editor} role="presentation" className="simple-editor-content" />
         </EditorContext.Provider>
 
-        <div className="flex items-center justify-between border-t border-stone-200 px-4 py-3 text-xs text-stone-500 dark:border-[#3e3e42] dark:text-stone-400">
-          <span>Use "/" for quick commands · Drag blocks to rearrange</span>
-          <span>{wordCount} words</span>
-        </div>
+        {!isEmbedded && (
+          <div className="flex items-center justify-between border-t border-stone-200 px-4 py-3 text-xs text-stone-500 dark:border-[#3e3e42] dark:text-stone-400">
+            <span>Use "/" for quick commands · Drag blocks to rearrange</span>
+            <span>{wordCount} words</span>
+          </div>
+        )}
       </div>
     )
   },
