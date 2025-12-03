@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchInput } from "@/components/ui/search-input";
 import {
   Dialog,
   DialogContent,
@@ -3027,7 +3028,7 @@ export const GardenDashboardPage: React.FC = () => {
                   </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
-                <Input
+                <SearchInput
                   placeholder={t("gardenDashboard.plantsSection.searchPlants")}
                   value={plantQuery}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>

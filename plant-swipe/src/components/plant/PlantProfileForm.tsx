@@ -11,6 +11,7 @@ import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory }
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 import { Sparkles, ChevronDown, ChevronUp } from "lucide-react"
+import { SearchInput } from "@/components/ui/search-input"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 
 export type PlantProfileFormProps = {
@@ -204,7 +205,7 @@ const CompanionSelector: React.FC<{ value: string[]; onChange: (ids: string[]) =
             <DialogTitle>Select a companion plant</DialogTitle>
           </DialogHeader>
           <div className="flex gap-2 items-center">
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search plants by name" />
+            <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search plants by name" loading={loading} className="flex-1" />
             <Button type="button" onClick={searchPlants} disabled={loading}>{loading ? 'Searching...' : 'Search'}</Button>
           </div>
           <div className="max-h-80 overflow-y-auto space-y-2 mt-3">
@@ -1105,7 +1106,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
               <DialogTitle>{t('plantAdmin.colors.dialogTitle', 'Select or add a color')}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-3">
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('plantAdmin.colors.searchPlaceholder', 'Search colors by name')} />
+              <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('plantAdmin.colors.searchPlaceholder', 'Search colors by name')} />
               <div className="max-h-64 overflow-auto border rounded p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {loading ? <div className="col-span-full text-center text-sm text-muted-foreground">{t('plantAdmin.colors.loading', 'Loading colors...')}</div> : (
                 (available || []).map((c) => (
