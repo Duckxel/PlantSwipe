@@ -3207,10 +3207,20 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
   }
   
   // Collect unique plant IDs for image fetching
+  // Validate that plant IDs are valid UUIDs or numeric IDs to avoid malformed queries
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const numericIdRegex = /^\d+$/
+  const isValidPlantId = (id: string): boolean => uuidRegex.test(id) || numericIdRegex.test(id)
+  
   const allPlantIds = new Set<string>()
   for (const plants of Object.values(plantsByGarden)) {
     for (const p of plants) {
-      if (p.plant_id) allPlantIds.add(String(p.plant_id))
+      if (p.plant_id) {
+        const plantId = String(p.plant_id).trim()
+        if (plantId && isValidPlantId(plantId)) {
+          allPlantIds.add(plantId)
+        }
+      }
     }
   }
   
