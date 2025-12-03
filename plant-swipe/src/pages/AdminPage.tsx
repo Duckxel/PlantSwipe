@@ -53,7 +53,6 @@ import {
   Sprout,
   TrendingUp,
   Package,
-  Filter,
   Sparkles,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
