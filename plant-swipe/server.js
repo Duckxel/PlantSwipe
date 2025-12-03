@@ -8504,18 +8504,31 @@ app.post('/api/account/delete', async (req, res) => {
     let deletedGardens = 0
     let deletedGardenIds = []
     try {
+      // 1. Get gardens where user is an owner
       const { data: ownerMemberships, error: ownerErr } = await supabaseServiceClient
         .from('garden_members')
         .select('garden_id')
         .eq('user_id', userId)
         .eq('role', 'owner')
       if (ownerErr) throw ownerErr
+      
+      // 2. Also get gardens where user is the creator (created_by)
+      const { data: createdGardens, error: createdErr } = await supabaseServiceClient
+        .from('gardens')
+        .select('id')
+        .eq('created_by', userId)
+      if (createdErr) throw createdErr
+      
+      // Combine both sets of garden IDs
       const gardenIds = Array.from(
-        new Set(
-          (ownerMemberships || [])
+        new Set([
+          ...(ownerMemberships || [])
             .map((row) => row?.garden_id)
             .filter((gid) => typeof gid === 'string' && gid.length > 0),
-        ),
+          ...(createdGardens || [])
+            .map((row) => row?.id)
+            .filter((gid) => typeof gid === 'string' && gid.length > 0),
+        ]),
       )
       if (gardenIds.length > 0) {
         const { data: deletedRows, error: deleteGardensErr } = await supabaseServiceClient
@@ -8528,7 +8541,7 @@ app.post('/api/account/delete', async (req, res) => {
         deletedGardens = deletedGardenIds.length
       }
     } catch (gardenErr) {
-      console.error('[account-delete] Failed to delete owned gardens', gardenErr)
+      console.error('[account-delete] Failed to delete owned/created gardens', gardenErr)
       res.status(500).json({ error: 'Failed to delete owned gardens' })
       return
     }
@@ -8550,11 +8563,46 @@ app.post('/api/account/delete', async (req, res) => {
       return
     }
 
+    // Clean up any orphaned gardens (gardens with no members) as a safety measure
+    let orphanedGardensDeleted = 0
+    try {
+      if (sql) {
+        // Use raw SQL to delete gardens with no members
+        const orphaned = await sql`
+          DELETE FROM gardens g
+          WHERE NOT EXISTS (
+            SELECT 1 FROM garden_members gm WHERE gm.garden_id = g.id
+          )
+          RETURNING id
+        `
+        orphanedGardensDeleted = orphaned?.length || 0
+      } else {
+        // Supabase client fallback - get orphaned gardens first, then delete
+        const { data: allGardens } = await supabaseServiceClient.from('gardens').select('id')
+        if (allGardens && allGardens.length > 0) {
+          const { data: memberships } = await supabaseServiceClient.from('garden_members').select('garden_id')
+          const gardenIdsWithMembers = new Set((memberships || []).map(m => m.garden_id))
+          const orphanedIds = allGardens.filter(g => !gardenIdsWithMembers.has(g.id)).map(g => g.id)
+          if (orphanedIds.length > 0) {
+            await supabaseServiceClient.from('gardens').delete().in('id', orphanedIds)
+            orphanedGardensDeleted = orphanedIds.length
+          }
+        }
+      }
+      if (orphanedGardensDeleted > 0) {
+        console.log(`[account-delete] Cleaned up ${orphanedGardensDeleted} orphaned garden(s)`)
+      }
+    } catch (orphanErr) {
+      // Non-fatal - just log and continue
+      console.warn('[account-delete] Failed to clean up orphaned gardens:', orphanErr?.message || orphanErr)
+    }
+
     res.json({
       ok: true,
       deletedGardens,
       deletedGardenIds,
       deletedUser: true,
+      orphanedGardensDeleted,
     })
   } catch (err) {
     console.error('[account-delete] Unexpected failure', err)

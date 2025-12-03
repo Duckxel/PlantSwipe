@@ -37,6 +37,7 @@ import {
   getGardenPlants,
   getGardenMembers,
   addMemberByNameOrEmail,
+  deleteGarden,
   deleteGardenPlant,
   addPlantToGarden,
   fetchServerNowISO,
@@ -2952,10 +2953,7 @@ export const GardenDashboardPage: React.FC = () => {
                             )
                               return;
                             try {
-                              await supabase
-                                .from("gardens")
-                                .delete()
-                                .eq("id", id);
+                              await deleteGarden(id);
                               navigate("/gardens");
                             } catch (e) {
                               alert(

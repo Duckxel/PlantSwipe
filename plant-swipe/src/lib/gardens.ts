@@ -756,6 +756,19 @@ export async function addMemberByNameOrEmail(params: { gardenId: string; input: 
 
 // Legacy watering schedule helpers removed
 
+/**
+ * Delete a garden and all its associated data.
+ * All child tables (garden_members, garden_plants, garden_tasks, etc.) will be
+ * cascade-deleted by the database.
+ */
+export async function deleteGarden(gardenId: string): Promise<void> {
+  const { error } = await supabase
+    .from('gardens')
+    .delete()
+    .eq('id', gardenId)
+  if (error) throw new Error(error.message)
+}
+
 export async function deleteGardenPlant(gardenPlantId: string): Promise<void> {
   const { error } = await supabase
     .from('garden_plants')
