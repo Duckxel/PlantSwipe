@@ -5110,22 +5110,24 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
     return
   }
   try {
-    // Get pending campaigns
+    // Get pending campaigns (including those stuck in processing)
     const pendingCampaigns = await sql`
-      select id, title, state, delivery_mode, next_run_at, planned_for, schedule_start_at, timezone
+      select id, title, state, delivery_mode, next_run_at, planned_for, schedule_start_at, timezone, updated_at, last_run_summary
       from public.notification_campaigns
       where deleted_at is null
         and state not in ('cancelled','completed')
-      order by next_run_at asc nulls last
+      order by 
+        case when state = 'processing' then 0 else 1 end,
+        next_run_at asc nulls last
       limit 10
     `
     
-    // Get recent user notifications
+    // Get recent user notifications with error breakdown
     const recentNotifications = await sql`
-      select un.id, un.user_id, un.title, un.delivery_status, un.scheduled_for, un.delivered_at, un.delivery_error, un.campaign_id
+      select un.id, un.user_id, un.title, un.delivery_status, un.scheduled_for, un.delivered_at, un.delivery_error, un.campaign_id, un.delivery_attempts
       from public.user_notifications un
       order by un.scheduled_for desc
-      limit 20
+      limit 30
     `
     
     // Get subscription counts
@@ -5146,6 +5148,40 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
       group by delivery_status
     `
     
+    // Get failure reason breakdown (last 24 hours)
+    const failureReasons = await sql`
+      select 
+        delivery_error,
+        count(*) as count
+      from public.user_notifications
+      where scheduled_for >= now() - interval '24 hours'
+        and delivery_status = 'failed'
+        and delivery_error is not null
+      group by delivery_error
+      order by count desc
+      limit 10
+    `
+    
+    // Get count of users who have push enabled in profile but no subscription registered
+    const usersWithoutSubscription = await sql`
+      select count(*) as count
+      from public.profiles p
+      where (p.notify_push is null or p.notify_push = true)
+        and not exists (
+          select 1 from public.user_push_subscriptions ups
+          where ups.user_id = p.id
+        )
+    `
+    
+    // Check for stuck campaigns
+    const stuckCampaigns = await sql`
+      select id, title, state, updated_at
+      from public.notification_campaigns
+      where deleted_at is null
+        and state = 'processing'
+        and updated_at < now() - interval '5 minutes'
+    `
+    
     res.json({
       pushEnabled: pushNotificationsEnabled,
       vapidConfigured: Boolean(vapidPublicKey && vapidPrivateKey),
@@ -5155,6 +5191,19 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
       recentNotifications: recentNotifications || [],
       subscriptionStats: subscriptionStats?.[0] || { users_with_subscriptions: 0, total_subscriptions: 0 },
       deliveryStats: deliveryStats || [],
+      failureReasons: failureReasons || [],
+      usersWithoutPushSubscription: Number(usersWithoutSubscription?.[0]?.count || 0),
+      stuckCampaigns: stuckCampaigns || [],
+      troubleshooting: {
+        vapidKeysConfigured: Boolean(vapidPublicKey && vapidPrivateKey),
+        pushEnabled: pushNotificationsEnabled,
+        commonIssues: [
+          'NO_PUSH_SUBSCRIPTION: User authorized notifications but subscription was not synced to server',
+          'SUBSCRIPTION_EXPIRED: Browser subscription expired, user needs to re-enable notifications',
+          'PUSH_DISABLED: VAPID keys not configured on server',
+          'Processing stuck: Campaign error occurred, state was reset after 5 minutes',
+        ],
+      },
     })
   } catch (err) {
     console.error('[notifications] debug endpoint failed', err)
@@ -11338,16 +11387,22 @@ async function deliverPushNotifications(notifications, campaign) {
     subsByUser.set(sub.user_id, list)
   }
   const deliveredIds = []
-  const failedIds = []
+  const failedWithReason = new Map() // Map<notificationId, errorReason>
   const staleSubscriptionIds = new Set()
   const usedSubscriptionIds = new Set()
+  
+  // Track users without subscriptions for better logging
+  const usersWithoutSubs = []
+  
   for (const notification of notifications) {
     const subs = subsByUser.get(notification.user_id) || []
     if (subs.length === 0) {
-      failedIds.push(notification.id)
+      failedWithReason.set(notification.id, 'NO_PUSH_SUBSCRIPTION')
+      usersWithoutSubs.push(notification.user_id)
       continue
     }
     let delivered = false
+    let lastError = null
     for (const sub of subs) {
       try {
         const payload =
@@ -11369,10 +11424,16 @@ async function deliverPushNotifications(notifications, campaign) {
         )
         delivered = true
         usedSubscriptionIds.add(sub.id)
+        break // Successfully sent, no need to try other subscriptions
       } catch (err) {
         const statusCode = err?.statusCode || err?.statuscode
         if (statusCode === 404 || statusCode === 410) {
           staleSubscriptionIds.add(sub.id)
+          lastError = 'SUBSCRIPTION_EXPIRED'
+        } else if (statusCode === 401 || statusCode === 403) {
+          lastError = 'VAPID_AUTH_ERROR'
+        } else {
+          lastError = `PUSH_ERROR:${statusCode || 'UNKNOWN'}`
         }
         console.warn('[notifications] push delivery failed', err?.message || err)
       }
@@ -11380,10 +11441,17 @@ async function deliverPushNotifications(notifications, campaign) {
     if (delivered) {
       deliveredIds.push(notification.id)
     } else {
-      failedIds.push(notification.id)
+      failedWithReason.set(notification.id, lastError || 'PUSH_FAILED')
     }
   }
+  
+  // Log summary of users without subscriptions
+  if (usersWithoutSubs.length > 0) {
+    console.warn(`[notifications] ${usersWithoutSubs.length} user(s) have no push subscriptions registered. They may need to enable notifications in their browser settings.`)
+  }
+  
   if (staleSubscriptionIds.size) {
+    console.log(`[notifications] Cleaning up ${staleSubscriptionIds.size} expired subscription(s)`)
     await sql`
       delete from public.user_push_subscriptions
       where id = any(${Array.from(staleSubscriptionIds)}::uuid[])
@@ -11406,17 +11474,20 @@ async function deliverPushNotifications(notifications, campaign) {
       where id = any(${deliveredIds}::uuid[])
     `
   }
-  if (failedIds.length) {
+  
+  // Update failed notifications with specific error reasons
+  for (const [notifId, errorReason] of failedWithReason.entries()) {
     await sql`
       update public.user_notifications
       set delivery_status = 'failed',
           delivered_at = now(),
           delivery_attempts = delivery_attempts + 1,
-          delivery_error = coalesce(delivery_error, 'FAILED')
-      where id = any(${failedIds}::uuid[])
+          delivery_error = ${errorReason}
+      where id = ${notifId}::uuid
     `
   }
-  return { sent: deliveredIds.length, failed: failedIds.length }
+  
+  return { sent: deliveredIds.length, failed: failedWithReason.size }
 }
 
 async function processDueUserNotifications() {
@@ -11483,6 +11554,8 @@ async function processDueUserNotifications() {
 
 async function runNotificationCampaign(row) {
   if (!sql) return
+  // Store original state to restore on error
+  const originalState = row.state || 'scheduled'
   const claimed = await sql`
     update public.notification_campaigns
     set state = 'processing', updated_at = now()
@@ -11499,43 +11572,103 @@ async function runNotificationCampaign(row) {
   if (!campaign) return
   const iteration = (campaign.runCount || 0) + 1
   console.log(`[notifications] Running campaign "${campaign.title}" (id=${campaign.id}), iteration=${iteration}, audience=${campaign.audience}`)
-  const recipients = await resolveNotificationAudience(campaign)
-  console.log(`[notifications] Resolved ${recipients.length} recipient(s) for campaign ${campaign.id}`)
-  const scheduledFor = new Date().toISOString()
-  const inserted = await insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor)
-  console.log(`[notifications] Queued ${inserted.length} notification(s) for delivery`)
-  const summary = {
-    recipients: recipients.length,
-    queued: inserted.length,
-    queuedAt: new Date().toISOString(),
+  
+  try {
+    const recipients = await resolveNotificationAudience(campaign)
+    console.log(`[notifications] Resolved ${recipients.length} recipient(s) for campaign ${campaign.id}`)
+    
+    if (recipients.length === 0) {
+      console.warn(`[notifications] Campaign ${campaign.id} has no recipients matching audience "${campaign.audience}"`)
+    }
+    
+    const scheduledFor = new Date().toISOString()
+    const inserted = await insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor)
+    console.log(`[notifications] Queued ${inserted.length} notification(s) for delivery`)
+    const summary = {
+      recipients: recipients.length,
+      queued: inserted.length,
+      queuedAt: new Date().toISOString(),
+    }
+    let nextState = 'completed'
+    let nextRunAt = null
+    if (campaign.deliveryMode === 'scheduled') {
+      nextRunAt = computeNextScheduledRun(campaign)
+      nextState = campaign.state === 'paused' ? 'paused' : 'scheduled'
+    }
+    await sql`
+      update public.notification_campaigns
+      set state = ${nextState},
+          run_count = run_count + 1,
+          last_run_at = now(),
+          next_run_at = ${nextRunAt},
+          last_run_summary = ${summary},
+          updated_at = now()
+      where id = ${campaign.id}
+    `
+    console.log(`[notifications] Campaign ${campaign.id} completed. State=${nextState}, next_run_at=${nextRunAt || 'none'}`)
+  } catch (err) {
+    // Reset state on error so the campaign can be retried
+    console.error(`[notifications] Campaign ${campaign.id} failed during processing:`, err)
+    try {
+      // Determine the appropriate fallback state
+      let fallbackState = originalState
+      if (originalState === 'processing' || originalState === 'draft') {
+        fallbackState = campaign.deliveryMode === 'scheduled' ? 'scheduled' : 'draft'
+      }
+      const errorSummary = {
+        error: err?.message || 'Unknown error during processing',
+        failedAt: new Date().toISOString(),
+      }
+      await sql`
+        update public.notification_campaigns
+        set state = ${fallbackState},
+            last_run_summary = ${errorSummary},
+            updated_at = now()
+        where id = ${campaign.id}
+      `
+      console.log(`[notifications] Campaign ${campaign.id} state reset to "${fallbackState}" after error`)
+    } catch (resetErr) {
+      console.error(`[notifications] Failed to reset campaign ${campaign.id} state:`, resetErr)
+    }
+    throw err // Re-throw to be caught by outer handler
   }
-  let nextState = 'completed'
-  let nextRunAt = null
-  if (campaign.deliveryMode === 'scheduled') {
-    nextRunAt = computeNextScheduledRun(campaign)
-    nextState = campaign.state === 'paused' ? 'paused' : 'scheduled'
-  }
-  await sql`
-    update public.notification_campaigns
-    set state = ${nextState},
-        run_count = run_count + 1,
-        last_run_at = now(),
-        next_run_at = ${nextRunAt},
-        last_run_summary = ${summary},
-        updated_at = now()
-    where id = ${campaign.id}
-  `
-  console.log(`[notifications] Campaign ${campaign.id} completed. State=${nextState}, next_run_at=${nextRunAt || 'none'}`)
 }
 
 async function processDueNotificationCampaigns() {
   if (!sql) return
   await ensureNotificationTables()
+  
+  // First, recover any campaigns stuck in 'processing' for more than 5 minutes
+  try {
+    const stuckCampaigns = await sql`
+      update public.notification_campaigns
+      set state = case 
+            when delivery_mode = 'scheduled' then 'scheduled'
+            when delivery_mode = 'planned' then 'draft'
+            else 'draft'
+          end,
+          last_run_summary = jsonb_build_object(
+            'error', 'Campaign was stuck in processing state and has been reset',
+            'resetAt', ${new Date().toISOString()}
+          ),
+          updated_at = now()
+      where deleted_at is null
+        and state = 'processing'
+        and updated_at < now() - interval '5 minutes'
+      returning id, title
+    `
+    if (stuckCampaigns && stuckCampaigns.length > 0) {
+      console.warn(`[notifications] Recovered ${stuckCampaigns.length} stuck campaign(s):`, stuckCampaigns.map(c => c.id))
+    }
+  } catch (err) {
+    console.error('[notifications] Failed to recover stuck campaigns:', err)
+  }
+  
   const due = await sql`
     select *
     from public.notification_campaigns
     where deleted_at is null
-      and state not in ('cancelled','completed','paused')
+      and state not in ('cancelled','completed','paused','processing')
       and next_run_at is not null
       and next_run_at <= now()
     order by next_run_at asc

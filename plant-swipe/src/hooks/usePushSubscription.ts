@@ -8,6 +8,8 @@ import {
 
 // Track if we've already attempted auto-enable for this session
 const autoEnableAttempted = new Set<string>()
+// Track if we've attempted re-sync for this session
+const resyncAttempted = new Set<string>()
 
 export function usePushSubscription(userId: string | null) {
   const supported = React.useMemo(() => {
@@ -22,6 +24,7 @@ export function usePushSubscription(userId: string | null) {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [autoEnableTried, setAutoEnableTried] = React.useState(false)
+  const [synced, setSynced] = React.useState(false)
 
   const refresh = React.useCallback(async () => {
     if (!supported) return
@@ -35,6 +38,38 @@ export function usePushSubscription(userId: string | null) {
       setError((err as Error)?.message || 'Failed to inspect subscription')
     }
   }, [supported])
+  
+  // Try to re-sync existing browser subscription to server
+  // This handles cases where browser has subscription but it wasn't synced properly
+  React.useEffect(() => {
+    if (!supported || !userId || synced) return
+    if (resyncAttempted.has(userId)) {
+      setSynced(true)
+      return
+    }
+    
+    const tryResync = async () => {
+      try {
+        const existing = await getExistingSubscription()
+        if (existing && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          // Browser has a subscription and permission is granted
+          // Try to re-sync with server (this will update/insert the subscription)
+          resyncAttempted.add(userId)
+          await registerPushSubscription(false) // Don't force, just sync existing
+          console.log('[push] Re-synced existing subscription with server')
+          setSynced(true)
+        }
+      } catch (err) {
+        // Sync failed - this might indicate an auth issue
+        console.warn('[push] Failed to re-sync subscription:', (err as Error)?.message)
+        setSynced(true) // Mark as attempted to avoid retry loops
+      }
+    }
+    
+    // Small delay to avoid blocking initial render
+    const timeout = setTimeout(tryResync, 1500)
+    return () => clearTimeout(timeout)
+  }, [supported, userId, synced])
 
   React.useEffect(() => {
     refresh().catch(() => {})

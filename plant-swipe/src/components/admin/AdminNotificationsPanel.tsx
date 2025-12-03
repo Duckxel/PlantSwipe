@@ -194,6 +194,10 @@ const getStatusConfig = (state: string) => {
       return { label: 'Paused', bg: 'bg-amber-500/10', text: 'text-amber-600', dot: 'bg-amber-500' }
     case 'completed':
       return { label: 'Completed', bg: 'bg-emerald-500/10', text: 'text-emerald-600', dot: 'bg-emerald-500' }
+    case 'processing':
+      return { label: 'Processing...', bg: 'bg-purple-500/10', text: 'text-purple-600', dot: 'bg-purple-500 animate-pulse' }
+    case 'draft':
+      return { label: 'Draft', bg: 'bg-stone-500/10', text: 'text-stone-500', dot: 'bg-stone-400' }
     default:
       return { label: state, bg: 'bg-stone-500/10', text: 'text-stone-500', dot: 'bg-stone-400' }
   }
@@ -541,8 +545,28 @@ export function AdminNotificationsPanel() {
             <div>
               <h3 className="font-semibold text-amber-900 dark:text-amber-100">Push delivery disabled</h3>
               <p className="text-sm text-amber-700 dark:text-amber-200 mt-1">
-                Add VAPID keys to enable live notifications. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on the server.
+                Add VAPID keys to enable live notifications. Set <code className="px-1 py-0.5 bg-amber-200/50 dark:bg-amber-800/50 rounded">VAPID_PUBLIC_KEY</code> and <code className="px-1 py-0.5 bg-amber-200/50 dark:bg-amber-800/50 rounded">VAPID_PRIVATE_KEY</code> on the server.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification Delivery Info */}
+      {notifications.some(n => n.stats.failed > 0) && (
+        <div className="rounded-2xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-blue-900 dark:text-blue-100">Some notifications failed to deliver</p>
+              <p className="text-blue-700 dark:text-blue-300 mt-1">
+                Common reasons for failed notifications:
+              </p>
+              <ul className="list-disc list-inside text-blue-600 dark:text-blue-400 mt-1 space-y-0.5">
+                <li><strong>NO_PUSH_SUBSCRIPTION</strong>: User hasn't enabled push notifications in their browser</li>
+                <li><strong>SUBSCRIPTION_EXPIRED</strong>: User's browser subscription has expired (they need to re-enable notifications)</li>
+                <li><strong>PUSH_DISABLED</strong>: VAPID keys not configured on the server</li>
+              </ul>
             </div>
           </div>
         </div>
@@ -677,15 +701,24 @@ export function AdminNotificationsPanel() {
 
                     <div>
                       <div className="text-[10px] sm:text-xs font-medium text-stone-400 uppercase tracking-wide mb-0.5 sm:mb-1">
-                        Sent
+                        Delivery Status
                       </div>
                       <div className="text-xs sm:text-sm font-medium">
                         <span className="text-emerald-600 dark:text-emerald-400">
-                          {notification.stats.sent}
+                          {notification.stats.sent} sent
                         </span>
-                        <span className="text-stone-400"> / {notification.stats.total}</span>
+                        {notification.stats.pending > 0 && (
+                          <span className="text-blue-500 ml-1.5">
+                            {notification.stats.pending} pending
+                          </span>
+                        )}
                         {notification.stats.failed > 0 && (
-                          <span className="text-red-500 ml-1 text-[10px] sm:text-xs">({notification.stats.failed} failed)</span>
+                          <span className="text-red-500 ml-1.5" title="Failed notifications may be due to: no push subscription registered, expired subscription, or push service error">
+                            {notification.stats.failed} failed
+                          </span>
+                        )}
+                        {notification.stats.total === 0 && (
+                          <span className="text-stone-400 italic">No recipients</span>
                         )}
                       </div>
                     </div>

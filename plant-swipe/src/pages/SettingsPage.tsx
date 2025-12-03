@@ -750,6 +750,18 @@ export default function SettingsPage() {
                         ? t('settings.notifications.disableBrowser', { defaultValue: 'Disable browser push' })
                         : t('settings.notifications.enableBrowser', { defaultValue: 'Enable browser push' })}
                     </Button>
+                    {/* Re-sync button - helps fix cases where subscription wasn't saved to server */}
+                    {pushSubscribed && pushPermission === 'granted' && (
+                      <Button
+                        onClick={enablePush}
+                        variant="outline"
+                        disabled={pushLoading}
+                        className="rounded-2xl"
+                        title="Re-sync your push subscription with the server"
+                      >
+                        {t('settings.notifications.resync', { defaultValue: 'Re-sync subscription' })}
+                      </Button>
+                    )}
                     <Button
                       onClick={refreshPush}
                       variant="outline"
@@ -759,6 +771,14 @@ export default function SettingsPage() {
                       {t('settings.notifications.refresh', { defaultValue: 'Refresh status' })}
                     </Button>
                   </div>
+                  {/* Help text for troubleshooting */}
+                  {pushSubscribed && pushPermission === 'granted' && (
+                    <p className="text-xs opacity-60 mt-2">
+                      {t('settings.notifications.troubleshootTip', { 
+                        defaultValue: 'Not receiving notifications? Try clicking "Re-sync subscription" to ensure your device is properly registered.' 
+                      })}
+                    </p>
+                  )}
                 </>
               )}
             </CardContent>
