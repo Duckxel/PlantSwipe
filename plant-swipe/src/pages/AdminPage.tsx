@@ -1284,12 +1284,6 @@ export const AdminPage: React.FC = () => {
   >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
-  const [isStatusRepartitionCollapsed, setIsStatusRepartitionCollapsed] =
-    React.useState<boolean>(true);
-  const [isRequestsVsApprovedCollapsed, setIsRequestsVsApprovedCollapsed] =
-    React.useState<boolean>(true);
-  const [isPromotionCadenceCollapsed, setIsPromotionCadenceCollapsed] =
-    React.useState<boolean>(true);
   const [isAnalyticsPanelCollapsed, setIsAnalyticsPanelCollapsed] =
     React.useState<boolean>(true);
   const [addFromDialogOpen, setAddFromDialogOpen] = React.useState(false);
@@ -5445,12 +5439,9 @@ export const AdminPage: React.FC = () => {
                               {!isAnalyticsPanelCollapsed && (
                                 <div className="p-4 sm:p-5 pt-0 space-y-4">
                                   <div className="grid gap-4 md:grid-cols-2">
-                                    {/* Status Repartition Chart */}
+                                    {/* Status Distribution Chart */}
                                     <div className="rounded-xl border border-stone-200/80 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-[#17171d] p-4 flex flex-col">
-                                      <button
-                                        onClick={() => setIsStatusRepartitionCollapsed(!isStatusRepartitionCollapsed)}
-                                        className="flex items-center justify-between gap-2 w-full text-left hover:opacity-80 transition-opacity"
-                                      >
+                                      <div className="flex items-center justify-between gap-2 mb-4">
                                         <div className="flex items-center gap-3">
                                           <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
                                             <PieChartIcon className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
@@ -5460,212 +5451,18 @@ export const AdminPage: React.FC = () => {
                                             <div className="text-xs text-stone-500 dark:text-stone-400">In progress, review, rework</div>
                                           </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-lg font-bold text-stone-900 dark:text-white">
-                                            {plantStatusDonutData.reduce((sum, slice) => sum + slice.value, 0)}
-                                          </span>
-                                          {isStatusRepartitionCollapsed ? (
-                                            <ChevronDown className="h-4 w-4 text-stone-400" />
-                                          ) : (
-                                            <ChevronUp className="h-4 w-4 text-stone-400" />
-                                          )}
-                                        </div>
-                                      </button>
-                                      {!isStatusRepartitionCollapsed && (
-                                        <div className="relative mt-4 h-48">
-                                          {plantTableLoading ? (
-                                            <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-                                              Loading chart...
-                                            </div>
-                                          ) : plantStatusDonutData.length === 0 ? (
-                                            <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-                                              No status data yet.
-                                            </div>
-                                          ) : (
-                                            <ChartSuspense
-                                              fallback={
-                                                <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-                                                  Loading chart...
-                                                </div>
-                                              }
-                                            >
-                                              <ResponsiveContainer width="100%" height="100%">
-                                                <PieChart>
-                                                  <Pie
-                                                    data={plantStatusDonutData}
-                                                    dataKey="value"
-                                                    nameKey="label"
-                                                    innerRadius="60%"
-                                                    outerRadius="90%"
-                                                    startAngle={90}
-                                                    endAngle={-270}
-                                                    paddingAngle={3}
-                                                    isAnimationActive={false}
-                                                  >
-                                                    {plantStatusDonutData.map((slice) => (
-                                                      <Cell
-                                                        key={slice.key}
-                                                        fill={slice.color}
-                                                        stroke={isDark ? slice.color : slice.color}
-                                                        strokeWidth={isDark ? 0 : 2}
-                                                      />
-                                                    ))}
-                                                  </Pie>
-                                                  <Tooltip
-                                                    formatter={(value: number, name: string) => [
-                                                      `${value} plants`,
-                                                      name,
-                                                    ]}
-                                                  />
-                                                </PieChart>
-                                              </ResponsiveContainer>
-                                            </ChartSuspense>
-                                          )}
-                                          {plantStatusDonutData.length > 0 && (
-                                            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                                              <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                                                Total
-                                              </span>
-                                              <span className="text-2xl font-bold text-stone-900 dark:text-white">
-                                                {plantStatusDonutData.reduce((sum, slice) => sum + slice.value, 0)}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    {/* Requests vs Approved Gauge */}
-                                    <div className="rounded-xl border border-stone-200/80 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-[#17171d] p-4 flex flex-col">
-                                      <button
-                                        onClick={() => setIsRequestsVsApprovedCollapsed(!isRequestsVsApprovedCollapsed)}
-                                        className="flex items-center justify-between gap-2 w-full text-left hover:opacity-80 transition-opacity"
-                                      >
-                                        <div className="flex items-center gap-3">
-                                          <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                                            <Target className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                                          </div>
-                                          <div>
-                                            <div className="text-sm font-semibold text-stone-900 dark:text-white">Coverage Ratio</div>
-                                            <div className="text-xs text-stone-500 dark:text-stone-400">Requests vs approved</div>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                                            {requestsVsApproved.ratio !== null
-                                              ? `${requestsVsApproved.percent.toFixed(0)}%`
-                                              : requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0
-                                                ? "∞"
-                                                : "0%"}
-                                          </span>
-                                          {isRequestsVsApprovedCollapsed ? (
-                                            <ChevronDown className="h-4 w-4 text-stone-400" />
-                                          ) : (
-                                            <ChevronUp className="h-4 w-4 text-stone-400" />
-                                          )}
-                                        </div>
-                                      </button>
-                                      {!isRequestsVsApprovedCollapsed && (
-                                        <>
-                                          <div className="mt-3 flex-1">
-                                            {plantTableLoading && totalPlantRequestsCount === 0 ? (
-                                              <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-                                                Loading gauge...
-                                              </div>
-                                            ) : requestsVsApproved.requests === 0 && requestsVsApproved.approved === 0 ? (
-                                              <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-                                                No requests or approved plants yet.
-                                              </div>
-                                            ) : (
-                                              <div className="relative h-40 sm:h-48">
-                                                <ChartSuspense
-                                                  fallback={
-                                                    <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-                                                      Loading gauge...
-                                                    </div>
-                                                  }
-                                                >
-                                                  <ResponsiveContainer width="100%" height="100%">
-                                                    <RadialBarChart
-                                                      data={[{ name: "ratio", value: requestsVsApproved.gaugeValue }]}
-                                                      startAngle={180}
-                                                      endAngle={0}
-                                                      innerRadius="70%"
-                                                      outerRadius="100%"
-                                                      margin={{ top: 0, bottom: 0, left: 0, right: 0 }}
-                                                    >
-                                                      <PolarAngleAxis
-                                                        type="number"
-                                                        domain={[0, Math.max(1, requestsVsApproved.domainMax)]}
-                                                        tick={false}
-                                                      />
-                                                      <RadialBar
-                                                        dataKey="value"
-                                                        cornerRadius={10}
-                                                        fill={accentColor}
-                                                        clockWise
-                                                        background
-                                                      />
-                                                    </RadialBarChart>
-                                                  </ResponsiveContainer>
-                                                </ChartSuspense>
-                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                                                    {requestsVsApproved.ratio !== null
-                                                      ? `${requestsVsApproved.percent.toFixed(0)}%`
-                                                      : requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0
-                                                        ? "∞"
-                                                        : "0%"}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                          <div className="mt-1 text-center">
-                                            <div className="text-sm text-stone-600 dark:text-stone-300">
-                                              {requestsVsApproved.requests} requests / {requestsVsApproved.approved} approved
-                                            </div>
-                                            {requestsVsApproved.ratio === null && requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0 && (
-                                              <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                                                Approve at least one plant to compute the ratio.
-                                              </div>
-                                            )}
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Promotion Cadence Chart */}
-                                  <div className="rounded-xl border border-stone-200/80 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-[#17171d] p-4 flex flex-col">
-                                    <button
-                                      onClick={() => setIsPromotionCadenceCollapsed(!isPromotionCadenceCollapsed)}
-                                      className="flex items-center justify-between gap-2 w-full text-left hover:opacity-80 transition-opacity"
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center">
-                                          <Calendar className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                                        </div>
-                                        <div>
-                                          <div className="text-sm font-semibold text-stone-900 dark:text-white">Promotion Calendar</div>
-                                          <div className="text-xs text-stone-500 dark:text-stone-400">Plants promoted per month</div>
-                                        </div>
+                                        <span className="text-lg font-bold text-stone-900 dark:text-white">
+                                          {plantStatusDonutData.reduce((sum, slice) => sum + slice.value, 0)}
+                                        </span>
                                       </div>
-                                      {isPromotionCadenceCollapsed ? (
-                                        <ChevronDown className="h-4 w-4 text-stone-400" />
-                                      ) : (
-                                        <ChevronUp className="h-4 w-4 text-stone-400" />
-                                      )}
-                                    </button>
-                                    {!isPromotionCadenceCollapsed && (
-                                      <div className="w-full h-[280px] sm:h-[320px] mt-4">
+                                      <div className="relative h-48">
                                         {plantTableLoading ? (
                                           <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
                                             Loading chart...
                                           </div>
-                                        ) : !hasPromotionMonthData ? (
+                                        ) : plantStatusDonutData.length === 0 ? (
                                           <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-                                            No promotion data yet.
+                                            No status data yet.
                                           </div>
                                         ) : (
                                           <ChartSuspense
@@ -5676,24 +5473,183 @@ export const AdminPage: React.FC = () => {
                                             }
                                           >
                                             <ResponsiveContainer width="100%" height="100%">
-                                              <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 16, right: 16, top: 16, bottom: 12 }}>
-                                                <CartesianGrid
-                                                  strokeDasharray="3 3"
-                                                  stroke={isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                                                />
-                                                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                                                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                                              <PieChart>
+                                                <Pie
+                                                  data={plantStatusDonutData}
+                                                  dataKey="value"
+                                                  nameKey="label"
+                                                  innerRadius="60%"
+                                                  outerRadius="90%"
+                                                  startAngle={90}
+                                                  endAngle={-270}
+                                                  paddingAngle={3}
+                                                  isAnimationActive={false}
+                                                >
+                                                  {plantStatusDonutData.map((slice) => (
+                                                    <Cell
+                                                      key={slice.key}
+                                                      fill={slice.color}
+                                                      stroke={isDark ? slice.color : slice.color}
+                                                      strokeWidth={isDark ? 0 : 2}
+                                                    />
+                                                  ))}
+                                                </Pie>
                                                 <Tooltip
-                                                  cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}
-                                                  formatter={(value: number) => [`${value} plants`, "Promotions"]}
+                                                  formatter={(value: number, name: string) => [
+                                                    `${value} plants`,
+                                                    name,
+                                                  ]}
                                                 />
-                                                <Bar dataKey="value" fill={accentColor} radius={6} />
-                                              </BarChart>
+                                              </PieChart>
                                             </ResponsiveContainer>
                                           </ChartSuspense>
                                         )}
+                                        {plantStatusDonutData.length > 0 && (
+                                          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                                            <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                                              Total
+                                            </span>
+                                            <span className="text-2xl font-bold text-stone-900 dark:text-white">
+                                              {plantStatusDonutData.reduce((sum, slice) => sum + slice.value, 0)}
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
-                                    )}
+                                    </div>
+
+                                    {/* Coverage Ratio Gauge */}
+                                    <div className="rounded-xl border border-stone-200/80 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-[#17171d] p-4 flex flex-col">
+                                      <div className="flex items-center justify-between gap-2 mb-4">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                                            <Target className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                          </div>
+                                          <div>
+                                            <div className="text-sm font-semibold text-stone-900 dark:text-white">Coverage Ratio</div>
+                                            <div className="text-xs text-stone-500 dark:text-stone-400">Requests vs approved</div>
+                                          </div>
+                                        </div>
+                                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                                          {requestsVsApproved.ratio !== null
+                                            ? `${requestsVsApproved.percent.toFixed(0)}%`
+                                            : requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0
+                                              ? "∞"
+                                              : "0%"}
+                                        </span>
+                                      </div>
+                                      <div className="flex-1">
+                                        {plantTableLoading && totalPlantRequestsCount === 0 ? (
+                                          <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                            Loading gauge...
+                                          </div>
+                                        ) : requestsVsApproved.requests === 0 && requestsVsApproved.approved === 0 ? (
+                                          <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                            No requests or approved plants yet.
+                                          </div>
+                                        ) : (
+                                          <div className="relative h-40 sm:h-48">
+                                            <ChartSuspense
+                                              fallback={
+                                                <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                                  Loading gauge...
+                                                </div>
+                                              }
+                                            >
+                                              <ResponsiveContainer width="100%" height="100%">
+                                                <RadialBarChart
+                                                  data={[{ name: "ratio", value: requestsVsApproved.gaugeValue }]}
+                                                  startAngle={180}
+                                                  endAngle={0}
+                                                  innerRadius="70%"
+                                                  outerRadius="100%"
+                                                  margin={{ top: 0, bottom: 0, left: 0, right: 0 }}
+                                                >
+                                                  <PolarAngleAxis
+                                                    type="number"
+                                                    domain={[0, Math.max(1, requestsVsApproved.domainMax)]}
+                                                    tick={false}
+                                                  />
+                                                  <RadialBar
+                                                    dataKey="value"
+                                                    cornerRadius={10}
+                                                    fill={accentColor}
+                                                    clockWise
+                                                    background
+                                                  />
+                                                </RadialBarChart>
+                                              </ResponsiveContainer>
+                                            </ChartSuspense>
+                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                                                {requestsVsApproved.ratio !== null
+                                                  ? `${requestsVsApproved.percent.toFixed(0)}%`
+                                                  : requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0
+                                                    ? "∞"
+                                                    : "0%"}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="mt-1 text-center">
+                                        <div className="text-sm text-stone-600 dark:text-stone-300">
+                                          {requestsVsApproved.requests} requests / {requestsVsApproved.approved} approved
+                                        </div>
+                                        {requestsVsApproved.ratio === null && requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0 && (
+                                          <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                                            Approve at least one plant to compute the ratio.
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Promotion Calendar Chart */}
+                                  <div className="rounded-xl border border-stone-200/80 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-[#17171d] p-4 flex flex-col">
+                                    <div className="flex items-center gap-3 mb-4">
+                                      <div className="w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center">
+                                        <Calendar className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                                      </div>
+                                      <div>
+                                        <div className="text-sm font-semibold text-stone-900 dark:text-white">Promotion Calendar</div>
+                                        <div className="text-xs text-stone-500 dark:text-stone-400">Plants promoted per month</div>
+                                      </div>
+                                    </div>
+                                    <div className="w-full h-[280px] sm:h-[320px]">
+                                      {plantTableLoading ? (
+                                        <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                          Loading chart...
+                                        </div>
+                                      ) : !hasPromotionMonthData ? (
+                                        <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                          No promotion data yet.
+                                        </div>
+                                      ) : (
+                                        <ChartSuspense
+                                          fallback={
+                                            <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                              Loading chart...
+                                            </div>
+                                          }
+                                        >
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 16, right: 16, top: 16, bottom: 12 }}>
+                                              <CartesianGrid
+                                                strokeDasharray="3 3"
+                                                stroke={isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
+                                              />
+                                              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                                              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                                              <Tooltip
+                                                cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}
+                                                formatter={(value: number) => [`${value} plants`, "Promotions"]}
+                                              />
+                                              <Bar dataKey="value" fill={accentColor} radius={6} />
+                                            </BarChart>
+                                          </ResponsiveContainer>
+                                        </ChartSuspense>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               )}
