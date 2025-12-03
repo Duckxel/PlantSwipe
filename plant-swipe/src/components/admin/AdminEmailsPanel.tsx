@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
+import { SearchInput } from "@/components/ui/search-input"
 import { supabase } from "@/lib/supabaseClient"
 import { useNavigate, useLocation, Link } from "react-router-dom"
 
@@ -850,19 +851,17 @@ export const AdminEmailsPanel: React.FC = () => {
           {/* Search Bar */}
           {templates.length > 0 && (
             <div className="relative">
-              <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-              <Input
-                type="text"
+              <SearchInput
                 placeholder="Search templates..."
                 value={templateSearch}
                 onChange={(e) => setTemplateSearch(e.target.value)}
-                className="pl-9 sm:pl-11 pr-9 sm:pr-10 h-10 sm:h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 text-sm"
+                className="h-10 sm:h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] text-sm"
               />
               {templateSearch && (
                 <button
                   type="button"
                   onClick={() => setTemplateSearch("")}
-                  className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
+                  className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors z-10"
                 >
                   <X className="h-4 w-4" />
                 </button>

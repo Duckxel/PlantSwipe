@@ -2,13 +2,13 @@ import React from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { createPortal } from "react-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, Search as SearchIcon, Loader2, UserCheck, Share2 } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2 } from "lucide-react"
+import { SearchInput } from "@/components/ui/search-input"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
@@ -731,12 +731,12 @@ export default function PublicProfilePage() {
           >
             {t('profile.searchUsers.label')}
           </label>
-            <div className="relative mt-2">
-              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" aria-hidden />
-              <Input
+            <div className="mt-2">
+              <SearchInput
                 id="profile-user-search"
                 value={searchTerm}
                 autoComplete="off"
+                loading={searchLoading}
                 onChange={(event) => {
                   const { value } = event.target
                   setSearchTerm(value)
@@ -750,11 +750,8 @@ export default function PublicProfilePage() {
                   }
                 }}
                 placeholder={t('profile.searchUsers.placeholder')}
-                className="pl-9 md:pl-9 pr-10 rounded-2xl"
+                className="rounded-2xl"
               />
-              {searchLoading && (
-                <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-stone-400" aria-hidden />
-              )}
             </div>
             {searchOpen && !needsMoreInput && (
               <div className="absolute z-40 mt-2 w-full overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-xl dark:border-[#3e3e42] dark:bg-[#252526]">

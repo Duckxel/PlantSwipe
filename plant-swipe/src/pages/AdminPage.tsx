@@ -46,6 +46,7 @@ import {
     Check,
   BellRing,
 } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
 import {
   loadPersistedBroadcast,
@@ -5637,13 +5638,12 @@ export const AdminPage: React.FC = () => {
                                         </div>
                                       </div>
                                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 w-full lg:w-auto">
-                                        <div className="relative flex-1">
-                                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
-                                          <Input
+                                        <div className="flex-1">
+                                          <SearchInput
                                             value={plantSearchQuery}
                                             onChange={(e) => setPlantSearchQuery(e.target.value)}
                                             placeholder="Search by plant name..."
-                                            className="pl-10 rounded-xl"
+                                            className="rounded-xl"
                                           />
                                         </div>
                                         <div className="w-full md:w-52">
@@ -5858,17 +5858,14 @@ export const AdminPage: React.FC = () => {
                         )}
 
                         {/* Search */}
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                          <Input
-                            placeholder="Search requests by plant name..."
-                            value={requestSearchQuery}
-                            onChange={(e) =>
-                              setRequestSearchQuery(e.target.value)
-                            }
-                            className="rounded-xl pl-10 pr-4"
-                          />
-                        </div>
+                        <SearchInput
+                          placeholder="Search requests by plant name..."
+                          value={requestSearchQuery}
+                          onChange={(e) =>
+                            setRequestSearchQuery(e.target.value)
+                          }
+                          className="rounded-xl"
+                        />
 
                         {plantRequestsError && (
                           <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
@@ -7475,18 +7472,14 @@ export const AdminPage: React.FC = () => {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
-            <Input
-              value={addFromSearchQuery}
-              onChange={(e) => {
-                setAddFromSearchQuery(e.target.value);
-                searchPlantsForAddFrom(e.target.value);
-              }}
-              placeholder="Search plants by name..."
-              className="pl-10"
-            />
-          </div>
+          <SearchInput
+            value={addFromSearchQuery}
+            onChange={(e) => {
+              setAddFromSearchQuery(e.target.value);
+              searchPlantsForAddFrom(e.target.value);
+            }}
+            placeholder="Search plants by name..."
+          />
           <div className="max-h-[300px] overflow-y-auto rounded-xl border border-stone-200 dark:border-[#3e3e42]">
             {addFromSearchLoading ? (
               <div className="p-4 text-sm text-center opacity-60">Searching...</div>
