@@ -19,16 +19,27 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
   canEdit,
 }) => {
   const { t } = useTranslation("common");
-  const [city, setCity] = React.useState((garden as any)?.locationCity || "");
-  const [country, setCountry] = React.useState((garden as any)?.locationCountry || "");
+  const gardenId = garden?.id;
+  const gardenCity = (garden as any)?.locationCity || "";
+  const gardenCountry = (garden as any)?.locationCountry || "";
+  
+  const [city, setCity] = React.useState(gardenCity);
+  const [country, setCountry] = React.useState(gardenCountry);
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [detectingLocation, setDetectingLocation] = React.useState(false);
+  
+  // Track the garden ID to only reset when switching to a different garden
+  const prevGardenIdRef = React.useRef<string | undefined>(gardenId);
 
   React.useEffect(() => {
-    setCity((garden as any)?.locationCity || "");
-    setCountry((garden as any)?.locationCountry || "");
-  }, [garden]);
+    // Only reset values when switching to a different garden
+    if (gardenId !== prevGardenIdRef.current) {
+      prevGardenIdRef.current = gardenId;
+      setCity(gardenCity);
+      setCountry(gardenCountry);
+    }
+  }, [gardenId, gardenCity, gardenCountry]);
 
   const handleSave = async () => {
     if (!garden?.id || !canEdit) return;
@@ -115,8 +126,7 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
   };
 
   const hasChanges =
-    city !== ((garden as any)?.locationCity || "") ||
-    country !== ((garden as any)?.locationCountry || "");
+    city !== gardenCity || country !== gardenCountry;
 
   return (
     <div className="space-y-4">
