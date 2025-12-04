@@ -1455,7 +1455,13 @@
       "stableTrend": "identique à la semaine dernière",
       "weeklyFocus": "Priorité de la semaine",
       "weatherAdvice": "Conseils météo",
-      "focusAreas": "Actions à faire"
+      "focusAreas": "Actions à faire",
+      "export": "Exporter",
+      "exportMarkdown": "Markdown (.md)",
+      "exportText": "Texte brut (.txt)",
+      "exportJson": "JSON (.json)",
+      "exportError": "Échec de l'exportation de l'analyse",
+      "imagesAnalyzed": "{{count}} photos analysées"
     },
     "journalSection": {
       "title": "Journal de jardin",
@@ -1513,7 +1519,8 @@
       "private": "Privé",
       "aiFeedback": "Conseils IA du jardinier",
       "generating": "Génération...",
-      "getAIFeedback": "Obtenir des conseils IA"
+      "getAIFeedback": "Obtenir des conseils IA",
+      "photosAnalyzed": "{{count}} photo(s) analysée(s)"
     },
     "routineSection": {
       "thisWeek": "Cette semaine",

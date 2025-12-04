@@ -27,6 +27,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Info,
+  Download,
+  FileText,
+  FileJson,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
@@ -195,6 +198,21 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   const [adviceError, setAdviceError] = React.useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = React.useState<AnalyticsData | null>(null);
   const [activeTab, setActiveTab] = React.useState<"overview" | "tasks" | "plants" | "members">("overview");
+  const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
+  const exportMenuRef = React.useRef<HTMLDivElement>(null);
+
+  // Close export menu when clicking outside
+  React.useEffect(() => {
+    if (!exportMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [exportMenuOpen]);
 
   // Check if garden is eligible for AI advice
   const gardenCreatedAt = garden?.createdAt ? new Date(garden.createdAt) : null;
@@ -362,6 +380,52 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       setAdviceLoading(false);
     }
   }, [gardenId, isEligibleForAdvice]);
+
+  // Export analysis as a file
+  const exportAnalysis = React.useCallback(async (format: "json" | "md" | "txt") => {
+    setExporting(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "*/*" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const resp = await fetch(`/api/garden/${gardenId}/advice/export?format=${format}`, {
+        headers,
+        credentials: "same-origin",
+      });
+
+      if (!resp.ok) {
+        throw new Error("Failed to export analysis");
+      }
+
+      // Get filename from Content-Disposition header or create default
+      const contentDisposition = resp.headers.get("Content-Disposition");
+      let filename = `garden-analysis.${format}`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^";\n]+)"?/);
+        if (match) filename = match[1];
+      }
+
+      // Download the file
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      setExportMenuOpen(false);
+    } catch (err: any) {
+      console.error("[Analytics] Export failed:", err);
+      alert(t("gardenDashboard.analyticsSection.exportError", { defaultValue: "Failed to export analysis" }));
+    } finally {
+      setExporting(false);
+    }
+  }, [gardenId, t]);
 
   React.useEffect(() => {
     fetchAnalytics();
@@ -864,22 +928,68 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       </details>
                     )}
 
-                    {/* Generated timestamp */}
-                    <p className="text-xs text-muted-foreground pt-2 flex items-center gap-2">
-                      <span>
-                        {t("gardenDashboard.analyticsSection.generatedOn", { 
-                          defaultValue: "Generated on {{date}}",
-                          date: new Date(advice.generatedAt).toLocaleDateString(undefined, {
-                            weekday: "long",
-                            month: "long",
-                            day: "numeric",
-                          }),
-                        })}
-                      </span>
-                      {advice.weatherContext?.location && (
-                        <span className="text-blue-500">• Based on {advice.weatherContext.location} weather</span>
-                      )}
-                    </p>
+                    {/* Generated timestamp and export */}
+                    <div className="flex items-center justify-between pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
+                      <p className="text-xs text-muted-foreground flex items-center gap-2">
+                        <span>
+                          {t("gardenDashboard.analyticsSection.generatedOn", { 
+                            defaultValue: "Generated on {{date}}",
+                            date: new Date(advice.generatedAt).toLocaleDateString(undefined, {
+                              weekday: "long",
+                              month: "long",
+                              day: "numeric",
+                            }),
+                          })}
+                        </span>
+                        {advice.weatherContext?.location && (
+                          <span className="text-blue-500">• Based on {advice.weatherContext.location} weather</span>
+                        )}
+                      </p>
+                      
+                      {/* Export button */}
+                      <div className="relative" ref={exportMenuRef}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="rounded-xl text-xs gap-1.5"
+                          onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                          disabled={exporting}
+                        >
+                          {exporting ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5" />
+                          )}
+                          {t("gardenDashboard.analyticsSection.export", { defaultValue: "Export" })}
+                        </Button>
+                        
+                        {exportMenuOpen && (
+                          <div className="absolute right-0 bottom-full mb-1 z-50 bg-white dark:bg-stone-800 rounded-xl shadow-lg border border-stone-200 dark:border-stone-700 py-1 min-w-[160px]">
+                            <button
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-stone-100 dark:hover:bg-stone-700 flex items-center gap-2"
+                              onClick={() => exportAnalysis("md")}
+                            >
+                              <FileText className="w-4 h-4 text-emerald-500" />
+                              {t("gardenDashboard.analyticsSection.exportMarkdown", { defaultValue: "Markdown (.md)" })}
+                            </button>
+                            <button
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-stone-100 dark:hover:bg-stone-700 flex items-center gap-2"
+                              onClick={() => exportAnalysis("txt")}
+                            >
+                              <FileText className="w-4 h-4 text-blue-500" />
+                              {t("gardenDashboard.analyticsSection.exportText", { defaultValue: "Plain Text (.txt)" })}
+                            </button>
+                            <button
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-stone-100 dark:hover:bg-stone-700 flex items-center gap-2"
+                              onClick={() => exportAnalysis("json")}
+                            >
+                              <FileJson className="w-4 h-4 text-orange-500" />
+                              {t("gardenDashboard.analyticsSection.exportJson", { defaultValue: "JSON (.json)" })}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center py-6 text-sm text-muted-foreground">

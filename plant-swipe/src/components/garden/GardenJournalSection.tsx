@@ -60,6 +60,7 @@ interface JournalEntry {
   isPrivate: boolean;
   aiFeedback: string | null;
   aiFeedbackGeneratedAt: string | null;
+  aiFeedbackImagesAnalyzed?: number;
   photos: JournalPhoto[];
   createdAt: string;
   updatedAt: string;
@@ -538,7 +539,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     }
   };
 
-  // Generate AI feedback for entry
+  // Generate AI feedback for entry (with image analysis)
   const handleGenerateFeedback = async (entryId: string) => {
     setGeneratingFeedback(true);
     try {
@@ -554,6 +555,15 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       });
 
       if (resp.ok) {
+        const data = await resp.json();
+        // Store images analyzed count in entry metadata (will be updated on fetch)
+        if (data.imagesAnalyzed > 0) {
+          setEntries(prev => prev.map(e => 
+            e.id === entryId 
+              ? { ...e, aiFeedback: data.feedback, aiFeedbackImagesAnalyzed: data.imagesAnalyzed }
+              : e
+          ));
+        }
         fetchEntries();
       }
     } catch (err) {
@@ -1353,11 +1363,22 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                       {/* AI Feedback section */}
                       {entry.aiFeedback ? (
                         <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200/50 dark:border-purple-800/50">
-                          <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300 mb-2">
-                            <Sparkles className="w-4 h-4" />
-                            {t("gardenDashboard.journalSection.aiFeedback", "AI Gardener Feedback")}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300">
+                              <Sparkles className="w-4 h-4" />
+                              {t("gardenDashboard.journalSection.aiFeedback", "AI Gardener Feedback")}
+                            </div>
+                            {entry.photos && entry.photos.length > 0 && (
+                              <span className="text-xs bg-purple-200/50 dark:bg-purple-800/50 text-purple-600 dark:text-purple-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <Camera className="w-3 h-3" />
+                                {t("gardenDashboard.journalSection.photosAnalyzed", { 
+                                  defaultValue: "{{count}} photo(s) analyzed",
+                                  count: Math.min(entry.photos.length, 4)
+                                })}
+                              </span>
+                            )}
                           </div>
-                          <p className="text-sm text-purple-800 dark:text-purple-200 leading-relaxed">
+                          <p className="text-sm text-purple-800 dark:text-purple-200 leading-relaxed whitespace-pre-wrap">
                             {entry.aiFeedback}
                           </p>
                           {entry.aiFeedbackGeneratedAt && (

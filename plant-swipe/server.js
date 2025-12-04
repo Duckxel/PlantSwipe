@@ -10958,11 +10958,13 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       plantImages = imgRows || []
     } catch {}
 
-    // Get journal photos from recent entries
+    // Get journal photos from recent entries (with URLs for vision analysis)
     let journalPhotos = []
+    let journalPhotoUrls = []
     try {
       const photoRows = await sql`
-        select gjp.caption, gjp.plant_health, gjp.observations, gp.nickname, p.name as plant_name
+        select gjp.image_url, gjp.caption, gjp.plant_health, gjp.observations, 
+               gp.nickname, p.name as plant_name, gje.entry_date
         from public.garden_journal_photos gjp
         join public.garden_journal_entries gje on gje.id = gjp.entry_id
         left join public.garden_plants gp on gp.id = gjp.garden_plant_id
@@ -10970,9 +10972,13 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         where gje.garden_id = ${gardenId}
           and gje.entry_date >= ${weekAgo}::date
         order by gjp.uploaded_at desc
-        limit 10
+        limit 6
       `
       journalPhotos = photoRows || []
+      // Transform URLs to media proxy format
+      journalPhotoUrls = journalPhotos
+        .map(p => supabaseStorageToMediaProxy(p.image_url) || p.image_url)
+        .filter(Boolean)
     } catch {}
 
     // Build comprehensive plant list
@@ -11105,14 +11111,45 @@ Format your response as JSON with this structure:
 }`
 
     try {
+      // Build messages with optional images for vision analysis
+      const useVision = journalPhotoUrls.length > 0
+      let messages = [
+        { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
+      ]
+
+      if (useVision) {
+        // Include up to 4 most recent journal photos for analysis
+        const imageUrls = journalPhotoUrls.slice(0, 4)
+        const content = [
+          { type: 'text', text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
+- Overall plant health and vigor
+- Signs of disease, pests, or stress
+- Watering issues (overwatering/underwatering)
+- Nutrient deficiencies
+- Growth progress
+Include specific observations from the photos in your advice.` }
+        ]
+        
+        for (const url of imageUrls) {
+          content.push({
+            type: 'image_url',
+            image_url: {
+              url: url,
+              detail: 'high'
+            }
+          })
+        }
+        
+        messages.push({ role: 'user', content })
+      } else {
+        messages.push({ role: 'user', content: prompt })
+      }
+
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging.' },
-          { role: 'user', content: prompt },
-        ],
+        model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
+        messages,
         temperature: 0.7,
-        max_tokens: 1500,
+        max_tokens: useVision ? 2000 : 1500,
         response_format: { type: 'json_object' },
       })
 
@@ -11612,7 +11649,7 @@ app.delete('/api/garden/:id/journal/:entryId', async (req, res) => {
   }
 })
 
-// Generate AI feedback for a journal entry
+// Generate AI feedback for a journal entry (with image analysis)
 app.post('/api/garden/:id/journal/:entryId/feedback', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
@@ -11623,7 +11660,7 @@ app.post('/api/garden/:id/journal/:entryId/feedback', async (req, res) => {
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
     if (!openai) { res.status(500).json({ ok: false, error: 'AI not configured' }); return }
 
-    // Get entry
+    // Get entry with photos
     const entries = await sql`
       select e.*, g.name as garden_name, g.location_city
       from public.garden_journal_entries e
@@ -11636,6 +11673,18 @@ app.post('/api/garden/:id/journal/:entryId/feedback', async (req, res) => {
       return
     }
     const entry = entries[0]
+
+    // Get photos for this entry
+    const photos = await sql`
+      select gjp.image_url, gjp.caption, gjp.plant_health, gjp.observations,
+             gp.nickname, p.name as plant_name
+      from public.garden_journal_photos gjp
+      left join public.garden_plants gp on gp.id = gjp.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where gjp.entry_id = ${entryId}
+      order by gjp.uploaded_at desc
+      limit 4
+    `
 
     // Get plants in garden for context
     const plants = await sql`
@@ -11654,14 +11703,15 @@ app.post('/api/garden/:id/journal/:entryId/feedback', async (req, res) => {
     }
 
     const moodLabels = {
-      great: 'The gardener is feeling great about their garden',
-      good: 'The gardener is feeling good',
-      neutral: 'The gardener is feeling neutral',
-      concerned: 'The gardener has some concerns',
-      struggling: 'The gardener is struggling with something'
+      blooming: 'Garden is blooming beautifully',
+      thriving: 'Garden is thriving and growing strong',
+      sprouting: 'New growth is appearing',
+      resting: 'Garden is in a resting/dormant phase',
+      wilting: 'Some plants need attention'
     }
 
-    const prompt = `You are a friendly, knowledgeable gardening expert providing personalized feedback on a gardener's journal entry.
+    // Build prompt
+    const textPrompt = `You are a friendly, knowledgeable gardening expert providing personalized feedback on a gardener's journal entry.
 
 Garden: "${entry.garden_name}"
 ${entry.location_city ? `Location: ${entry.location_city}` : ''}
@@ -11669,30 +11719,64 @@ Plants in garden: ${plantList || 'Not specified'}
 ${weatherContext}
 
 Journal Entry Date: ${entry.entry_date}
-${entry.mood ? `Mood: ${moodLabels[entry.mood] || entry.mood}` : ''}
+${entry.mood ? `Garden Status: ${moodLabels[entry.mood] || entry.mood}` : ''}
 ${entry.title ? `Title: ${entry.title}` : ''}
 
 Entry Content:
 "${entry.content}"
 
-Please provide brief, warm, helpful feedback (2-4 sentences) that:
-1. Acknowledges their observations
-2. Offers one specific tip or insight related to what they mentioned
-3. Encourages their gardening journey
+${photos.length > 0 ? `The gardener has attached ${photos.length} photo(s) with this entry. Please analyze the images carefully and include observations about:
+- Plant health and appearance
+- Any signs of disease, pests, or nutrient deficiency
+- Growth progress
+- Care recommendations based on what you see` : ''}
 
-Keep the tone conversational and supportive. Don't be generic - reference specific things they mentioned.`
+Please provide detailed, warm, helpful feedback that:
+1. ${photos.length > 0 ? 'Describes what you observe in the photos' : 'Acknowledges their observations'}
+2. Identifies any issues or areas needing attention
+3. Offers specific, actionable tips based on what you see
+4. Celebrates any positive progress
+5. Encourages their gardening journey
+
+Be specific and reference what you actually see in the images. If you notice any concerning signs, explain what they might be and how to address them.`
+
+    // Build messages array with images for OpenAI Vision
+    const messages = [
+      { role: 'system', content: 'You are a friendly, expert gardener who can analyze plant photos and provide detailed, helpful feedback. When analyzing images, be specific about what you observe.' },
+    ]
+
+    // If we have photos, use vision model with images
+    if (photos.length > 0) {
+      const content = [
+        { type: 'text', text: textPrompt }
+      ]
+      
+      // Add images - transform URLs to media proxy format for optimization
+      for (const photo of photos) {
+        const imageUrl = supabaseStorageToMediaProxy(photo.image_url) || photo.image_url
+        content.push({
+          type: 'image_url',
+          image_url: {
+            url: imageUrl,
+            detail: 'high' // Use high detail for plant analysis
+          }
+        })
+      }
+      
+      messages.push({ role: 'user', content })
+    } else {
+      messages.push({ role: 'user', content: textPrompt })
+    }
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You are a friendly gardening expert providing warm, personalized feedback.' },
-        { role: 'user', content: prompt },
-      ],
+      model: photos.length > 0 ? 'gpt-4o' : 'gpt-4o-mini', // Use vision-capable model when we have images
+      messages,
       temperature: 0.7,
-      max_tokens: 300,
+      max_tokens: photos.length > 0 ? 800 : 400,
     })
 
     const feedback = completion.choices[0]?.message?.content
+    const tokensUsed = completion.usage?.total_tokens || 0
 
     await sql`
       update public.garden_journal_entries
@@ -11700,10 +11784,191 @@ Keep the tone conversational and supportive. Don't be generic - reference specif
       where id = ${entryId}
     `
 
-    res.json({ ok: true, feedback })
+    res.json({ ok: true, feedback, imagesAnalyzed: photos.length, tokensUsed })
   } catch (e) {
     console.error('[journal-feedback] Error:', e)
     res.status(500).json({ ok: false, error: e?.message || 'Failed to generate feedback' })
+  }
+})
+
+// Export AI analysis as a formatted document
+app.get('/api/garden/:id/advice/export', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    const format = req.query.format || 'json' // json, txt, md
+
+    // Verify membership
+    const membership = await sql`
+      select 1 from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership?.length) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
+      return
+    }
+
+    // Get garden info
+    const gardenRows = await sql`
+      select name, location_city, location_country, created_at
+      from public.gardens where id = ${gardenId} limit 1
+    `
+    const garden = gardenRows[0]
+    if (!garden) {
+      res.status(404).json({ ok: false, error: 'Garden not found' })
+      return
+    }
+
+    // Get all AI advice history
+    const adviceHistory = await sql`
+      select week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+             improvement_score, weather_context, generated_at
+      from public.garden_ai_advice
+      where garden_id = ${gardenId}
+      order by week_start desc
+      limit 12
+    `
+
+    // Get recent journal entries with AI feedback and photos
+    const journalEntries = await sql`
+      select gje.id, gje.entry_date, gje.title, gje.content, gje.mood, gje.ai_feedback, gje.ai_feedback_generated_at,
+             (select json_agg(json_build_object(
+               'url', gjp.image_url,
+               'caption', gjp.caption,
+               'observations', gjp.observations,
+               'plantHealth', gjp.plant_health
+             )) from public.garden_journal_photos gjp where gjp.entry_id = gje.id) as photos
+      from public.garden_journal_entries gje
+      where gje.garden_id = ${gardenId} and gje.ai_feedback is not null
+      order by gje.entry_date desc
+      limit 20
+    `
+
+    // Get plant info
+    const plants = await sql`
+      select gp.nickname, p.name as plant_name, gp.plants_on_hand
+      from public.garden_plants gp
+      left join public.plants p on p.id = gp.plant_id
+      where gp.garden_id = ${gardenId}
+      limit 50
+    `
+
+    const exportData = {
+      garden: {
+        name: garden.name,
+        location: garden.location_city ? `${garden.location_city}${garden.location_country ? ', ' + garden.location_country : ''}` : null,
+        createdAt: garden.created_at,
+        plantsCount: plants.length,
+      },
+      plants: plants.map(p => ({
+        name: p.nickname || p.plant_name,
+        quantity: p.plants_on_hand || 1,
+      })),
+      weeklyAdvice: adviceHistory.map(a => ({
+        weekStart: a.week_start,
+        summary: a.advice_summary,
+        focusAreas: a.focus_areas || [],
+        plantTips: a.plant_specific_tips || [],
+        score: a.improvement_score,
+        weather: a.weather_context?.current ? `${a.weather_context.current.temp}°C, ${a.weather_context.current.condition}` : null,
+        fullAdvice: a.advice_text,
+        generatedAt: a.generated_at,
+      })),
+      journalFeedback: journalEntries.map(e => ({
+        date: e.entry_date,
+        title: e.title,
+        mood: e.mood,
+        yourEntry: e.content,
+        aiFeedback: e.ai_feedback,
+        feedbackGeneratedAt: e.ai_feedback_generated_at,
+        photos: (e.photos || []).map(p => ({
+          url: supabaseStorageToMediaProxy(p.url) || p.url,
+          caption: p.caption,
+          observations: p.observations,
+          plantHealth: p.plantHealth,
+        })),
+        photosAnalyzed: Math.min((e.photos || []).length, 4),
+      })),
+      exportedAt: new Date().toISOString(),
+    }
+
+    if (format === 'json') {
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Content-Disposition', `attachment; filename="${garden.name}-garden-analysis.json"`)
+      res.json(exportData)
+    } else if (format === 'md' || format === 'txt') {
+      // Generate markdown/text format
+      let content = `# ${garden.name} - Garden Analysis Report\n\n`
+      content += `**Exported:** ${new Date().toLocaleDateString()}\n`
+      if (exportData.garden.location) content += `**Location:** ${exportData.garden.location}\n`
+      content += `**Plants:** ${exportData.garden.plantsCount}\n\n`
+
+      content += `---\n\n## Your Plants\n\n`
+      exportData.plants.forEach(p => {
+        content += `- ${p.name} (${p.quantity})\n`
+      })
+
+      content += `\n---\n\n## Weekly Gardener Advice\n\n`
+      exportData.weeklyAdvice.forEach(a => {
+        content += `### Week of ${a.weekStart}\n`
+        if (a.score) content += `**Garden Score:** ${a.score}/100\n`
+        if (a.weather) content += `**Weather:** ${a.weather}\n`
+        content += `\n**Summary:** ${a.summary || 'N/A'}\n\n`
+        if (a.focusAreas?.length) {
+          content += `**Focus Areas:**\n`
+          a.focusAreas.forEach((f, i) => content += `${i + 1}. ${f}\n`)
+          content += `\n`
+        }
+        if (a.plantTips?.length) {
+          content += `**Plant Tips:**\n`
+          a.plantTips.forEach(t => {
+            content += `- **${t.plantName}** (${t.priority}): ${t.tip}\n`
+          })
+          content += `\n`
+        }
+        if (a.fullAdvice) {
+          content += `**Detailed Advice:**\n${a.fullAdvice}\n\n`
+        }
+        content += `---\n\n`
+      })
+
+      if (exportData.journalFeedback.length > 0) {
+        content += `## Journal Entry Feedback\n\n`
+        exportData.journalFeedback.forEach(e => {
+          content += `### ${e.date}${e.title ? ' - ' + e.title : ''}\n`
+          if (e.mood) content += `**Garden Status:** ${e.mood}\n`
+          if (e.photosAnalyzed > 0) content += `**Photos Analyzed:** ${e.photosAnalyzed}\n`
+          content += `\n**Your Entry:**\n${e.yourEntry}\n\n`
+          if (e.photos && e.photos.length > 0) {
+            content += `**Photos:**\n`
+            e.photos.forEach((p, i) => {
+              content += `- Photo ${i + 1}: ${p.url}\n`
+              if (p.caption) content += `  Caption: ${p.caption}\n`
+              if (p.observations) content += `  Observations: ${p.observations}\n`
+              if (p.plantHealth) content += `  Plant Health: ${p.plantHealth}\n`
+            })
+            content += `\n`
+          }
+          content += `**AI Feedback:**\n${e.aiFeedback}\n\n`
+          content += `---\n\n`
+        })
+      }
+
+      const ext = format === 'md' ? 'md' : 'txt'
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      res.setHeader('Content-Disposition', `attachment; filename="${garden.name}-garden-analysis.${ext}"`)
+      res.send(content)
+    } else {
+      res.status(400).json({ ok: false, error: 'Invalid format. Use json, md, or txt' })
+    }
+  } catch (e) {
+    console.error('[advice-export] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to export analysis' })
   }
 })
 
@@ -11774,10 +12039,11 @@ app.post('/api/garden/:id/upload', async (req, res) => {
         return
       }
 
-      // Get public URL
+      // Get public URL and transform to media proxy
       const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
+      const proxyUrl = supabaseStorageToMediaProxy(urlData?.publicUrl) || urlData?.publicUrl || ''
       
-      res.json({ ok: true, url: urlData?.publicUrl || '', path: storagePath })
+      res.json({ ok: true, url: proxyUrl, path: storagePath })
     })
 
     req.pipe(bb)

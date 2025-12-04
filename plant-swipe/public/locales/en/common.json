@@ -1455,7 +1455,13 @@
       "stableTrend": "same as last week",
       "weeklyFocus": "This Week's Focus",
       "weatherAdvice": "Weather-Based Tips",
-      "focusAreas": "Action Items"
+      "focusAreas": "Action Items",
+      "export": "Export",
+      "exportMarkdown": "Markdown (.md)",
+      "exportText": "Plain Text (.txt)",
+      "exportJson": "JSON (.json)",
+      "exportError": "Failed to export analysis",
+      "imagesAnalyzed": "{{count}} photos analyzed"
     },
     "journalSection": {
       "title": "Garden Journal",
@@ -1513,7 +1519,8 @@
       "private": "Private",
       "aiFeedback": "AI Gardener Feedback",
       "generating": "Generating...",
-      "getAIFeedback": "Get AI Feedback"
+      "getAIFeedback": "Get AI Feedback",
+      "photosAnalyzed": "{{count}} photo(s) analyzed"
     },
     "routineSection": {
       "thisWeek": "This week",
