@@ -10838,7 +10838,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       try {
         const existingAdvice = await sql`
           select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-                 improvement_score, generated_at
+                 improvement_score, generated_at, weather_context, location_context
           from public.garden_ai_advice
           where garden_id = ${gardenId} and week_start = ${weekStartIso}
           limit 1
@@ -10856,6 +10856,8 @@ app.get('/api/garden/:id/advice', async (req, res) => {
               plantSpecificTips: adv.plant_specific_tips || [],
               improvementScore: adv.improvement_score,
               generatedAt: adv.generated_at,
+              weatherContext: adv.weather_context || null,
+              locationContext: adv.location_context || null,
             },
           })
           return
@@ -11144,13 +11146,17 @@ Include specific observations from the photos in your advice.` }
         messages.push({ role: 'user', content: prompt })
       }
 
-      const completion = await openai.chat.completions.create({
+      const completionOptions = {
         model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
         messages,
         temperature: 0.7,
         max_tokens: useVision ? 2000 : 1500,
-        response_format: { type: 'json_object' },
-      })
+      }
+      // Only use json_object response format when not using vision (compatibility)
+      if (!useVision) {
+        completionOptions.response_format = { type: 'json_object' }
+      }
+      const completion = await openai.chat.completions.create(completionOptions)
 
       const aiResponse = completion.choices[0]?.message?.content
       const tokensUsed = completion.usage?.total_tokens || 0

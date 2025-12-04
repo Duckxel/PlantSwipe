@@ -777,7 +777,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 ) : advice ? (
                   <div className="space-y-5">
                     {/* Location & Weather Header */}
-                    {advice.weatherContext?.current && (
+                    {advice.weatherContext && advice.weatherContext.current && (
                       <div className="flex items-center gap-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200/50 dark:border-blue-800/50">
                         <div className="flex items-center gap-2">
                           <span className="text-2xl">🌡️</span>
