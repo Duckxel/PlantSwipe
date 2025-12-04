@@ -574,7 +574,7 @@ export async function refreshGardenStreak(gardenId: string, anchorDayIso?: strin
 export async function getGardenPlants(gardenId: string, language?: SupportedLanguage): Promise<Array<GardenPlant & { plant?: Plant | null; sortIndex?: number | null }>> {
   const { data, error } = await supabase
     .from('garden_plants')
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value, plants_on_hand')
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value, plants_on_hand, health_status, notes, last_health_update')
     .eq('garden_id', gardenId)
     .order('sort_index', { ascending: true, nullsFirst: false })
   if (error) throw new Error(error.message)
@@ -644,6 +644,9 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
       overrideWaterFreqUnit: r.override_water_freq_unit || null,
       overrideWaterFreqValue: r.override_water_freq_value ?? null,
       plantsOnHand: Number(r.plants_on_hand ?? 0),
+      healthStatus: r.health_status || null,
+      notes: r.notes || null,
+      lastHealthUpdate: r.last_health_update || null,
       plant: idToPlant[plantId] || null,
       sortIndex: (r as any).sort_index ?? null,
     }

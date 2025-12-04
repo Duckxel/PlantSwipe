@@ -4551,15 +4551,19 @@ function EditPlantButton({
     setSubmitting(true);
     try {
       // Update nickname, count, health status, and notes; delete plant if count becomes 0
+      const updateData: Record<string, any> = {
+        nickname: nickname.trim() || null,
+        plants_on_hand: Math.max(0, Number(count || 0)),
+        health_status: healthStatus || null,
+        notes: notes.trim() || null,
+      };
+      // Only update last_health_update if health status changed
+      if (healthStatus !== (gp.healthStatus || null)) {
+        updateData.last_health_update = new Date().toISOString();
+      }
       await supabase
         .from("garden_plants")
-        .update({
-          nickname: nickname.trim() || null,
-          plants_on_hand: Math.max(0, Number(count || 0)),
-          health_status: healthStatus || null,
-          notes: notes.trim() || null,
-          last_health_update: healthStatus !== gp.healthStatus ? new Date().toISOString() : undefined,
-        })
+        .update(updateData)
         .eq("id", gp.id);
       if (count <= 0) {
         await supabase.from("garden_plants").delete().eq("id", gp.id);
