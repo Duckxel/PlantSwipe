@@ -11052,9 +11052,8 @@ PLANT OBSERVATIONS FROM PHOTOS:
 ${photoObservations.map(p => `- ${p.nickname || p.plant_name || 'Plant'}: ${p.plant_health ? `Health: ${p.plant_health}` : ''} ${p.observations || ''}`).join('\n')}`
     }
 
-    // Get current date and day of week for temporal context
-    const now = new Date()
-    const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()]
+    // Get current date and day of week for temporal context (reuse 'now' from earlier)
+    const dayOfWeekName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()]
     const currentDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
     const prompt = `You are an expert gardener and plant care specialist providing personalized weekly advice. Analyze all the data below and provide comprehensive, actionable advice.
@@ -11062,7 +11061,7 @@ ${photoObservations.map(p => `- ${p.nickname || p.plant_name || 'Plant'}: ${p.pl
 ═══════════════════════════════════════════════════════════════
 📅 DATE & TIME CONTEXT
 ═══════════════════════════════════════════════════════════════
-Today: ${dayOfWeek}, ${currentDate}
+Today: ${dayOfWeekName}, ${currentDate}
 Location: ${gardenLocation.location_city || 'Unknown'}${gardenLocation.location_country ? `, ${gardenLocation.location_country}` : ''}
 Timezone: ${gardenLocation.location_timezone || 'Unknown'}
 Average task completion time: ${avgCompletionTime}
