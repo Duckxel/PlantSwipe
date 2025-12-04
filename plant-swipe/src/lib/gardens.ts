@@ -3297,3 +3297,131 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
   })
 }
 
+
+// ----- Garden Analytics Types and Functions -----
+
+export interface DailyStat {
+  date: string
+  due: number
+  completed: number
+  success: boolean
+  water: number
+  fertilize: number
+  harvest: number
+  cut: number
+  custom: number
+}
+
+export interface WeeklyStats {
+  tasksCompleted: number
+  tasksDue: number
+  completionRate: number
+  trend: 'up' | 'down' | 'stable'
+  trendValue: number
+  tasksByType: {
+    water: number
+    fertilize: number
+    harvest: number
+    cut: number
+    custom: number
+  }
+}
+
+export interface MemberContribution {
+  userId: string
+  displayName: string
+  tasksCompleted: number
+  percentage: number
+  color: string
+}
+
+export interface PlantStats {
+  total: number
+  species: number
+  needingAttention: number
+  healthy: number
+}
+
+export interface GardenAnalytics {
+  dailyStats: DailyStat[]
+  weeklyStats: WeeklyStats
+  memberContributions: MemberContribution[]
+  plantStats: PlantStats
+}
+
+export interface PlantTip {
+  plantName: string
+  tip: string
+  priority: 'high' | 'medium' | 'low'
+}
+
+export interface GardenAdvice {
+  id: string
+  weekStart: string
+  adviceText: string
+  adviceSummary: string
+  focusAreas: string[]
+  plantSpecificTips: PlantTip[]
+  improvementScore: number | null
+  generatedAt: string
+}
+
+export interface AdviceResponse {
+  ok: boolean
+  advice: GardenAdvice | null
+  message?: string
+}
+
+export interface AnalyticsResponse {
+  ok: boolean
+  analytics: GardenAnalytics
+  error?: string
+}
+
+/**
+ * Fetch garden analytics data from the server
+ */
+export async function fetchGardenAnalytics(gardenId: string): Promise<AnalyticsResponse> {
+  const { data: session } = await supabase.auth.getSession()
+  const token = session?.session?.access_token
+  
+  const response = await fetch(`/api/garden/${gardenId}/analytics`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+  })
+  
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Failed to fetch analytics' }))
+    throw new Error(err.error || 'Failed to fetch analytics')
+  }
+  
+  return response.json()
+}
+
+/**
+ * Fetch or generate garden AI advice
+ */
+export async function fetchGardenAdvice(gardenId: string, forceRefresh = false): Promise<AdviceResponse> {
+  const { data: session } = await supabase.auth.getSession()
+  const token = session?.session?.access_token
+  
+  const url = `/api/garden/${gardenId}/advice${forceRefresh ? '?refresh=true' : ''}`
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+  })
+  
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Failed to fetch advice' }))
+    throw new Error(err.error || 'Failed to fetch advice')
+  }
+  
+  return response.json()
+}
+

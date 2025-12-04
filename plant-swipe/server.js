@@ -10615,6 +10615,417 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
   }
 })
 
+// Garden Analytics endpoint - returns aggregated statistics
+app.get('/api/garden/:id/analytics', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Verify membership
+    const membership = await sql`
+      select 1 from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership || membership.length === 0) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
+      return
+    }
+
+    const today = new Date().toISOString().slice(0, 10)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    // Get task occurrences for last 30 days with task type breakdown
+    const taskStats = await sql`
+      select
+        date_trunc('day', o.due_at)::date as due_date,
+        t.type,
+        sum(o.required_count) as due_count,
+        sum(least(o.completed_count, o.required_count)) as completed_count
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      where t.garden_id = ${gardenId}
+        and o.due_at >= ${thirtyDaysAgo}::date
+        and o.due_at <= (${today}::date + interval '1 day')
+      group by due_date, t.type
+      order by due_date asc
+    `
+
+    // Aggregate by date
+    const dailyStatsMap = {}
+    for (const row of taskStats) {
+      const dateKey = row.due_date ? new Date(row.due_date).toISOString().slice(0, 10) : null
+      if (!dateKey) continue
+      if (!dailyStatsMap[dateKey]) {
+        dailyStatsMap[dateKey] = { date: dateKey, due: 0, completed: 0, water: 0, fertilize: 0, harvest: 0, cut: 0, custom: 0 }
+      }
+      const due = Number(row.due_count || 0)
+      const done = Number(row.completed_count || 0)
+      dailyStatsMap[dateKey].due += due
+      dailyStatsMap[dateKey].completed += done
+      if (row.type && dailyStatsMap[dateKey][row.type] !== undefined) {
+        dailyStatsMap[dateKey][row.type] += due
+      }
+    }
+
+    // Fill in missing days
+    const dailyStats = []
+    const cursor = new Date(thirtyDaysAgo)
+    const endDate = new Date(today)
+    while (cursor <= endDate) {
+      const dateKey = cursor.toISOString().slice(0, 10)
+      if (dailyStatsMap[dateKey]) {
+        dailyStatsMap[dateKey].success = dailyStatsMap[dateKey].due === 0 || dailyStatsMap[dateKey].completed >= dailyStatsMap[dateKey].due
+        dailyStats.push(dailyStatsMap[dateKey])
+      } else {
+        dailyStats.push({ date: dateKey, due: 0, completed: 0, success: true, water: 0, fertilize: 0, harvest: 0, cut: 0, custom: 0 })
+      }
+      cursor.setDate(cursor.getDate() + 1)
+    }
+
+    // Get member contributions for this week
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    let memberContributions = []
+    try {
+      const memberStats = await sql`
+        select
+          uc.user_id,
+          p.display_name,
+          p.accent_key,
+          sum(uc.increment) as tasks_completed
+        from public.garden_task_user_completions uc
+        join public.garden_plant_task_occurrences o on o.id = uc.occurrence_id
+        join public.garden_plant_tasks t on t.id = o.task_id
+        left join public.profiles p on p.id = uc.user_id
+        where t.garden_id = ${gardenId}
+          and uc.occurred_at >= ${weekAgo}::date
+        group by uc.user_id, p.display_name, p.accent_key
+        order by tasks_completed desc
+      `
+      const totalCompleted = memberStats.reduce((s, r) => s + Number(r.tasks_completed || 0), 0)
+      const memberColors = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4', '#84cc16', '#f97316']
+      memberContributions = memberStats.map((r, i) => ({
+        userId: String(r.user_id),
+        displayName: r.display_name || 'Member',
+        tasksCompleted: Number(r.tasks_completed || 0),
+        percentage: totalCompleted > 0 ? Math.round((Number(r.tasks_completed || 0) / totalCompleted) * 100) : 0,
+        color: memberColors[i % memberColors.length],
+      }))
+    } catch {}
+
+    // Get plant stats
+    const plantStats = await sql`
+      select
+        count(distinct id)::int as total,
+        count(distinct plant_id)::int as species,
+        count(case when plants_on_hand < 1 then 1 end)::int as needs_attention,
+        count(case when plants_on_hand >= 1 then 1 end)::int as healthy
+      from public.garden_plants
+      where garden_id = ${gardenId}
+    `
+    const ps = plantStats[0] || { total: 0, species: 0, needs_attention: 0, healthy: 0 }
+
+    // Compute weekly stats
+    const last7Stats = dailyStats.slice(-7)
+    const prev7Stats = dailyStats.slice(-14, -7)
+    const currentWeekCompleted = last7Stats.reduce((s, d) => s + d.completed, 0)
+    const currentWeekDue = last7Stats.reduce((s, d) => s + d.due, 0)
+    const prevWeekCompleted = prev7Stats.reduce((s, d) => s + d.completed, 0)
+    const completionRate = currentWeekDue > 0 ? Math.round((currentWeekCompleted / currentWeekDue) * 100) : 100
+    const trendValue = prevWeekCompleted > 0 ? Math.round(((currentWeekCompleted - prevWeekCompleted) / prevWeekCompleted) * 100) : 0
+    let trend = 'stable'
+    if (trendValue > 5) trend = 'up'
+    else if (trendValue < -5) trend = 'down'
+
+    const tasksByType = last7Stats.reduce((acc, d) => {
+      acc.water += d.water || 0
+      acc.fertilize += d.fertilize || 0
+      acc.harvest += d.harvest || 0
+      acc.cut += d.cut || 0
+      acc.custom += d.custom || 0
+      return acc
+    }, { water: 0, fertilize: 0, harvest: 0, cut: 0, custom: 0 })
+
+    res.json({
+      ok: true,
+      analytics: {
+        dailyStats,
+        weeklyStats: {
+          tasksCompleted: currentWeekCompleted,
+          tasksDue: currentWeekDue,
+          completionRate,
+          trend,
+          trendValue: Math.abs(trendValue),
+          tasksByType,
+        },
+        memberContributions,
+        plantStats: {
+          total: Number(ps.total || 0),
+          species: Number(ps.species || 0),
+          needingAttention: Number(ps.needs_attention || 0),
+          healthy: Number(ps.healthy || 0),
+        },
+      },
+    })
+  } catch (e) {
+    console.error('[garden-analytics] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load analytics' })
+  }
+})
+
+// Garden AI Advice endpoint - generates or retrieves cached weekly advice
+app.get('/api/garden/:id/advice', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    const forceRefresh = req.query.refresh === 'true'
+
+    // Verify membership
+    const membership = await sql`
+      select 1 from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership || membership.length === 0) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
+      return
+    }
+
+    // Get garden info
+    const gardenRows = await sql`
+      select id, name, created_at from public.gardens where id = ${gardenId} limit 1
+    `
+    const garden = gardenRows[0]
+    if (!garden) {
+      res.status(404).json({ ok: false, error: 'Garden not found' })
+      return
+    }
+
+    // Check eligibility: garden must be older than 7 days and have at least 1 plant
+    const gardenAge = Math.floor((Date.now() - new Date(garden.created_at).getTime()) / (1000 * 60 * 60 * 24))
+    if (gardenAge < 7) {
+      res.json({ ok: true, message: `Garden needs to be at least 1 week old. Come back in ${7 - gardenAge} days!`, advice: null })
+      return
+    }
+
+    const plantCountRows = await sql`
+      select count(*)::int as count from public.garden_plants where garden_id = ${gardenId}
+    `
+    const plantCount = Number(plantCountRows[0]?.count || 0)
+    if (plantCount < 1) {
+      res.json({ ok: true, message: 'Add at least 1 plant to receive personalized advice.', advice: null })
+      return
+    }
+
+    // Calculate current week start (Monday)
+    const now = new Date()
+    const dayOfWeek = now.getUTCDay() // 0 = Sunday
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+    const weekStart = new Date(now)
+    weekStart.setUTCDate(now.getUTCDate() + mondayOffset)
+    weekStart.setUTCHours(0, 0, 0, 0)
+    const weekStartIso = weekStart.toISOString().slice(0, 10)
+
+    // Check for existing advice this week
+    if (!forceRefresh) {
+      try {
+        const existingAdvice = await sql`
+          select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                 improvement_score, generated_at
+          from public.garden_ai_advice
+          where garden_id = ${gardenId} and week_start = ${weekStartIso}
+          limit 1
+        `
+        if (existingAdvice && existingAdvice.length > 0) {
+          const adv = existingAdvice[0]
+          res.json({
+            ok: true,
+            advice: {
+              id: String(adv.id),
+              weekStart: adv.week_start,
+              adviceText: adv.advice_text,
+              adviceSummary: adv.advice_summary,
+              focusAreas: adv.focus_areas || [],
+              plantSpecificTips: adv.plant_specific_tips || [],
+              improvementScore: adv.improvement_score,
+              generatedAt: adv.generated_at,
+            },
+          })
+          return
+        }
+      } catch {}
+    }
+
+    // Generate new advice using OpenAI
+    if (!openai) {
+      res.json({ ok: true, message: 'AI advice generation not available', advice: null })
+      return
+    }
+
+    // Gather garden data for AI
+    const plants = await sql`
+      select gp.id, gp.nickname, gp.plants_on_hand, p.name as plant_name, p.scientific_name,
+             p.watering_type, p.level_sun, p.maintenance_level
+      from public.garden_plants gp
+      left join public.plants p on p.id = gp.plant_id
+      where gp.garden_id = ${gardenId}
+      limit 50
+    `
+
+    // Get task completion data for last 7 days
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const taskData = await sql`
+      select
+        t.type,
+        p.name as plant_name,
+        gp.nickname,
+        o.due_at,
+        o.required_count,
+        o.completed_count
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      join public.garden_plants gp on gp.id = t.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where t.garden_id = ${gardenId}
+        and o.due_at >= ${weekAgo}::date
+      order by o.due_at desc
+      limit 200
+    `
+
+    // Get custom plant images if available
+    let plantImages = []
+    try {
+      const imgRows = await sql`
+        select gpi.image_url, gp.nickname, p.name as plant_name
+        from public.garden_plant_images gpi
+        join public.garden_plants gp on gp.id = gpi.garden_plant_id
+        left join public.plants p on p.id = gp.plant_id
+        where gp.garden_id = ${gardenId}
+        order by gpi.uploaded_at desc
+        limit 5
+      `
+      plantImages = imgRows || []
+    } catch {}
+
+    // Build prompt
+    const plantList = plants.map(p => `- ${p.nickname || p.plant_name || 'Unknown'} (${p.plant_name || 'N/A'}): ${p.plants_on_hand || 0} on hand, sun: ${p.level_sun || 'unknown'}, maintenance: ${p.maintenance_level || 'unknown'}`).join('\n')
+    
+    const taskSummary = taskData.reduce((acc, t) => {
+      const key = `${t.type}`
+      if (!acc[key]) acc[key] = { due: 0, completed: 0 }
+      acc[key].due += Number(t.required_count || 0)
+      acc[key].completed += Math.min(Number(t.completed_count || 0), Number(t.required_count || 0))
+      return acc
+    }, {})
+    const taskSummaryText = Object.entries(taskSummary).map(([type, data]) => `${type}: ${data.completed}/${data.due} completed`).join(', ')
+
+    // Calculate completion rate
+    const totalDue = Object.values(taskSummary).reduce((s, d) => s + d.due, 0)
+    const totalCompleted = Object.values(taskSummary).reduce((s, d) => s + d.completed, 0)
+    const completionRate = totalDue > 0 ? Math.round((totalCompleted / totalDue) * 100) : 100
+
+    const prompt = `You are an expert gardener providing weekly advice to a home gardener. Analyze their garden data and provide helpful, actionable advice.
+
+Garden: "${garden.name}"
+Plants (${plants.length} total):
+${plantList}
+
+This week's task performance (${completionRate}% completion rate):
+${taskSummaryText || 'No task data available'}
+
+${plantImages.length > 0 ? `The gardener has uploaded ${plantImages.length} photos of their plants.` : ''}
+
+Please provide:
+1. A brief summary (1-2 sentences) of how the garden is doing overall
+2. 2-3 focus areas for improvement this week
+3. 2-3 specific tips for individual plants that need attention
+4. An improvement score from 0-100 based on task completion and plant health
+
+Format your response as JSON with this structure:
+{
+  "summary": "Brief overall assessment",
+  "focusAreas": ["area1", "area2"],
+  "plantTips": [{"plantName": "name", "tip": "specific advice", "priority": "high|medium|low"}],
+  "improvementScore": 85,
+  "fullAdvice": "Detailed paragraph of advice"
+}`
+
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a helpful gardening expert. Always respond with valid JSON.' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+        response_format: { type: 'json_object' },
+      })
+
+      const aiResponse = completion.choices[0]?.message?.content
+      const tokensUsed = completion.usage?.total_tokens || 0
+
+      let parsed = {}
+      try {
+        parsed = JSON.parse(aiResponse || '{}')
+      } catch {
+        parsed = { summary: 'Unable to parse advice', focusAreas: [], plantTips: [], improvementScore: null, fullAdvice: aiResponse }
+      }
+
+      // Store in database
+      const insertResult = await sql`
+        insert into public.garden_ai_advice (
+          garden_id, week_start, advice_text, advice_summary, focus_areas,
+          plant_specific_tips, improvement_score, model_used, tokens_used, generated_at
+        ) values (
+          ${gardenId}, ${weekStartIso}, ${parsed.fullAdvice || ''}, ${parsed.summary || ''},
+          ${JSON.stringify(parsed.focusAreas || [])}::text[], ${JSON.stringify(parsed.plantTips || [])}::jsonb,
+          ${parsed.improvementScore || null}, 'gpt-4o-mini', ${tokensUsed}, now()
+        )
+        on conflict (garden_id, week_start)
+        do update set
+          advice_text = excluded.advice_text,
+          advice_summary = excluded.advice_summary,
+          focus_areas = excluded.focus_areas,
+          plant_specific_tips = excluded.plant_specific_tips,
+          improvement_score = excluded.improvement_score,
+          model_used = excluded.model_used,
+          tokens_used = excluded.tokens_used,
+          generated_at = excluded.generated_at
+        returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, improvement_score, generated_at
+      `
+
+      const saved = insertResult[0]
+      res.json({
+        ok: true,
+        advice: {
+          id: String(saved.id),
+          weekStart: saved.week_start,
+          adviceText: saved.advice_text,
+          adviceSummary: saved.advice_summary,
+          focusAreas: saved.focus_areas || [],
+          plantSpecificTips: saved.plant_specific_tips || [],
+          improvementScore: saved.improvement_score,
+          generatedAt: saved.generated_at,
+        },
+      })
+    } catch (aiErr) {
+      console.error('[garden-advice] AI generation failed:', aiErr)
+      res.json({ ok: true, message: 'AI advice generation temporarily unavailable', advice: null })
+    }
+  } catch (e) {
+    console.error('[garden-advice] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to get advice' })
+  }
+})
+
 // Admin: create a new broadcast message
 app.post('/api/admin/broadcast', async (req, res) => {
   try {

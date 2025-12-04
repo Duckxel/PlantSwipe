@@ -76,8 +76,9 @@ import { useLanguage } from "@/lib/i18nRouting";
 import { mergePlantWithTranslation } from "@/lib/plantTranslationLoader";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
+import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSection";
 
-type TabKey = "overview" | "plants" | "routine" | "settings";
+type TabKey = "overview" | "plants" | "routine" | "analytics" | "settings";
 
 const getMaxScheduleSelections = (period: "week" | "month" | "year") =>
   period === "week" ? 7 : period === "month" ? 12 : 52;
@@ -2555,6 +2556,7 @@ export const GardenDashboardPage: React.FC = () => {
                       ["overview", t("gardenDashboard.overview")],
                       ["plants", t("gardenDashboard.plants")],
                       ["routine", t("gardenDashboard.routine")],
+                      ["analytics", t("gardenDashboard.analytics", "Analytics")],
                       ["settings", t("gardenDashboard.settings")],
                     ]
                   : [["overview", t("gardenDashboard.overview")]]
@@ -2863,6 +2865,22 @@ export const GardenDashboardPage: React.FC = () => {
                       progressingOccIds={progressingOccIds}
                       completingPlantIds={completingPlantIds}
                       completeAllTodayForPlant={completeAllTodayForPlant}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
+                }
+              />
+              <Route
+                path="analytics"
+                element={
+                  canViewFullGarden ? (
+                    <GardenAnalyticsSection
+                      gardenId={id!}
+                      garden={garden}
+                      plants={plants}
+                      members={members}
+                      dailyStats={dailyStats}
                     />
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
