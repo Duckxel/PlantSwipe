@@ -6125,6 +6125,18 @@ async function runAutomation(automation) {
       .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
     
     try {
+      // Check if notification already exists for this automation + user today
+      const existing = await sql`
+        select id from public.user_notifications 
+        where automation_id = ${automation.id} 
+          and user_id = ${recipient.user_id}
+          and scheduled_for::date = current_date
+        limit 1
+      `
+      if (existing && existing.length > 0) {
+        continue // Skip, already sent today
+      }
+      
       await sql`
         insert into public.user_notifications (
           automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
@@ -6138,14 +6150,10 @@ async function runAutomation(automation) {
           now(),
           'pending'
         )
-        on conflict (automation_id, user_id, (scheduled_for::date)) do nothing
       `
       insertedCount++
     } catch (insertErr) {
-      // Ignore duplicate entries
-      if (!insertErr?.message?.includes('unique')) {
-        console.error('[automation] insert error', insertErr)
-      }
+      console.error('[automation] insert error', insertErr)
     }
   }
   
@@ -12995,10 +13003,9 @@ async function processDueAutomations() {
                 now(),
                 'pending'
               )
-              on conflict (automation_id, user_id, (scheduled_for::date)) do nothing
             `
           } catch (insertErr) {
-            // Ignore duplicate entries
+            // Ignore errors (e.g. if notification already exists)
           }
         }
         

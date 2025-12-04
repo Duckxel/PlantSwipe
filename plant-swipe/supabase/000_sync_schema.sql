@@ -5806,9 +5806,10 @@ begin
     if not exists (select 1 from pg_indexes where indexname = 'user_notifications_automation_idx') then
       create index user_notifications_automation_idx on public.user_notifications (automation_id);
     end if;
-    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_unique_automation_delivery') then
-      create unique index user_notifications_unique_automation_delivery
-        on public.user_notifications (automation_id, user_id, (scheduled_for::date))
+    -- Index for looking up automation notifications by user and date
+    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_automation_user_idx') then
+      create index user_notifications_automation_user_idx 
+        on public.user_notifications (automation_id, user_id, scheduled_for)
         where automation_id is not null;
     end if;
   end if;
