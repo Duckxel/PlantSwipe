@@ -2719,28 +2719,48 @@ export const GardenDashboardPage: React.FC = () => {
                               })()}
                             </div>
                             <div className="col-span-2 p-3">
-                              <div className="font-medium">
-                                {gp.nickname || gp.plant?.name || 'Unknown Plant'}
+                              <div className="flex items-center justify-between">
+                                <div className="font-medium">
+                                  {gp.nickname || gp.plant?.name || 'Unknown Plant'}
+                                </div>
+                                {/* Health Status Badge */}
+                                {gp.healthStatus && (() => {
+                                  const status = getHealthStatus(gp.healthStatus);
+                                  return status ? (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${status.bg} ${status.color} flex items-center gap-1`}>
+                                      <span>{status.emoji}</span>
+                                      <span className="hidden sm:inline">{status.label}</span>
+                                    </span>
+                                  ) : null;
+                                })()}
                               </div>
                               {gp.nickname && gp.plant?.name && (
                                 <div className="text-xs opacity-60">
                                   {gp.plant.name}
                                 </div>
                               )}
-                              <div className="text-xs opacity-60">
-                                {t("gardenDashboard.plantsSection.onHand")}{" "}
-                                {Number(gp.plantsOnHand ?? 0)}
-                              </div>
-                              <div className="text-xs opacity-60">
-                                {t("gardenDashboard.plantsSection.tasks")}{" "}
-                                {taskCountsByPlant[gp.id] || 0}
-                              </div>
-                              <div className="flex items-center justify-between">
+                              <div className="grid grid-cols-2 gap-1 mt-1">
+                                <div className="text-xs opacity-60">
+                                  {t("gardenDashboard.plantsSection.onHand")}{" "}
+                                  <span className="font-medium">{Number(gp.plantsOnHand ?? 0)}</span>
+                                </div>
+                                <div className="text-xs opacity-60">
+                                  {t("gardenDashboard.plantsSection.tasks")}{" "}
+                                  <span className="font-medium">{taskCountsByPlant[gp.id] || 0}</span>
+                                </div>
                                 <div className="text-xs opacity-60">
                                   {t("gardenDashboard.plantsSection.dueToday")}{" "}
-                                  {taskOccDueToday[gp.id] || 0}
+                                  <span className={`font-medium ${(taskOccDueToday[gp.id] || 0) > 0 ? 'text-amber-500' : ''}`}>
+                                    {taskOccDueToday[gp.id] || 0}
+                                  </span>
                                 </div>
                               </div>
+                              {/* Plant Notes Preview */}
+                              {gp.notes && (
+                                <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 line-clamp-1 italic">
+                                  📝 {gp.notes}
+                                </div>
+                              )}
                               <div className="mt-2 flex gap-2 flex-wrap">
                                 <Button
                                   variant="secondary"
@@ -4474,6 +4494,19 @@ function colorForName(
   return colors[hash % colors.length];
 }
 
+// Health status options with colors and icons
+const HEALTH_STATUSES = [
+  { key: 'thriving', label: 'Thriving', emoji: '🌟', color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+  { key: 'healthy', label: 'Healthy', emoji: '💚', color: 'text-green-500', bg: 'bg-green-100 dark:bg-green-900/30' },
+  { key: 'okay', label: 'Okay', emoji: '🌱', color: 'text-lime-500', bg: 'bg-lime-100 dark:bg-lime-900/30' },
+  { key: 'struggling', label: 'Struggling', emoji: '🥀', color: 'text-amber-500', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+  { key: 'critical', label: 'Critical', emoji: '⚠️', color: 'text-red-500', bg: 'bg-red-100 dark:bg-red-900/30' },
+];
+
+function getHealthStatus(status: string | null) {
+  return HEALTH_STATUSES.find(h => h.key === status) || null;
+}
+
 function EditPlantButton({
   gp,
   gardenId,
@@ -4493,6 +4526,8 @@ function EditPlantButton({
   const [count, setCount] = React.useState<number>(
     Number(gp.plantsOnHand ?? 0),
   );
+  const [healthStatus, setHealthStatus] = React.useState<string | null>(gp.healthStatus || null);
+  const [notes, setNotes] = React.useState(gp.notes || "");
   const [submitting, setSubmitting] = React.useState(false);
 
   React.useEffect(() => {
@@ -4503,16 +4538,27 @@ function EditPlantButton({
     setCount(Number(gp.plantsOnHand ?? 0));
   }, [gp.plantsOnHand]);
 
+  React.useEffect(() => {
+    setHealthStatus(gp.healthStatus || null);
+  }, [gp.healthStatus]);
+
+  React.useEffect(() => {
+    setNotes(gp.notes || "");
+  }, [gp.notes]);
+
   const save = async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
-      // Update nickname & per-instance count; delete plant if count becomes 0
+      // Update nickname, count, health status, and notes; delete plant if count becomes 0
       await supabase
         .from("garden_plants")
         .update({
           nickname: nickname.trim() || null,
           plants_on_hand: Math.max(0, Number(count || 0)),
+          health_status: healthStatus || null,
+          notes: notes.trim() || null,
+          last_health_update: healthStatus !== gp.healthStatus ? new Date().toISOString() : undefined,
         })
         .eq("id", gp.id);
       if (count <= 0) {
@@ -4574,7 +4620,7 @@ function EditPlantButton({
               {t("gardenDashboard.plantsSection.editPlant")}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">
                 {t("gardenDashboard.plantsSection.customName")}
@@ -4599,6 +4645,46 @@ function EditPlantButton({
                 onChange={(e: any) => setCount(Number(e.target.value))}
               />
             </div>
+            
+            {/* Health Status Selector */}
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                {t("gardenDashboard.plantsSection.healthStatus", "Plant Health")}
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {HEALTH_STATUSES.map((status) => (
+                  <button
+                    key={status.key}
+                    type="button"
+                    onClick={() => setHealthStatus(healthStatus === status.key ? null : status.key)}
+                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
+                      healthStatus === status.key
+                        ? `${status.bg} ${status.color} ring-2 ring-offset-1 ring-current`
+                        : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
+                    }`}
+                  >
+                    <span>{status.emoji}</span>
+                    <span>{t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Notes */}
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                {t("gardenDashboard.plantsSection.notes", "Notes")}
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={t("gardenDashboard.plantsSection.notesPlaceholder", "Add observations about this plant...")}
+                className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-sm resize-none"
+                rows={3}
+                maxLength={500}
+              />
+            </div>
+            
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 variant="secondary"

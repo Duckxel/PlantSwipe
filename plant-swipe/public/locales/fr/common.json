@@ -1597,7 +1597,17 @@
       "numberOfFlowers": "Nombre de fleurs",
       "back": "Retour",
       "add": "Ajouter",
-      "moreInformation": "Plus d'informations"
+      "moreInformation": "Plus d'informations",
+      "healthStatus": "Santé de la plante",
+      "notes": "Notes",
+      "notesPlaceholder": "Ajouter des observations sur cette plante...",
+      "health": {
+        "thriving": "Florissante",
+        "healthy": "En bonne santé",
+        "okay": "Correcte",
+        "struggling": "En difficulté",
+        "critical": "Critique"
+      }
     },
     "settingsSection": {
       "gardenDetails": "Détails du jardin",

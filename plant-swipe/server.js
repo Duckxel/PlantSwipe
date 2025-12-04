@@ -10876,8 +10876,9 @@ app.get('/api/garden/:id/advice', async (req, res) => {
 
     // Gather comprehensive garden data for AI
     const plants = await sql`
-      select gp.id, gp.nickname, gp.plants_on_hand, p.name as plant_name, p.scientific_name,
-             p.watering_type, p.level_sun, p.maintenance_level, p.edible_plant
+      select gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes,
+             p.name as plant_name, p.scientific_name,
+             p.watering_type, p.level_sun, p.maintenance_level
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
@@ -10993,7 +10994,8 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       if (p.level_sun) details.push(`sun: ${p.level_sun}`)
       if (p.maintenance_level) details.push(`maintenance: ${p.maintenance_level}`)
       if (p.watering_type) details.push(`watering: ${p.watering_type}`)
-      if (p.edible_plant) details.push(`edible`)
+      if (p.health_status) details.push(`health: ${p.health_status}`)
+      if (p.notes) details.push(`notes: ${p.notes}`)
       return `- ${p.nickname || p.plant_name || 'Unknown'} (${p.plant_name || 'N/A'}): ${details.join(', ') || 'no details'}`
     }).join('\n')
     
@@ -11398,6 +11400,125 @@ app.put('/api/garden/:id/location', async (req, res) => {
   } catch (e) {
     console.error('[garden-location] Error:', e)
     res.status(500).json({ ok: false, error: e?.message || 'Failed to update location' })
+  }
+})
+
+// ============ PLANT HEALTH ENDPOINTS ============
+
+// Update plant health status and notes
+app.put('/api/garden/:gardenId/plant/:plantId/health', async (req, res) => {
+  try {
+    const gardenId = String(req.params.gardenId || '').trim()
+    const plantId = String(req.params.plantId || '').trim()
+    if (!gardenId || !plantId) { 
+      res.status(400).json({ ok: false, error: 'garden id and plant id required' })
+      return 
+    }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    const { healthStatus, notes } = req.body || {}
+
+    // Verify membership
+    const membership = await sql`
+      select 1 from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership?.length) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
+      return
+    }
+
+    // Validate health status
+    const validStatuses = ['thriving', 'healthy', 'okay', 'struggling', 'critical', null]
+    if (healthStatus !== undefined && !validStatuses.includes(healthStatus)) {
+      res.status(400).json({ ok: false, error: 'Invalid health status' })
+      return
+    }
+
+    // Update plant
+    await sql`
+      update public.garden_plants
+      set 
+        health_status = ${healthStatus || null},
+        notes = ${notes || null},
+        last_health_update = now()
+      where id = ${plantId} and garden_id = ${gardenId}
+    `
+
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('[plant-health] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to update plant health' })
+  }
+})
+
+// Get plant details including health
+app.get('/api/garden/:gardenId/plant/:plantId', async (req, res) => {
+  try {
+    const gardenId = String(req.params.gardenId || '').trim()
+    const plantId = String(req.params.plantId || '').trim()
+    if (!gardenId || !plantId) { 
+      res.status(400).json({ ok: false, error: 'garden id and plant id required' })
+      return 
+    }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Verify membership
+    const membership = await sql`
+      select 1 from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership?.length) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
+      return
+    }
+
+    // Get plant with health status
+    const plants = await sql`
+      select gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes, 
+             gp.last_health_update, gp.planted_at, gp.expected_bloom_date,
+             p.id as plant_id, p.name as plant_name, p.scientific_name,
+             p.watering_type, p.level_sun, p.maintenance_level
+      from public.garden_plants gp
+      left join public.plants p on p.id = gp.plant_id
+      where gp.id = ${plantId} and gp.garden_id = ${gardenId}
+      limit 1
+    `
+
+    if (!plants?.length) {
+      res.status(404).json({ ok: false, error: 'Plant not found' })
+      return
+    }
+
+    const plant = plants[0]
+    res.json({ 
+      ok: true, 
+      plant: {
+        id: plant.id,
+        nickname: plant.nickname,
+        plantsOnHand: plant.plants_on_hand,
+        healthStatus: plant.health_status,
+        notes: plant.notes,
+        lastHealthUpdate: plant.last_health_update,
+        plantedAt: plant.planted_at,
+        expectedBloomDate: plant.expected_bloom_date,
+        plantId: plant.plant_id,
+        plantName: plant.plant_name,
+        scientificName: plant.scientific_name,
+        wateringType: plant.watering_type,
+        levelSun: plant.level_sun,
+        maintenanceLevel: plant.maintenance_level,
+      }
+    })
+  } catch (e) {
+    console.error('[plant-details] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to get plant details' })
   }
 })
 
