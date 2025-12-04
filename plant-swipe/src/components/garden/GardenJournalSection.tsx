@@ -201,36 +201,167 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     };
   }, [isPlaying, allPhotos.length, timelapseSpeed]);
 
-  // Download timelapse as ZIP
+  // Export state
+  const [showExportMenu, setShowExportMenu] = React.useState(false);
+  const [exporting, setExporting] = React.useState<'timelapse' | 'montage' | 'zip' | null>(null);
+  const [exportProgress, setExportProgress] = React.useState(0);
+
+  // Download photos as ZIP
   const downloadPhotosAsZip = async () => {
     if (allPhotos.length === 0) return;
+    setExporting('zip');
+    setExportProgress(0);
     
-    // Dynamic import of JSZip
-    const JSZip = (await import('jszip')).default;
-    const zip = new JSZip();
-    
-    // Add photos to zip
-    for (let i = 0; i < allPhotos.length; i++) {
-      const photo = allPhotos[i];
-      try {
-        const response = await fetch(photo.url);
-        const blob = await response.blob();
-        const ext = photo.url.split('.').pop()?.split('?')[0] || 'jpg';
-        const filename = `${String(i + 1).padStart(3, '0')}_${photo.date}.${ext}`;
-        zip.file(filename, blob);
-      } catch (err) {
-        console.warn(`Failed to download photo ${i}:`, err);
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      
+      for (let i = 0; i < allPhotos.length; i++) {
+        const photo = allPhotos[i];
+        try {
+          const response = await fetch(photo.url);
+          const blob = await response.blob();
+          const ext = photo.url.split('.').pop()?.split('?')[0] || 'jpg';
+          const filename = `${String(i + 1).padStart(3, '0')}_${photo.date}.${ext}`;
+          zip.file(filename, blob);
+          setExportProgress(Math.round(((i + 1) / allPhotos.length) * 100));
+        } catch (err) {
+          console.warn(`Failed to download photo ${i}:`, err);
+        }
       }
+      
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${garden?.name || 'garden'}-photos.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(null);
+      setShowExportMenu(false);
     }
+  };
+
+  // Generate video (timelapse or montage)
+  const generateVideo = async (type: 'timelapse' | 'montage') => {
+    if (allPhotos.length === 0) return;
+    setExporting(type);
+    setExportProgress(0);
     
-    // Generate and download zip
-    const content = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(content);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${garden?.name || 'garden'}-timelapse-photos.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const frameDuration = type === 'timelapse' ? 500 : 2000; // ms per frame
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Set canvas size (1080p for quality)
+    canvas.width = 1920;
+    canvas.height = 1080;
+    
+    try {
+      // Load all images first
+      const loadedImages: HTMLImageElement[] = [];
+      for (let i = 0; i < allPhotos.length; i++) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject();
+          img.src = allPhotos[i].url;
+        });
+        loadedImages.push(img);
+        setExportProgress(Math.round(((i + 1) / allPhotos.length) * 30)); // 0-30% for loading
+      }
+
+      // Setup MediaRecorder
+      const stream = canvas.captureStream(30);
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm;codecs=vp9',
+        videoBitsPerSecond: 5000000,
+      });
+      
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      
+      mediaRecorder.start();
+
+      // Draw each frame
+      for (let i = 0; i < loadedImages.length; i++) {
+        const img = loadedImages[i];
+        const photo = allPhotos[i];
+        
+        // Clear canvas with black background
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Calculate fit dimensions
+        const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const x = (canvas.width - w) / 2;
+        const y = (canvas.height - h) / 2;
+        
+        // Draw image
+        ctx.drawImage(img, x, y, w, h);
+        
+        // Add date overlay
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 32px system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        const dateStr = new Date(photo.date).toLocaleDateString(undefined, {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+        ctx.fillText(dateStr, 40, canvas.height - 30);
+        
+        // Add mood emoji
+        if (photo.mood) {
+          const moodEmoji = MOODS.find(m => m.key === photo.mood)?.emoji || '';
+          ctx.font = '48px system-ui, sans-serif';
+          ctx.textAlign = 'right';
+          ctx.fillText(moodEmoji, canvas.width - 40, canvas.height - 25);
+        }
+        
+        // Add frame counter
+        ctx.font = '24px system-ui, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.fillText(`${i + 1} / ${loadedImages.length}`, canvas.width - 40, 50);
+        
+        // Wait for frame duration
+        await new Promise(resolve => setTimeout(resolve, frameDuration));
+        setExportProgress(30 + Math.round(((i + 1) / loadedImages.length) * 70)); // 30-100%
+      }
+
+      // Stop recording and save
+      mediaRecorder.stop();
+      
+      await new Promise<void>(resolve => {
+        mediaRecorder.onstop = () => resolve();
+      });
+      
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${garden?.name || 'garden'}-${type}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+    } catch (err) {
+      console.error('Failed to generate video:', err);
+      alert('Failed to generate video. Your browser may not support this feature.');
+    } finally {
+      setExporting(null);
+      setShowExportMenu(false);
+    }
   };
 
   // Fetch journal entries
@@ -649,7 +780,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 </Button>
               </div>
 
-              {/* Speed control and download */}
+              {/* Speed control and export */}
               <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-2 text-white/70">
                   <span className="text-xs">{t("gardenDashboard.journalSection.speed", "Speed")}:</span>
@@ -665,15 +796,128 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                   </select>
                 </div>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-white hover:bg-white/20 rounded-xl gap-2"
-                  onClick={downloadPhotosAsZip}
-                >
-                  <Download className="w-4 h-4" />
-                  {t("gardenDashboard.journalSection.downloadAll", "Download All Photos")}
-                </Button>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20 rounded-xl gap-2"
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                  >
+                    <Download className="w-4 h-4" />
+                    {t("gardenDashboard.journalSection.export", "Export")}
+                  </Button>
+
+                  {/* Export Menu */}
+                  <AnimatePresence>
+                    {showExportMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute bottom-full right-0 mb-2 w-72 bg-white dark:bg-[#1f1f1f] rounded-2xl shadow-2xl border border-stone-200 dark:border-stone-700 overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="p-3 border-b border-stone-200 dark:border-stone-700">
+                          <h4 className="font-semibold text-stone-900 dark:text-white text-sm">
+                            {t("gardenDashboard.journalSection.exportOptions", "Export Options")}
+                          </h4>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {allPhotos.length} {t("gardenDashboard.journalSection.photosToExport", "photos to export")}
+                          </p>
+                        </div>
+
+                        <div className="p-2 space-y-1">
+                          {/* Timelapse Video */}
+                          <button
+                            onClick={() => generateVideo('timelapse')}
+                            disabled={exporting !== null}
+                            className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left disabled:opacity-50"
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                              <Film className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-stone-900 dark:text-white text-sm">
+                                {t("gardenDashboard.journalSection.timelapse", "Timelapse Video")}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {t("gardenDashboard.journalSection.timelapseDesc", "Fast-paced video to show growth progress")}
+                              </div>
+                              {exporting === 'timelapse' && (
+                                <div className="mt-2">
+                                  <div className="h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-purple-500 transition-all" 
+                                      style={{ width: `${exportProgress}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </button>
+
+                          {/* Montage Video */}
+                          <button
+                            onClick={() => generateVideo('montage')}
+                            disabled={exporting !== null}
+                            className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left disabled:opacity-50"
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center flex-shrink-0">
+                              <Images className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-stone-900 dark:text-white text-sm">
+                                {t("gardenDashboard.journalSection.montage", "Montage Video")}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {t("gardenDashboard.journalSection.montageDesc", "Slower slideshow to appreciate each moment")}
+                              </div>
+                              {exporting === 'montage' && (
+                                <div className="mt-2">
+                                  <div className="h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-amber-500 transition-all" 
+                                      style={{ width: `${exportProgress}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </button>
+
+                          {/* ZIP Download */}
+                          <button
+                            onClick={downloadPhotosAsZip}
+                            disabled={exporting !== null}
+                            className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left disabled:opacity-50"
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center flex-shrink-0">
+                              <Download className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-stone-900 dark:text-white text-sm">
+                                {t("gardenDashboard.journalSection.zipDownload", "ZIP Download")}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {t("gardenDashboard.journalSection.zipDesc", "Download all photos as numbered files")}
+                              </div>
+                              {exporting === 'zip' && (
+                                <div className="mt-2">
+                                  <div className="h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-emerald-500 transition-all" 
+                                      style={{ width: `${exportProgress}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
 
               {/* Thumbnail strip */}
