@@ -55,6 +55,7 @@ import {
   Package,
   Sparkles,
 } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
 import {
   loadPersistedBroadcast,
@@ -5665,10 +5666,31 @@ export const AdminPage: React.FC = () => {
                                       <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-teal-100 to-emerald-100 dark:from-teal-900/30 dark:to-emerald-900/30 flex items-center justify-center">
                                         <Package className="h-5 w-5 text-teal-600 dark:text-teal-400" />
                                       </div>
-                                      <div>
-                                        <div className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base">Plant Collection</div>
-                                        <div className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-                                          {filteredPlantRows.length} of {plantDashboardRows.length} plants
+                                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 w-full lg:w-auto">
+                                        <div className="flex-1">
+                                          <SearchInput
+                                            value={plantSearchQuery}
+                                            onChange={(e) => setPlantSearchQuery(e.target.value)}
+                                            placeholder="Search by plant name..."
+                                            className="rounded-xl"
+                                          />
+                                        </div>
+                                        <div className="w-full md:w-52">
+                                          <select
+                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                            value={selectedPromotionMonth}
+                                            onChange={(e) =>
+                                              setSelectedPromotionMonth(e.target.value as PromotionMonthSlug | "none" | "all")
+                                            }
+                                          >
+                                            <option value="all">All promotion months</option>
+                                            <option value="none">None assigned</option>
+                                            {PROMOTION_MONTH_SLUGS.map((slug) => (
+                                              <option key={slug} value={slug}>
+                                                {PROMOTION_MONTH_LABELS[slug]}
+                                              </option>
+                                            ))}
+                                          </select>
                                         </div>
                                       </div>
                                     </div>
@@ -5914,17 +5936,14 @@ export const AdminPage: React.FC = () => {
                         )}
 
                         {/* Search */}
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                          <Input
-                            placeholder="Search requests by plant name..."
-                            value={requestSearchQuery}
-                            onChange={(e) =>
-                              setRequestSearchQuery(e.target.value)
-                            }
-                            className="rounded-xl pl-10 pr-4"
-                          />
-                        </div>
+                        <SearchInput
+                          placeholder="Search requests by plant name..."
+                          value={requestSearchQuery}
+                          onChange={(e) =>
+                            setRequestSearchQuery(e.target.value)
+                          }
+                          className="rounded-xl"
+                        />
 
                         {plantRequestsError && (
                           <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
@@ -7531,18 +7550,14 @@ export const AdminPage: React.FC = () => {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
-            <Input
-              value={addFromSearchQuery}
-              onChange={(e) => {
-                setAddFromSearchQuery(e.target.value);
-                searchPlantsForAddFrom(e.target.value);
-              }}
-              placeholder="Search plants by name..."
-              className="pl-10"
-            />
-          </div>
+          <SearchInput
+            value={addFromSearchQuery}
+            onChange={(e) => {
+              setAddFromSearchQuery(e.target.value);
+              searchPlantsForAddFrom(e.target.value);
+            }}
+            placeholder="Search plants by name..."
+          />
           <div className="max-h-[300px] overflow-y-auto rounded-xl border border-stone-200 dark:border-[#3e3e42]">
             {addFromSearchLoading ? (
               <div className="p-4 text-sm text-center opacity-60">Searching...</div>

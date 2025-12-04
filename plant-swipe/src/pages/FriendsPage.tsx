@@ -2,7 +2,6 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
-import { User, Search, UserPlus, Check, X, ArrowUpRight } from "lucide-react";
+import { User, UserPlus, Check, X, ArrowUpRight } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
@@ -941,17 +941,13 @@ export const FriendsPage: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
-              <Input
-                className="pl-9"
-                placeholder={t("friends.addFriendDialog.searchPlaceholder")}
-                value={dialogSearchQuery}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setDialogSearchQuery(e.target.value)
-                }
-              />
-            </div>
+            <SearchInput
+              placeholder={t("friends.addFriendDialog.searchPlaceholder")}
+              value={dialogSearchQuery}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setDialogSearchQuery(e.target.value)
+              }
+            />
             {dialogSearching && (
               <div className="text-xs opacity-60 text-black dark:text-white">
                 {t("friends.addFriendDialog.searching")}

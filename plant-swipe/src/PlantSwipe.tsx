@@ -4,7 +4,8 @@ import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "
 import { Navigate } from "@/components/i18n/Navigate";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -1218,19 +1219,17 @@ export default function PlantSwipe() {
                         <Label htmlFor="plant-search-main" className="sr-only">
                           {t("common.search")}
                         </Label>
-                        <div className="relative">
-                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-                          <Input
-                            id="plant-search-main"
-                            className="w-full pl-10 pr-4 rounded-2xl h-12"
-                            placeholder={t("plant.searchPlaceholder")}
-                            value={query}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                              setQuery(e.target.value)
-                              setIndex(0)
-                            }}
-                          />
-                        </div>
+                        <SearchInput
+                          id="plant-search-main"
+                          variant="lg"
+                          className="rounded-2xl"
+                          placeholder={t("plant.searchPlaceholder")}
+                          value={query}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                            setQuery(e.target.value)
+                            setIndex(0)
+                          }}
+                        />
                       </div>
                       <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
                       <Button
