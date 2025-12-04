@@ -132,7 +132,10 @@ do $$ declare
     'garden_ai_advice',
     'garden_analytics_snapshots',
     'garden_user_activity',
-    'garden_plant_images'
+    'garden_plant_images',
+    -- Journal
+    'garden_journal_entries',
+    'garden_journal_photos'
   ];
   rec record;
 begin
@@ -1219,8 +1222,21 @@ create table if not exists public.gardens (
   created_by uuid not null references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
   streak integer not null default 0,
-  privacy text not null default 'public' check (privacy in ('public', 'friends_only', 'private'))
+  privacy text not null default 'public' check (privacy in ('public', 'friends_only', 'private')),
+  -- Location for weather and contextual advice
+  location_city text,
+  location_country text,
+  location_timezone text,
+  location_lat numeric,
+  location_lon numeric
 );
+
+-- Migration: Add location columns to existing gardens
+alter table if exists public.gardens add column if not exists location_city text;
+alter table if exists public.gardens add column if not exists location_country text;
+alter table if exists public.gardens add column if not exists location_timezone text;
+alter table if exists public.gardens add column if not exists location_lat numeric;
+alter table if exists public.gardens add column if not exists location_lon numeric;
 
 -- Migration: Add/migrate privacy column (for existing databases)
 do $$
@@ -6368,3 +6384,157 @@ end $$;
 
 -- Add garden_ai_advice and garden_analytics_snapshots and garden_user_activity and garden_plant_images to allowed tables
 -- (This is handled by the whitelist at the top of the file - update the allowed_tables array if needed)
+
+-- ========== Garden Journal System ==========
+-- Journal entries for daily observations, notes, and reflections
+create table if not exists public.garden_journal_entries (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  entry_date date not null,
+  title text,
+  content text not null,
+  mood text check (mood is null or mood in ('great', 'good', 'neutral', 'concerned', 'struggling')),
+  weather_snapshot jsonb default '{}'::jsonb,
+  -- Metadata
+  plants_mentioned uuid[] default '{}',
+  tags text[] default '{}',
+  is_private boolean not null default false,
+  -- AI feedback
+  ai_feedback text,
+  ai_feedback_generated_at timestamptz,
+  -- Timestamps
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists gje_garden_date_idx on public.garden_journal_entries (garden_id, entry_date desc);
+create index if not exists gje_user_date_idx on public.garden_journal_entries (user_id, entry_date desc);
+
+alter table public.garden_journal_entries enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_entries' and policyname='gje_select') then
+    drop policy gje_select on public.garden_journal_entries;
+  end if;
+  create policy gje_select on public.garden_journal_entries for select to authenticated
+    using (
+      -- Own entries
+      user_id = (select auth.uid())
+      -- Other members can see non-private entries
+      or (
+        not is_private
+        and exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      )
+      -- Admins can see all
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_entries' and policyname='gje_insert') then
+    drop policy gje_insert on public.garden_journal_entries;
+  end if;
+  create policy gje_insert on public.garden_journal_entries for insert to authenticated
+    with check (
+      user_id = (select auth.uid())
+      and exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_entries' and policyname='gje_update') then
+    drop policy gje_update on public.garden_journal_entries;
+  end if;
+  create policy gje_update on public.garden_journal_entries for update to authenticated
+    using (user_id = (select auth.uid()))
+    with check (user_id = (select auth.uid()));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_entries' and policyname='gje_delete') then
+    drop policy gje_delete on public.garden_journal_entries;
+  end if;
+  create policy gje_delete on public.garden_journal_entries for delete to authenticated
+    using (
+      user_id = (select auth.uid())
+      or exists (
+        select 1 from public.garden_members gm 
+        where gm.garden_id = garden_id and gm.user_id = (select auth.uid()) and gm.role = 'owner'
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Journal photos - attached to journal entries
+-- Stored in: PHOTO/{garden_id}/journal/{entry_id}/{filename}
+create table if not exists public.garden_journal_photos (
+  id uuid primary key default gen_random_uuid(),
+  entry_id uuid not null references public.garden_journal_entries(id) on delete cascade,
+  garden_plant_id uuid references public.garden_plants(id) on delete set null,
+  image_url text not null,
+  thumbnail_url text,
+  caption text,
+  -- Plant health observation
+  plant_health text check (plant_health is null or plant_health in ('thriving', 'healthy', 'okay', 'struggling', 'critical')),
+  observations text,
+  -- Timestamps
+  taken_at timestamptz,
+  uploaded_at timestamptz not null default now()
+);
+
+create index if not exists gjp_entry_idx on public.garden_journal_photos (entry_id, uploaded_at desc);
+create index if not exists gjp_plant_idx on public.garden_journal_photos (garden_plant_id, uploaded_at desc);
+
+alter table public.garden_journal_photos enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_photos' and policyname='gjp_select') then
+    drop policy gjp_select on public.garden_journal_photos;
+  end if;
+  create policy gjp_select on public.garden_journal_photos for select to authenticated
+    using (
+      exists (
+        select 1 from public.garden_journal_entries e
+        join public.garden_members gm on gm.garden_id = e.garden_id
+        where e.id = entry_id and (
+          e.user_id = (select auth.uid())
+          or (not e.is_private and gm.user_id = (select auth.uid()))
+        )
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_photos' and policyname='gjp_insert') then
+    drop policy gjp_insert on public.garden_journal_photos;
+  end if;
+  create policy gjp_insert on public.garden_journal_photos for insert to authenticated
+    with check (
+      exists (
+        select 1 from public.garden_journal_entries e
+        where e.id = entry_id and e.user_id = (select auth.uid())
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_photos' and policyname='gjp_delete') then
+    drop policy gjp_delete on public.garden_journal_photos;
+  end if;
+  create policy gjp_delete on public.garden_journal_photos for delete to authenticated
+    using (
+      exists (
+        select 1 from public.garden_journal_entries e
+        where e.id = entry_id and e.user_id = (select auth.uid())
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Add weather and context columns to garden_ai_advice
+alter table if exists public.garden_ai_advice add column if not exists weather_context jsonb default '{}'::jsonb;
+alter table if exists public.garden_ai_advice add column if not exists journal_context jsonb default '{}'::jsonb;
+alter table if exists public.garden_ai_advice add column if not exists avg_completion_time text;
+alter table if exists public.garden_ai_advice add column if not exists location_context jsonb default '{}'::jsonb;

@@ -77,8 +77,10 @@ import { mergePlantWithTranslation } from "@/lib/plantTranslationLoader";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
 import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSection";
+import { GardenJournalSection } from "@/components/garden/GardenJournalSection";
+import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
 
-type TabKey = "overview" | "plants" | "routine" | "analytics" | "settings";
+type TabKey = "overview" | "plants" | "routine" | "journal" | "analytics" | "settings";
 
 const getMaxScheduleSelections = (period: "week" | "month" | "year") =>
   period === "week" ? 7 : period === "month" ? 12 : 52;
@@ -2556,6 +2558,7 @@ export const GardenDashboardPage: React.FC = () => {
                       ["overview", t("gardenDashboard.overview")],
                       ["plants", t("gardenDashboard.plants")],
                       ["routine", t("gardenDashboard.routine")],
+                      ["journal", t("gardenDashboard.journal", "Journal")],
                       ["analytics", t("gardenDashboard.analytics", "Analytics")],
                       ["settings", t("gardenDashboard.settings")],
                     ]
@@ -2872,6 +2875,21 @@ export const GardenDashboardPage: React.FC = () => {
                 }
               />
               <Route
+                path="journal"
+                element={
+                  canViewFullGarden ? (
+                    <GardenJournalSection
+                      gardenId={id!}
+                      garden={garden}
+                      plants={plants}
+                      members={members}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
+                }
+              />
+              <Route
                 path="analytics"
                 element={
                   canViewFullGarden ? (
@@ -2921,6 +2939,20 @@ export const GardenDashboardPage: React.FC = () => {
                       </div>
                       <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
                         <GardenDetailsEditor
+                          garden={garden}
+                          onSaved={load}
+                          canEdit={viewerIsOwner}
+                        />
+                      </Card>
+                    </div>
+                    {/* Location Settings */}
+                    <div className="space-y-3">
+                      <div className="text-lg font-medium flex items-center gap-2">
+                        <Globe className="w-5 h-5" />
+                        {t("gardenDashboard.settingsSection.location", "Location")}
+                      </div>
+                      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
+                        <GardenLocationEditor
                           garden={garden}
                           onSaved={load}
                           canEdit={viewerIsOwner}

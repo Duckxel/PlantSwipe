@@ -105,9 +105,20 @@ interface GardenerAdvice {
     plantName: string;
     tip: string;
     priority: "high" | "medium" | "low";
+    reason?: string;
   }>;
   improvementScore: number | null;
   generatedAt: string;
+  // Enhanced fields
+  weeklyFocus?: string | null;
+  weatherAdvice?: string | null;
+  encouragement?: string | null;
+  weatherContext?: {
+    current?: { temp?: number; condition?: string; humidity?: number };
+    forecast?: Array<{ date: string; condition: string; tempMax: number; tempMin: number; precipProbability: number }>;
+    location?: string;
+  } | null;
+  locationContext?: { city?: string; country?: string } | null;
 }
 
 interface GardenAnalyticsSectionProps {
@@ -700,25 +711,90 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     </Button>
                   </div>
                 ) : advice ? (
-                  <div className="space-y-4">
-                    {/* Summary */}
-                    {advice.adviceSummary && (
-                      <p className="text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
-                        {advice.adviceSummary}
-                      </p>
+                  <div className="space-y-5">
+                    {/* Location & Weather Header */}
+                    {advice.weatherContext?.current && (
+                      <div className="flex items-center gap-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200/50 dark:border-blue-800/50">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🌡️</span>
+                          <div>
+                            <div className="text-lg font-semibold text-blue-700 dark:text-blue-300">
+                              {advice.weatherContext.current.temp}°C
+                            </div>
+                            <div className="text-xs text-blue-600 dark:text-blue-400">
+                              {advice.weatherContext.current.condition}
+                            </div>
+                          </div>
+                        </div>
+                        {advice.locationContext?.city && (
+                          <div className="text-sm text-blue-600 dark:text-blue-400">
+                            📍 {advice.locationContext.city}
+                            {advice.locationContext.country && `, ${advice.locationContext.country}`}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Summary with Improvement Score */}
+                    <div className="flex items-start gap-4">
+                      {advice.improvementScore !== null && (
+                        <div className="flex-shrink-0 w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg">
+                          <span className="text-xl font-bold text-white">{advice.improvementScore}</span>
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        {advice.adviceSummary && (
+                          <p className="text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
+                            {advice.adviceSummary}
+                          </p>
+                        )}
+                        {advice.encouragement && (
+                          <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-2 italic">
+                            ✨ {advice.encouragement}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Weekly Focus */}
+                    {advice.weeklyFocus && (
+                      <div className="p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200/50 dark:border-amber-800/50">
+                        <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-2 mb-2">
+                          🎯 {t("gardenDashboard.analyticsSection.weeklyFocus", { defaultValue: "This Week's Focus" })}
+                        </h4>
+                        <p className="text-sm text-amber-800 dark:text-amber-200">{advice.weeklyFocus}</p>
+                      </div>
+                    )}
+
+                    {/* Weather Advice */}
+                    {advice.weatherAdvice && (
+                      <div className="p-4 rounded-xl bg-gradient-to-r from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 border border-sky-200/50 dark:border-sky-800/50">
+                        <h4 className="text-sm font-semibold text-sky-700 dark:text-sky-300 flex items-center gap-2 mb-2">
+                          🌤️ {t("gardenDashboard.analyticsSection.weatherAdvice", { defaultValue: "Weather-Based Tips" })}
+                        </h4>
+                        <p className="text-sm text-sky-800 dark:text-sky-200">{advice.weatherAdvice}</p>
+                      </div>
                     )}
 
                     {/* Focus Areas */}
                     {advice.focusAreas && advice.focusAreas.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {advice.focusAreas.map((area, idx) => (
-                          <span
-                            key={idx}
-                            className="px-3 py-1 text-xs font-medium rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
-                          >
-                            {area}
-                          </span>
-                        ))}
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                          {t("gardenDashboard.analyticsSection.focusAreas", { defaultValue: "Action Items" })}
+                        </h4>
+                        <div className="grid gap-2">
+                          {advice.focusAreas.map((area, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/50 dark:border-stone-700/50"
+                            >
+                              <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                {idx + 1}
+                              </div>
+                              <span className="text-sm text-stone-700 dark:text-stone-300">{area}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -729,7 +805,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                           {t("gardenDashboard.analyticsSection.plantTips", { defaultValue: "Plant-Specific Tips" })}
                         </h4>
                         <div className="grid gap-2">
-                          {advice.plantSpecificTips.slice(0, 3).map((tip, idx) => (
+                          {advice.plantSpecificTips.map((tip, idx) => (
                             <div
                               key={idx}
                               className={`flex items-start gap-3 p-3 rounded-xl ${
@@ -749,13 +825,25 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                                 )}
                               </div>
-                              <div className="min-w-0">
-                                <div className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                                  {tip.plantName}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs font-semibold text-stone-600 dark:text-stone-400">
+                                    🌱 {tip.plantName}
+                                  </div>
+                                  {tip.priority === "high" && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                                      Priority
+                                    </span>
+                                  )}
                                 </div>
-                                <div className="text-sm text-stone-700 dark:text-stone-300 mt-0.5">
+                                <div className="text-sm text-stone-700 dark:text-stone-300 mt-1">
                                   {tip.tip}
                                 </div>
+                                {tip.reason && (
+                                  <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 italic">
+                                    → {tip.reason}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -777,15 +865,20 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     )}
 
                     {/* Generated timestamp */}
-                    <p className="text-xs text-muted-foreground pt-2">
-                      {t("gardenDashboard.analyticsSection.generatedOn", { 
-                        defaultValue: "Generated on {{date}}",
-                        date: new Date(advice.generatedAt).toLocaleDateString(undefined, {
-                          weekday: "long",
-                          month: "long",
-                          day: "numeric",
-                        }),
-                      })}
+                    <p className="text-xs text-muted-foreground pt-2 flex items-center gap-2">
+                      <span>
+                        {t("gardenDashboard.analyticsSection.generatedOn", { 
+                          defaultValue: "Generated on {{date}}",
+                          date: new Date(advice.generatedAt).toLocaleDateString(undefined, {
+                            weekday: "long",
+                            month: "long",
+                            day: "numeric",
+                          }),
+                        })}
+                      </span>
+                      {advice.weatherContext?.location && (
+                        <span className="text-blue-500">• Based on {advice.weatherContext.location} weather</span>
+                      )}
                     </p>
                   </div>
                 ) : (

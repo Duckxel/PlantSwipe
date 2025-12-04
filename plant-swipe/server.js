@@ -10869,17 +10869,35 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       return
     }
 
-    // Gather garden data for AI
+    // Gather comprehensive garden data for AI
     const plants = await sql`
       select gp.id, gp.nickname, gp.plants_on_hand, p.name as plant_name, p.scientific_name,
-             p.watering_type, p.level_sun, p.maintenance_level
+             p.watering_type, p.level_sun, p.maintenance_level, p.edible_plant
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
       limit 50
     `
 
-    // Get task completion data for last 7 days
+    // Get garden location for context
+    const gardenFull = await sql`
+      select location_city, location_country, location_timezone, location_lat, location_lon
+      from public.gardens where id = ${gardenId} limit 1
+    `
+    const gardenLocation = gardenFull[0] || {}
+
+    // Get weather data for the location
+    let weatherData = null
+    if (gardenLocation.location_city || gardenLocation.location_lat) {
+      weatherData = await fetchWeatherForLocation(
+        gardenLocation.location_lat, 
+        gardenLocation.location_lon, 
+        gardenLocation.location_city
+      )
+    }
+
+    // Get task completion data for last 14 days (for better trend analysis)
+    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     const taskData = await sql`
       select
@@ -10888,16 +10906,42 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         gp.nickname,
         o.due_at,
         o.required_count,
-        o.completed_count
+        o.completed_count,
+        o.completed_at
       from public.garden_plant_task_occurrences o
       join public.garden_plant_tasks t on t.id = o.task_id
       join public.garden_plants gp on gp.id = t.garden_plant_id
       left join public.plants p on p.id = gp.plant_id
       where t.garden_id = ${gardenId}
-        and o.due_at >= ${weekAgo}::date
+        and o.due_at >= ${twoWeeksAgo}::date
       order by o.due_at desc
-      limit 200
+      limit 300
     `
+
+    // Calculate average completion time (hour of day when tasks are typically completed)
+    const completionHours = taskData
+      .filter(t => t.completed_at)
+      .map(t => new Date(t.completed_at).getHours())
+    const avgCompletionHour = completionHours.length > 0 
+      ? Math.round(completionHours.reduce((a, b) => a + b, 0) / completionHours.length)
+      : null
+    const avgCompletionTime = avgCompletionHour !== null
+      ? `${avgCompletionHour}:00`
+      : 'Not enough data'
+
+    // Get recent journal entries (last 7 days) for additional context
+    let recentJournalEntries = []
+    try {
+      const journalRows = await sql`
+        select entry_date, title, content, mood, weather_snapshot
+        from public.garden_journal_entries
+        where garden_id = ${gardenId}
+          and entry_date >= ${weekAgo}::date
+        order by entry_date desc
+        limit 5
+      `
+      recentJournalEntries = journalRows || []
+    } catch {}
 
     // Get custom plant images if available
     let plantImages = []
@@ -10914,58 +10958,161 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       plantImages = imgRows || []
     } catch {}
 
-    // Build prompt
-    const plantList = plants.map(p => `- ${p.nickname || p.plant_name || 'Unknown'} (${p.plant_name || 'N/A'}): ${p.plants_on_hand || 0} on hand, sun: ${p.level_sun || 'unknown'}, maintenance: ${p.maintenance_level || 'unknown'}`).join('\n')
+    // Get journal photos from recent entries
+    let journalPhotos = []
+    try {
+      const photoRows = await sql`
+        select gjp.caption, gjp.plant_health, gjp.observations, gp.nickname, p.name as plant_name
+        from public.garden_journal_photos gjp
+        join public.garden_journal_entries gje on gje.id = gjp.entry_id
+        left join public.garden_plants gp on gp.id = gjp.garden_plant_id
+        left join public.plants p on p.id = gp.plant_id
+        where gje.garden_id = ${gardenId}
+          and gje.entry_date >= ${weekAgo}::date
+        order by gjp.uploaded_at desc
+        limit 10
+      `
+      journalPhotos = photoRows || []
+    } catch {}
+
+    // Build comprehensive plant list
+    const plantList = plants.map(p => {
+      const details = []
+      if (p.plants_on_hand) details.push(`${p.plants_on_hand} on hand`)
+      if (p.level_sun) details.push(`sun: ${p.level_sun}`)
+      if (p.maintenance_level) details.push(`maintenance: ${p.maintenance_level}`)
+      if (p.watering_type) details.push(`watering: ${p.watering_type}`)
+      if (p.edible_plant) details.push(`edible`)
+      return `- ${p.nickname || p.plant_name || 'Unknown'} (${p.plant_name || 'N/A'}): ${details.join(', ') || 'no details'}`
+    }).join('\n')
     
-    const taskSummary = taskData.reduce((acc, t) => {
-      const key = `${t.type}`
-      if (!acc[key]) acc[key] = { due: 0, completed: 0 }
-      acc[key].due += Number(t.required_count || 0)
-      acc[key].completed += Math.min(Number(t.completed_count || 0), Number(t.required_count || 0))
-      return acc
-    }, {})
-    const taskSummaryText = Object.entries(taskSummary).map(([type, data]) => `${type}: ${data.completed}/${data.due} completed`).join(', ')
+    // Calculate task statistics for this week and last week
+    const thisWeekTasks = taskData.filter(t => t.due_at >= weekAgo)
+    const lastWeekTasks = taskData.filter(t => t.due_at >= twoWeeksAgo && t.due_at < weekAgo)
+    
+    const calcStats = (tasks) => {
+      const summary = tasks.reduce((acc, t) => {
+        const key = t.type
+        if (!acc[key]) acc[key] = { due: 0, completed: 0 }
+        acc[key].due += Number(t.required_count || 0)
+        acc[key].completed += Math.min(Number(t.completed_count || 0), Number(t.required_count || 0))
+        return acc
+      }, {})
+      const totalDue = Object.values(summary).reduce((s, d) => s + d.due, 0)
+      const totalCompleted = Object.values(summary).reduce((s, d) => s + d.completed, 0)
+      return { summary, totalDue, totalCompleted, rate: totalDue > 0 ? Math.round((totalCompleted / totalDue) * 100) : 100 }
+    }
+    
+    const thisWeekStats = calcStats(thisWeekTasks)
+    const lastWeekStats = calcStats(lastWeekTasks)
+    
+    const taskSummaryText = Object.entries(thisWeekStats.summary)
+      .map(([type, data]) => `${type}: ${data.completed}/${data.due}`)
+      .join(', ')
 
-    // Calculate completion rate
-    const totalDue = Object.values(taskSummary).reduce((s, d) => s + d.due, 0)
-    const totalCompleted = Object.values(taskSummary).reduce((s, d) => s + d.completed, 0)
-    const completionRate = totalDue > 0 ? Math.round((totalCompleted / totalDue) * 100) : 100
+    // Build weather context
+    let weatherContext = ''
+    if (weatherData) {
+      const current = weatherData.current
+      const forecast = weatherData.forecast?.slice(0, 7) || []
+      weatherContext = `
+CURRENT WEATHER (${gardenLocation.location_city || 'Location'}):
+- Temperature: ${current?.temp}°C
+- Condition: ${current?.condition}
+- Humidity: ${current?.humidity}%
+- Wind: ${current?.windSpeed} km/h
 
-    const prompt = `You are an expert gardener providing weekly advice to a home gardener. Analyze their garden data and provide helpful, actionable advice.
+7-DAY FORECAST:
+${forecast.map(f => `- ${f.date}: ${f.condition}, ${f.tempMin}°-${f.tempMax}°C, ${f.precipProbability}% rain chance`).join('\n')}`
+    }
 
-Garden: "${garden.name}"
+    // Build journal context
+    let journalContext = ''
+    if (recentJournalEntries.length > 0) {
+      journalContext = `
+RECENT JOURNAL ENTRIES (gardener's own observations):
+${recentJournalEntries.map(e => {
+  const moodEmoji = { great: '🌟', good: '😊', neutral: '😐', concerned: '😟', struggling: '😰' }[e.mood] || ''
+  return `- ${e.entry_date}${moodEmoji ? ' ' + moodEmoji : ''}: "${e.content.slice(0, 200)}${e.content.length > 200 ? '...' : ''}"`
+}).join('\n')}`
+    }
+
+    // Build photo observations context
+    let photoContext = ''
+    const photoObservations = journalPhotos.filter(p => p.observations || p.plant_health)
+    if (photoObservations.length > 0) {
+      photoContext = `
+PLANT OBSERVATIONS FROM PHOTOS:
+${photoObservations.map(p => `- ${p.nickname || p.plant_name || 'Plant'}: ${p.plant_health ? `Health: ${p.plant_health}` : ''} ${p.observations || ''}`).join('\n')}`
+    }
+
+    // Get current date and day of week for temporal context
+    const now = new Date()
+    const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()]
+    const currentDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+
+    const prompt = `You are an expert gardener and plant care specialist providing personalized weekly advice. Analyze all the data below and provide comprehensive, actionable advice.
+
+═══════════════════════════════════════════════════════════════
+📅 DATE & TIME CONTEXT
+═══════════════════════════════════════════════════════════════
+Today: ${dayOfWeek}, ${currentDate}
+Location: ${gardenLocation.location_city || 'Unknown'}${gardenLocation.location_country ? `, ${gardenLocation.location_country}` : ''}
+Timezone: ${gardenLocation.location_timezone || 'Unknown'}
+Average task completion time: ${avgCompletionTime}
+
+═══════════════════════════════════════════════════════════════
+🌱 GARDEN: "${garden.name}"
+═══════════════════════════════════════════════════════════════
 Plants (${plants.length} total):
-${plantList}
+${plantList || 'No plants yet'}
 
-This week's task performance (${completionRate}% completion rate):
-${taskSummaryText || 'No task data available'}
+═══════════════════════════════════════════════════════════════
+📊 TASK PERFORMANCE
+═══════════════════════════════════════════════════════════════
+This week: ${thisWeekStats.rate}% completion rate (${thisWeekStats.totalCompleted}/${thisWeekStats.totalDue} tasks)
+Last week: ${lastWeekStats.rate}% completion rate (${lastWeekStats.totalCompleted}/${lastWeekStats.totalDue} tasks)
+Trend: ${thisWeekStats.rate > lastWeekStats.rate ? '📈 Improving' : thisWeekStats.rate < lastWeekStats.rate ? '📉 Declining' : '➡️ Stable'}
 
-${plantImages.length > 0 ? `The gardener has uploaded ${plantImages.length} photos of their plants.` : ''}
+Task breakdown this week: ${taskSummaryText || 'No tasks scheduled'}
+${weatherContext}
+${journalContext}
+${photoContext}
+${plantImages.length > 0 ? `\n📷 The gardener has uploaded ${plantImages.length} plant photos.` : ''}
 
-Please provide:
-1. A brief summary (1-2 sentences) of how the garden is doing overall
-2. 2-3 focus areas for improvement this week
-3. 2-3 specific tips for individual plants that need attention
-4. An improvement score from 0-100 based on task completion and plant health
+═══════════════════════════════════════════════════════════════
+YOUR ADVICE
+═══════════════════════════════════════════════════════════════
+Based on ALL the above data, provide personalized advice. Consider:
+- The weather forecast and how it affects care needs
+- The gardener's observations and concerns from their journal
+- Task completion patterns and timing
+- Specific plant needs based on their characteristics
+- Seasonal considerations for the current date and location
 
 Format your response as JSON with this structure:
 {
-  "summary": "Brief overall assessment",
-  "focusAreas": ["area1", "area2"],
-  "plantTips": [{"plantName": "name", "tip": "specific advice", "priority": "high|medium|low"}],
+  "summary": "A warm, encouraging 2-3 sentence overview of the garden's status",
+  "weeklyFocus": "What the gardener should prioritize this specific week based on weather and plant needs",
+  "focusAreas": ["3-4 specific action items for this week"],
+  "plantTips": [
+    {"plantName": "name", "tip": "specific, actionable advice", "priority": "high|medium|low", "reason": "why this matters now"}
+  ],
+  "weatherAdvice": "How the upcoming weather affects plant care (be specific about the forecast)",
   "improvementScore": 85,
-  "fullAdvice": "Detailed paragraph of advice"
+  "encouragement": "A personalized, motivating message based on their progress",
+  "fullAdvice": "A detailed, friendly paragraph covering all your recommendations"
 }`
 
     try {
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are a helpful gardening expert. Always respond with valid JSON.' },
+          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging.' },
           { role: 'user', content: prompt },
         ],
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 1500,
         response_format: { type: 'json_object' },
       })
 
@@ -10979,15 +11126,37 @@ Format your response as JSON with this structure:
         parsed = { summary: 'Unable to parse advice', focusAreas: [], plantTips: [], improvementScore: null, fullAdvice: aiResponse }
       }
 
-      // Store in database
+      // Build context objects for storage
+      const weatherContextObj = weatherData ? {
+        current: weatherData.current,
+        forecast: weatherData.forecast?.slice(0, 7),
+        location: gardenLocation.location_city,
+      } : {}
+
+      const journalContextObj = {
+        entriesCount: recentJournalEntries.length,
+        recentMoods: recentJournalEntries.map(e => e.mood).filter(Boolean),
+        photoObservations: photoObservations.map(p => ({ plant: p.nickname || p.plant_name, health: p.plant_health })),
+      }
+
+      const locationContextObj = {
+        city: gardenLocation.location_city,
+        country: gardenLocation.location_country,
+        timezone: gardenLocation.location_timezone,
+      }
+
+      // Store in database with enhanced context
       const insertResult = await sql`
         insert into public.garden_ai_advice (
           garden_id, week_start, advice_text, advice_summary, focus_areas,
-          plant_specific_tips, improvement_score, model_used, tokens_used, generated_at
+          plant_specific_tips, improvement_score, model_used, tokens_used, generated_at,
+          weather_context, journal_context, avg_completion_time, location_context
         ) values (
           ${gardenId}, ${weekStartIso}, ${parsed.fullAdvice || ''}, ${parsed.summary || ''},
           ${JSON.stringify(parsed.focusAreas || [])}::text[], ${JSON.stringify(parsed.plantTips || [])}::jsonb,
-          ${parsed.improvementScore || null}, 'gpt-4o-mini', ${tokensUsed}, now()
+          ${parsed.improvementScore || null}, 'gpt-4o-mini', ${tokensUsed}, now(),
+          ${JSON.stringify(weatherContextObj)}::jsonb, ${JSON.stringify(journalContextObj)}::jsonb,
+          ${avgCompletionTime}, ${JSON.stringify(locationContextObj)}::jsonb
         )
         on conflict (garden_id, week_start)
         do update set
@@ -10998,8 +11167,13 @@ Format your response as JSON with this structure:
           improvement_score = excluded.improvement_score,
           model_used = excluded.model_used,
           tokens_used = excluded.tokens_used,
-          generated_at = excluded.generated_at
-        returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, improvement_score, generated_at
+          generated_at = excluded.generated_at,
+          weather_context = excluded.weather_context,
+          journal_context = excluded.journal_context,
+          avg_completion_time = excluded.avg_completion_time,
+          location_context = excluded.location_context
+        returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
+                  improvement_score, generated_at, weather_context, location_context
       `
 
       const saved = insertResult[0]
@@ -11014,6 +11188,12 @@ Format your response as JSON with this structure:
           plantSpecificTips: saved.plant_specific_tips || [],
           improvementScore: saved.improvement_score,
           generatedAt: saved.generated_at,
+          // Enhanced fields
+          weeklyFocus: parsed.weeklyFocus || null,
+          weatherAdvice: parsed.weatherAdvice || null,
+          encouragement: parsed.encouragement || null,
+          weatherContext: saved.weather_context || null,
+          locationContext: saved.location_context || null,
         },
       })
     } catch (aiErr) {
@@ -11023,6 +11203,587 @@ Format your response as JSON with this structure:
   } catch (e) {
     console.error('[garden-advice] Error:', e)
     res.status(500).json({ ok: false, error: e?.message || 'Failed to get advice' })
+  }
+})
+
+// Weather API helper
+async function fetchWeatherForLocation(lat, lon, city) {
+  // Use Open-Meteo API (free, no API key needed)
+  try {
+    if (!lat || !lon) {
+      // Try geocoding if we only have city name
+      if (city) {
+        const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)
+        if (geoResp.ok) {
+          const geoData = await geoResp.json()
+          if (geoData.results?.[0]) {
+            lat = geoData.results[0].latitude
+            lon = geoData.results[0].longitude
+          }
+        }
+      }
+      if (!lat || !lon) return null
+    }
+    
+    const weatherResp = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7`
+    )
+    
+    if (!weatherResp.ok) return null
+    const data = await weatherResp.json()
+    
+    // Weather code to description mapping
+    const weatherCodes = {
+      0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+      45: 'Foggy', 48: 'Rime fog', 51: 'Light drizzle', 53: 'Moderate drizzle',
+      55: 'Dense drizzle', 61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+      71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow', 80: 'Rain showers',
+      95: 'Thunderstorm'
+    }
+    
+    return {
+      current: {
+        temp: data.current?.temperature_2m,
+        humidity: data.current?.relative_humidity_2m,
+        condition: weatherCodes[data.current?.weather_code] || 'Unknown',
+        windSpeed: data.current?.wind_speed_10m,
+        weatherCode: data.current?.weather_code,
+      },
+      forecast: (data.daily?.time || []).slice(0, 7).map((date, i) => ({
+        date,
+        tempMax: data.daily?.temperature_2m_max?.[i],
+        tempMin: data.daily?.temperature_2m_min?.[i],
+        condition: weatherCodes[data.daily?.weather_code?.[i]] || 'Unknown',
+        precipProbability: data.daily?.precipitation_probability_max?.[i],
+      })),
+      timezone: data.timezone,
+    }
+  } catch (err) {
+    console.warn('[weather] Failed to fetch weather:', err)
+    return null
+  }
+}
+
+// Garden Weather endpoint
+app.get('/api/garden/:id/weather', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Get garden location
+    const gardenRows = await sql`
+      select location_city, location_country, location_lat, location_lon, location_timezone
+      from public.gardens where id = ${gardenId} limit 1
+    `
+    const garden = gardenRows[0]
+    if (!garden) {
+      res.status(404).json({ ok: false, error: 'Garden not found' })
+      return
+    }
+    
+    if (!garden.location_city && !garden.location_lat) {
+      res.json({ ok: true, weather: null, message: 'No location set for this garden' })
+      return
+    }
+
+    const weather = await fetchWeatherForLocation(garden.location_lat, garden.location_lon, garden.location_city)
+    res.json({ ok: true, weather, location: { city: garden.location_city, country: garden.location_country } })
+  } catch (e) {
+    console.error('[garden-weather] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to get weather' })
+  }
+})
+
+// Update garden location
+app.put('/api/garden/:id/location', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    const { city, country, timezone, lat, lon } = req.body || {}
+
+    // Verify membership with owner/admin role
+    const membership = await sql`
+      select role from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership?.[0] || membership[0].role !== 'owner') {
+      // Check if admin
+      const adminCheck = await sql`select is_admin from public.profiles where id = ${user.id}`
+      if (!adminCheck?.[0]?.is_admin) {
+        res.status(403).json({ ok: false, error: 'Only garden owners can update location' })
+        return
+      }
+    }
+
+    // If city provided but no coords, try to geocode
+    let finalLat = lat
+    let finalLon = lon
+    if (city && (!lat || !lon)) {
+      try {
+        const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)
+        if (geoResp.ok) {
+          const geoData = await geoResp.json()
+          if (geoData.results?.[0]) {
+            finalLat = geoData.results[0].latitude
+            finalLon = geoData.results[0].longitude
+          }
+        }
+      } catch {}
+    }
+
+    await sql`
+      update public.gardens set
+        location_city = ${city || null},
+        location_country = ${country || null},
+        location_timezone = ${timezone || null},
+        location_lat = ${finalLat || null},
+        location_lon = ${finalLon || null}
+      where id = ${gardenId}
+    `
+
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('[garden-location] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to update location' })
+  }
+})
+
+// ============ JOURNAL ENDPOINTS ============
+
+// Get journal entries for a garden
+app.get('/api/garden/:id/journal', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Verify membership
+    const membership = await sql`
+      select 1 from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership?.length) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
+      return
+    }
+
+    // Get entries (own entries + non-private entries from others)
+    const entries = await sql`
+      select 
+        e.id, e.garden_id, e.user_id, e.entry_date, e.title, e.content, e.mood,
+        e.weather_snapshot, e.plants_mentioned, e.tags, e.is_private,
+        e.ai_feedback, e.ai_feedback_generated_at, e.created_at, e.updated_at,
+        p.display_name as author_name
+      from public.garden_journal_entries e
+      left join public.profiles p on p.id = e.user_id
+      where e.garden_id = ${gardenId}
+        and (e.user_id = ${user.id} or e.is_private = false)
+      order by e.entry_date desc, e.created_at desc
+      limit 100
+    `
+
+    // Get photos for each entry
+    const entryIds = entries.map(e => e.id)
+    let photosMap = {}
+    if (entryIds.length > 0) {
+      const photos = await sql`
+        select id, entry_id, garden_plant_id, image_url, thumbnail_url, caption,
+               plant_health, observations, taken_at, uploaded_at
+        from public.garden_journal_photos
+        where entry_id = any(${entryIds})
+        order by uploaded_at asc
+      `
+      for (const photo of photos) {
+        if (!photosMap[photo.entry_id]) photosMap[photo.entry_id] = []
+        photosMap[photo.entry_id].push({
+          id: String(photo.id),
+          entryId: String(photo.entry_id),
+          gardenPlantId: photo.garden_plant_id ? String(photo.garden_plant_id) : null,
+          imageUrl: photo.image_url,
+          thumbnailUrl: photo.thumbnail_url,
+          caption: photo.caption,
+          plantHealth: photo.plant_health,
+          observations: photo.observations,
+          takenAt: photo.taken_at,
+          uploadedAt: photo.uploaded_at,
+        })
+      }
+    }
+
+    const result = entries.map(e => ({
+      id: String(e.id),
+      gardenId: String(e.garden_id),
+      userId: String(e.user_id),
+      authorName: e.author_name,
+      entryDate: e.entry_date,
+      title: e.title,
+      content: e.content,
+      mood: e.mood,
+      weatherSnapshot: e.weather_snapshot || {},
+      plantsMentioned: e.plants_mentioned || [],
+      tags: e.tags || [],
+      isPrivate: e.is_private,
+      aiFeedback: e.ai_feedback,
+      aiFeedbackGeneratedAt: e.ai_feedback_generated_at,
+      photos: photosMap[e.id] || [],
+      createdAt: e.created_at,
+      updatedAt: e.updated_at,
+    }))
+
+    res.json({ ok: true, entries: result })
+  } catch (e) {
+    console.error('[journal] Error fetching entries:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to fetch journal' })
+  }
+})
+
+// Create journal entry
+app.post('/api/garden/:id/journal', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    const { title, content, mood, isPrivate, tags, photos } = req.body || {}
+    if (!content?.trim()) {
+      res.status(400).json({ ok: false, error: 'Content is required' })
+      return
+    }
+
+    // Verify membership
+    const membership = await sql`
+      select 1 from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership?.length) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
+      return
+    }
+
+    // Fetch weather for the entry
+    let weatherSnapshot = {}
+    try {
+      const gardenRows = await sql`
+        select location_city, location_lat, location_lon
+        from public.gardens where id = ${gardenId} limit 1
+      `
+      const garden = gardenRows[0]
+      if (garden?.location_city || garden?.location_lat) {
+        const weather = await fetchWeatherForLocation(garden.location_lat, garden.location_lon, garden.location_city)
+        if (weather?.current) {
+          weatherSnapshot = weather.current
+        }
+      }
+    } catch {}
+
+    const today = new Date().toISOString().slice(0, 10)
+
+    // Insert entry
+    const insertResult = await sql`
+      insert into public.garden_journal_entries (
+        garden_id, user_id, entry_date, title, content, mood, is_private, tags, weather_snapshot
+      ) values (
+        ${gardenId}, ${user.id}, ${today}, ${title || null}, ${content.trim()},
+        ${mood || null}, ${isPrivate || false}, ${JSON.stringify(tags || [])}::text[], ${JSON.stringify(weatherSnapshot)}::jsonb
+      )
+      returning id
+    `
+    const entryId = insertResult[0]?.id
+
+    // Insert photos if any
+    if (photos?.length && entryId) {
+      for (const photoUrl of photos) {
+        await sql`
+          insert into public.garden_journal_photos (entry_id, image_url)
+          values (${entryId}, ${photoUrl})
+        `
+      }
+    }
+
+    res.json({ ok: true, entryId: String(entryId) })
+  } catch (e) {
+    console.error('[journal] Error creating entry:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to create entry' })
+  }
+})
+
+// Update journal entry
+app.put('/api/garden/:id/journal', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    const { entryId, title, content, mood, isPrivate, tags, photos } = req.body || {}
+    if (!entryId) {
+      res.status(400).json({ ok: false, error: 'Entry ID is required' })
+      return
+    }
+
+    // Verify ownership
+    const entry = await sql`
+      select id, user_id from public.garden_journal_entries
+      where id = ${entryId} and garden_id = ${gardenId}
+      limit 1
+    `
+    if (!entry?.length || entry[0].user_id !== user.id) {
+      res.status(403).json({ ok: false, error: 'You can only edit your own entries' })
+      return
+    }
+
+    await sql`
+      update public.garden_journal_entries set
+        title = ${title || null},
+        content = ${content?.trim() || ''},
+        mood = ${mood || null},
+        is_private = ${isPrivate || false},
+        tags = ${JSON.stringify(tags || [])}::text[],
+        updated_at = now()
+      where id = ${entryId}
+    `
+
+    // Add new photos if any
+    if (photos?.length) {
+      for (const photoUrl of photos) {
+        await sql`
+          insert into public.garden_journal_photos (entry_id, image_url)
+          values (${entryId}, ${photoUrl})
+        `
+      }
+    }
+
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('[journal] Error updating entry:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to update entry' })
+  }
+})
+
+// Delete journal entry
+app.delete('/api/garden/:id/journal/:entryId', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    const entryId = String(req.params.entryId || '').trim()
+    if (!gardenId || !entryId) { res.status(400).json({ ok: false, error: 'garden id and entry id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Verify ownership or owner role
+    const entry = await sql`
+      select e.id, e.user_id, gm.role
+      from public.garden_journal_entries e
+      join public.garden_members gm on gm.garden_id = e.garden_id and gm.user_id = ${user.id}
+      where e.id = ${entryId} and e.garden_id = ${gardenId}
+      limit 1
+    `
+    if (!entry?.length) {
+      res.status(404).json({ ok: false, error: 'Entry not found' })
+      return
+    }
+    if (entry[0].user_id !== user.id && entry[0].role !== 'owner') {
+      res.status(403).json({ ok: false, error: 'You can only delete your own entries' })
+      return
+    }
+
+    // Photos will be cascade deleted
+    await sql`delete from public.garden_journal_entries where id = ${entryId}`
+
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('[journal] Error deleting entry:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to delete entry' })
+  }
+})
+
+// Generate AI feedback for a journal entry
+app.post('/api/garden/:id/journal/:entryId/feedback', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    const entryId = String(req.params.entryId || '').trim()
+    if (!gardenId || !entryId) { res.status(400).json({ ok: false, error: 'garden id and entry id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+    if (!openai) { res.status(500).json({ ok: false, error: 'AI not configured' }); return }
+
+    // Get entry
+    const entries = await sql`
+      select e.*, g.name as garden_name, g.location_city
+      from public.garden_journal_entries e
+      join public.gardens g on g.id = e.garden_id
+      where e.id = ${entryId} and e.garden_id = ${gardenId} and e.user_id = ${user.id}
+      limit 1
+    `
+    if (!entries?.length) {
+      res.status(404).json({ ok: false, error: 'Entry not found' })
+      return
+    }
+    const entry = entries[0]
+
+    // Get plants in garden for context
+    const plants = await sql`
+      select gp.nickname, p.name as plant_name
+      from public.garden_plants gp
+      left join public.plants p on p.id = gp.plant_id
+      where gp.garden_id = ${gardenId}
+      limit 20
+    `
+    const plantList = plants.map(p => p.nickname || p.plant_name).filter(Boolean).join(', ')
+
+    // Get weather context if available
+    let weatherContext = ''
+    if (entry.weather_snapshot?.temp) {
+      weatherContext = `Weather when entry was written: ${entry.weather_snapshot.temp}°C, ${entry.weather_snapshot.condition || 'Unknown'}`
+    }
+
+    const moodLabels = {
+      great: 'The gardener is feeling great about their garden',
+      good: 'The gardener is feeling good',
+      neutral: 'The gardener is feeling neutral',
+      concerned: 'The gardener has some concerns',
+      struggling: 'The gardener is struggling with something'
+    }
+
+    const prompt = `You are a friendly, knowledgeable gardening expert providing personalized feedback on a gardener's journal entry.
+
+Garden: "${entry.garden_name}"
+${entry.location_city ? `Location: ${entry.location_city}` : ''}
+Plants in garden: ${plantList || 'Not specified'}
+${weatherContext}
+
+Journal Entry Date: ${entry.entry_date}
+${entry.mood ? `Mood: ${moodLabels[entry.mood] || entry.mood}` : ''}
+${entry.title ? `Title: ${entry.title}` : ''}
+
+Entry Content:
+"${entry.content}"
+
+Please provide brief, warm, helpful feedback (2-4 sentences) that:
+1. Acknowledges their observations
+2. Offers one specific tip or insight related to what they mentioned
+3. Encourages their gardening journey
+
+Keep the tone conversational and supportive. Don't be generic - reference specific things they mentioned.`
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a friendly gardening expert providing warm, personalized feedback.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 300,
+    })
+
+    const feedback = completion.choices[0]?.message?.content
+
+    await sql`
+      update public.garden_journal_entries
+      set ai_feedback = ${feedback}, ai_feedback_generated_at = now()
+      where id = ${entryId}
+    `
+
+    res.json({ ok: true, feedback })
+  } catch (e) {
+    console.error('[journal-feedback] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to generate feedback' })
+  }
+})
+
+// Upload photo for garden (used by journal)
+app.post('/api/garden/:id/upload', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+
+    // Verify membership
+    if (sql) {
+      const membership = await sql`
+        select 1 from public.garden_members
+        where garden_id = ${gardenId} and user_id = ${user.id}
+        limit 1
+      `
+      if (!membership?.length) {
+        res.status(403).json({ ok: false, error: 'Access denied' })
+        return
+      }
+    }
+
+    // Parse multipart form data
+    const busboy = (await import('busboy')).default
+    const bb = busboy({ headers: req.headers })
+    
+    let fileBuffer = null
+    let fileName = ''
+    let mimeType = ''
+    let folder = 'journal'
+
+    bb.on('file', (name, file, info) => {
+      fileName = info.filename
+      mimeType = info.mimeType
+      const chunks = []
+      file.on('data', (data) => chunks.push(data))
+      file.on('end', () => { fileBuffer = Buffer.concat(chunks) })
+    })
+
+    bb.on('field', (name, val) => {
+      if (name === 'folder') folder = val
+    })
+
+    bb.on('finish', async () => {
+      if (!fileBuffer) {
+        res.status(400).json({ ok: false, error: 'No file uploaded' })
+        return
+      }
+
+      // Generate unique filename
+      const ext = fileName.split('.').pop() || 'jpg'
+      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const storagePath = `gardens/${gardenId}/${folder}/${uniqueName}`
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('photos')
+        .upload(storagePath, fileBuffer, {
+          contentType: mimeType,
+          upsert: false,
+        })
+
+      if (error) {
+        console.error('[upload] Storage error:', error)
+        res.status(500).json({ ok: false, error: 'Failed to upload file' })
+        return
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
+      
+      res.json({ ok: true, url: urlData?.publicUrl || '', path: storagePath })
+    })
+
+    req.pipe(bb)
+  } catch (e) {
+    console.error('[upload] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to upload' })
   }
 })
 
