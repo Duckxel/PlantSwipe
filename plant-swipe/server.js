@@ -3832,10 +3832,18 @@ let notificationTablesEnsured = false
 const DEFAULT_TIMEZONE = 'Europe/London'
 
 async function ensureNotificationTables() {
-  if (!sql) return
-  if (notificationTablesEnsured) return
+  if (!sql) {
+    console.log('[ensureNotificationTables] No SQL connection')
+    return
+  }
+  if (notificationTablesEnsured) {
+    console.log('[ensureNotificationTables] Already ensured, skipping')
+    return
+  }
+  console.log('[ensureNotificationTables] Starting table creation...')
   try {
     // Notification Templates
+    console.log('[ensureNotificationTables] Creating notification_templates...')
     await sql`
       create table if not exists public.notification_templates (
         id uuid primary key default gen_random_uuid(),
@@ -3978,8 +3986,9 @@ async function ensureNotificationTables() {
     await sql`create unique index if not exists user_push_subscriptions_endpoint_idx on public.user_push_subscriptions (endpoint);`
     await sql`create index if not exists user_push_subscriptions_user_idx on public.user_push_subscriptions (user_id);`
     notificationTablesEnsured = true
+    console.log('[ensureNotificationTables] All tables created successfully')
   } catch (err) {
-    console.error('[schema] failed to ensure notification tables', err)
+    console.error('[ensureNotificationTables] Failed:', err?.message || err)
   }
 }
 
@@ -5806,8 +5815,29 @@ app.put('/api/admin/notification-templates/:id/translations', async (req, res) =
 // ---- Notification Automations ----
 // Ensure default automations exist in database
 async function ensureDefaultAutomations() {
-  if (!sql) return
+  if (!sql) {
+    console.log('[notification-automations] No SQL connection, skipping')
+    return
+  }
+  
+  console.log('[notification-automations] Starting to ensure default automations...')
+  
   try {
+    // First check if the table exists
+    const tableCheck = await sql`
+      select exists (
+        select from information_schema.tables 
+        where table_schema = 'public' 
+        and table_name = 'notification_automations'
+      ) as table_exists
+    `
+    console.log('[notification-automations] Table exists:', tableCheck?.[0]?.table_exists)
+    
+    if (!tableCheck?.[0]?.table_exists) {
+      console.log('[notification-automations] Table does not exist, skipping seeding')
+      return
+    }
+    
     const defaultAutomations = [
       {
         trigger_type: 'weekly_inactive_reminder',
@@ -5835,6 +5865,8 @@ async function ensureDefaultAutomations() {
         const existing = await sql`
           select id from public.notification_automations where trigger_type = ${auto.trigger_type} limit 1
         `
+        console.log(`[notification-automations] Checking ${auto.trigger_type}: exists=${existing?.length > 0}`)
+        
         if (!existing || existing.length === 0) {
           await sql`
             insert into public.notification_automations (trigger_type, display_name, description, send_hour)
@@ -5843,14 +5875,16 @@ async function ensureDefaultAutomations() {
           console.log(`[notification-automations] Created automation: ${auto.trigger_type}`)
         }
       } catch (insertErr) {
-        // Ignore duplicate key errors
-        if (!insertErr?.message?.includes('duplicate') && !insertErr?.message?.includes('unique')) {
-          console.error(`[notification-automations] Failed to create ${auto.trigger_type}:`, insertErr)
-        }
+        console.error(`[notification-automations] Failed to create ${auto.trigger_type}:`, insertErr?.message || insertErr)
       }
     }
+    
+    // Verify what we have
+    const allAutomations = await sql`select trigger_type from public.notification_automations`
+    console.log('[notification-automations] All automations in DB:', allAutomations?.map(a => a.trigger_type))
+    
   } catch (err) {
-    console.error('[notification-automations] failed to ensure defaults', err)
+    console.error('[notification-automations] failed to ensure defaults:', err?.message || err)
   }
 }
 
@@ -5869,48 +5903,71 @@ app.get('/api/admin/notification-automations', async (req, res) => {
     console.log('[notification-automations] Ensuring default automations exist...')
     await ensureDefaultAutomations()
     
+    // First, get basic automations
     const rows = await sql`
       select a.*,
-             t.title as template_title,
-             rc.recipient_count
+             t.title as template_title
       from public.notification_automations a
       left join public.notification_templates t on t.id = a.template_id
-      left join lateral (
-        select case 
-          when a.trigger_type = 'weekly_inactive_reminder' then (
-            select count(*)::bigint
+      order by a.created_at asc
+    `
+    console.log('[notification-automations] Query returned:', rows?.length || 0, 'rows')
+    
+    // Calculate recipient counts separately to avoid query failures
+    const automationsWithCounts = await Promise.all((rows || []).map(async (row) => {
+      let recipientCount = 0
+      try {
+        if (row.trigger_type === 'weekly_inactive_reminder') {
+          const countResult = await sql`
+            select count(*)::bigint as cnt
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
-          )
-          when a.trigger_type = 'daily_task_reminder' then (
-            select count(distinct p.id)::bigint
-            from public.profiles p
-            join public.garden_members gm on gm.user_id = p.id
-            join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
-              select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
-            )
-            where (p.notify_push is null or p.notify_push = true)
-              and occ.due_at::date = current_date
-              and (occ.completed_count < occ.required_count or occ.completed_count = 0)
-          )
-          when a.trigger_type = 'journal_continue_reminder' then (
-            select count(distinct p.id)::bigint
-            from public.profiles p
-            join public.garden_members gm on gm.user_id = p.id
-            join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
-            where (p.notify_push is null or p.notify_push = true)
-              and gal.action_type = 'journal_entry'
-              and gal.created_at::date = current_date - interval '1 day'
-          )
-          else 0
-        end as recipient_count
-      ) rc on true
-      order by a.created_at asc
-    `
-    console.log('[notification-automations] Query returned:', rows?.length || 0, 'rows')
-    const automations = (rows || []).map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
+          `
+          recipientCount = Number(countResult?.[0]?.cnt || 0)
+        } else if (row.trigger_type === 'daily_task_reminder') {
+          try {
+            const countResult = await sql`
+              select count(distinct p.id)::bigint as cnt
+              from public.profiles p
+              join public.garden_members gm on gm.user_id = p.id
+              join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
+                select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
+              )
+              where (p.notify_push is null or p.notify_push = true)
+                and occ.due_at::date = current_date
+                and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+            `
+            recipientCount = Number(countResult?.[0]?.cnt || 0)
+          } catch (e) {
+            // Table might not exist
+            recipientCount = 0
+          }
+        } else if (row.trigger_type === 'journal_continue_reminder') {
+          try {
+            const countResult = await sql`
+              select count(distinct p.id)::bigint as cnt
+              from public.profiles p
+              join public.garden_members gm on gm.user_id = p.id
+              join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
+              where (p.notify_push is null or p.notify_push = true)
+                and gal.action_type = 'journal_entry'
+                and gal.created_at::date = current_date - interval '1 day'
+            `
+            recipientCount = Number(countResult?.[0]?.cnt || 0)
+          } catch (e) {
+            // Table might not exist
+            recipientCount = 0
+          }
+        }
+      } catch (countErr) {
+        console.error('[notification-automations] Error counting recipients for', row.trigger_type, countErr)
+      }
+      return { ...row, recipient_count: recipientCount }
+    }))
+    
+    const automations = automationsWithCounts.map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
     console.log('[notification-automations] Returning:', automations.length, 'automations')
     res.json({ automations })
   } catch (err) {
