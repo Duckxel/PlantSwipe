@@ -8,17 +8,14 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { supabase } from '@/lib/supabaseClient'
 import {
   BellRing,
-  Pause,
   Play,
   Trash2,
-  Edit,
   Plus,
   Clock,
   Send,
   Users,
   Calendar,
   MessageSquare,
-  Link as LinkIcon,
   CheckCircle2,
   AlertCircle,
   Zap,
@@ -26,7 +23,6 @@ import {
   X,
   Search,
   Loader2,
-  Target,
   FileText,
   Copy,
   ChevronRight,
@@ -38,7 +34,7 @@ import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
 import { Link, useLocation } from 'react-router-dom'
 import { translateNotificationToAllLanguages } from '@/lib/deepl'
-import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n'
+import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from '@/lib/i18n'
 
 // Types
 type NotificationTemplate = {
