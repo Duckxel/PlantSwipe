@@ -5761,7 +5761,6 @@ end $$;
 create table if not exists public.user_notifications (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid references public.notification_campaigns(id) on delete set null,
-  automation_id uuid references public.notification_automations(id) on delete set null,
   iteration integer not null default 1,
   user_id uuid not null references auth.users(id) on delete cascade,
   title text,
@@ -5777,15 +5776,47 @@ create table if not exists public.user_notifications (
   cancelled_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+-- Add automation_id column if it doesn't exist (for existing tables)
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'user_notifications' 
+    and column_name = 'automation_id'
+  ) then
+    alter table public.user_notifications 
+      add column automation_id uuid references public.notification_automations(id) on delete set null;
+  end if;
+end $$;
+
 create index if not exists user_notifications_user_idx on public.user_notifications (user_id, scheduled_for desc);
 create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);
-create index if not exists user_notifications_automation_idx on public.user_notifications (automation_id);
+
+-- Create automation indexes only if column exists
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'user_notifications' 
+    and column_name = 'automation_id'
+  ) then
+    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_automation_idx') then
+      create index user_notifications_automation_idx on public.user_notifications (automation_id);
+    end if;
+    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_unique_automation_delivery') then
+      create unique index user_notifications_unique_automation_delivery
+        on public.user_notifications (automation_id, user_id, (scheduled_for::date))
+        where automation_id is not null;
+    end if;
+  end if;
+end $$;
+
 create unique index if not exists user_notifications_unique_delivery
   on public.user_notifications (campaign_id, iteration, user_id)
   where campaign_id is not null;
-create unique index if not exists user_notifications_unique_automation_delivery
-  on public.user_notifications (automation_id, user_id, (scheduled_for::date))
-  where automation_id is not null;
 grant select, insert, update, delete on public.user_notifications to authenticated;
 alter table public.user_notifications enable row level security;
 do $$ begin
