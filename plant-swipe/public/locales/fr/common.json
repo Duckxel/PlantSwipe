@@ -1474,12 +1474,16 @@
       "editEntry": "Modifier l'entrée",
       "howFeeling": "Comment va votre jardin aujourd'hui ?",
       "moods": {
-        "great": "Excellent",
-        "good": "Bien",
-        "neutral": "Neutre",
-        "concerned": "Préoccupé",
-        "struggling": "Difficile"
+        "blooming": "En fleur",
+        "thriving": "Épanoui",
+        "sprouting": "En pousse",
+        "resting": "Au repos",
+        "wilting": "Besoin de soins"
       },
+      "gardenStatus": "Comment va votre jardin aujourd'hui ?",
+      "viewTimelapse": "Voir le timelapse",
+      "speed": "Vitesse",
+      "downloadAll": "Télécharger toutes les photos",
       "titleOptional": "Titre (optionnel)",
       "titlePlaceholder": "Donnez un titre à cette entrée...",
       "observations": "Vos observations",

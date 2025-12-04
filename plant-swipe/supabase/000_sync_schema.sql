@@ -6394,7 +6394,7 @@ create table if not exists public.garden_journal_entries (
   entry_date date not null,
   title text,
   content text not null,
-  mood text check (mood is null or mood in ('great', 'good', 'neutral', 'concerned', 'struggling')),
+  mood text check (mood is null or mood in ('blooming', 'thriving', 'sprouting', 'resting', 'wilting')),
   weather_snapshot jsonb default '{}'::jsonb,
   -- Metadata
   plants_mentioned uuid[] default '{}',

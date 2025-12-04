@@ -11,7 +11,6 @@ import {
   Plus,
   Calendar,
   Camera,
-  Smile,
   CloudSun,
   Leaf,
   Pencil,
@@ -26,14 +25,18 @@ import {
   Heart,
   AlertCircle,
   CheckCircle2,
-  Meh,
-  Frown,
   X,
   Upload,
   Tag,
   Lock,
   Globe,
   RefreshCw,
+  Play,
+  Pause,
+  Download,
+  Film,
+  Images,
+  ZoomIn,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
@@ -86,13 +89,13 @@ interface GardenJournalSectionProps {
   }>;
 }
 
-// Mood configuration
+// Garden-themed mood configuration
 const MOODS = [
-  { key: "great", emoji: "🌟", label: "Great", color: "text-yellow-500", bg: "bg-yellow-100 dark:bg-yellow-900/30" },
-  { key: "good", emoji: "😊", label: "Good", color: "text-emerald-500", bg: "bg-emerald-100 dark:bg-emerald-900/30" },
-  { key: "neutral", emoji: "😐", label: "Neutral", color: "text-stone-500", bg: "bg-stone-100 dark:bg-stone-800/50" },
-  { key: "concerned", emoji: "😟", label: "Concerned", color: "text-amber-500", bg: "bg-amber-100 dark:bg-amber-900/30" },
-  { key: "struggling", emoji: "😰", label: "Struggling", color: "text-red-500", bg: "bg-red-100 dark:bg-red-900/30" },
+  { key: "blooming", emoji: "🌸", label: "Blooming", color: "text-pink-500", bg: "bg-pink-100 dark:bg-pink-900/30", desc: "Peak beauty" },
+  { key: "thriving", emoji: "🌿", label: "Thriving", color: "text-emerald-500", bg: "bg-emerald-100 dark:bg-emerald-900/30", desc: "Growing strong" },
+  { key: "sprouting", emoji: "🌱", label: "Sprouting", color: "text-lime-500", bg: "bg-lime-100 dark:bg-lime-900/30", desc: "New growth" },
+  { key: "resting", emoji: "🍂", label: "Resting", color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/30", desc: "Seasonal pause" },
+  { key: "wilting", emoji: "🥀", label: "Needs Care", color: "text-red-500", bg: "bg-red-100 dark:bg-red-900/30", desc: "Attention needed" },
 ];
 
 const PLANT_HEALTH = [
@@ -140,6 +143,95 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     const todayIso = new Date().toISOString().slice(0, 10);
     return entries.find((e) => e.entryDate === todayIso);
   }, [entries]);
+
+  // Timelapse state
+  const [showTimelapse, setShowTimelapse] = React.useState(false);
+  const [timelapseIndex, setTimelapseIndex] = React.useState(0);
+  const [isPlaying, setIsPlaying] = React.useState(false);
+  const [timelapseSpeed, setTimelapseSpeed] = React.useState(2000); // ms per frame
+  const timelapseRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Get all photos sorted by date for timelapse
+  const allPhotos = React.useMemo(() => {
+    const photos: Array<{
+      url: string;
+      date: string;
+      caption?: string;
+      entryTitle?: string;
+      mood?: string;
+    }> = [];
+    
+    entries.forEach((entry) => {
+      if (entry.photos && entry.photos.length > 0) {
+        entry.photos.forEach((photo) => {
+          photos.push({
+            url: photo.imageUrl,
+            date: entry.entryDate,
+            caption: photo.caption || undefined,
+            entryTitle: entry.title || undefined,
+            mood: entry.mood || undefined,
+          });
+        });
+      }
+    });
+    
+    // Sort oldest to newest for timelapse
+    return photos.sort((a, b) => a.date.localeCompare(b.date));
+  }, [entries]);
+
+  // Timelapse playback
+  React.useEffect(() => {
+    if (isPlaying && allPhotos.length > 1) {
+      timelapseRef.current = setInterval(() => {
+        setTimelapseIndex((prev) => {
+          const next = prev + 1;
+          if (next >= allPhotos.length) {
+            setIsPlaying(false);
+            return 0;
+          }
+          return next;
+        });
+      }, timelapseSpeed);
+    }
+    
+    return () => {
+      if (timelapseRef.current) {
+        clearInterval(timelapseRef.current);
+      }
+    };
+  }, [isPlaying, allPhotos.length, timelapseSpeed]);
+
+  // Download timelapse as ZIP
+  const downloadPhotosAsZip = async () => {
+    if (allPhotos.length === 0) return;
+    
+    // Dynamic import of JSZip
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+    
+    // Add photos to zip
+    for (let i = 0; i < allPhotos.length; i++) {
+      const photo = allPhotos[i];
+      try {
+        const response = await fetch(photo.url);
+        const blob = await response.blob();
+        const ext = photo.url.split('.').pop()?.split('?')[0] || 'jpg';
+        const filename = `${String(i + 1).padStart(3, '0')}_${photo.date}.${ext}`;
+        zip.file(filename, blob);
+      } catch (err) {
+        console.warn(`Failed to download photo ${i}:`, err);
+      }
+    }
+    
+    // Generate and download zip
+    const content = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${garden?.name || 'garden'}-timelapse-photos.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Fetch journal entries
   const fetchEntries = React.useCallback(async () => {
@@ -431,8 +523,186 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
               </span>
             </div>
           )}
+          {allPhotos.length >= 2 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full gap-2 bg-white/60 dark:bg-black/20 backdrop-blur-sm border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30"
+              onClick={() => setShowTimelapse(true)}
+            >
+              <Film className="w-4 h-4" />
+              {t("gardenDashboard.journalSection.viewTimelapse", "View Timelapse")}
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Timelapse Viewer Modal */}
+      <AnimatePresence>
+        {showTimelapse && allPhotos.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+            onClick={() => {
+              setShowTimelapse(false);
+              setIsPlaying(false);
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-4xl w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => {
+                  setShowTimelapse(false);
+                  setIsPlaying(false);
+                }}
+                className="absolute -top-12 right-0 text-white/80 hover:text-white transition-colors"
+              >
+                <X className="w-8 h-8" />
+              </button>
+
+              {/* Main image */}
+              <div className="relative aspect-[4/3] bg-black rounded-2xl overflow-hidden">
+                <img
+                  src={allPhotos[timelapseIndex]?.url}
+                  alt={`Photo ${timelapseIndex + 1}`}
+                  className="w-full h-full object-contain"
+                />
+                
+                {/* Photo info overlay */}
+                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                  <div className="flex items-center justify-between text-white">
+                    <div>
+                      <div className="text-sm font-medium">
+                        {allPhotos[timelapseIndex]?.entryTitle || 
+                          new Date(allPhotos[timelapseIndex]?.date).toLocaleDateString(undefined, {
+                            weekday: "long",
+                            month: "long",
+                            day: "numeric",
+                            year: "numeric",
+                          })
+                        }
+                      </div>
+                      {allPhotos[timelapseIndex]?.caption && (
+                        <div className="text-xs text-white/70 mt-1">
+                          {allPhotos[timelapseIndex].caption}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {allPhotos[timelapseIndex]?.mood && (
+                        <span className="text-xl">
+                          {MOODS.find(m => m.key === allPhotos[timelapseIndex]?.mood)?.emoji}
+                        </span>
+                      )}
+                      <span className="text-sm text-white/70">
+                        {timelapseIndex + 1} / {allPhotos.length}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex items-center justify-center gap-4 mt-4">
+                {/* Previous */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/20 rounded-full"
+                  onClick={() => setTimelapseIndex((prev) => Math.max(0, prev - 1))}
+                  disabled={timelapseIndex === 0}
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </Button>
+
+                {/* Play/Pause */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/20 rounded-full w-14 h-14"
+                  onClick={() => setIsPlaying(!isPlaying)}
+                >
+                  {isPlaying ? (
+                    <Pause className="w-8 h-8" />
+                  ) : (
+                    <Play className="w-8 h-8 ml-1" />
+                  )}
+                </Button>
+
+                {/* Next */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/20 rounded-full"
+                  onClick={() => setTimelapseIndex((prev) => Math.min(allPhotos.length - 1, prev + 1))}
+                  disabled={timelapseIndex === allPhotos.length - 1}
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </Button>
+              </div>
+
+              {/* Speed control and download */}
+              <div className="flex items-center justify-between mt-4">
+                <div className="flex items-center gap-2 text-white/70">
+                  <span className="text-xs">{t("gardenDashboard.journalSection.speed", "Speed")}:</span>
+                  <select
+                    value={timelapseSpeed}
+                    onChange={(e) => setTimelapseSpeed(Number(e.target.value))}
+                    className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs text-white"
+                  >
+                    <option value={3000}>0.5x</option>
+                    <option value={2000}>1x</option>
+                    <option value={1000}>2x</option>
+                    <option value={500}>4x</option>
+                  </select>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white hover:bg-white/20 rounded-xl gap-2"
+                  onClick={downloadPhotosAsZip}
+                >
+                  <Download className="w-4 h-4" />
+                  {t("gardenDashboard.journalSection.downloadAll", "Download All Photos")}
+                </Button>
+              </div>
+
+              {/* Thumbnail strip */}
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-2 px-1">
+                {allPhotos.map((photo, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setTimelapseIndex(idx);
+                      setIsPlaying(false);
+                    }}
+                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                      idx === timelapseIndex
+                        ? "border-white scale-110 shadow-lg"
+                        : "border-transparent opacity-60 hover:opacity-100"
+                    }`}
+                  >
+                    <img
+                      src={photo.url}
+                      alt={`Thumb ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* New/Edit Entry Form */}
       <AnimatePresence>
@@ -480,23 +750,24 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 {/* Mood selector */}
                 <div>
                   <label className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Smile className="w-4 h-4" />
-                    {t("gardenDashboard.journalSection.howFeeling", "How's your garden feeling today?")}
+                    <Leaf className="w-4 h-4" />
+                    {t("gardenDashboard.journalSection.gardenStatus", "How's your garden today?")}
                   </label>
-                  <div className="flex flex-wrap gap-2 mt-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2">
                     {MOODS.map((mood) => (
                       <button
                         key={mood.key}
                         type="button"
                         onClick={() => setEntryMood(entryMood === mood.key ? null : mood.key)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all ${
+                        className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
                           entryMood === mood.key
-                            ? `${mood.bg} border-current ${mood.color} shadow-md`
-                            : "border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600"
+                            ? `${mood.bg} border-current ${mood.color} shadow-md scale-105`
+                            : "border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 hover:scale-102"
                         }`}
                       >
-                        <span className="text-xl">{mood.emoji}</span>
-                        <span className="text-sm font-medium">{t(`gardenDashboard.journalSection.moods.${mood.key}`, mood.label)}</span>
+                        <span className="text-2xl">{mood.emoji}</span>
+                        <span className="text-xs font-medium">{t(`gardenDashboard.journalSection.moods.${mood.key}`, mood.label)}</span>
+                        <span className="text-[10px] text-muted-foreground">{mood.desc}</span>
                       </button>
                     ))}
                   </div>

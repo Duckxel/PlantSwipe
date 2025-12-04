@@ -1474,12 +1474,16 @@
       "editEntry": "Edit Entry",
       "howFeeling": "How's your garden feeling today?",
       "moods": {
-        "great": "Great",
-        "good": "Good",
-        "neutral": "Neutral",
-        "concerned": "Concerned",
-        "struggling": "Struggling"
+        "blooming": "Blooming",
+        "thriving": "Thriving",
+        "sprouting": "Sprouting",
+        "resting": "Resting",
+        "wilting": "Needs Care"
       },
+      "gardenStatus": "How's your garden today?",
+      "viewTimelapse": "View Timelapse",
+      "speed": "Speed",
+      "downloadAll": "Download All Photos",
       "titleOptional": "Title (optional)",
       "titlePlaceholder": "Give this entry a title...",
       "observations": "Your observations",
