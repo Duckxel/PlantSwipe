@@ -32,10 +32,13 @@ import {
   ChevronRight,
   Globe,
   Languages,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
 import { Link, useLocation } from 'react-router-dom'
+import { translateNotificationToAllLanguages } from '@/lib/deepl'
+import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n'
 
 // Types
 type NotificationTemplate = {
@@ -267,6 +270,7 @@ export function AdminNotificationsPanel() {
   const [selectedTranslationLang, setSelectedTranslationLang] = React.useState<string | null>(null)
   const [templateTranslations, setTemplateTranslations] = React.useState<Record<string, string[]>>({})
   const [newTranslationVariantText, setNewTranslationVariantText] = React.useState('')
+  const [isAutoTranslating, setIsAutoTranslating] = React.useState(false)
 
   // Filtered lists
   const filteredCampaigns = React.useMemo(() => {
@@ -471,6 +475,7 @@ export function AdminNotificationsPanel() {
     setTemplateTranslations({})
     setSelectedTranslationLang(null)
     setNewTranslationVariantText('')
+    setIsAutoTranslating(false)
     setTemplateSheetOpen(true)
   }, [])
 
@@ -488,6 +493,7 @@ export function AdminNotificationsPanel() {
     setTemplateTranslations(template.translations || {})
     setSelectedTranslationLang(null)
     setNewTranslationVariantText('')
+    setIsAutoTranslating(false)
     setTemplateSheetOpen(true)
   }, [])
 
@@ -530,6 +536,37 @@ export function AdminNotificationsPanel() {
       [selectedTranslationLang]: [...templateForm.messageVariants],
     }))
   }, [selectedTranslationLang, templateForm.messageVariants])
+
+  // Auto-translate all variants to all languages using DeepL
+  const handleAutoTranslate = React.useCallback(async () => {
+    if (!templateForm.messageVariants.length) {
+      alert('Add at least one message variant first.')
+      return
+    }
+    if (isAutoTranslating) return
+
+    setIsAutoTranslating(true)
+    try {
+      const translations = await translateNotificationToAllLanguages(
+        templateForm.messageVariants,
+        DEFAULT_LANGUAGE
+      )
+
+      // Update state with all translations (except English)
+      const newTranslations: Record<string, string[]> = {}
+      for (const lang of SUPPORTED_LANGUAGES) {
+        if (lang !== DEFAULT_LANGUAGE && translations[lang]) {
+          newTranslations[lang] = translations[lang]
+        }
+      }
+      setTemplateTranslations(newTranslations)
+    } catch (err) {
+      console.error('Auto-translate failed:', err)
+      alert('Translation failed. Please try again.')
+    } finally {
+      setIsAutoTranslating(false)
+    }
+  }, [templateForm.messageVariants, isAutoTranslating])
 
   // Get non-English languages for translations
   const translationLanguages = React.useMemo(() => {
@@ -1574,9 +1611,31 @@ export function AdminNotificationsPanel() {
             {/* Translations Section */}
             {translationLanguages.length > 0 && (
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-amber-600" />
-                  <Label className="text-sm font-medium">Translations</Label>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-amber-600" />
+                    <Label className="text-sm font-medium">Translations</Label>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAutoTranslate}
+                    disabled={isAutoTranslating || !templateForm.messageVariants.length}
+                    className="rounded-lg h-8 text-xs border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                  >
+                    {isAutoTranslating ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                        Translating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-3 w-3 mr-1.5" />
+                        Auto-translate (DeepL)
+                      </>
+                    )}
+                  </Button>
                 </div>
                 <p className="text-xs text-stone-500">
                   Provide translated message variants for each language. Users will receive notifications in their preferred language.
