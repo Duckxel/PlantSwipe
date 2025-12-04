@@ -437,7 +437,20 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     }
   }, [isEligibleForAdvice, fetchAdvice]);
 
-  const analytics = analyticsData || computedAnalytics;
+  // Merge server analytics with computed analytics to ensure all fields are present
+  const analytics = React.useMemo(() => {
+    if (!computedAnalytics) return analyticsData;
+    if (!analyticsData) return computedAnalytics;
+    // Merge: prefer server data but fall back to computed for missing fields
+    return {
+      ...computedAnalytics,
+      ...analyticsData,
+      // Ensure streakInfo is always present (server might not send it)
+      streakInfo: analyticsData.streakInfo || computedAnalytics.streakInfo,
+      weeklyStats: analyticsData.weeklyStats || computedAnalytics.weeklyStats,
+      plantStats: analyticsData.plantStats || computedAnalytics.plantStats,
+    };
+  }, [analyticsData, computedAnalytics]);
 
   if (!analytics) {
     return (
@@ -551,10 +564,10 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     {t("gardenDashboard.analyticsSection.currentStreak", { defaultValue: "Current Streak" })}
                   </div>
                   <div className="text-3xl font-bold text-orange-600 dark:text-orange-400">
-                    {analytics.streakInfo.current}
+                    {analytics.streakInfo?.current ?? 0}
                   </div>
                   <div className="text-xs text-stone-500 mt-1">
-                    {t("gardenDashboard.analyticsSection.bestStreak", { defaultValue: "Best:" })} {analytics.streakInfo.best} {t("gardenDashboard.analyticsSection.days", { defaultValue: "days" })}
+                    {t("gardenDashboard.analyticsSection.bestStreak", { defaultValue: "Best:" })} {analytics.streakInfo?.best ?? 0} {t("gardenDashboard.analyticsSection.days", { defaultValue: "days" })}
                   </div>
                 </div>
               </Card>
@@ -568,10 +581,10 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     {t("gardenDashboard.analyticsSection.thisWeek", { defaultValue: "This Week" })}
                   </div>
                   <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                    {analytics.weeklyStats.tasksCompleted}
+                    {analytics.weeklyStats?.tasksCompleted ?? 0}
                   </div>
                   <div className="text-xs text-stone-500 mt-1">
-                    {t("gardenDashboard.analyticsSection.of", { defaultValue: "of" })} {analytics.weeklyStats.tasksDue} {t("gardenDashboard.analyticsSection.tasks", { defaultValue: "tasks" })}
+                    {t("gardenDashboard.analyticsSection.of", { defaultValue: "of" })} {analytics.weeklyStats?.tasksDue ?? 0} {t("gardenDashboard.analyticsSection.tasks", { defaultValue: "tasks" })}
                   </div>
                 </div>
               </Card>
@@ -585,10 +598,10 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     {t("gardenDashboard.analyticsSection.plants", { defaultValue: "Plants" })}
                   </div>
                   <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                    {analytics.plantStats.total}
+                    {analytics.plantStats?.total ?? 0}
                   </div>
                   <div className="text-xs text-stone-500 mt-1">
-                    {analytics.plantStats.species} {t("gardenDashboard.analyticsSection.species", { defaultValue: "species" })}
+                    {analytics.plantStats?.species ?? 0} {t("gardenDashboard.analyticsSection.species", { defaultValue: "species" })}
                   </div>
                 </div>
               </Card>
@@ -1098,7 +1111,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 text-center">
                 <div className="text-3xl mb-2">🌱</div>
                 <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {analytics.plantStats.total}
+                  {analytics.plantStats?.total ?? 0}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {t("gardenDashboard.analyticsSection.totalPlants", { defaultValue: "Total Plants" })}
@@ -1107,7 +1120,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 text-center">
                 <div className="text-3xl mb-2">🌿</div>
                 <div className="text-3xl font-bold text-teal-600 dark:text-teal-400">
-                  {analytics.plantStats.species}
+                  {analytics.plantStats?.species ?? 0}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {t("gardenDashboard.analyticsSection.uniqueSpecies", { defaultValue: "Unique Species" })}
@@ -1116,7 +1129,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 text-center">
                 <div className="text-3xl mb-2">✅</div>
                 <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                  {analytics.plantStats.healthy}
+                  {analytics.plantStats?.healthy ?? 0}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {t("gardenDashboard.analyticsSection.healthy", { defaultValue: "Healthy" })}
@@ -1125,7 +1138,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 text-center">
                 <div className="text-3xl mb-2">⚠️</div>
                 <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">
-                  {analytics.plantStats.needingAttention}
+                  {analytics.plantStats?.needingAttention ?? 0}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {t("gardenDashboard.analyticsSection.needsAttention", { defaultValue: "Needs Attention" })}
@@ -1151,8 +1164,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       data={[
                         {
                           name: "Health",
-                          value: analytics.plantStats.total > 0
-                            ? Math.round((analytics.plantStats.healthy / analytics.plantStats.total) * 100)
+                          value: (analytics.plantStats?.total ?? 0) > 0
+                            ? Math.round(((analytics.plantStats?.healthy ?? 0) / (analytics.plantStats?.total ?? 1)) * 100)
                             : 100,
                           fill: CHART_COLORS.primary,
                         },
@@ -1173,8 +1186,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                         dominantBaseline="middle"
                         className="fill-current text-3xl font-bold"
                       >
-                        {analytics.plantStats.total > 0
-                          ? Math.round((analytics.plantStats.healthy / analytics.plantStats.total) * 100)
+                        {(analytics.plantStats?.total ?? 0) > 0
+                          ? Math.round(((analytics.plantStats?.healthy ?? 0) / (analytics.plantStats?.total ?? 1)) * 100)
                           : 100}%
                       </text>
                     </RadialBarChart>

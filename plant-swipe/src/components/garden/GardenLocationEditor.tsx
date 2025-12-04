@@ -83,35 +83,27 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
-          // Use reverse geocoding to get city name
+          // Use Nominatim for reverse geocoding (supports CORS)
           const { latitude, longitude } = position.coords;
-          const resp = await fetch(
-            `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${latitude}&longitude=${longitude}`
+          const nomResp = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+            { headers: { 'Accept': 'application/json' } }
           );
-          
-          if (resp.ok) {
-            const data = await resp.json();
-            if (data?.results?.[0]) {
-              setCity(data.results[0].name || "");
-              setCountry(data.results[0].country || "");
-            }
+          if (nomResp.ok) {
+            const nomData = await nomResp.json();
+            const detectedCity = nomData.address?.city || nomData.address?.town || nomData.address?.village || nomData.address?.municipality || "";
+            const detectedCountry = nomData.address?.country || "";
+            setCity(detectedCity);
+            setCountry(detectedCountry);
           } else {
             // Fallback: just use coordinates
-            setCity(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
+            setCity(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
           }
-        } catch {
-          // Fallback method using a free geocoding API
-          try {
-            const { latitude, longitude } = position.coords;
-            const nomResp = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-            );
-            if (nomResp.ok) {
-              const nomData = await nomResp.json();
-              setCity(nomData.address?.city || nomData.address?.town || nomData.address?.village || "");
-              setCountry(nomData.address?.country || "");
-            }
-          } catch {}
+        } catch (err) {
+          console.error("Reverse geocoding failed:", err);
+          // Show coordinates as fallback
+          const { latitude, longitude } = position.coords;
+          setCity(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         } finally {
           setDetectingLocation(false);
         }
