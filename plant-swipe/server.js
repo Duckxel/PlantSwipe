@@ -5997,36 +5997,24 @@ app.put('/api/admin/notification-automations/:id', async (req, res) => {
   }
   const adminUuid = toAdminUuid(adminId)
   try {
-    // Build dynamic update
-    const updates = []
-    const values = []
-    if (typeof parsed.isEnabled === 'boolean') {
-      updates.push('is_enabled = $' + (values.length + 1))
-      values.push(parsed.isEnabled)
-    }
-    if (parsed.templateId !== undefined) {
-      updates.push('template_id = $' + (values.length + 1))
-      values.push(parsed.templateId)
-    }
-    if (typeof parsed.sendHour === 'number') {
-      updates.push('send_hour = $' + (values.length + 1))
-      values.push(parsed.sendHour)
-    }
-    if (parsed.ctaUrl !== undefined) {
-      updates.push('cta_url = $' + (values.length + 1))
-      values.push(parsed.ctaUrl)
-    }
-    updates.push('updated_by = $' + (values.length + 1))
-    values.push(adminUuid)
-    updates.push('updated_at = now()')
-    values.push(automationId) // for WHERE clause
+    // Convert undefined to null for SQL compatibility
+    const isEnabled = typeof parsed.isEnabled === 'boolean' ? parsed.isEnabled : null
+    const templateId = parsed.templateId !== undefined ? (parsed.templateId || null) : null
+    const sendHour = typeof parsed.sendHour === 'number' ? parsed.sendHour : null
+    const ctaUrl = parsed.ctaUrl !== undefined ? (parsed.ctaUrl || null) : null
+    
+    // Track which fields to update
+    const hasIsEnabled = typeof parsed.isEnabled === 'boolean'
+    const hasTemplateId = parsed.templateId !== undefined
+    const hasSendHour = typeof parsed.sendHour === 'number'
+    const hasCtaUrl = parsed.ctaUrl !== undefined
     
     const rows = await sql`
       update public.notification_automations
-      set is_enabled = coalesce(${parsed.isEnabled}, is_enabled),
-          template_id = case when ${parsed.templateId !== undefined} then ${parsed.templateId} else template_id end,
-          send_hour = coalesce(${parsed.sendHour}, send_hour),
-          cta_url = case when ${parsed.ctaUrl !== undefined} then ${parsed.ctaUrl} else cta_url end,
+      set is_enabled = case when ${hasIsEnabled} then ${isEnabled} else is_enabled end,
+          template_id = case when ${hasTemplateId} then ${templateId} else template_id end,
+          send_hour = case when ${hasSendHour} then ${sendHour} else send_hour end,
+          cta_url = case when ${hasCtaUrl} then ${ctaUrl} else cta_url end,
           updated_by = ${adminUuid},
           updated_at = now()
       where id = ${automationId}
