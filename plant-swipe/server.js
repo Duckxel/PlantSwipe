@@ -774,6 +774,22 @@ if (openaiApiKey) {
   console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')
 }
 
+// Some deployments might lag behind on the latest schema additions for the
+// garden_ai_advice table. Track whether advanced context columns (weather,
+// journal, avg_completion_time, etc.) are available so queries can gracefully
+// fall back instead of failing with "column ... does not exist".
+let gardenAdviceContextColumnsSupported = true
+function isMissingColumnError(err) {
+  const msg = String(err?.message || '').toLowerCase()
+  return msg.includes('column') && msg.includes('does not exist')
+}
+function disableGardenAdviceContextColumns(stage, err) {
+  if (!gardenAdviceContextColumnsSupported) return
+  gardenAdviceContextColumnsSupported = false
+  const label = stage ? ` (${stage})` : ''
+  console.warn(`[garden-advice] Context columns unavailable${label}:`, err?.message || err)
+}
+
 const supportEmailTargets = parseEmailTargets(process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL, DEFAULT_SUPPORT_EMAIL)
 const supportEmailFrom =
   process.env.SUPPORT_EMAIL_FROM
@@ -10845,13 +10861,40 @@ app.get('/api/garden/:id/advice', async (req, res) => {
     // Check for existing advice this week
     if (!forceRefresh) {
       try {
-        const existingAdvice = await sql`
-          select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-                 improvement_score, generated_at, weather_context, location_context
-          from public.garden_ai_advice
-          where garden_id = ${gardenId} and week_start = ${weekStartIso}
-          limit 1
-        `
+        let existingAdvice
+        if (gardenAdviceContextColumnsSupported) {
+          try {
+            existingAdvice = await sql`
+              select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                     improvement_score, generated_at, weather_context, location_context
+              from public.garden_ai_advice
+              where garden_id = ${gardenId} and week_start = ${weekStartIso}
+              limit 1
+            `
+          } catch (err) {
+            if (isMissingColumnError(err)) {
+              disableGardenAdviceContextColumns('select', err)
+              existingAdvice = await sql`
+                select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                       improvement_score, generated_at
+                from public.garden_ai_advice
+                where garden_id = ${gardenId} and week_start = ${weekStartIso}
+                limit 1
+              `
+            } else {
+              throw err
+            }
+          }
+        } else {
+          existingAdvice = await sql`
+            select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                   improvement_score, generated_at
+            from public.garden_ai_advice
+            where garden_id = ${gardenId} and week_start = ${weekStartIso}
+            limit 1
+          `
+        }
+
         if (existingAdvice && existingAdvice.length > 0) {
           const adv = existingAdvice[0]
           res.json({
@@ -10871,7 +10914,9 @@ app.get('/api/garden/:id/advice', async (req, res) => {
           })
           return
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[garden-advice] Existing advice lookup failed:', err)
+      }
     }
 
     // Generate new advice using OpenAI
@@ -11198,18 +11243,31 @@ Include specific observations from the photos in your advice.` }
         timezone: gardenLocation.location_timezone,
       }
 
-      // Store in database with enhanced context
-      const insertResult = await sql`
+      // Store in database with enhanced context. Fall back gracefully if the target columns don't exist yet.
+      let insertResult
+      const insertArgs = {
+        gardenId,
+        weekStartIso,
+        fullAdvice: parsed.fullAdvice || '',
+        summary: parsed.summary || '',
+        focusAreas: JSON.stringify(parsed.focusAreas || []),
+        plantTips: JSON.stringify(parsed.plantTips || []),
+        improvementScore: parsed.improvementScore || null,
+        tokensUsed,
+        weatherContextJson: JSON.stringify(weatherContextObj),
+        journalContextJson: JSON.stringify(journalContextObj),
+        avgCompletionTime,
+        locationContextJson: JSON.stringify(locationContextObj),
+      }
+
+      const runBaseInsert = () => sql`
         insert into public.garden_ai_advice (
           garden_id, week_start, advice_text, advice_summary, focus_areas,
-          plant_specific_tips, improvement_score, model_used, tokens_used, generated_at,
-          weather_context, journal_context, avg_completion_time, location_context
+          plant_specific_tips, improvement_score, model_used, tokens_used, generated_at
         ) values (
-          ${gardenId}, ${weekStartIso}, ${parsed.fullAdvice || ''}, ${parsed.summary || ''},
-          ${JSON.stringify(parsed.focusAreas || [])}::text[], ${JSON.stringify(parsed.plantTips || [])}::jsonb,
-          ${parsed.improvementScore || null}, 'gpt-4o-mini', ${tokensUsed}, now(),
-          ${JSON.stringify(weatherContextObj)}::jsonb, ${JSON.stringify(journalContextObj)}::jsonb,
-          ${avgCompletionTime}, ${JSON.stringify(locationContextObj)}::jsonb
+          ${insertArgs.gardenId}, ${insertArgs.weekStartIso}, ${insertArgs.fullAdvice}, ${insertArgs.summary},
+          ${insertArgs.focusAreas}::text[], ${insertArgs.plantTips}::jsonb,
+          ${insertArgs.improvementScore}, 'gpt-4o-mini', ${insertArgs.tokensUsed}, now()
         )
         on conflict (garden_id, week_start)
         do update set
@@ -11220,14 +11278,53 @@ Include specific observations from the photos in your advice.` }
           improvement_score = excluded.improvement_score,
           model_used = excluded.model_used,
           tokens_used = excluded.tokens_used,
-          generated_at = excluded.generated_at,
-          weather_context = excluded.weather_context,
-          journal_context = excluded.journal_context,
-          avg_completion_time = excluded.avg_completion_time,
-          location_context = excluded.location_context
+          generated_at = excluded.generated_at
         returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
-                  improvement_score, generated_at, weather_context, location_context
+                  improvement_score, generated_at
       `
+
+      if (gardenAdviceContextColumnsSupported) {
+        try {
+          insertResult = await sql`
+            insert into public.garden_ai_advice (
+              garden_id, week_start, advice_text, advice_summary, focus_areas,
+              plant_specific_tips, improvement_score, model_used, tokens_used, generated_at,
+              weather_context, journal_context, avg_completion_time, location_context
+            ) values (
+              ${insertArgs.gardenId}, ${insertArgs.weekStartIso}, ${insertArgs.fullAdvice}, ${insertArgs.summary},
+              ${insertArgs.focusAreas}::text[], ${insertArgs.plantTips}::jsonb,
+              ${insertArgs.improvementScore}, 'gpt-4o-mini', ${insertArgs.tokensUsed}, now(),
+              ${insertArgs.weatherContextJson}::jsonb, ${insertArgs.journalContextJson}::jsonb,
+              ${insertArgs.avgCompletionTime}, ${insertArgs.locationContextJson}::jsonb
+            )
+            on conflict (garden_id, week_start)
+            do update set
+              advice_text = excluded.advice_text,
+              advice_summary = excluded.advice_summary,
+              focus_areas = excluded.focus_areas,
+              plant_specific_tips = excluded.plant_specific_tips,
+              improvement_score = excluded.improvement_score,
+              model_used = excluded.model_used,
+              tokens_used = excluded.tokens_used,
+              generated_at = excluded.generated_at,
+              weather_context = excluded.weather_context,
+              journal_context = excluded.journal_context,
+              avg_completion_time = excluded.avg_completion_time,
+              location_context = excluded.location_context
+            returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
+                      improvement_score, generated_at, weather_context, location_context
+          `
+        } catch (err) {
+          if (isMissingColumnError(err)) {
+            disableGardenAdviceContextColumns('insert', err)
+            insertResult = await runBaseInsert()
+          } else {
+            throw err
+          }
+        }
+      } else {
+        insertResult = await runBaseInsert()
+      }
 
       const saved = insertResult[0]
       res.json({
@@ -11960,14 +12057,37 @@ app.get('/api/garden/:id/advice/export', async (req, res) => {
     }
 
     // Get all AI advice history
-    const adviceHistory = await sql`
+    let adviceHistory
+    const runAdviceHistoryBaseQuery = () => sql`
       select week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-             improvement_score, weather_context, generated_at
+             improvement_score, generated_at
       from public.garden_ai_advice
       where garden_id = ${gardenId}
       order by week_start desc
       limit 12
     `
+
+    if (gardenAdviceContextColumnsSupported) {
+      try {
+        adviceHistory = await sql`
+          select week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                 improvement_score, weather_context, generated_at
+          from public.garden_ai_advice
+          where garden_id = ${gardenId}
+          order by week_start desc
+          limit 12
+        `
+      } catch (err) {
+        if (isMissingColumnError(err)) {
+          disableGardenAdviceContextColumns('export-select', err)
+          adviceHistory = await runAdviceHistoryBaseQuery()
+        } else {
+          throw err
+        }
+      }
+    } else {
+      adviceHistory = await runAdviceHistoryBaseQuery()
+    }
 
     // Get recent journal entries with AI feedback and photos
     const journalEntries = await sql`
