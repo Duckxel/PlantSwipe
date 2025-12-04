@@ -1158,6 +1158,20 @@ function sanitizeUploadBaseName(name) {
   }
 }
 
+function normalizeJsonArray(input, fallback = []) {
+  if (!input) return Array.isArray(fallback) ? fallback : []
+  if (Array.isArray(input)) return input
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input)
+      return Array.isArray(parsed) ? parsed : Array.isArray(fallback) ? fallback : []
+    } catch {
+      return Array.isArray(fallback) ? fallback : []
+    }
+  }
+  return Array.isArray(fallback) ? fallback : []
+}
+
 function sanitizePathSegment(value, fallback = 'unknown') {
   try {
     const normalized = String(value || '')
@@ -10910,7 +10924,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
                 adviceText: adv.advice_text,
                 adviceSummary: adv.advice_summary,
                 focusAreas: adv.focus_areas || [],
-                plantSpecificTips: adv.plant_specific_tips || [],
+                plantSpecificTips: normalizeJsonArray(adv.plant_specific_tips),
                 improvementScore: adv.improvement_score,
                 generatedAt: adv.generated_at,
                 weatherContext: adv.weather_context || null,
@@ -11371,7 +11385,7 @@ Include specific observations from the photos in your advice.` }
         adviceText: saved.advice_text,
         adviceSummary: saved.advice_summary,
         focusAreas: saved.focus_areas || [],
-        plantSpecificTips: saved.plant_specific_tips || [],
+        plantSpecificTips: normalizeJsonArray(saved.plant_specific_tips),
         improvementScore: saved.improvement_score,
         generatedAt: saved.generated_at,
         weeklyFocus: parsed.weeklyFocus || null,
@@ -12328,7 +12342,7 @@ app.get('/api/garden/:id/advice/export', async (req, res) => {
         weekStart: a.week_start,
         summary: a.advice_summary,
         focusAreas: a.focus_areas || [],
-        plantTips: a.plant_specific_tips || [],
+        plantTips: normalizeJsonArray(a.plant_specific_tips),
         score: a.improvement_score,
         weather: a.weather_context?.current ? `${a.weather_context.current.temp}°C, ${a.weather_context.current.condition}` : null,
         fullAdvice: a.advice_text,
