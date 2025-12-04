@@ -3835,6 +3835,39 @@ async function ensureNotificationTables() {
   if (!sql) return
   if (notificationTablesEnsured) return
   try {
+    // Notification Templates
+    await sql`
+      create table if not exists public.notification_templates (
+        id uuid primary key default gen_random_uuid(),
+        title text not null,
+        description text,
+        message_variants text[] not null default '{}'::text[],
+        randomize boolean not null default true,
+        is_active boolean not null default true,
+        usage_count integer not null default 0,
+        created_by uuid,
+        updated_by uuid,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+    `
+    await sql`create index if not exists notification_templates_active_idx on public.notification_templates (is_active) where is_active = true;`
+
+    // Notification Template Translations
+    await sql`
+      create table if not exists public.notification_template_translations (
+        id uuid primary key default gen_random_uuid(),
+        template_id uuid not null references public.notification_templates(id) on delete cascade,
+        language text not null,
+        message_variants text[] not null default '{}'::text[],
+        created_at timestamptz default now(),
+        updated_at timestamptz default now(),
+        unique(template_id, language)
+      );
+    `
+    await sql`create index if not exists ntt_template_lang_idx on public.notification_template_translations (template_id, language);`
+
+    // Notification Campaigns
     await sql`
       create table if not exists public.notification_campaigns (
         id uuid primary key default gen_random_uuid(),
@@ -3852,6 +3885,7 @@ async function ensureNotificationTables() {
         schedule_interval text check (schedule_interval in ('daily','weekly','monthly')),
         cta_url text,
         custom_user_ids uuid[] not null default '{}'::uuid[],
+        template_id uuid references public.notification_templates(id) on delete set null,
         run_count integer not null default 0,
         created_by uuid,
         updated_by uuid,
@@ -3866,10 +3900,33 @@ async function ensureNotificationTables() {
     await sql`create index if not exists notification_campaigns_next_run_idx on public.notification_campaigns (next_run_at) where deleted_at is null;`
     await sql`create index if not exists notification_campaigns_state_idx on public.notification_campaigns (state);`
 
+    // Notification Automations
+    await sql`
+      create table if not exists public.notification_automations (
+        id uuid primary key default gen_random_uuid(),
+        trigger_type text not null unique,
+        display_name text not null,
+        description text,
+        is_enabled boolean not null default false,
+        template_id uuid references public.notification_templates(id) on delete set null,
+        send_hour integer not null default 9,
+        cta_url text,
+        last_run_at timestamptz,
+        last_run_summary jsonb,
+        created_by uuid,
+        updated_by uuid,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+    `
+    await sql`create index if not exists notification_automations_enabled_idx on public.notification_automations (is_enabled) where is_enabled = true;`
+
+    // User Notifications
     await sql`
       create table if not exists public.user_notifications (
         id uuid primary key default gen_random_uuid(),
         campaign_id uuid references public.notification_campaigns(id) on delete set null,
+        automation_id uuid references public.notification_automations(id) on delete set null,
         iteration integer not null default 1,
         user_id uuid not null references auth.users(id) on delete cascade,
         title text,
@@ -3888,8 +3945,10 @@ async function ensureNotificationTables() {
     `
     await sql`create index if not exists user_notifications_user_idx on public.user_notifications (user_id, scheduled_for desc);`
     await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
+    await sql`create index if not exists user_notifications_automation_idx on public.user_notifications (automation_id);`
     await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
 
+    // User Push Subscriptions
     await sql`
       create table if not exists public.user_push_subscriptions (
         id uuid primary key default gen_random_uuid(),
@@ -5731,6 +5790,43 @@ app.put('/api/admin/notification-templates/:id/translations', async (req, res) =
 })
 
 // ---- Notification Automations ----
+// Ensure default automations exist in database
+async function ensureDefaultAutomations() {
+  if (!sql) return
+  try {
+    const defaultAutomations = [
+      {
+        trigger_type: 'weekly_inactive_reminder',
+        display_name: 'Weekly Inactive User Reminder',
+        description: 'Sends a reminder to users who have been inactive for 7+ days',
+        send_hour: 10,
+      },
+      {
+        trigger_type: 'daily_task_reminder',
+        display_name: 'Daily Remaining Task Reminder',
+        description: 'Sends a reminder about incomplete tasks for today',
+        send_hour: 18,
+      },
+      {
+        trigger_type: 'journal_continue_reminder',
+        display_name: 'Journal Continue Reminder',
+        description: 'Encourages users who wrote in their journal yesterday to continue',
+        send_hour: 9,
+      },
+    ]
+    
+    for (const auto of defaultAutomations) {
+      await sql`
+        insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+        values (${auto.trigger_type}, ${auto.display_name}, ${auto.description}, ${auto.send_hour})
+        on conflict (trigger_type) do nothing
+      `
+    }
+  } catch (err) {
+    console.error('[notification-automations] failed to ensure defaults', err)
+  }
+}
+
 app.get('/api/admin/notification-automations', async (req, res) => {
   const adminId = await ensureAdmin(req, res)
   if (!adminId) return
@@ -5739,6 +5835,11 @@ app.get('/api/admin/notification-automations', async (req, res) => {
     return
   }
   try {
+    // Ensure notification tables exist first
+    await ensureNotificationTables()
+    // Ensure default automations exist
+    await ensureDefaultAutomations()
+    
     const rows = await sql`
       select a.*,
              t.title as template_title,

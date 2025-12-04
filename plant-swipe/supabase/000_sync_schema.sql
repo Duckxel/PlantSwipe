@@ -5733,13 +5733,30 @@ do $$ begin
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
--- Seed default automation triggers
-insert into public.notification_automations (trigger_type, display_name, description, send_hour)
-values 
-  ('weekly_inactive_reminder', 'Weekly Inactive User Reminder', 'Sends a reminder to users who have been inactive for 7+ days', 10),
-  ('daily_task_reminder', 'Daily Remaining Task Reminder', 'Sends a reminder about remaining tasks for the day', 18),
-  ('journal_continue_reminder', 'Journal Continue Reminder', 'Encourages users who wrote in their journal yesterday to continue', 9)
-on conflict (trigger_type) do nothing;
+-- Seed default automation triggers (always ensure these exist)
+do $$
+begin
+  -- Weekly Inactive User Reminder
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('weekly_inactive_reminder', 'Weekly Inactive User Reminder', 'Sends a reminder to users who have been inactive for 7+ days', 10)
+  on conflict (trigger_type) do update set
+    display_name = excluded.display_name,
+    description = excluded.description;
+  
+  -- Daily Remaining Task Reminder
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('daily_task_reminder', 'Daily Remaining Task Reminder', 'Sends a reminder about incomplete tasks for today', 18)
+  on conflict (trigger_type) do update set
+    display_name = excluded.display_name,
+    description = excluded.description;
+  
+  -- Journal Continue Reminder
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('journal_continue_reminder', 'Journal Continue Reminder', 'Encourages users who wrote in their journal yesterday to continue', 9)
+  on conflict (trigger_type) do update set
+    display_name = excluded.display_name,
+    description = excluded.description;
+end $$;
 
 create table if not exists public.user_notifications (
   id uuid primary key default gen_random_uuid(),
