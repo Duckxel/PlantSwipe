@@ -5422,7 +5422,8 @@ app.get('/api/admin/notification-templates', async (req, res) => {
     const rows = await sql`
       select t.*,
              stats.campaign_count,
-             auto_stats.automation_count
+             auto_stats.automation_count,
+             trans.translations
       from public.notification_templates t
       left join lateral (
         select count(*)::bigint as campaign_count
@@ -5434,6 +5435,11 @@ app.get('/api/admin/notification-templates', async (req, res) => {
         from public.notification_automations a
         where a.template_id = t.id
       ) auto_stats on true
+      left join lateral (
+        select jsonb_object_agg(ntt.language, ntt.message_variants) as translations
+        from public.notification_template_translations ntt
+        where ntt.template_id = t.id
+      ) trans on true
       order by t.updated_at desc
       limit 200
     `
@@ -5586,6 +5592,141 @@ app.delete('/api/admin/notification-templates/:id', async (req, res) => {
   } catch (err) {
     console.error('[notification-templates] failed to delete template', err)
     res.status(500).json({ error: err?.message || 'Failed to delete template' })
+  }
+})
+
+// ---- Notification Template Translations ----
+app.get('/api/admin/notification-templates/:id/translations', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select language, message_variants, updated_at
+      from public.notification_template_translations
+      where template_id = ${templateId}
+      order by language
+    `
+    const translations = {}
+    for (const row of rows || []) {
+      translations[row.language] = {
+        messageVariants: toStringArray(row.message_variants),
+        updatedAt: isoOrNull(row.updated_at),
+      }
+    }
+    res.json({ templateId, translations })
+  } catch (err) {
+    console.error('[notification-templates] failed to load translations', err)
+    res.status(500).json({ error: err?.message || 'Failed to load translations' })
+  }
+})
+
+app.put('/api/admin/notification-templates/:id/translations/:lang', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  const language = String(req.params?.lang || '').trim().toLowerCase()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  if (!language || language.length > 10) {
+    res.status(400).json({ error: 'Invalid language code' })
+    return
+  }
+  const body = req.body || {}
+  const messageVariants = toStringArray(body.messageVariants || [])
+    .map(v => v.trim())
+    .filter(v => v.length > 0)
+  
+  if (!messageVariants.length) {
+    // Delete translation if no variants
+    try {
+      await sql`
+        delete from public.notification_template_translations
+        where template_id = ${templateId} and language = ${language}
+      `
+      res.json({ deleted: true, templateId, language })
+    } catch (err) {
+      console.error('[notification-templates] failed to delete translation', err)
+      res.status(500).json({ error: err?.message || 'Failed to delete translation' })
+    }
+    return
+  }
+  
+  try {
+    const rows = await sql`
+      insert into public.notification_template_translations (template_id, language, message_variants, updated_at)
+      values (${templateId}, ${language}, ${sql.array(messageVariants)}, now())
+      on conflict (template_id, language)
+      do update set message_variants = ${sql.array(messageVariants)}, updated_at = now()
+      returning *
+    `
+    res.json({
+      templateId,
+      language,
+      messageVariants: toStringArray(rows?.[0]?.message_variants),
+      updatedAt: isoOrNull(rows?.[0]?.updated_at),
+    })
+  } catch (err) {
+    console.error('[notification-templates] failed to save translation', err)
+    res.status(500).json({ error: err?.message || 'Failed to save translation' })
+  }
+})
+
+// Batch save all translations for a template
+app.put('/api/admin/notification-templates/:id/translations', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  const body = req.body || {}
+  const translationsInput = body.translations || {}
+  
+  try {
+    // Delete all existing translations first
+    await sql`delete from public.notification_template_translations where template_id = ${templateId}`
+    
+    // Insert new translations
+    const savedTranslations = {}
+    for (const [language, variants] of Object.entries(translationsInput)) {
+      const lang = String(language).trim().toLowerCase()
+      if (!lang || lang.length > 10) continue
+      const messageVariants = toStringArray(variants)
+        .map(v => v.trim())
+        .filter(v => v.length > 0)
+      if (!messageVariants.length) continue
+      
+      await sql`
+        insert into public.notification_template_translations (template_id, language, message_variants, updated_at)
+        values (${templateId}, ${lang}, ${sql.array(messageVariants)}, now())
+      `
+      savedTranslations[lang] = messageVariants
+    }
+    
+    res.json({ templateId, translations: savedTranslations })
+  } catch (err) {
+    console.error('[notification-templates] failed to save translations', err)
+    res.status(500).json({ error: err?.message || 'Failed to save translations' })
   }
 })
 
@@ -5770,8 +5911,25 @@ app.post('/api/admin/notification-automations/:id/trigger', async (req, res) => 
 async function runAutomation(automation) {
   if (!sql) return { error: 'Database not configured' }
   
-  const messageVariants = toStringArray(automation.message_variants)
-  if (!messageVariants.length) return { error: 'No message variants' }
+  const defaultVariants = toStringArray(automation.message_variants)
+  if (!defaultVariants.length) return { error: 'No message variants' }
+  
+  // Load translations for the template
+  let translations = {}
+  if (automation.template_id) {
+    try {
+      const transRows = await sql`
+        select language, message_variants
+        from public.notification_template_translations
+        where template_id = ${automation.template_id}
+      `
+      for (const row of transRows || []) {
+        translations[row.language] = toStringArray(row.message_variants)
+      }
+    } catch (err) {
+      console.error('[automation] failed to load translations', err)
+    }
+  }
   
   const triggerType = automation.trigger_type
   let recipientQuery
@@ -5821,6 +5979,13 @@ async function runAutomation(automation) {
   // Create user_notifications entries
   let insertedCount = 0
   for (const recipient of recipients) {
+    // Get message variants for user's language (with fallback to default)
+    const userLang = (recipient.language || 'en').toLowerCase()
+    let messageVariants = defaultVariants
+    if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
+      messageVariants = translations[userLang]
+    }
+    
     const messageIndex = automation.randomize 
       ? Math.floor(Math.random() * messageVariants.length)
       : 0
@@ -11620,8 +11785,15 @@ function normalizeNotificationCampaign(row) {
   }
 }
 
-function normalizeNotificationTemplate(row) {
+function normalizeNotificationTemplate(row, translations = null) {
   if (!row) return null
+  // Parse translations if provided as JSON
+  let parsedTranslations = {}
+  if (translations) {
+    parsedTranslations = translations
+  } else if (row.translations && typeof row.translations === 'object') {
+    parsedTranslations = row.translations
+  }
   return {
     id: row.id || null,
     title: row.title || '',
@@ -11636,7 +11808,23 @@ function normalizeNotificationTemplate(row) {
     updatedBy: row.updated_by || null,
     createdAt: isoOrNull(row.created_at),
     updatedAt: isoOrNull(row.updated_at),
+    translations: parsedTranslations,
   }
+}
+
+// Get message variants for a specific language (with fallback to default)
+function getMessageVariantsForLanguage(template, userLanguage) {
+  const defaultVariants = toStringArray(template.message_variants)
+  if (!userLanguage || userLanguage === 'en') return defaultVariants
+  
+  // Check if translations exist for this language
+  const translations = template.translations || {}
+  if (translations[userLanguage] && translations[userLanguage].length > 0) {
+    return translations[userLanguage]
+  }
+  
+  // Fallback to default (English)
+  return defaultVariants
 }
 
 function normalizeNotificationAutomation(row) {
@@ -12547,11 +12735,17 @@ async function processDueAutomations() {
   if (!sql) return
   
   try {
-    // Get all enabled automations
+    // Get all enabled automations with their templates and translations
     const automations = await sql`
-      select a.*, t.message_variants, t.randomize
+      select a.*, t.message_variants, t.randomize, t.id as template_id,
+             trans.translations
       from public.notification_automations a
       left join public.notification_templates t on t.id = a.template_id
+      left join lateral (
+        select jsonb_object_agg(ntt.language, ntt.message_variants) as translations
+        from public.notification_template_translations ntt
+        where ntt.template_id = t.id
+      ) trans on true
       where a.is_enabled = true
         and a.template_id is not null
     `
@@ -12567,6 +12761,9 @@ async function processDueAutomations() {
         // We check if any timezone would currently be at the target send_hour
         // This runs every hour, and we check all timezones where current local time = send_hour
         const sendHour = automation.send_hour || 9
+        
+        // Parse translations from JSONB
+        const translations = automation.translations || {}
         
         // Get users eligible for this automation whose local time is at send_hour
         let recipientQuery
@@ -12632,12 +12829,20 @@ async function processDueAutomations() {
         const recipients = await recipientQuery
         if (!recipients || !recipients.length) continue
         
-        const messageVariants = toStringArray(automation.message_variants)
-        if (!messageVariants.length) continue
+        // Default message variants (English)
+        const defaultVariants = toStringArray(automation.message_variants)
+        if (!defaultVariants.length) continue
         
         console.log(`[automations] Processing ${automation.trigger_type}: ${recipients.length} recipients`)
         
         for (const recipient of recipients) {
+          // Get message variants for user's language (with fallback to default)
+          const userLang = (recipient.language || 'en').toLowerCase()
+          let messageVariants = defaultVariants
+          if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
+            messageVariants = translations[userLang]
+          }
+          
           const messageIndex = automation.randomize 
             ? Math.floor(Math.random() * messageVariants.length)
             : 0

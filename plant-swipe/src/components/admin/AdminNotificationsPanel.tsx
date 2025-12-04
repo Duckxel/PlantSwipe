@@ -30,6 +30,8 @@ import {
   FileText,
   Copy,
   ChevronRight,
+  Globe,
+  Languages,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
@@ -48,6 +50,12 @@ type NotificationTemplate = {
   automationCount: number
   createdAt: string
   updatedAt: string
+  translations?: Record<string, string[]>
+}
+
+type TranslationLanguage = {
+  code: string
+  label: string
 }
 
 type NotificationCampaign = {
@@ -254,6 +262,12 @@ export function AdminNotificationsPanel() {
   const [newVariantText, setNewVariantText] = React.useState('')
   const [showTemplateInfo, setShowTemplateInfo] = React.useState(false)
 
+  // State: Translations
+  const [languages, setLanguages] = React.useState<TranslationLanguage[]>([])
+  const [selectedTranslationLang, setSelectedTranslationLang] = React.useState<string | null>(null)
+  const [templateTranslations, setTemplateTranslations] = React.useState<Record<string, string[]>>({})
+  const [newTranslationVariantText, setNewTranslationVariantText] = React.useState('')
+
   // Filtered lists
   const filteredCampaigns = React.useMemo(() => {
     if (!campaignSearch.trim()) return campaigns
@@ -321,6 +335,23 @@ export function AdminNotificationsPanel() {
       setLoadingAutomations(false)
     }
   }, [])
+
+  const loadLanguages = React.useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('translation_languages')
+        .select('code, label')
+        .order('code')
+      if (error) throw error
+      setLanguages(data || [])
+    } catch (err) {
+      console.error('Failed to load languages:', err)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    loadLanguages().catch(() => {})
+  }, [loadLanguages])
 
   React.useEffect(() => {
     if (activeView === 'campaigns') {
@@ -437,6 +468,9 @@ export function AdminNotificationsPanel() {
     setTemplateEditId(null)
     setTemplateForm({ title: '', description: '', messageVariants: [], randomize: true, isActive: true })
     setNewVariantText('')
+    setTemplateTranslations({})
+    setSelectedTranslationLang(null)
+    setNewTranslationVariantText('')
     setTemplateSheetOpen(true)
   }, [])
 
@@ -450,6 +484,10 @@ export function AdminNotificationsPanel() {
       isActive: template.isActive,
     })
     setNewVariantText('')
+    // Load translations from template
+    setTemplateTranslations(template.translations || {})
+    setSelectedTranslationLang(null)
+    setNewTranslationVariantText('')
     setTemplateSheetOpen(true)
   }, [])
 
@@ -466,6 +504,37 @@ export function AdminNotificationsPanel() {
       messageVariants: prev.messageVariants.filter((_, i) => i !== index),
     }))
   }, [])
+
+  // Translation variant helpers
+  const addTranslationVariant = React.useCallback(() => {
+    const text = newTranslationVariantText.trim()
+    if (!text || !selectedTranslationLang) return
+    setTemplateTranslations(prev => ({
+      ...prev,
+      [selectedTranslationLang]: [...(prev[selectedTranslationLang] || []), text],
+    }))
+    setNewTranslationVariantText('')
+  }, [newTranslationVariantText, selectedTranslationLang])
+
+  const removeTranslationVariant = React.useCallback((lang: string, index: number) => {
+    setTemplateTranslations(prev => ({
+      ...prev,
+      [lang]: (prev[lang] || []).filter((_, i) => i !== index),
+    }))
+  }, [])
+
+  const copyDefaultToTranslation = React.useCallback(() => {
+    if (!selectedTranslationLang) return
+    setTemplateTranslations(prev => ({
+      ...prev,
+      [selectedTranslationLang]: [...templateForm.messageVariants],
+    }))
+  }, [selectedTranslationLang, templateForm.messageVariants])
+
+  // Get non-English languages for translations
+  const translationLanguages = React.useMemo(() => {
+    return languages.filter(lang => lang.code !== 'en')
+  }, [languages])
 
   const handleSaveTemplate = React.useCallback(async () => {
     if (!templateForm.title.trim()) {
@@ -498,15 +567,32 @@ export function AdminNotificationsPanel() {
       })
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || 'Failed to save template')
+      
+      // Save translations if we have a template ID
+      const savedTemplateId = data?.template?.id || templateEditId
+      if (savedTemplateId && Object.keys(templateTranslations).length > 0) {
+        try {
+          await fetch(`/api/admin/notification-templates/${encodeURIComponent(savedTemplateId)}/translations`, {
+            method: 'PUT',
+            headers,
+            credentials: 'same-origin',
+            body: JSON.stringify({ translations: templateTranslations }),
+          })
+        } catch (translationErr) {
+          console.error('Failed to save translations:', translationErr)
+        }
+      }
+      
       setTemplateSheetOpen(false)
       setTemplateEditId(null)
+      setTemplateTranslations({})
       loadTemplates().catch(() => {})
     } catch (err) {
       alert((err as Error).message)
     } finally {
       setTemplateSaving(false)
     }
-  }, [templateForm, templateEditId, loadTemplates])
+  }, [templateForm, templateEditId, templateTranslations, loadTemplates])
 
   const handleDeleteTemplate = React.useCallback(async (template: NotificationTemplate) => {
     if (!window.confirm(`Delete template "${template.title}"?`)) return
@@ -1151,9 +1237,17 @@ export function AdminNotificationsPanel() {
                       <h3 className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
                         {template.title}
                       </h3>
-                      <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5">
-                        {template.messageVariants.length} variant{template.messageVariants.length !== 1 ? 's' : ''}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate">
+                          {template.messageVariants.length} variant{template.messageVariants.length !== 1 ? 's' : ''}
+                        </p>
+                        {template.translations && Object.keys(template.translations).length > 0 && (
+                          <span className="flex items-center gap-0.5 text-[10px] sm:text-xs text-emerald-600 dark:text-emerald-400">
+                            <Globe className="h-3 w-3" />
+                            {Object.keys(template.translations).length} lang{Object.keys(template.translations).length !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-stone-300 dark:text-stone-600 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
@@ -1476,6 +1570,115 @@ export function AdminNotificationsPanel() {
                 </Button>
               </div>
             </div>
+
+            {/* Translations Section */}
+            {translationLanguages.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-amber-600" />
+                  <Label className="text-sm font-medium">Translations</Label>
+                </div>
+                <p className="text-xs text-stone-500">
+                  Provide translated message variants for each language. Users will receive notifications in their preferred language.
+                </p>
+
+                {/* Language Tabs */}
+                <div className="flex flex-wrap gap-2">
+                  {translationLanguages.map((lang) => {
+                    const hasTranslation = (templateTranslations[lang.code]?.length || 0) > 0
+                    return (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => setSelectedTranslationLang(selectedTranslationLang === lang.code ? null : lang.code)}
+                        className={cn(
+                          "px-3 py-1.5 text-sm rounded-lg border transition-all flex items-center gap-1.5",
+                          selectedTranslationLang === lang.code
+                            ? "bg-amber-100 dark:bg-amber-900/30 border-amber-500 text-amber-700 dark:text-amber-400"
+                            : hasTranslation
+                              ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400"
+                              : "bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-400"
+                        )}
+                      >
+                        <Languages className="h-3.5 w-3.5" />
+                        {lang.label}
+                        {hasTranslation && (
+                          <span className="ml-1 text-xs opacity-75">({templateTranslations[lang.code]?.length})</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Selected Language Translation Editor */}
+                {selectedTranslationLang && (
+                  <div className="p-4 bg-amber-50/50 dark:bg-amber-900/10 rounded-xl border border-amber-200 dark:border-amber-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm flex items-center gap-2">
+                        <Languages className="h-4 w-4 text-amber-600" />
+                        {languages.find(l => l.code === selectedTranslationLang)?.label || selectedTranslationLang} Translation
+                      </h4>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={copyDefaultToTranslation}
+                        className="text-xs h-7 rounded-lg"
+                        disabled={!templateForm.messageVariants.length}
+                      >
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copy English
+                      </Button>
+                    </div>
+
+                    {/* Translation Variants List */}
+                    {(templateTranslations[selectedTranslationLang] || []).length > 0 && (
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {(templateTranslations[selectedTranslationLang] || []).map((variant, index) => (
+                          <div key={index} className="flex items-start gap-2 group">
+                            <div className="flex-1 p-2 bg-white dark:bg-stone-800 rounded-lg border border-stone-200 dark:border-stone-600 text-sm">
+                              {variant}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeTranslationVariant(selectedTranslationLang, index)}
+                              className="p-1 text-stone-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add Translation Variant */}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={newTranslationVariantText}
+                        onChange={(e) => setNewTranslationVariantText(e.target.value)}
+                        placeholder={`Enter ${languages.find(l => l.code === selectedTranslationLang)?.label || selectedTranslationLang} message...`}
+                        className="rounded-lg flex-1 text-sm"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            addTranslationVariant()
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="rounded-lg bg-amber-600 hover:bg-amber-700"
+                        onClick={addTranslationVariant}
+                        disabled={!newTranslationVariantText.trim()}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Randomize Toggle */}
             <div className="flex items-center justify-between p-3 bg-stone-50 dark:bg-[#1a1a1d] rounded-xl border border-stone-200 dark:border-[#3e3e42]">

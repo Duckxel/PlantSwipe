@@ -127,6 +127,7 @@ do $$ declare
     -- Notifications
     'notification_campaigns',
     'notification_templates',
+    'notification_template_translations',
     'notification_automations',
     'user_notifications',
     'user_push_subscriptions'
@@ -5667,6 +5668,30 @@ do $$ begin
   end if;
   create policy notification_templates_admins on public.notification_templates
     for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Notification Template Translations (stores translated message variants for each language)
+create table if not exists public.notification_template_translations (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references public.notification_templates(id) on delete cascade,
+  language text not null references public.translation_languages(code),
+  message_variants text[] not null default '{}',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(template_id, language)
+);
+
+create index if not exists ntt_template_lang_idx on public.notification_template_translations (template_id, language);
+
+alter table public.notification_template_translations enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='notification_template_translations' and policyname='ntt_admin_all') then
+    drop policy ntt_admin_all on public.notification_template_translations;
+  end if;
+  create policy ntt_admin_all on public.notification_template_translations for all to authenticated
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
