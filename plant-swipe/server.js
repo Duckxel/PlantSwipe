@@ -5478,6 +5478,7 @@ app.get('/api/admin/notification-templates', async (req, res) => {
     return
   }
   try {
+    await ensureNotificationTables()
     const rows = await sql`
       select t.*,
              stats.campaign_count,
@@ -5517,6 +5518,7 @@ app.post('/api/admin/notification-templates', async (req, res) => {
     res.status(500).json({ error: 'Database not configured' })
     return
   }
+  await ensureNotificationTables()
   let parsed
   try {
     parsed = notificationTemplateInputSchema.parse(req.body || {})
@@ -5816,11 +5818,24 @@ async function ensureDefaultAutomations() {
     ]
     
     for (const auto of defaultAutomations) {
-      await sql`
-        insert into public.notification_automations (trigger_type, display_name, description, send_hour)
-        values (${auto.trigger_type}, ${auto.display_name}, ${auto.description}, ${auto.send_hour})
-        on conflict (trigger_type) do nothing
-      `
+      try {
+        // First check if it exists
+        const existing = await sql`
+          select id from public.notification_automations where trigger_type = ${auto.trigger_type} limit 1
+        `
+        if (!existing || existing.length === 0) {
+          await sql`
+            insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+            values (${auto.trigger_type}, ${auto.display_name}, ${auto.description}, ${auto.send_hour})
+          `
+          console.log(`[notification-automations] Created automation: ${auto.trigger_type}`)
+        }
+      } catch (insertErr) {
+        // Ignore duplicate key errors
+        if (!insertErr?.message?.includes('duplicate') && !insertErr?.message?.includes('unique')) {
+          console.error(`[notification-automations] Failed to create ${auto.trigger_type}:`, insertErr)
+        }
+      }
     }
   } catch (err) {
     console.error('[notification-automations] failed to ensure defaults', err)
@@ -5836,8 +5851,10 @@ app.get('/api/admin/notification-automations', async (req, res) => {
   }
   try {
     // Ensure notification tables exist first
+    console.log('[notification-automations] Ensuring tables exist...')
     await ensureNotificationTables()
     // Ensure default automations exist
+    console.log('[notification-automations] Ensuring default automations exist...')
     await ensureDefaultAutomations()
     
     const rows = await sql`
@@ -5880,7 +5897,9 @@ app.get('/api/admin/notification-automations', async (req, res) => {
       ) rc on true
       order by a.created_at asc
     `
+    console.log('[notification-automations] Query returned:', rows?.length || 0, 'rows')
     const automations = (rows || []).map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
+    console.log('[notification-automations] Returning:', automations.length, 'automations')
     res.json({ automations })
   } catch (err) {
     console.error('[notification-automations] failed to load automations', err)

@@ -312,10 +312,14 @@ export function AdminNotificationsPanel() {
       const headers = await buildAdminHeaders()
       const resp = await fetch('/api/admin/notification-templates', { headers, credentials: 'same-origin' })
       const data = await resp.json().catch(() => ({}))
-      if (!resp.ok) throw new Error(data?.error || 'Failed to load templates')
+      if (!resp.ok) {
+        console.error('[templates] Load failed:', data?.error)
+        throw new Error(data?.error || 'Failed to load templates')
+      }
+      console.log('[templates] Loaded:', data?.templates?.length || 0, 'templates')
       setTemplates(Array.isArray(data?.templates) ? data.templates : [])
     } catch (err) {
-      console.error(err)
+      console.error('[templates] Error:', err)
     } finally {
       setLoadingTemplates(false)
     }
@@ -327,10 +331,14 @@ export function AdminNotificationsPanel() {
       const headers = await buildAdminHeaders()
       const resp = await fetch('/api/admin/notification-automations', { headers, credentials: 'same-origin' })
       const data = await resp.json().catch(() => ({}))
-      if (!resp.ok) throw new Error(data?.error || 'Failed to load automations')
+      if (!resp.ok) {
+        console.error('[automations] Load failed:', data?.error)
+        throw new Error(data?.error || 'Failed to load automations')
+      }
+      console.log('[automations] Loaded:', data?.automations?.length || 0, 'automations')
       setAutomations(Array.isArray(data?.automations) ? data.automations : [])
     } catch (err) {
-      console.error(err)
+      console.error('[automations] Error:', err)
     } finally {
       setLoadingAutomations(false)
     }
@@ -588,6 +596,7 @@ export function AdminNotificationsPanel() {
         randomize: templateForm.randomize,
         isActive: templateForm.isActive,
       }
+      console.log('[templates] Saving template:', payload)
       const endpoint = templateEditId
         ? `/api/admin/notification-templates/${encodeURIComponent(templateEditId)}`
         : '/api/admin/notification-templates'
@@ -599,6 +608,7 @@ export function AdminNotificationsPanel() {
         body: JSON.stringify(payload),
       })
       const data = await resp.json().catch(() => ({}))
+      console.log('[templates] Save response:', resp.status, data)
       if (!resp.ok) throw new Error(data?.error || 'Failed to save template')
       
       // Save translations if we have a template ID
