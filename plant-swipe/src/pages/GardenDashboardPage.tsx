@@ -744,10 +744,19 @@ export const GardenDashboardPage: React.FC = () => {
               return days.map((day) => {
                 const cached = prevByDate.get(day.date);
                 if (!cached) return day;
+                const finalDue = cached.due ?? day.due;
+                const finalCompleted = cached.completed ?? day.completed;
+                // Compute success from merged due/completed when we have cached task data
+                // When no tasks are due (finalDue === 0), day is automatically successful
+                // Otherwise check if garden_tasks recorded success or compute from completion
+                const computedSuccess = finalDue === 0 || finalCompleted >= finalDue;
+                // Use computed success if we have cached task data, otherwise prefer cached success over garden_tasks
+                const finalSuccess = cached.due !== undefined ? computedSuccess : (cached.success ?? day.success);
                 return {
                   ...day,
-                  due: cached.due ?? day.due,
-                  completed: cached.completed ?? day.completed,
+                  due: finalDue,
+                  completed: finalCompleted,
+                  success: finalSuccess,
                 };
               });
             });
@@ -904,8 +913,9 @@ export const GardenDashboardPage: React.FC = () => {
               ),
             0,
           );
+          const success = reqDone === 0 || compDone >= reqDone;
           return prev.map((d) =>
-            d.date === today ? { ...d, due: reqDone, completed: compDone } : d,
+            d.date === today ? { ...d, due: reqDone, completed: compDone, success } : d,
           );
         });
 
@@ -1295,9 +1305,10 @@ export const GardenDashboardPage: React.FC = () => {
                     ),
                   0,
                 );
+                const success = reqDone === 0 || compDone >= reqDone;
                 return prev.map((d) =>
                   d.date === today
-                    ? { ...d, due: reqDone, completed: compDone }
+                    ? { ...d, due: reqDone, completed: compDone, success }
                     : d,
                 );
               });
