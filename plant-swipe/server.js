@@ -3897,6 +3897,12 @@ async function ensureNotificationTables() {
         deleted_at timestamptz
       );
     `
+    // Add template_id column if it doesn't exist (for existing tables)
+    try {
+      await sql`alter table public.notification_campaigns add column if not exists template_id uuid references public.notification_templates(id) on delete set null;`
+    } catch (alterErr) {
+      // Column might already exist, ignore error
+    }
     await sql`create index if not exists notification_campaigns_next_run_idx on public.notification_campaigns (next_run_at) where deleted_at is null;`
     await sql`create index if not exists notification_campaigns_state_idx on public.notification_campaigns (state);`
 
@@ -3943,6 +3949,12 @@ async function ensureNotificationTables() {
         created_at timestamptz not null default now()
       );
     `
+    // Add automation_id column if it doesn't exist (for existing tables)
+    try {
+      await sql`alter table public.user_notifications add column if not exists automation_id uuid references public.notification_automations(id) on delete set null;`
+    } catch (alterErr) {
+      // Column might already exist, ignore error
+    }
     await sql`create index if not exists user_notifications_user_idx on public.user_notifications (user_id, scheduled_for desc);`
     await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
     await sql`create index if not exists user_notifications_automation_idx on public.user_notifications (automation_id);`
