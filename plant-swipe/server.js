@@ -11273,19 +11273,26 @@ Include specific observations from the photos in your advice.` }
 
     // Store in database with enhanced context. Fall back gracefully if the target columns don't exist yet.
     let insertResult
+    const focusAreasArray = Array.isArray(parsed.focusAreas)
+      ? parsed.focusAreas.map((area) => String(area || '').trim()).filter(Boolean)
+      : []
+    const plantTipsJson = JSON.stringify(parsed.plantTips || [])
+    const weatherContextJson = JSON.stringify(weatherContextObj)
+    const journalContextJson = JSON.stringify(journalContextObj)
+    const locationContextJson = JSON.stringify(locationContextObj)
     const insertArgs = {
       gardenId,
       weekStartIso,
       fullAdvice: parsed.fullAdvice || '',
       summary: parsed.summary || '',
-      focusAreas: JSON.stringify(parsed.focusAreas || []),
-      plantTips: JSON.stringify(parsed.plantTips || []),
+      focusAreas: focusAreasArray,
+      plantTips: plantTipsJson,
       improvementScore: parsed.improvementScore || null,
       tokensUsed,
-      weatherContextJson: JSON.stringify(weatherContextObj),
-      journalContextJson: JSON.stringify(journalContextObj),
+      weatherContextJson,
+      journalContextJson,
       avgCompletionTime,
-      locationContextJson: JSON.stringify(locationContextObj),
+      locationContextJson,
       modelUsed,
     }
 
@@ -11295,7 +11302,7 @@ Include specific observations from the photos in your advice.` }
         plant_specific_tips, improvement_score, model_used, tokens_used, generated_at
       ) values (
         ${insertArgs.gardenId}, ${insertArgs.weekStartIso}, ${insertArgs.fullAdvice}, ${insertArgs.summary},
-        ${insertArgs.focusAreas}::text[], ${insertArgs.plantTips}::jsonb,
+        ${sql.array(insertArgs.focusAreas, 'text')}, ${insertArgs.plantTips}::jsonb,
         ${insertArgs.improvementScore}, ${insertArgs.modelUsed}, ${insertArgs.tokensUsed}, now()
       )
       on conflict (garden_id, week_start)
