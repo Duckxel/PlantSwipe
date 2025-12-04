@@ -10305,7 +10305,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       }
 
       // Garden plants
-      const gpUrl = `${supabaseUrlEnv}/rest/v1/garden_plants?garden_id=eq.${encodeURIComponent(gardenId)}&select=id,garden_id,plant_id,nickname,seeds_planted,planted_at,expected_bloom_date,override_water_freq_unit,override_water_freq_value,plants_on_hand,sort_index`
+      const gpUrl = `${supabaseUrlEnv}/rest/v1/garden_plants?garden_id=eq.${encodeURIComponent(gardenId)}&select=id,garden_id,plant_id,nickname,seeds_planted,planted_at,expected_bloom_date,override_water_freq_unit,override_water_freq_value,plants_on_hand,sort_index,health_status,notes,last_health_update`
       const gpResp = await fetch(gpUrl, { headers })
       let gpRows = []
       if (gpResp.ok) gpRows = await gpResp.json().catch(() => [])
@@ -10351,6 +10351,9 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         overrideWaterFreqValue: (r.override_water_freq_value ?? null),
         plantsOnHand: Number(r.plants_on_hand || 0),
         sortIndex: (r.sort_index ?? null),
+        healthStatus: r.health_status || null,
+        notes: r.notes || null,
+        lastHealthUpdate: r.last_health_update || null,
         plant: plantsMap[String(r.plant_id)] || null,
       }))
 

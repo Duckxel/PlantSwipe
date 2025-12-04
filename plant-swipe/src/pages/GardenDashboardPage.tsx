@@ -4529,6 +4529,21 @@ function EditPlantButton({
   const [healthStatus, setHealthStatus] = React.useState<string | null>(gp.healthStatus || null);
   const [notes, setNotes] = React.useState(gp.notes || "");
   const [submitting, setSubmitting] = React.useState(false);
+  const selectedHealthStatus = React.useMemo(() => getHealthStatus(healthStatus), [healthStatus]);
+  const lastHealthUpdatedLabel = React.useMemo(() => {
+    if (!gp.lastHealthUpdate) return null;
+    try {
+      return new Date(gp.lastHealthUpdate).toLocaleString([], {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return null;
+    }
+  }, [gp.lastHealthUpdate]);
+  const pendingStatusChange =
+    (healthStatus || null) !== (gp.healthStatus || null);
 
   React.useEffect(() => {
     setNickname(gp.nickname || "");
@@ -4583,11 +4598,19 @@ function EditPlantButton({
         const changedName = (gp.nickname || "") !== (nickname.trim() || "");
         const changedCount =
           Number(gp.plantsOnHand || 0) !== Math.max(0, Number(count || 0));
-        if (changedName || changedCount) {
+        const changedStatus =
+          (gp.healthStatus || null) !== (healthStatus || null);
+        if (changedName || changedCount || changedStatus) {
           const parts: string[] = [];
           if (changedName) parts.push(`name: "${nickname.trim() || "-"}"`);
           if (changedCount)
             parts.push(`count: ${Math.max(0, Number(count || 0))}`);
+          if (changedStatus) {
+            const nextStatus = getHealthStatus(healthStatus);
+            parts.push(
+              `health: ${nextStatus ? nextStatus.label : "none"}`,
+            );
+          }
           const plantName =
             nickname.trim() || gp.nickname || gp.plant?.name || "Plant";
           await logGardenActivity({
@@ -4652,26 +4675,57 @@ function EditPlantButton({
             
             {/* Health Status Selector */}
             <div>
-              <label className="text-sm font-medium block mb-2">
-                {t("gardenDashboard.plantsSection.healthStatus", "Plant Health")}
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {HEALTH_STATUSES.map((status) => (
-                  <button
-                    key={status.key}
-                    type="button"
-                    onClick={() => setHealthStatus(healthStatus === status.key ? null : status.key)}
-                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
-                      healthStatus === status.key
-                        ? `${status.bg} ${status.color} ring-2 ring-offset-1 ring-current`
-                        : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
-                    }`}
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <label className="text-sm font-medium">
+                  {t("gardenDashboard.plantsSection.healthStatus", "Plant Health")}
+                </label>
+                {selectedHealthStatus ? (
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${selectedHealthStatus.bg} ${selectedHealthStatus.color}`}
                   >
-                    <span>{status.emoji}</span>
-                    <span>{t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}</span>
-                  </button>
-                ))}
+                    <span>{selectedHealthStatus.emoji}</span>
+                    <span>{t(`gardenDashboard.plantsSection.health.${selectedHealthStatus.key}`, selectedHealthStatus.label)}</span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-stone-500 dark:text-stone-400">
+                    {t("gardenDashboard.plantsSection.healthStatusUnset", "Not set yet")}
+                  </span>
+                )}
               </div>
+              {lastHealthUpdatedLabel && (
+                <p className="text-xs text-stone-500 dark:text-stone-400 mb-2">
+                  {t("gardenDashboard.plantsSection.healthStatusUpdated", "Last updated")} {lastHealthUpdatedLabel}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {HEALTH_STATUSES.map((status) => {
+                  const isSelected = healthStatus === status.key;
+                  return (
+                    <button
+                      key={status.key}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setHealthStatus(isSelected ? null : status.key)}
+                      className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
+                        isSelected
+                          ? `${status.bg} ${status.color} ring-2 ring-offset-1 ring-current`
+                          : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                      }`}
+                    >
+                      <span>{status.emoji}</span>
+                      <span>{t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {pendingStatusChange && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                  {t(
+                    "gardenDashboard.plantsSection.healthStatusPending",
+                    "New status will be saved when you click Save."
+                  )}
+                </p>
+              )}
             </div>
             
             {/* Notes */}
