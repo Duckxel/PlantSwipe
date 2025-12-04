@@ -1461,7 +1461,17 @@
       "exportText": "Texte brut (.txt)",
       "exportJson": "JSON (.json)",
       "exportError": "Échec de l'exportation de l'analyse",
-      "imagesAnalyzed": "{{count}} photos analysées"
+      "imagesAnalyzed": "{{count}} photos analysées",
+      "allTimeStats": "Statistiques globales",
+      "totalTasks": "Tâches accomplies",
+      "perfectDays": "Jours parfaits",
+      "longestStreak": "Plus longue série",
+      "avgPerDay": "Moy. tâches/jour",
+      "mostActiveDay": "Jour le plus actif",
+      "daysActive": "Jours actifs",
+      "thisMonth": "Ce mois-ci",
+      "humidity": "humidité",
+      "weeklyForecast": "Prévisions 7 jours"
     },
     "journalSection": {
       "title": "Journal de jardin",

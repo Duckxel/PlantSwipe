@@ -1461,7 +1461,17 @@
       "exportText": "Plain Text (.txt)",
       "exportJson": "JSON (.json)",
       "exportError": "Failed to export analysis",
-      "imagesAnalyzed": "{{count}} photos analyzed"
+      "imagesAnalyzed": "{{count}} photos analyzed",
+      "allTimeStats": "All-Time Statistics",
+      "totalTasks": "Tasks Completed",
+      "perfectDays": "Perfect Days",
+      "longestStreak": "Longest Streak",
+      "avgPerDay": "Avg Tasks/Day",
+      "mostActiveDay": "Most Active Day",
+      "daysActive": "Days Active",
+      "thisMonth": "This Month",
+      "humidity": "humidity",
+      "weeklyForecast": "7-Day Forecast"
     },
     "journalSection": {
       "title": "Garden Journal",

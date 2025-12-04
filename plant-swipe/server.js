@@ -760,12 +760,15 @@ const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
 let openaiClient = null
+let openai = null // Alias for garden advice endpoints
 if (openaiApiKey) {
   try {
     openaiClient = new OpenAI({ apiKey: openaiApiKey })
+    openai = openaiClient // Use same client for garden advice
   } catch (err) {
     console.error('[server] Failed to initialize OpenAI client:', err)
     openaiClient = null
+    openai = null
   }
 } else {
   console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')

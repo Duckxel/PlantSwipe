@@ -96,6 +96,20 @@ interface AnalyticsData {
     best: number;
     lastMissed: string | null;
   };
+  // Extended stats
+  allTimeStats?: {
+    totalTasksCompleted: number;
+    totalDaysActive: number;
+    perfectDays: number;
+    mostActiveDay: string;
+    averageTasksPerDay: number;
+    longestStreak: number;
+    monthlyComparison: {
+      thisMonth: number;
+      lastMonth: number;
+      change: number;
+    };
+  };
 }
 
 interface GardenerAdvice {
@@ -123,6 +137,36 @@ interface GardenerAdvice {
   } | null;
   locationContext?: { city?: string; country?: string } | null;
 }
+
+// Weather condition to icon mapping
+const getWeatherIcon = (condition: string): string => {
+  const c = (condition || '').toLowerCase();
+  if (c.includes('clear') || c.includes('sunny')) return '☀️';
+  if (c.includes('partly cloudy') || c.includes('partly')) return '⛅';
+  if (c.includes('cloudy') || c.includes('overcast')) return '☁️';
+  if (c.includes('rain') || c.includes('drizzle') || c.includes('shower')) return '🌧️';
+  if (c.includes('thunder') || c.includes('storm')) return '⛈️';
+  if (c.includes('snow') || c.includes('sleet')) return '❄️';
+  if (c.includes('fog') || c.includes('mist') || c.includes('haze')) return '🌫️';
+  if (c.includes('wind')) return '💨';
+  if (c.includes('hot')) return '🔥';
+  if (c.includes('cold') || c.includes('freezing')) return '🥶';
+  return '🌤️';
+};
+
+// Get background color class based on weather
+const getWeatherBgClass = (condition: string): string => {
+  const c = (condition || '').toLowerCase();
+  if (c.includes('rain') || c.includes('drizzle') || c.includes('shower')) 
+    return 'from-blue-100 to-slate-100 dark:from-blue-900/30 dark:to-slate-900/30';
+  if (c.includes('thunder') || c.includes('storm')) 
+    return 'from-purple-100 to-slate-100 dark:from-purple-900/30 dark:to-slate-900/30';
+  if (c.includes('snow') || c.includes('cold')) 
+    return 'from-cyan-100 to-blue-100 dark:from-cyan-900/30 dark:to-blue-900/30';
+  if (c.includes('clear') || c.includes('sunny')) 
+    return 'from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20';
+  return 'from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20';
+};
 
 interface GardenAnalyticsSectionProps {
   gardenId: string;
@@ -283,6 +327,41 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       custom: Math.round(currentWeekCompleted * 0.1),
     };
 
+    // Calculate extended stats
+    const totalTasksCompleted = dailyStats.reduce((sum, d) => sum + (d.completed || 0), 0);
+    const totalDaysActive = dailyStats.filter(d => d.completed > 0).length;
+    const perfectDays = dailyStats.filter(d => d.success && d.due > 0).length;
+    const averageTasksPerDay = totalDaysActive > 0 ? Math.round((totalTasksCompleted / totalDaysActive) * 10) / 10 : 0;
+
+    // Find most active day of week
+    const dayOfWeekCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    dailyStats.forEach(d => {
+      const dayOfWeek = new Date(d.date).getDay();
+      dayOfWeekCounts[dayOfWeek] += d.completed || 0;
+    });
+    const mostActiveDayNum = Object.entries(dayOfWeekCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '0';
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const mostActiveDay = dayNames[parseInt(mostActiveDayNum)];
+
+    // Monthly comparison
+    const thisMonthStart = new Date(today);
+    thisMonthStart.setDate(1);
+    const lastMonthStart = new Date(thisMonthStart);
+    lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+    
+    const thisMonthTasks = dailyStats
+      .filter(d => new Date(d.date) >= thisMonthStart)
+      .reduce((sum, d) => sum + (d.completed || 0), 0);
+    const lastMonthTasks = dailyStats
+      .filter(d => {
+        const date = new Date(d.date);
+        return date >= lastMonthStart && date < thisMonthStart;
+      })
+      .reduce((sum, d) => sum + (d.completed || 0), 0);
+    const monthlyChange = lastMonthTasks > 0 
+      ? Math.round(((thisMonthTasks - lastMonthTasks) / lastMonthTasks) * 100)
+      : 0;
+
     return {
       dailyStats: dailyStats,
       weeklyStats: {
@@ -310,6 +389,19 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
         current: streak,
         best: Math.max(bestStreak, streak),
         lastMissed,
+      },
+      allTimeStats: {
+        totalTasksCompleted,
+        totalDaysActive,
+        perfectDays,
+        mostActiveDay,
+        averageTasksPerDay,
+        longestStreak: Math.max(bestStreak, streak),
+        monthlyComparison: {
+          thisMonth: thisMonthTasks,
+          lastMonth: lastMonthTasks,
+          change: monthlyChange,
+        },
       },
     } as AnalyticsData;
   }, [dailyStats, serverToday, plants, members, streak]);
@@ -722,6 +814,109 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               </Card>
             </div>
 
+            {/* Extended Stats Section */}
+            {analytics.allTimeStats && (
+              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
+                <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
+                  <BarChart3 className="w-5 h-5 text-indigo-500" />
+                  {t("gardenDashboard.analyticsSection.allTimeStats", { defaultValue: "All-Time Statistics" })}
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Total Tasks */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 text-center">
+                    <div className="text-3xl mb-1">✅</div>
+                    <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                      {analytics.allTimeStats.totalTasksCompleted.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                      {t("gardenDashboard.analyticsSection.totalTasks", { defaultValue: "Tasks Completed" })}
+                    </div>
+                  </div>
+                  
+                  {/* Perfect Days */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 text-center">
+                    <div className="text-3xl mb-1">⭐</div>
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {analytics.allTimeStats.perfectDays}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                      {t("gardenDashboard.analyticsSection.perfectDays", { defaultValue: "Perfect Days" })}
+                    </div>
+                  </div>
+                  
+                  {/* Longest Streak */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 text-center">
+                    <div className="text-3xl mb-1">🔥</div>
+                    <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                      {analytics.allTimeStats.longestStreak}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                      {t("gardenDashboard.analyticsSection.longestStreak", { defaultValue: "Longest Streak" })}
+                    </div>
+                  </div>
+                  
+                  {/* Average per Day */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 text-center">
+                    <div className="text-3xl mb-1">📊</div>
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {analytics.allTimeStats.averageTasksPerDay}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                      {t("gardenDashboard.analyticsSection.avgPerDay", { defaultValue: "Avg Tasks/Day" })}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Second Row */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+                  {/* Most Active Day */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 text-center">
+                    <div className="text-3xl mb-1">📅</div>
+                    <div className="text-lg font-bold text-pink-600 dark:text-pink-400">
+                      {analytics.allTimeStats.mostActiveDay}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                      {t("gardenDashboard.analyticsSection.mostActiveDay", { defaultValue: "Most Active Day" })}
+                    </div>
+                  </div>
+                  
+                  {/* Days Active */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-900/20 dark:to-emerald-900/20 text-center">
+                    <div className="text-3xl mb-1">🌱</div>
+                    <div className="text-2xl font-bold text-teal-600 dark:text-teal-400">
+                      {analytics.allTimeStats.totalDaysActive}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                      {t("gardenDashboard.analyticsSection.daysActive", { defaultValue: "Days Active" })}
+                    </div>
+                  </div>
+                  
+                  {/* Monthly Comparison */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 text-center">
+                    <div className="text-3xl mb-1">📈</div>
+                    <div className="flex items-center justify-center gap-1">
+                      <span className="text-lg font-bold text-violet-600 dark:text-violet-400">
+                        {analytics.allTimeStats.monthlyComparison.thisMonth}
+                      </span>
+                      {analytics.allTimeStats.monthlyComparison.change !== 0 && (
+                        <span className={`text-xs font-medium ${
+                          analytics.allTimeStats.monthlyComparison.change > 0 
+                            ? 'text-green-500' 
+                            : 'text-red-500'
+                        }`}>
+                          {analytics.allTimeStats.monthlyComparison.change > 0 ? '↑' : '↓'}
+                          {Math.abs(analytics.allTimeStats.monthlyComparison.change)}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                      {t("gardenDashboard.analyticsSection.thisMonth", { defaultValue: "This Month" })}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            )}
+
             {/* Gardener Advice Section */}
             <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/50 dark:from-amber-900/10 dark:via-[#1f1f1f] dark:to-emerald-900/10 backdrop-blur p-6 relative overflow-hidden">
               <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-amber-200/30 to-emerald-200/30 dark:from-amber-500/10 dark:to-emerald-500/10 rounded-full blur-3xl" />
@@ -789,24 +984,72 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </div>
                 ) : advice ? (
                   <div className="space-y-5">
-                    {/* Location & Weather Header */}
+                    {/* Location & Weather Header with Forecast */}
                     {advice.weatherContext && advice.weatherContext.current && (
-                      <div className="flex items-center gap-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200/50 dark:border-blue-800/50">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl">🌡️</span>
-                          <div>
-                            <div className="text-lg font-semibold text-blue-700 dark:text-blue-300">
-                              {advice.weatherContext.current.temp}°C
-                            </div>
-                            <div className="text-xs text-blue-600 dark:text-blue-400">
-                              {advice.weatherContext.current.condition}
+                      <div className={`p-4 rounded-xl bg-gradient-to-r ${getWeatherBgClass(advice.weatherContext.current.condition || '')} border border-blue-200/50 dark:border-blue-800/50`}>
+                        {/* Current Weather */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <span className="text-4xl">{getWeatherIcon(advice.weatherContext.current.condition || '')}</span>
+                            <div>
+                              <div className="text-2xl font-bold text-stone-800 dark:text-stone-100">
+                                {advice.weatherContext.current.temp}°C
+                              </div>
+                              <div className="text-sm text-stone-600 dark:text-stone-300">
+                                {advice.weatherContext.current.condition}
+                              </div>
+                              {advice.weatherContext.current.humidity && (
+                                <div className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1">
+                                  💧 {advice.weatherContext.current.humidity}% {t("gardenDashboard.analyticsSection.humidity", { defaultValue: "humidity" })}
+                                </div>
+                              )}
                             </div>
                           </div>
+                          {advice.locationContext?.city && (
+                            <div className="text-right">
+                              <div className="text-sm font-medium text-stone-700 dark:text-stone-200">
+                                📍 {advice.locationContext.city}
+                              </div>
+                              {advice.locationContext.country && (
+                                <div className="text-xs text-stone-500 dark:text-stone-400">
+                                  {advice.locationContext.country}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {advice.locationContext?.city && (
-                          <div className="text-sm text-blue-600 dark:text-blue-400">
-                            📍 {advice.locationContext.city}
-                            {advice.locationContext.country && `, ${advice.locationContext.country}`}
+                        
+                        {/* 7-Day Forecast */}
+                        {advice.weatherContext.forecast && advice.weatherContext.forecast.length > 0 && (
+                          <div className="pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
+                            <h4 className="text-xs font-medium text-stone-600 dark:text-stone-400 mb-2">
+                              {t("gardenDashboard.analyticsSection.weeklyForecast", { defaultValue: "7-Day Forecast" })}
+                            </h4>
+                            <div className="grid grid-cols-7 gap-1">
+                              {advice.weatherContext.forecast.slice(0, 7).map((day, idx) => {
+                                const dayDate = new Date(day.date);
+                                const dayName = dayDate.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 2);
+                                return (
+                                  <div key={idx} className="text-center p-1.5 rounded-lg bg-white/50 dark:bg-black/20">
+                                    <div className="text-[10px] font-medium text-stone-500 dark:text-stone-400 uppercase">
+                                      {dayName}
+                                    </div>
+                                    <div className="text-lg my-0.5">{getWeatherIcon(day.condition)}</div>
+                                    <div className="text-xs font-semibold text-stone-700 dark:text-stone-200">
+                                      {Math.round(day.tempMax)}°
+                                    </div>
+                                    <div className="text-[10px] text-stone-500 dark:text-stone-400">
+                                      {Math.round(day.tempMin)}°
+                                    </div>
+                                    {day.precipProbability > 20 && (
+                                      <div className="text-[9px] text-blue-500">
+                                        💧{day.precipProbability}%
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
