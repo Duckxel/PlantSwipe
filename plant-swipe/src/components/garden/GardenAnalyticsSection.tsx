@@ -246,6 +246,14 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
+  
+  // Direct weather data (independent of advice)
+  const [weatherData, setWeatherData] = React.useState<{
+    current?: { temp?: number; condition?: string; humidity?: number; windSpeed?: number };
+    forecast?: Array<{ date: string; condition: string; tempMax: number; tempMin: number; precipProbability: number }>;
+    location?: string;
+  } | null>(null);
+  const [weatherLoading, setWeatherLoading] = React.useState(false);
 
   // Close export menu when clicking outside
   React.useEffect(() => {
@@ -529,6 +537,56 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       fetchAdvice();
     }
   }, [isEligibleForAdvice, fetchAdvice]);
+
+  // Fetch weather data directly (independent of advice)
+  const fetchWeather = React.useCallback(async () => {
+    if (!gardenId) return;
+    
+    // Check if garden has location
+    const hasLocation = garden?.locationCity || garden?.locationLat;
+    if (!hasLocation) {
+      console.log("[Weather] No location set for garden");
+      setWeatherData(null);
+      return;
+    }
+
+    setWeatherLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const resp = await fetch(`/api/garden/${gardenId}/weather`, {
+        headers,
+        credentials: "same-origin",
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data?.ok && data.weather) {
+          console.log("[Weather] Fetched weather data:", data.weather);
+          setWeatherData({
+            current: data.weather.current,
+            forecast: data.weather.forecast,
+            location: data.location?.city || garden?.locationCity,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("[Weather] Failed to fetch weather:", err);
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, [gardenId, garden?.locationCity, garden?.locationLat]);
+
+  // Fetch weather when tab is active or garden location changes
+  React.useEffect(() => {
+    const hasLocation = garden?.locationCity || garden?.locationLat;
+    if (hasLocation && (activeTab === "weather" || activeTab === "overview")) {
+      fetchWeather();
+    }
+  }, [activeTab, garden?.locationCity, garden?.locationLat, fetchWeather]);
 
   // Merge server analytics with computed analytics to ensure all fields are present
   const analytics = React.useMemo(() => {
@@ -1234,43 +1292,59 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       )}
 
       {/* Weather Tab */}
-      {activeTab === "weather" && (
+      {activeTab === "weather" && (() => {
+        // Merge weather sources: prefer direct fetch, fallback to advice context
+        const currentWeather = weatherData?.current || advice?.weatherContext?.current;
+        const forecastData = weatherData?.forecast || advice?.weatherContext?.forecast;
+        const locationName = weatherData?.location || advice?.locationContext?.city || garden?.locationCity;
+        const locationCountry = advice?.locationContext?.country || garden?.locationCountry;
+        
+        return (
         <div className="space-y-6">
-            {/* Weather from advice context */}
-            {advice?.weatherContext?.current ? (
+            {/* Loading state */}
+            {weatherLoading ? (
+              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-500 mr-2" />
+                  <span className="text-sm text-muted-foreground">
+                    {t("gardenDashboard.analyticsSection.loadingWeather", { defaultValue: "Loading weather data..." })}
+                  </span>
+                </div>
+              </Card>
+            ) : currentWeather ? (
               <>
                 {/* Current Weather Card */}
-                <Card className={`rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br ${getWeatherBgClass(advice.weatherContext.current.condition || '')} p-6 relative overflow-hidden`}>
+                <Card className={`rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br ${getWeatherBgClass(currentWeather.condition || '')} p-6 relative overflow-hidden`}>
                   <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/20 dark:bg-white/5 rounded-full blur-3xl" />
                   <div className="relative">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-semibold text-lg flex items-center gap-2">
-                        <span className="text-2xl">{getWeatherIcon(advice.weatherContext.current.condition || '')}</span>
+                        <span className="text-2xl">{getWeatherIcon(currentWeather.condition || '')}</span>
                         {t("gardenDashboard.analyticsSection.currentWeather", { defaultValue: "Current Weather" })}
                       </h3>
-                      {advice.locationContext?.city && (
+                      {locationName && (
                         <div className="text-sm font-medium text-stone-600 dark:text-stone-300 flex items-center gap-1">
-                          📍 {advice.locationContext.city}
-                          {advice.locationContext.country && `, ${advice.locationContext.country}`}
+                          📍 {locationName}
+                          {locationCountry && `, ${locationCountry}`}
                         </div>
                       )}
                     </div>
                     
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="p-4 rounded-xl bg-white/50 dark:bg-black/20 text-center">
-                        <div className="text-4xl mb-2">{getWeatherIcon(advice.weatherContext.current.condition || '')}</div>
+                        <div className="text-4xl mb-2">{getWeatherIcon(currentWeather.condition || '')}</div>
                         <div className="text-3xl font-bold text-stone-800 dark:text-stone-100">
-                          {advice.weatherContext.current.temp}°C
+                          {currentWeather.temp}°C
                         </div>
                         <div className="text-sm text-stone-600 dark:text-stone-300 capitalize">
-                          {advice.weatherContext.current.condition}
+                          {currentWeather.condition}
                         </div>
                       </div>
                       
                       <div className="p-4 rounded-xl bg-white/50 dark:bg-black/20 text-center">
                         <div className="text-3xl mb-2">💧</div>
                         <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                          {advice.weatherContext.current.humidity}%
+                          {currentWeather.humidity}%
                         </div>
                         <div className="text-sm text-stone-600 dark:text-stone-300">
                           {t("gardenDashboard.analyticsSection.humidity", { defaultValue: "Humidity" })}
@@ -1282,9 +1356,9 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                           {t("gardenDashboard.analyticsSection.gardeningConditions", { defaultValue: "Gardening Conditions" })}
                         </div>
                         <div className="text-sm text-stone-600 dark:text-stone-300">
-                          {advice.weatherContext.current.temp && advice.weatherContext.current.temp > 30 
+                          {currentWeather.temp && currentWeather.temp > 30 
                             ? t("gardenDashboard.analyticsSection.weatherHot", { defaultValue: "🔥 Hot - water early morning or evening" })
-                            : advice.weatherContext.current.temp && advice.weatherContext.current.temp < 10
+                            : currentWeather.temp && currentWeather.temp < 10
                               ? t("gardenDashboard.analyticsSection.weatherCold", { defaultValue: "🥶 Cold - protect sensitive plants" })
                               : t("gardenDashboard.analyticsSection.weatherIdeal", { defaultValue: "✅ Good conditions for gardening" })
                           }
@@ -1295,7 +1369,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 </Card>
 
                 {/* 7-Day Forecast */}
-                {advice.weatherContext.forecast && advice.weatherContext.forecast.length > 0 && (
+                {forecastData && forecastData.length > 0 && (
                   <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
                     <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
                       <Calendar className="w-5 h-5 text-blue-500" />
@@ -1303,7 +1377,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     </h3>
                     
                     <div className="grid grid-cols-7 gap-2">
-                      {advice.weatherContext.forecast.slice(0, 7).map((day, idx) => {
+                      {forecastData.slice(0, 7).map((day, idx) => {
                         const dayDate = new Date(day.date);
                         const dayName = dayDate.toLocaleDateString(undefined, { weekday: 'short' });
                         const isToday = idx === 0;
@@ -1339,7 +1413,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 )}
 
                 {/* Weather-Based Tips */}
-                {advice.weatherAdvice && (
+                {advice?.weatherAdvice && (
                   <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 p-6">
                     <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
                       <span className="text-xl">🌤️</span>
@@ -1352,7 +1426,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 )}
 
                 {/* Upcoming Alerts */}
-                {advice.weatherContext.forecast && advice.weatherContext.forecast.length > 0 && (
+                {forecastData && forecastData.length > 0 && (
                   <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
                     <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
                       <AlertCircle className="w-5 h-5 text-amber-500" />
@@ -1361,7 +1435,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     <div className="space-y-3">
                       {(() => {
                         const alerts = [];
-                        const forecast = advice.weatherContext.forecast || [];
+                        const forecast = forecastData || [];
                         
                         // Check for high precipitation days
                         const rainyDays = forecast.filter(d => d.precipProbability >= 60);
@@ -1479,7 +1553,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               </Card>
             )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Tasks Tab */}
       {activeTab === "tasks" && (

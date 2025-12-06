@@ -48,14 +48,35 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
   const suggestionsRef = React.useRef<HTMLDivElement>(null);
   const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   
-  // Track the garden ID to only reset when switching to a different garden
-  const prevGardenIdRef = React.useRef<string | undefined>(gardenId);
+  // Track previous values to detect changes
+  const prevValuesRef = React.useRef<{ gardenId?: string; city?: string; country?: string }>({});
 
-  // Initialize from garden data
+  // Initialize from garden data - runs when garden data changes
   React.useEffect(() => {
-    if (gardenId !== prevGardenIdRef.current) {
-      prevGardenIdRef.current = gardenId;
+    console.log("[LocationEditor] useEffect triggered:", { 
+      gardenId, 
+      gardenCity, 
+      gardenCountry, 
+      gardenLat, 
+      gardenLon,
+      prev: prevValuesRef.current
+    });
+    
+    const prevGardenId = prevValuesRef.current.gardenId;
+    const prevCity = prevValuesRef.current.city;
+    const prevCountry = prevValuesRef.current.country;
+    
+    // Check if anything actually changed
+    const gardenChanged = gardenId !== prevGardenId;
+    const locationChanged = gardenCity !== prevCity || gardenCountry !== prevCountry;
+    
+    console.log("[LocationEditor] Change detection:", { gardenChanged, locationChanged });
+    
+    if (gardenChanged || locationChanged) {
+      prevValuesRef.current = { gardenId, city: gardenCity, country: gardenCountry };
+      
       if (gardenCity) {
+        console.log("[LocationEditor] Setting location from garden data:", gardenCity, gardenCountry, gardenLat, gardenLon);
         setSearchQuery("");
         setSelectedLocation({
           id: 0,
@@ -64,7 +85,9 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
           latitude: gardenLat || 0,
           longitude: gardenLon || 0,
         });
-      } else {
+      } else if (gardenChanged) {
+        // Only clear when switching gardens, not when location is empty after save
+        console.log("[LocationEditor] Clearing location (garden changed)");
         setSearchQuery("");
         setSelectedLocation(null);
       }
