@@ -1411,6 +1411,21 @@ export const GardenDashboardPage: React.FC = () => {
     ],
   );
 
+  // Simple callback to refresh just the garden data (for settings updates like location)
+  const refreshGarden = React.useCallback(async () => {
+    if (!id) return;
+    try {
+      console.log("[GardenDashboard] Refreshing garden data...");
+      const g = await getGarden(id);
+      if (g) {
+        console.log("[GardenDashboard] Garden refreshed:", g.locationCity, g.locationCountry);
+        setGarden(g);
+      }
+    } catch (e) {
+      console.warn("[GardenDashboard] Failed to refresh garden:", e);
+    }
+  }, [id]);
+
   const scheduleReload = React.useCallback(() => {
     const executeReload = async () => {
       pendingReloadRef.current = false;
@@ -2980,7 +2995,7 @@ export const GardenDashboardPage: React.FC = () => {
                       <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
                         <GardenLocationEditor
                           garden={garden}
-                          onSaved={load}
+                          onSaved={refreshGarden}
                           canEdit={viewerIsOwner}
                         />
                       </Card>

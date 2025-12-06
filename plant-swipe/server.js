@@ -12674,8 +12674,10 @@ app.get('/api/garden/:id/weather', async (req, res) => {
 app.put('/api/garden/:id/location', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
+    console.log('[garden-location] PUT request for garden:', gardenId, 'body:', JSON.stringify(req.body))
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
+    console.log('[garden-location] User:', user?.id)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
@@ -12712,7 +12714,8 @@ app.put('/api/garden/:id/location', async (req, res) => {
       } catch {}
     }
 
-    await sql`
+    console.log('[garden-location] Updating garden with:', { city, country, timezone, finalLat, finalLon })
+    const updateResult = await sql`
       update public.gardens set
         location_city = ${city || null},
         location_country = ${country || null},
@@ -12720,9 +12723,11 @@ app.put('/api/garden/:id/location', async (req, res) => {
         location_lat = ${finalLat || null},
         location_lon = ${finalLon || null}
       where id = ${gardenId}
+      returning id, location_city, location_country
     `
+    console.log('[garden-location] Update result:', updateResult)
 
-    res.json({ ok: true })
+    res.json({ ok: true, updated: updateResult?.[0] || null })
   } catch (e) {
     console.error('[garden-location] Error:', e)
     res.status(500).json({ ok: false, error: e?.message || 'Failed to update location' })

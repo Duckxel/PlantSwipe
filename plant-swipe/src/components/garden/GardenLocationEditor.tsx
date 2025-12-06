@@ -167,6 +167,16 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
 
+      const payload = {
+        city: selectedLocation.name,
+        country: selectedLocation.country,
+        lat: selectedLocation.latitude,
+        lon: selectedLocation.longitude,
+        timezone: selectedLocation.timezone || null,
+      };
+      
+      console.log("[location] Saving location:", payload);
+
       const resp = await fetch(`/api/garden/${garden.id}/location`, {
         method: "PUT",
         headers: {
@@ -174,22 +184,24 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         credentials: "same-origin",
-        body: JSON.stringify({
-          city: selectedLocation.name,
-          country: selectedLocation.country,
-          lat: selectedLocation.latitude,
-          lon: selectedLocation.longitude,
-          timezone: selectedLocation.timezone || null,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      console.log("[location] Save response:", resp.status, data);
+
+      if (resp.ok && data.ok) {
         setSaved(true);
+        // Call onSaved to refresh the garden data
         onSaved();
         setTimeout(() => setSaved(false), 2000);
+      } else {
+        console.error("[location] Save failed:", data.error || "Unknown error");
+        alert(data.error || "Failed to save location");
       }
     } catch (err) {
       console.error("[location] Failed to save:", err);
+      alert("Failed to save location. Please try again.");
     } finally {
       setSaving(false);
     }
