@@ -3,7 +3,7 @@
 import { clientsClaim } from 'workbox-core'
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { registerRoute } from 'workbox-routing'
-import { CacheFirst, NetworkFirst, NetworkOnly, StaleWhileRevalidate } from 'workbox-strategies'
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { offlineFallback, warmStrategyCache } from 'workbox-recipes'
@@ -141,23 +141,6 @@ warmStrategyCache({
 registerRoute(
   ({ request, url }) => request.mode === 'navigate' && !/\/api\//.test(url.pathname),
   pageStrategy
-)
-
-registerRoute(
-  ({ url }) => /\/api\/.+\/stream/.test(url.pathname),
-  new NetworkOnly()
-)
-
-registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/') && !/\/stream/.test(url.pathname),
-  new NetworkFirst({
-    cacheName: 'api-cache',
-    networkTimeoutSeconds: 10,
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 60 * 5 }),
-    ],
-  })
 )
 
 registerRoute(

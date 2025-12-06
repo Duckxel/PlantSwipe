@@ -774,6 +774,22 @@ if (openaiApiKey) {
   console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')
 }
 
+// Some deployments might lag behind on the latest schema additions for the
+// garden_ai_advice table. Track whether advanced context columns (weather,
+// journal, avg_completion_time, etc.) are available so queries can gracefully
+// fall back instead of failing with "column ... does not exist".
+let gardenAdviceContextColumnsSupported = true
+function isMissingColumnError(err) {
+  const msg = String(err?.message || '').toLowerCase()
+  return msg.includes('column') && msg.includes('does not exist')
+}
+function disableGardenAdviceContextColumns(stage, err) {
+  if (!gardenAdviceContextColumnsSupported) return
+  gardenAdviceContextColumnsSupported = false
+  const label = stage ? ` (${stage})` : ''
+  console.warn(`[garden-advice] Context columns unavailable${label}:`, err?.message || err)
+}
+
 const supportEmailTargets = parseEmailTargets(process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL, DEFAULT_SUPPORT_EMAIL)
 const supportEmailFrom =
   process.env.SUPPORT_EMAIL_FROM
@@ -1140,6 +1156,20 @@ function sanitizeUploadBaseName(name) {
   } catch {
     return 'upload'
   }
+}
+
+function normalizeJsonArray(input, fallback = []) {
+  if (!input) return Array.isArray(fallback) ? fallback : []
+  if (Array.isArray(input)) return input
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input)
+      return Array.isArray(parsed) ? parsed : Array.isArray(fallback) ? fallback : []
+    } catch {
+      return Array.isArray(fallback) ? fallback : []
+    }
+  }
+  return Array.isArray(fallback) ? fallback : []
 }
 
 function sanitizePathSegment(value, fallback = 'unknown') {
@@ -10289,7 +10319,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       }
 
       // Garden plants
-      const gpUrl = `${supabaseUrlEnv}/rest/v1/garden_plants?garden_id=eq.${encodeURIComponent(gardenId)}&select=id,garden_id,plant_id,nickname,seeds_planted,planted_at,expected_bloom_date,override_water_freq_unit,override_water_freq_value,plants_on_hand,sort_index`
+      const gpUrl = `${supabaseUrlEnv}/rest/v1/garden_plants?garden_id=eq.${encodeURIComponent(gardenId)}&select=id,garden_id,plant_id,nickname,seeds_planted,planted_at,expected_bloom_date,override_water_freq_unit,override_water_freq_value,plants_on_hand,sort_index,health_status,notes,last_health_update`
       const gpResp = await fetch(gpUrl, { headers })
       let gpRows = []
       if (gpResp.ok) gpRows = await gpResp.json().catch(() => [])
@@ -10335,6 +10365,9 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         overrideWaterFreqValue: (r.override_water_freq_value ?? null),
         plantsOnHand: Number(r.plants_on_hand || 0),
         sortIndex: (r.sort_index ?? null),
+        healthStatus: r.health_status || null,
+        notes: r.notes || null,
+        lastHealthUpdate: r.last_health_update || null,
         plant: plantsMap[String(r.plant_id)] || null,
       }))
 
@@ -10845,42 +10878,68 @@ app.get('/api/garden/:id/advice', async (req, res) => {
     // Check for existing advice this week
     if (!forceRefresh) {
       try {
-        const existingAdvice = await sql`
-          select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-                 improvement_score, generated_at, weather_context, location_context
-          from public.garden_ai_advice
-          where garden_id = ${gardenId} and week_start = ${weekStartIso}
-          limit 1
-        `
+        let existingAdvice
+        if (gardenAdviceContextColumnsSupported) {
+          try {
+            existingAdvice = await sql`
+              select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                     improvement_score, generated_at, weather_context, location_context, model_used
+              from public.garden_ai_advice
+              where garden_id = ${gardenId} and week_start = ${weekStartIso}
+              limit 1
+            `
+          } catch (err) {
+            if (isMissingColumnError(err)) {
+              disableGardenAdviceContextColumns('select', err)
+              existingAdvice = await sql`
+                select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                       improvement_score, generated_at, model_used
+                from public.garden_ai_advice
+                where garden_id = ${gardenId} and week_start = ${weekStartIso}
+                limit 1
+              `
+            } else {
+              throw err
+            }
+          }
+        } else {
+          existingAdvice = await sql`
+            select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                   improvement_score, generated_at, model_used
+            from public.garden_ai_advice
+            where garden_id = ${gardenId} and week_start = ${weekStartIso}
+            limit 1
+          `
+        }
+
         if (existingAdvice && existingAdvice.length > 0) {
           const adv = existingAdvice[0]
-          res.json({
-            ok: true,
-            advice: {
-              id: String(adv.id),
-              weekStart: adv.week_start,
-              adviceText: adv.advice_text,
-              adviceSummary: adv.advice_summary,
-              focusAreas: adv.focus_areas || [],
-              plantSpecificTips: adv.plant_specific_tips || [],
-              improvementScore: adv.improvement_score,
-              generatedAt: adv.generated_at,
-              weatherContext: adv.weather_context || null,
-              locationContext: adv.location_context || null,
-            },
-          })
-          return
+          const modelUsed = adv.model_used || 'unknown'
+          if (modelUsed !== 'rule-based') {
+            res.json({
+              ok: true,
+              advice: {
+                id: String(adv.id),
+                weekStart: adv.week_start,
+                adviceText: adv.advice_text,
+                adviceSummary: adv.advice_summary,
+                focusAreas: adv.focus_areas || [],
+                plantSpecificTips: normalizeJsonArray(adv.plant_specific_tips),
+                improvementScore: adv.improvement_score,
+                generatedAt: adv.generated_at,
+                weatherContext: adv.weather_context || null,
+                locationContext: adv.location_context || null,
+              },
+            })
+            return
+          }
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[garden-advice] Existing advice lookup failed:', err)
+      }
     }
 
-    // Generate new advice using OpenAI
-    if (!openai) {
-      res.json({ ok: true, message: 'AI advice generation not available', advice: null })
-      return
-    }
-
-    // Gather comprehensive garden data for AI
+    // Gather comprehensive garden data for advice generation
     const plants = await sql`
       select gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes,
              p.name as plant_name, p.scientific_name,
@@ -11122,137 +11181,220 @@ Format your response as JSON with this structure:
   "fullAdvice": "A detailed, friendly paragraph covering all your recommendations"
 }`
 
-    try {
-      // Build messages with optional images for vision analysis
-      const useVision = journalPhotoUrls.length > 0
-      let messages = [
-        { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
-      ]
+    const buildRuleBased = () =>
+      generateRuleBasedAdvice({
+        gardenName: garden.name,
+        plants,
+        thisWeekStats,
+        lastWeekStats,
+        weatherData,
+        avgCompletionTime,
+        taskSummaryText,
+      })
 
-      if (useVision) {
-        // Include up to 4 most recent journal photos for analysis
-        const imageUrls = journalPhotoUrls.slice(0, 4)
-        const content = [
-          { type: 'text', text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
+    let parsed = null
+    let tokensUsed = 0
+    let modelUsed = 'gpt-4o-mini'
+
+    if (openai) {
+      try {
+        // Build messages with optional images for vision analysis
+        const useVision = journalPhotoUrls.length > 0
+        let messages = [
+          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
+        ]
+
+        if (useVision) {
+          // Include up to 4 most recent journal photos for analysis
+          const imageUrls = journalPhotoUrls.slice(0, 4)
+          const content = [
+            { type: 'text', text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
 - Overall plant health and vigor
 - Signs of disease, pests, or stress
 - Watering issues (overwatering/underwatering)
 - Nutrient deficiencies
 - Growth progress
 Include specific observations from the photos in your advice.` }
-        ]
-        
-        for (const url of imageUrls) {
-          content.push({
-            type: 'image_url',
-            image_url: {
-              url: url,
-              detail: 'high'
-            }
-          })
+          ]
+          
+          for (const url of imageUrls) {
+            content.push({
+              type: 'image_url',
+              image_url: {
+                url: url,
+                detail: 'high'
+              }
+            })
+          }
+          
+          messages.push({ role: 'user', content })
+        } else {
+          messages.push({ role: 'user', content: prompt })
         }
-        
-        messages.push({ role: 'user', content })
-      } else {
-        messages.push({ role: 'user', content: prompt })
+
+        const completionOptions = {
+          model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
+          messages,
+          temperature: 0.7,
+          max_tokens: useVision ? 2000 : 1500,
+        }
+        // Only use json_object response format when not using vision (compatibility)
+        if (!useVision) {
+          completionOptions.response_format = { type: 'json_object' }
+        }
+        const completion = await openai.chat.completions.create(completionOptions)
+
+        const aiResponse = completion.choices[0]?.message?.content
+        tokensUsed = completion.usage?.total_tokens || 0
+
+        try {
+          parsed = JSON.parse(aiResponse || '{}')
+        } catch {
+          parsed = { summary: 'Unable to parse advice', focusAreas: [], plantTips: [], improvementScore: null, fullAdvice: aiResponse }
+        }
+      } catch (aiErr) {
+        console.error('[garden-advice] AI generation failed:', aiErr)
+        parsed = buildRuleBased()
+        modelUsed = 'rule-based'
+        tokensUsed = 0
       }
-
-      const completionOptions = {
-        model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
-        messages,
-        temperature: 0.7,
-        max_tokens: useVision ? 2000 : 1500,
-      }
-      // Only use json_object response format when not using vision (compatibility)
-      if (!useVision) {
-        completionOptions.response_format = { type: 'json_object' }
-      }
-      const completion = await openai.chat.completions.create(completionOptions)
-
-      const aiResponse = completion.choices[0]?.message?.content
-      const tokensUsed = completion.usage?.total_tokens || 0
-
-      let parsed = {}
-      try {
-        parsed = JSON.parse(aiResponse || '{}')
-      } catch {
-        parsed = { summary: 'Unable to parse advice', focusAreas: [], plantTips: [], improvementScore: null, fullAdvice: aiResponse }
-      }
-
-      // Build context objects for storage
-      const weatherContextObj = weatherData ? {
-        current: weatherData.current,
-        forecast: weatherData.forecast?.slice(0, 7),
-        location: gardenLocation.location_city,
-      } : {}
-
-      const journalContextObj = {
-        entriesCount: recentJournalEntries.length,
-        recentMoods: recentJournalEntries.map(e => e.mood).filter(Boolean),
-        photoObservations: photoObservations.map(p => ({ plant: p.nickname || p.plant_name, health: p.plant_health })),
-      }
-
-      const locationContextObj = {
-        city: gardenLocation.location_city,
-        country: gardenLocation.location_country,
-        timezone: gardenLocation.location_timezone,
-      }
-
-      // Store in database with enhanced context
-      const insertResult = await sql`
-        insert into public.garden_ai_advice (
-          garden_id, week_start, advice_text, advice_summary, focus_areas,
-          plant_specific_tips, improvement_score, model_used, tokens_used, generated_at,
-          weather_context, journal_context, avg_completion_time, location_context
-        ) values (
-          ${gardenId}, ${weekStartIso}, ${parsed.fullAdvice || ''}, ${parsed.summary || ''},
-          ${JSON.stringify(parsed.focusAreas || [])}::text[], ${JSON.stringify(parsed.plantTips || [])}::jsonb,
-          ${parsed.improvementScore || null}, 'gpt-4o-mini', ${tokensUsed}, now(),
-          ${JSON.stringify(weatherContextObj)}::jsonb, ${JSON.stringify(journalContextObj)}::jsonb,
-          ${avgCompletionTime}, ${JSON.stringify(locationContextObj)}::jsonb
-        )
-        on conflict (garden_id, week_start)
-        do update set
-          advice_text = excluded.advice_text,
-          advice_summary = excluded.advice_summary,
-          focus_areas = excluded.focus_areas,
-          plant_specific_tips = excluded.plant_specific_tips,
-          improvement_score = excluded.improvement_score,
-          model_used = excluded.model_used,
-          tokens_used = excluded.tokens_used,
-          generated_at = excluded.generated_at,
-          weather_context = excluded.weather_context,
-          journal_context = excluded.journal_context,
-          avg_completion_time = excluded.avg_completion_time,
-          location_context = excluded.location_context
-        returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
-                  improvement_score, generated_at, weather_context, location_context
-      `
-
-      const saved = insertResult[0]
-      res.json({
-        ok: true,
-        advice: {
-          id: String(saved.id),
-          weekStart: saved.week_start,
-          adviceText: saved.advice_text,
-          adviceSummary: saved.advice_summary,
-          focusAreas: saved.focus_areas || [],
-          plantSpecificTips: saved.plant_specific_tips || [],
-          improvementScore: saved.improvement_score,
-          generatedAt: saved.generated_at,
-          // Enhanced fields
-          weeklyFocus: parsed.weeklyFocus || null,
-          weatherAdvice: parsed.weatherAdvice || null,
-          encouragement: parsed.encouragement || null,
-          weatherContext: saved.weather_context || null,
-          locationContext: saved.location_context || null,
-        },
-      })
-    } catch (aiErr) {
-      console.error('[garden-advice] AI generation failed:', aiErr)
-      res.json({ ok: true, message: 'AI advice generation temporarily unavailable', advice: null })
+    } else {
+      parsed = buildRuleBased()
+      modelUsed = 'rule-based'
+      tokensUsed = 0
     }
+
+    if (!parsed) parsed = buildRuleBased()
+
+    // Build context objects for storage
+    const weatherContextObj = weatherData ? {
+      current: weatherData.current,
+      forecast: weatherData.forecast?.slice(0, 7),
+      location: gardenLocation.location_city,
+    } : {}
+
+    const journalContextObj = {
+      entriesCount: recentJournalEntries.length,
+      recentMoods: recentJournalEntries.map(e => e.mood).filter(Boolean),
+      photoObservations: photoObservations.map(p => ({ plant: p.nickname || p.plant_name, health: p.plant_health })),
+    }
+
+    const locationContextObj = {
+      city: gardenLocation.location_city,
+      country: gardenLocation.location_country,
+      timezone: gardenLocation.location_timezone,
+    }
+
+    // Store in database with enhanced context. Fall back gracefully if the target columns don't exist yet.
+    let insertResult
+    const focusAreasArray = Array.isArray(parsed.focusAreas)
+      ? parsed.focusAreas.map((area) => String(area || '').trim()).filter(Boolean)
+      : []
+    const plantTipsJson = JSON.stringify(parsed.plantTips || [])
+    const weatherContextJson = JSON.stringify(weatherContextObj)
+    const journalContextJson = JSON.stringify(journalContextObj)
+    const locationContextJson = JSON.stringify(locationContextObj)
+    const insertArgs = {
+      gardenId,
+      weekStartIso,
+      fullAdvice: parsed.fullAdvice || '',
+      summary: parsed.summary || '',
+      focusAreas: focusAreasArray,
+      plantTips: plantTipsJson,
+      improvementScore: parsed.improvementScore || null,
+      tokensUsed,
+      weatherContextJson,
+      journalContextJson,
+      avgCompletionTime,
+      locationContextJson,
+      modelUsed,
+    }
+
+    const runBaseInsert = () => sql`
+      insert into public.garden_ai_advice (
+        garden_id, week_start, advice_text, advice_summary, focus_areas,
+        plant_specific_tips, improvement_score, model_used, tokens_used, generated_at
+      ) values (
+        ${insertArgs.gardenId}, ${insertArgs.weekStartIso}, ${insertArgs.fullAdvice}, ${insertArgs.summary},
+        ${sql.array(insertArgs.focusAreas, 'text')}, ${insertArgs.plantTips}::jsonb,
+        ${insertArgs.improvementScore}, ${insertArgs.modelUsed}, ${insertArgs.tokensUsed}, now()
+      )
+      on conflict (garden_id, week_start)
+      do update set
+        advice_text = excluded.advice_text,
+        advice_summary = excluded.advice_summary,
+        focus_areas = excluded.focus_areas,
+        plant_specific_tips = excluded.plant_specific_tips,
+        improvement_score = excluded.improvement_score,
+        model_used = excluded.model_used,
+        tokens_used = excluded.tokens_used,
+        generated_at = excluded.generated_at
+      returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
+                improvement_score, generated_at
+    `
+
+    if (gardenAdviceContextColumnsSupported) {
+      try {
+        insertResult = await sql`
+          insert into public.garden_ai_advice (
+            garden_id, week_start, advice_text, advice_summary, focus_areas,
+            plant_specific_tips, improvement_score, model_used, tokens_used, generated_at,
+            weather_context, journal_context, avg_completion_time, location_context
+          ) values (
+            ${insertArgs.gardenId}, ${insertArgs.weekStartIso}, ${insertArgs.fullAdvice}, ${insertArgs.summary},
+            ${insertArgs.focusAreas}::text[], ${insertArgs.plantTips}::jsonb,
+            ${insertArgs.improvementScore}, ${insertArgs.modelUsed}, ${insertArgs.tokensUsed}, now(),
+            ${insertArgs.weatherContextJson}::jsonb, ${insertArgs.journalContextJson}::jsonb,
+            ${insertArgs.avgCompletionTime}, ${insertArgs.locationContextJson}::jsonb
+          )
+          on conflict (garden_id, week_start)
+          do update set
+            advice_text = excluded.advice_text,
+            advice_summary = excluded.advice_summary,
+            focus_areas = excluded.focus_areas,
+            plant_specific_tips = excluded.plant_specific_tips,
+            improvement_score = excluded.improvement_score,
+            model_used = excluded.model_used,
+            tokens_used = excluded.tokens_used,
+            generated_at = excluded.generated_at,
+            weather_context = excluded.weather_context,
+            journal_context = excluded.journal_context,
+            avg_completion_time = excluded.avg_completion_time,
+            location_context = excluded.location_context
+          returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
+                    improvement_score, generated_at, weather_context, location_context
+        `
+      } catch (err) {
+        if (isMissingColumnError(err)) {
+          disableGardenAdviceContextColumns('insert', err)
+          insertResult = await runBaseInsert()
+        } else {
+          throw err
+        }
+      }
+    } else {
+      insertResult = await runBaseInsert()
+    }
+
+    const saved = insertResult[0]
+    res.json({
+      ok: true,
+      advice: {
+        id: String(saved.id),
+        weekStart: saved.week_start,
+        adviceText: saved.advice_text,
+        adviceSummary: saved.advice_summary,
+        focusAreas: saved.focus_areas || [],
+        plantSpecificTips: normalizeJsonArray(saved.plant_specific_tips),
+        improvementScore: saved.improvement_score,
+        generatedAt: saved.generated_at,
+        weeklyFocus: parsed.weeklyFocus || null,
+        weatherAdvice: parsed.weatherAdvice || null,
+        encouragement: parsed.encouragement || null,
+        weatherContext: saved.weather_context || null,
+        locationContext: saved.location_context || null,
+      },
+    })
   } catch (e) {
     console.error('[garden-advice] Error:', e)
     res.status(500).json({ ok: false, error: e?.message || 'Failed to get advice' })
@@ -11314,6 +11456,175 @@ async function fetchWeatherForLocation(lat, lon, city) {
   } catch (err) {
     console.warn('[weather] Failed to fetch weather:', err)
     return null
+  }
+}
+
+/**
+ * Generate heuristic gardener advice when AI is unavailable.
+ */
+function generateRuleBasedAdvice({
+  gardenName,
+  plants,
+  thisWeekStats,
+  lastWeekStats,
+  weatherData,
+  avgCompletionTime,
+  taskSummaryText,
+}) {
+  const plantCount = plants.length
+  const normalizedThisWeek = thisWeekStats || { rate: 100, summary: {} }
+  const normalizedLastWeek = lastWeekStats || { rate: normalizedThisWeek.rate }
+  const completionRate = Number.isFinite(normalizedThisWeek.rate) ? normalizedThisWeek.rate : 100
+  const previousRate = Number.isFinite(normalizedLastWeek.rate) ? normalizedLastWeek.rate : completionRate
+  const rateDelta = completionRate - previousRate
+  const summaryParts = []
+
+  if (plantCount > 0) {
+    summaryParts.push(`You’re currently caring for ${plantCount} plant${plantCount === 1 ? '' : 's'}.`)
+  } else {
+    summaryParts.push('No plants are linked to this garden yet, so insights focus on task habits.')
+  }
+
+  const trendText =
+    rateDelta > 3
+      ? ` (up ${Math.abs(rateDelta)}% from last week)`
+      : rateDelta < -3
+        ? ` (${Math.abs(rateDelta)}% below last week)`
+        : ''
+  summaryParts.push(`You logged ${completionRate}% of scheduled tasks this week${trendText}.`)
+
+  if (avgCompletionTime && avgCompletionTime !== 'Not enough data') {
+    summaryParts.push(`Most tasks get completed around ${avgCompletionTime}.`)
+  }
+
+  const typeLabels = {
+    water: 'watering',
+    fertilize: 'feeding',
+    harvest: 'harvesting',
+    cut: 'pruning',
+    custom: 'custom care',
+  }
+  const summaryByType = normalizedThisWeek.summary || {}
+  const deficits = Object.entries(typeLabels).map(([type, label]) => {
+    const stats = summaryByType[type] || { due: 0, completed: 0 }
+    const due = Number(stats.due || 0)
+    const completed = Number(stats.completed || 0)
+    return { type, label, due, completed, deficit: Math.max(0, due - completed) }
+  })
+    .filter(entry => entry.due > 0)
+    .sort((a, b) => {
+      if (b.deficit === a.deficit) return b.due - a.due
+      return b.deficit - a.deficit
+    })
+
+  const focusAreas = []
+  for (const entry of deficits) {
+    if (entry.deficit <= 0) continue
+    focusAreas.push(`Prioritize ${entry.label} tasks (${entry.completed}/${entry.due} logged).`)
+    if (focusAreas.length >= 3) break
+  }
+  if (focusAreas.length === 0) {
+    focusAreas.push(plantCount === 0
+      ? 'Add at least one plant so reminders can target something alive.'
+      : 'Stay consistent with your existing routine to keep plants thriving.')
+  }
+
+  const stressedPlants = plants.filter(p => {
+    const health = (p.health_status || '').toLowerCase()
+    return Boolean(
+      (health && !['great', 'good', 'thriving', 'healthy'].includes(health)) ||
+      (p.notes && p.notes.length > 0)
+    )
+  })
+
+  const plantTips = []
+  const plantEntries = stressedPlants.length ? stressedPlants : plants.slice(0, 3)
+  plantEntries.slice(0, 3).forEach((p, idx) => {
+    const plantName = p.nickname || p.plant_name || `Plant ${idx + 1}`
+    const health = (p.health_status || '').toLowerCase()
+    let tip = 'Give this plant a quick inspection for pests, yellowing leaves, or soil compaction.'
+    let reason = 'General upkeep keeps foliage breathing well.'
+    let priority = 'medium'
+
+    if (health.includes('dry')) {
+      tip = 'Soak the soil thoroughly, add mulch to retain moisture, and monitor afternoon sun.'
+      reason = 'Reported dryness suggests the roots need a deeper drink.'
+      priority = 'high'
+    } else if (health.includes('pest') || health.includes('spot')) {
+      tip = 'Wipe leaves, remove damaged growth, and consider a neem or soap spray this week.'
+      reason = 'Spots or pests spread quickly when ignored.'
+      priority = 'high'
+    } else if (health.includes('slow') || health.includes('stall')) {
+      tip = 'Check fertilizer schedule and gently loosen the top layer of soil to improve airflow.'
+      reason = 'Stalled growth often tracks back to nutrients or compacted soil.'
+    } else if (p.notes) {
+      reason = p.notes.slice(0, 160)
+    }
+
+    plantTips.push({
+      plantName,
+      tip,
+      priority,
+      reason,
+    })
+  })
+
+  const formatDay = iso => {
+    try {
+      return new Date(iso).toLocaleDateString(undefined, { weekday: 'long' })
+    } catch {
+      return 'upcoming days'
+    }
+  }
+
+  let weatherAdvice = null
+  if (weatherData?.forecast?.length) {
+    const upcoming = weatherData.forecast.slice(0, 5)
+    const heavyRain = upcoming.find(day => (day.precipProbability || 0) >= 60)
+    const hotDay = upcoming.find(day => (day.tempMax || 0) >= 30)
+    const chillyNight = upcoming.find(day => (day.tempMin || 99) <= 5)
+    if (hotDay) {
+      weatherAdvice = `Prep for heat around ${formatDay(hotDay.date)} (highs near ${Math.round(hotDay.tempMax)}°C). Deep morning watering and afternoon shade will protect tender plants.`
+    } else if (heavyRain) {
+      weatherAdvice = `Significant rain is likely ${formatDay(heavyRain.date)}. Hold off on extra watering and make sure planters drain well.`
+    } else if (chillyNight) {
+      weatherAdvice = `Expect cooler nights (≈${Math.round(chillyNight.tempMin)}°C). Move sensitive pots closer to the house or add covers overnight.`
+    } else if (weatherData.current) {
+      weatherAdvice = `Current conditions are ${weatherData.current.condition?.toLowerCase() || 'steady'}, so keep watering moderate and watch humidity (${weatherData.current.humidity || 0}%).`
+    }
+  }
+
+  const weeklyFocus = focusAreas[0] || 'Maintain a gentle routine this week.'
+
+  let encouragement = 'Keep up the steady routine and log tasks as soon as you finish them.'
+  if (rateDelta > 5) {
+    encouragement = 'Nice momentum! The uptick in completed tasks shows your routine is clicking.'
+  } else if (rateDelta < -5) {
+    encouragement = 'You lost a bit of momentum this week, but a short daily check-in will bring it back.'
+  }
+
+  const improvementScore = Math.max(45, Math.min(95, Math.round(completionRate || 70)))
+
+  const fullAdviceSections = [
+    summaryParts.join(' '),
+    weeklyFocus,
+    focusAreas.length ? `Focus areas: ${focusAreas.join(' ')}` : '',
+    plantTips.length
+      ? `Plant-specific tips:\n${plantTips.map((tip, idx) => `${idx + 1}. ${tip.plantName}: ${tip.tip}`).join('\n')}`
+      : '',
+    weatherAdvice ? `Weather outlook: ${weatherAdvice}` : '',
+    taskSummaryText ? `Task snapshot: ${taskSummaryText}.` : '',
+  ].filter(Boolean)
+
+  return {
+    summary: summaryParts.join(' '),
+    weeklyFocus,
+    focusAreas,
+    plantTips,
+    weatherAdvice,
+    improvementScore,
+    encouragement,
+    fullAdvice: fullAdviceSections.join('\n\n'),
   }
 }
 
@@ -11960,14 +12271,37 @@ app.get('/api/garden/:id/advice/export', async (req, res) => {
     }
 
     // Get all AI advice history
-    const adviceHistory = await sql`
+    let adviceHistory
+    const runAdviceHistoryBaseQuery = () => sql`
       select week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-             improvement_score, weather_context, generated_at
+             improvement_score, generated_at
       from public.garden_ai_advice
       where garden_id = ${gardenId}
       order by week_start desc
       limit 12
     `
+
+    if (gardenAdviceContextColumnsSupported) {
+      try {
+        adviceHistory = await sql`
+          select week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                 improvement_score, weather_context, generated_at
+          from public.garden_ai_advice
+          where garden_id = ${gardenId}
+          order by week_start desc
+          limit 12
+        `
+      } catch (err) {
+        if (isMissingColumnError(err)) {
+          disableGardenAdviceContextColumns('export-select', err)
+          adviceHistory = await runAdviceHistoryBaseQuery()
+        } else {
+          throw err
+        }
+      }
+    } else {
+      adviceHistory = await runAdviceHistoryBaseQuery()
+    }
 
     // Get recent journal entries with AI feedback and photos
     const journalEntries = await sql`
@@ -12008,7 +12342,7 @@ app.get('/api/garden/:id/advice/export', async (req, res) => {
         weekStart: a.week_start,
         summary: a.advice_summary,
         focusAreas: a.focus_areas || [],
-        plantTips: a.plant_specific_tips || [],
+        plantTips: normalizeJsonArray(a.plant_specific_tips),
         score: a.improvement_score,
         weather: a.weather_context?.current ? `${a.weather_context.current.temp}°C, ${a.weather_context.current.condition}` : null,
         fullAdvice: a.advice_text,
