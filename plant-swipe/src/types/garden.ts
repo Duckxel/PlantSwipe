@@ -24,6 +24,8 @@ export interface GardenMember {
   accentKey?: string | null
 }
 
+export type PlantHealthStatus = 'thriving' | 'healthy' | 'okay' | 'struggling' | 'critical'
+
 export interface GardenPlant {
   id: string
   gardenId: string
@@ -35,6 +37,9 @@ export interface GardenPlant {
   overrideWaterFreqUnit?: WaterFreqUnit | null
   overrideWaterFreqValue?: number | null
   plantsOnHand?: number | null
+  healthStatus?: PlantHealthStatus | null
+  notes?: string | null
+  lastHealthUpdate?: string | null
 }
 
 export type GardenPlantEventType = "water" | "fertilize" | "prune" | "harvest" | "note"

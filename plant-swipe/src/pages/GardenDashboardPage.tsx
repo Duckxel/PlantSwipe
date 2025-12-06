@@ -76,8 +76,11 @@ import { useLanguage } from "@/lib/i18nRouting";
 import { mergePlantWithTranslation } from "@/lib/plantTranslationLoader";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
+import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSection";
+import { GardenJournalSection } from "@/components/garden/GardenJournalSection";
+import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
 
-type TabKey = "overview" | "plants" | "routine" | "settings";
+type TabKey = "overview" | "plants" | "routine" | "journal" | "analytics" | "settings";
 
 const getMaxScheduleSelections = (period: "week" | "month" | "year") =>
   period === "week" ? 7 : period === "month" ? 12 : 52;
@@ -2555,6 +2558,8 @@ export const GardenDashboardPage: React.FC = () => {
                       ["overview", t("gardenDashboard.overview")],
                       ["plants", t("gardenDashboard.plants")],
                       ["routine", t("gardenDashboard.routine")],
+                      ["journal", t("gardenDashboard.journal", "Journal")],
+                      ["analytics", t("gardenDashboard.analytics", "Analytics")],
                       ["settings", t("gardenDashboard.settings")],
                     ]
                   : [["overview", t("gardenDashboard.overview")]]
@@ -2714,28 +2719,48 @@ export const GardenDashboardPage: React.FC = () => {
                               })()}
                             </div>
                             <div className="col-span-2 p-3">
-                              <div className="font-medium">
-                                {gp.nickname || gp.plant?.name || 'Unknown Plant'}
+                              <div className="flex items-center justify-between">
+                                <div className="font-medium">
+                                  {gp.nickname || gp.plant?.name || 'Unknown Plant'}
+                                </div>
+                                {/* Health Status Badge */}
+                                {gp.healthStatus && (() => {
+                                  const status = getHealthStatus(gp.healthStatus);
+                                  return status ? (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${status.bg} ${status.color} flex items-center gap-1`}>
+                                      <span>{status.emoji}</span>
+                                      <span className="hidden sm:inline">{status.label}</span>
+                                    </span>
+                                  ) : null;
+                                })()}
                               </div>
                               {gp.nickname && gp.plant?.name && (
                                 <div className="text-xs opacity-60">
                                   {gp.plant.name}
                                 </div>
                               )}
-                              <div className="text-xs opacity-60">
-                                {t("gardenDashboard.plantsSection.onHand")}{" "}
-                                {Number(gp.plantsOnHand ?? 0)}
-                              </div>
-                              <div className="text-xs opacity-60">
-                                {t("gardenDashboard.plantsSection.tasks")}{" "}
-                                {taskCountsByPlant[gp.id] || 0}
-                              </div>
-                              <div className="flex items-center justify-between">
+                              <div className="grid grid-cols-2 gap-1 mt-1">
+                                <div className="text-xs opacity-60">
+                                  {t("gardenDashboard.plantsSection.onHand")}{" "}
+                                  <span className="font-medium">{Number(gp.plantsOnHand ?? 0)}</span>
+                                </div>
+                                <div className="text-xs opacity-60">
+                                  {t("gardenDashboard.plantsSection.tasks")}{" "}
+                                  <span className="font-medium">{taskCountsByPlant[gp.id] || 0}</span>
+                                </div>
                                 <div className="text-xs opacity-60">
                                   {t("gardenDashboard.plantsSection.dueToday")}{" "}
-                                  {taskOccDueToday[gp.id] || 0}
+                                  <span className={`font-medium ${(taskOccDueToday[gp.id] || 0) > 0 ? 'text-amber-500' : ''}`}>
+                                    {taskOccDueToday[gp.id] || 0}
+                                  </span>
                                 </div>
                               </div>
+                              {/* Plant Notes Preview */}
+                              {gp.notes && (
+                                <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 line-clamp-1 italic">
+                                  📝 {gp.notes}
+                                </div>
+                              )}
                               <div className="mt-2 flex gap-2 flex-wrap">
                                 <Button
                                   variant="secondary"
@@ -2870,6 +2895,37 @@ export const GardenDashboardPage: React.FC = () => {
                 }
               />
               <Route
+                path="journal"
+                element={
+                  canViewFullGarden ? (
+                    <GardenJournalSection
+                      gardenId={id!}
+                      garden={garden}
+                      plants={plants}
+                      members={members}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
+                }
+              />
+              <Route
+                path="analytics"
+                element={
+                  canViewFullGarden ? (
+                    <GardenAnalyticsSection
+                      gardenId={id!}
+                      garden={garden}
+                      plants={plants}
+                      members={members}
+                      dailyStats={dailyStats}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
+                }
+              />
+              <Route
                 path="settings"
                 element={
                   canViewFullGarden ? (
@@ -2903,6 +2959,20 @@ export const GardenDashboardPage: React.FC = () => {
                       </div>
                       <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
                         <GardenDetailsEditor
+                          garden={garden}
+                          onSaved={load}
+                          canEdit={viewerIsOwner}
+                        />
+                      </Card>
+                    </div>
+                    {/* Location Settings */}
+                    <div className="space-y-3">
+                      <div className="text-lg font-medium flex items-center gap-2">
+                        <Globe className="w-5 h-5" />
+                        {t("gardenDashboard.settingsSection.location", "Location")}
+                      </div>
+                      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
+                        <GardenLocationEditor
                           garden={garden}
                           onSaved={load}
                           canEdit={viewerIsOwner}
@@ -4424,6 +4494,19 @@ function colorForName(
   return colors[hash % colors.length];
 }
 
+// Health status options with colors and icons
+const HEALTH_STATUSES = [
+  { key: 'thriving', label: 'Thriving', emoji: '🌟', color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+  { key: 'healthy', label: 'Healthy', emoji: '💚', color: 'text-green-500', bg: 'bg-green-100 dark:bg-green-900/30' },
+  { key: 'okay', label: 'Okay', emoji: '🌱', color: 'text-lime-500', bg: 'bg-lime-100 dark:bg-lime-900/30' },
+  { key: 'struggling', label: 'Struggling', emoji: '🥀', color: 'text-amber-500', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+  { key: 'critical', label: 'Critical', emoji: '⚠️', color: 'text-red-500', bg: 'bg-red-100 dark:bg-red-900/30' },
+];
+
+function getHealthStatus(status: string | null) {
+  return HEALTH_STATUSES.find(h => h.key === status) || null;
+}
+
 function EditPlantButton({
   gp,
   gardenId,
@@ -4443,7 +4526,24 @@ function EditPlantButton({
   const [count, setCount] = React.useState<number>(
     Number(gp.plantsOnHand ?? 0),
   );
+  const [healthStatus, setHealthStatus] = React.useState<string | null>(gp.healthStatus || null);
+  const [notes, setNotes] = React.useState(gp.notes || "");
   const [submitting, setSubmitting] = React.useState(false);
+  const selectedHealthStatus = React.useMemo(() => getHealthStatus(healthStatus), [healthStatus]);
+  const lastHealthUpdatedLabel = React.useMemo(() => {
+    if (!gp.lastHealthUpdate) return null;
+    try {
+      return new Date(gp.lastHealthUpdate).toLocaleString([], {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return null;
+    }
+  }, [gp.lastHealthUpdate]);
+  const pendingStatusChange =
+    (healthStatus || null) !== (gp.healthStatus || null);
 
   React.useEffect(() => {
     setNickname(gp.nickname || "");
@@ -4453,17 +4553,32 @@ function EditPlantButton({
     setCount(Number(gp.plantsOnHand ?? 0));
   }, [gp.plantsOnHand]);
 
+  React.useEffect(() => {
+    setHealthStatus(gp.healthStatus || null);
+  }, [gp.healthStatus]);
+
+  React.useEffect(() => {
+    setNotes(gp.notes || "");
+  }, [gp.notes]);
+
   const save = async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
-      // Update nickname & per-instance count; delete plant if count becomes 0
+      // Update nickname, count, health status, and notes; delete plant if count becomes 0
+      const updateData: Record<string, any> = {
+        nickname: nickname.trim() || null,
+        plants_on_hand: Math.max(0, Number(count || 0)),
+        health_status: healthStatus || null,
+        notes: notes.trim() || null,
+      };
+      // Only update last_health_update if health status changed
+      if (healthStatus !== (gp.healthStatus || null)) {
+        updateData.last_health_update = new Date().toISOString();
+      }
       await supabase
         .from("garden_plants")
-        .update({
-          nickname: nickname.trim() || null,
-          plants_on_hand: Math.max(0, Number(count || 0)),
-        })
+        .update(updateData)
         .eq("id", gp.id);
       if (count <= 0) {
         await supabase.from("garden_plants").delete().eq("id", gp.id);
@@ -4483,11 +4598,19 @@ function EditPlantButton({
         const changedName = (gp.nickname || "") !== (nickname.trim() || "");
         const changedCount =
           Number(gp.plantsOnHand || 0) !== Math.max(0, Number(count || 0));
-        if (changedName || changedCount) {
+        const changedStatus =
+          (gp.healthStatus || null) !== (healthStatus || null);
+        if (changedName || changedCount || changedStatus) {
           const parts: string[] = [];
           if (changedName) parts.push(`name: "${nickname.trim() || "-"}"`);
           if (changedCount)
             parts.push(`count: ${Math.max(0, Number(count || 0))}`);
+          if (changedStatus) {
+            const nextStatus = getHealthStatus(healthStatus);
+            parts.push(
+              `health: ${nextStatus ? nextStatus.label : "none"}`,
+            );
+          }
           const plantName =
             nickname.trim() || gp.nickname || gp.plant?.name || "Plant";
           await logGardenActivity({
@@ -4524,7 +4647,7 @@ function EditPlantButton({
               {t("gardenDashboard.plantsSection.editPlant")}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">
                 {t("gardenDashboard.plantsSection.customName")}
@@ -4549,6 +4672,77 @@ function EditPlantButton({
                 onChange={(e: any) => setCount(Number(e.target.value))}
               />
             </div>
+            
+            {/* Health Status Selector */}
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <label className="text-sm font-medium">
+                  {t("gardenDashboard.plantsSection.healthStatus", "Plant Health")}
+                </label>
+                {selectedHealthStatus ? (
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${selectedHealthStatus.bg} ${selectedHealthStatus.color}`}
+                  >
+                    <span>{selectedHealthStatus.emoji}</span>
+                    <span>{t(`gardenDashboard.plantsSection.health.${selectedHealthStatus.key}`, selectedHealthStatus.label)}</span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-stone-500 dark:text-stone-400">
+                    {t("gardenDashboard.plantsSection.healthStatusUnset", "Not set yet")}
+                  </span>
+                )}
+              </div>
+              {lastHealthUpdatedLabel && (
+                <p className="text-xs text-stone-500 dark:text-stone-400 mb-2">
+                  {t("gardenDashboard.plantsSection.healthStatusUpdated", "Last updated")} {lastHealthUpdatedLabel}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {HEALTH_STATUSES.map((status) => {
+                  const isSelected = healthStatus === status.key;
+                  return (
+                    <button
+                      key={status.key}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setHealthStatus(isSelected ? null : status.key)}
+                      className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
+                        isSelected
+                          ? `${status.bg} ${status.color} ring-2 ring-offset-1 ring-current`
+                          : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                      }`}
+                    >
+                      <span>{status.emoji}</span>
+                      <span>{t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {pendingStatusChange && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                  {t(
+                    "gardenDashboard.plantsSection.healthStatusPending",
+                    "New status will be saved when you click Save."
+                  )}
+                </p>
+              )}
+            </div>
+            
+            {/* Notes */}
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                {t("gardenDashboard.plantsSection.notes", "Notes")}
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={t("gardenDashboard.plantsSection.notesPlaceholder", "Add observations about this plant...")}
+                className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-sm resize-none"
+                rows={3}
+                maxLength={500}
+              />
+            </div>
+            
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 variant="secondary"
