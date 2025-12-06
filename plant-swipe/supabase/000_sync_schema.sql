@@ -126,6 +126,9 @@ do $$ declare
     'profile_admin_notes',
     -- Notifications
     'notification_campaigns',
+    'notification_templates',
+    'notification_template_translations',
+    'notification_automations',
     'user_notifications',
     'user_push_subscriptions',
     -- Analytics & AI Advice
@@ -5665,6 +5668,123 @@ do $$ begin
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- ========== Notification Templates (reusable message templates with variations) ==========
+create table if not exists public.notification_templates (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  message_variants text[] not null default '{}',
+  randomize boolean not null default true,
+  is_active boolean not null default true,
+  usage_count integer not null default 0,
+  created_by uuid references public.profiles(id),
+  updated_by uuid references public.profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists notification_templates_active_idx
+  on public.notification_templates (is_active)
+  where is_active = true;
+alter table public.notification_templates enable row level security;
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='notification_templates' and policyname='notification_templates_admins'
+  ) then
+    drop policy notification_templates_admins on public.notification_templates;
+  end if;
+  create policy notification_templates_admins on public.notification_templates
+    for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Notification Template Translations (stores translated message variants for each language)
+create table if not exists public.notification_template_translations (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references public.notification_templates(id) on delete cascade,
+  language text not null references public.translation_languages(code),
+  message_variants text[] not null default '{}',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(template_id, language)
+);
+
+create index if not exists ntt_template_lang_idx on public.notification_template_translations (template_id, language);
+
+alter table public.notification_template_translations enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='notification_template_translations' and policyname='ntt_admin_all') then
+    drop policy ntt_admin_all on public.notification_template_translations;
+  end if;
+  create policy ntt_admin_all on public.notification_template_translations for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Add template_id to notification_campaigns
+alter table public.notification_campaigns add column if not exists template_id uuid references public.notification_templates(id) on delete set null;
+
+-- ========== Notification Automations (recurring automated notifications) ==========
+create table if not exists public.notification_automations (
+  id uuid primary key default gen_random_uuid(),
+  trigger_type text not null unique check (trigger_type in ('weekly_inactive_reminder', 'daily_task_reminder', 'journal_continue_reminder')),
+  display_name text not null,
+  description text,
+  is_enabled boolean not null default false,
+  template_id uuid references public.notification_templates(id) on delete set null,
+  send_hour integer not null default 9 check (send_hour >= 0 and send_hour <= 23),
+  cta_url text,
+  last_run_at timestamptz,
+  last_run_summary jsonb,
+  created_by uuid references public.profiles(id),
+  updated_by uuid references public.profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists notification_automations_enabled_idx
+  on public.notification_automations (is_enabled)
+  where is_enabled = true;
+alter table public.notification_automations enable row level security;
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='notification_automations' and policyname='notification_automations_admins'
+  ) then
+    drop policy notification_automations_admins on public.notification_automations;
+  end if;
+  create policy notification_automations_admins on public.notification_automations
+    for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Seed default automation triggers (always ensure these exist)
+do $$
+begin
+  -- Weekly Inactive User Reminder
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('weekly_inactive_reminder', 'Weekly Inactive User Reminder', 'Sends a reminder to users who have been inactive for 7+ days', 10)
+  on conflict (trigger_type) do update set
+    display_name = excluded.display_name,
+    description = excluded.description;
+  
+  -- Daily Remaining Task Reminder
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('daily_task_reminder', 'Daily Remaining Task Reminder', 'Sends a reminder about incomplete tasks for today', 18)
+  on conflict (trigger_type) do update set
+    display_name = excluded.display_name,
+    description = excluded.description;
+  
+  -- Journal Continue Reminder
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('journal_continue_reminder', 'Journal Continue Reminder', 'Encourages users who wrote in their journal yesterday to continue', 9)
+  on conflict (trigger_type) do update set
+    display_name = excluded.display_name,
+    description = excluded.description;
+end $$;
+
 create table if not exists public.user_notifications (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid references public.notification_campaigns(id) on delete set null,
@@ -5683,10 +5803,48 @@ create table if not exists public.user_notifications (
   cancelled_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+-- Add automation_id column if it doesn't exist (for existing tables)
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'user_notifications' 
+    and column_name = 'automation_id'
+  ) then
+    alter table public.user_notifications 
+      add column automation_id uuid references public.notification_automations(id) on delete set null;
+  end if;
+end $$;
+
 create index if not exists user_notifications_user_idx on public.user_notifications (user_id, scheduled_for desc);
 create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);
+
+-- Create automation indexes only if column exists
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'user_notifications' 
+    and column_name = 'automation_id'
+  ) then
+    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_automation_idx') then
+      create index user_notifications_automation_idx on public.user_notifications (automation_id);
+    end if;
+    -- Index for looking up automation notifications by user and date
+    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_automation_user_idx') then
+      create index user_notifications_automation_user_idx 
+        on public.user_notifications (automation_id, user_id, scheduled_for)
+        where automation_id is not null;
+    end if;
+  end if;
+end $$;
+
 create unique index if not exists user_notifications_unique_delivery
-  on public.user_notifications (campaign_id, iteration, user_id);
+  on public.user_notifications (campaign_id, iteration, user_id)
+  where campaign_id is not null;
 grant select, insert, update, delete on public.user_notifications to authenticated;
 alter table public.user_notifications enable row level security;
 do $$ begin

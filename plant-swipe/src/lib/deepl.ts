@@ -480,3 +480,54 @@ export async function translateEmailToAllLanguages(
 
   return translations
 }
+
+// ============================================================================
+// Notification Template Translation Functions
+// ============================================================================
+
+/**
+ * Translate notification message variants to target language
+ */
+export async function translateNotificationVariants(
+  variants: string[],
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<string[]> {
+  if (!variants || variants.length === 0) return variants
+  if (sourceLang === targetLang) return variants
+
+  const translatedVariants: string[] = []
+
+  for (const variant of variants) {
+    try {
+      const translated = await translateText(variant, targetLang, sourceLang)
+      translatedVariants.push(translated)
+    } catch (error) {
+      console.error('Failed to translate notification variant:', error)
+      // Keep original text on error
+      translatedVariants.push(variant)
+    }
+  }
+
+  return translatedVariants
+}
+
+/**
+ * Translate notification message variants to all supported languages
+ */
+export async function translateNotificationToAllLanguages(
+  variants: string[],
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<Record<SupportedLanguage, string[]>> {
+  const translations: Record<SupportedLanguage, string[]> = {} as Record<SupportedLanguage, string[]>
+
+  for (const lang of SUPPORTED_LANGUAGES) {
+    if (lang === sourceLang) {
+      translations[lang] = variants
+    } else {
+      translations[lang] = await translateNotificationVariants(variants, lang, sourceLang)
+    }
+  }
+
+  return translations
+}

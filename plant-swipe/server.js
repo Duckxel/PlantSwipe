@@ -3865,9 +3865,50 @@ let notificationTablesEnsured = false
 const DEFAULT_TIMEZONE = 'Europe/London'
 
 async function ensureNotificationTables() {
-  if (!sql) return
-  if (notificationTablesEnsured) return
+  if (!sql) {
+    console.log('[ensureNotificationTables] No SQL connection')
+    return
+  }
+  if (notificationTablesEnsured) {
+    console.log('[ensureNotificationTables] Already ensured, skipping')
+    return
+  }
+  console.log('[ensureNotificationTables] Starting table creation...')
   try {
+    // Notification Templates
+    console.log('[ensureNotificationTables] Creating notification_templates...')
+    await sql`
+      create table if not exists public.notification_templates (
+        id uuid primary key default gen_random_uuid(),
+        title text not null,
+        description text,
+        message_variants text[] not null default '{}'::text[],
+        randomize boolean not null default true,
+        is_active boolean not null default true,
+        usage_count integer not null default 0,
+        created_by uuid,
+        updated_by uuid,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+    `
+    await sql`create index if not exists notification_templates_active_idx on public.notification_templates (is_active) where is_active = true;`
+
+    // Notification Template Translations
+    await sql`
+      create table if not exists public.notification_template_translations (
+        id uuid primary key default gen_random_uuid(),
+        template_id uuid not null references public.notification_templates(id) on delete cascade,
+        language text not null,
+        message_variants text[] not null default '{}'::text[],
+        created_at timestamptz default now(),
+        updated_at timestamptz default now(),
+        unique(template_id, language)
+      );
+    `
+    await sql`create index if not exists ntt_template_lang_idx on public.notification_template_translations (template_id, language);`
+
+    // Notification Campaigns
     await sql`
       create table if not exists public.notification_campaigns (
         id uuid primary key default gen_random_uuid(),
@@ -3885,6 +3926,7 @@ async function ensureNotificationTables() {
         schedule_interval text check (schedule_interval in ('daily','weekly','monthly')),
         cta_url text,
         custom_user_ids uuid[] not null default '{}'::uuid[],
+        template_id uuid references public.notification_templates(id) on delete set null,
         run_count integer not null default 0,
         created_by uuid,
         updated_by uuid,
@@ -3896,13 +3938,42 @@ async function ensureNotificationTables() {
         deleted_at timestamptz
       );
     `
+    // Add template_id column if it doesn't exist (for existing tables)
+    try {
+      await sql`alter table public.notification_campaigns add column if not exists template_id uuid references public.notification_templates(id) on delete set null;`
+    } catch (alterErr) {
+      // Column might already exist, ignore error
+    }
     await sql`create index if not exists notification_campaigns_next_run_idx on public.notification_campaigns (next_run_at) where deleted_at is null;`
     await sql`create index if not exists notification_campaigns_state_idx on public.notification_campaigns (state);`
 
+    // Notification Automations
+    await sql`
+      create table if not exists public.notification_automations (
+        id uuid primary key default gen_random_uuid(),
+        trigger_type text not null unique,
+        display_name text not null,
+        description text,
+        is_enabled boolean not null default false,
+        template_id uuid references public.notification_templates(id) on delete set null,
+        send_hour integer not null default 9,
+        cta_url text,
+        last_run_at timestamptz,
+        last_run_summary jsonb,
+        created_by uuid,
+        updated_by uuid,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+    `
+    await sql`create index if not exists notification_automations_enabled_idx on public.notification_automations (is_enabled) where is_enabled = true;`
+
+    // User Notifications
     await sql`
       create table if not exists public.user_notifications (
         id uuid primary key default gen_random_uuid(),
         campaign_id uuid references public.notification_campaigns(id) on delete set null,
+        automation_id uuid references public.notification_automations(id) on delete set null,
         iteration integer not null default 1,
         user_id uuid not null references auth.users(id) on delete cascade,
         title text,
@@ -3919,10 +3990,18 @@ async function ensureNotificationTables() {
         created_at timestamptz not null default now()
       );
     `
+    // Add automation_id column if it doesn't exist (for existing tables)
+    try {
+      await sql`alter table public.user_notifications add column if not exists automation_id uuid references public.notification_automations(id) on delete set null;`
+    } catch (alterErr) {
+      // Column might already exist, ignore error
+    }
     await sql`create index if not exists user_notifications_user_idx on public.user_notifications (user_id, scheduled_for desc);`
     await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
+    await sql`create index if not exists user_notifications_automation_idx on public.user_notifications (automation_id);`
     await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
 
+    // User Push Subscriptions
     await sql`
       create table if not exists public.user_push_subscriptions (
         id uuid primary key default gen_random_uuid(),
@@ -3940,8 +4019,9 @@ async function ensureNotificationTables() {
     await sql`create unique index if not exists user_push_subscriptions_endpoint_idx on public.user_push_subscriptions (endpoint);`
     await sql`create index if not exists user_push_subscriptions_user_idx on public.user_push_subscriptions (user_id);`
     notificationTablesEnsured = true
+    console.log('[ensureNotificationTables] All tables created successfully')
   } catch (err) {
-    console.error('[schema] failed to ensure notification tables', err)
+    console.error('[ensureNotificationTables] Failed:', err?.message || err)
   }
 }
 
@@ -3985,6 +4065,71 @@ const notificationInputSchema = z.object({
 })
 const notificationStateSchema = z.object({
   state: z.enum(['paused', 'scheduled']),
+})
+
+// Notification template schema
+const notificationTemplateInputSchema = z.object({
+  title: z.string().trim().min(3).max(160),
+  description: z
+    .string()
+    .max(2000)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  messageVariants: z.array(z.string().min(1).max(400)).min(1),
+  randomize: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+})
+
+// Notification automation schema
+const notificationAutomationTriggerTypes = ['weekly_inactive_reminder', 'daily_task_reminder', 'journal_continue_reminder']
+const notificationAutomationUpdateSchema = z.object({
+  isEnabled: z.boolean().optional(),
+  templateId: z.string().uuid().nullable().optional(),
+  sendHour: z.number().int().min(0).max(23).optional(),
+  ctaUrl: z
+    .string()
+    .url()
+    .optional()
+    .nullable()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+})
+
+// Campaign input schema (updated to support template_id)
+const notificationCampaignInputSchema = z.object({
+  title: z.string().min(3).max(160),
+  description: z
+    .string()
+    .max(2000)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  deliveryMode: z.enum(notificationModeValues),
+  audience: z.enum(notificationAudienceValues),
+  templateId: z.string().uuid().optional().nullable(),
+  messageVariants: z.array(z.string().min(1).max(400)).optional(),
+  randomize: z.boolean().optional(),
+  timezone: z
+    .string()
+    .max(64)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  plannedFor: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  scheduleStartAt: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  scheduleInterval: z
+    .enum(notificationIntervalValues)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value : null)),
+  ctaUrl: z
+    .string()
+    .url()
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  customUserIds: z.array(z.string().uuid()).optional(),
 })
 
 const emailTemplateInputSchema = z.object({
@@ -4715,8 +4860,11 @@ app.get('/api/admin/notifications', async (req, res) => {
   await ensureNotificationTables()
   try {
     const rows = await sql`
-      select n.*, stats.total_recipients, stats.sent_count, stats.failed_count, stats.pending_count,
-             creator.display_name as created_by_name
+      select n.*, 
+             stats.total_recipients, stats.sent_count, stats.failed_count, stats.pending_count,
+             creator.display_name as created_by_name,
+             t.title as template_title,
+             rc.recipient_count as estimated_recipients
       from public.notification_campaigns n
       left join lateral (
         select
@@ -4728,6 +4876,43 @@ app.get('/api/admin/notifications', async (req, res) => {
         where un.campaign_id = n.id
       ) stats on true
       left join public.profiles creator on creator.id = n.created_by
+      left join public.notification_templates t on t.id = n.template_id
+      left join lateral (
+        select case 
+          when n.audience = 'all' then (
+            select count(*)::bigint from public.profiles p 
+            where (p.notify_push is null or p.notify_push = true)
+          )
+          when n.audience = 'tasks_open' then (
+            select count(distinct p.id)::bigint
+            from public.profiles p
+            join public.garden_members gm on gm.user_id = p.id
+            join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
+              select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
+            )
+            where (p.notify_push is null or p.notify_push = true)
+              and occ.due_at::date = current_date
+              and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+          )
+          when n.audience = 'inactive_week' then (
+            select count(*)::bigint
+            from public.profiles p
+            left join auth.users u on u.id = p.id
+            where (p.notify_push is null or p.notify_push = true)
+              and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+          )
+          when n.audience = 'admins' then (
+            select count(*)::bigint from public.profiles p 
+            where p.is_admin = true and (p.notify_push is null or p.notify_push = true)
+          )
+          when n.audience = 'custom' then (
+            select count(*)::bigint from unnest(n.custom_user_ids) as uid
+            join public.profiles p on p.id = uid
+            where (p.notify_push is null or p.notify_push = true)
+          )
+          else 0
+        end as recipient_count
+      ) rc on true
       where n.deleted_at is null
       order by coalesce(n.next_run_at, n.created_at) desc
       limit 200
@@ -4848,13 +5033,14 @@ app.post('/api/admin/notifications', async (req, res) => {
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
   const timezone = campaignTimezone
   const state = deliveryMode === 'scheduled' ? 'scheduled' : 'draft'
+  const templateId = parsed.templateId || null
   const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       insert into public.notification_campaigns (
         title, description, delivery_mode, state, audience, filters, message_variants,
         randomize, timezone, planned_for, schedule_start_at, schedule_interval, cta_url,
-        custom_user_ids, run_count, created_by, updated_by, next_run_at, created_at, updated_at
+        custom_user_ids, template_id, run_count, created_by, updated_by, next_run_at, created_at, updated_at
       )
       values (
         ${parsed.title.trim()},
@@ -4871,6 +5057,7 @@ app.post('/api/admin/notifications', async (req, res) => {
         ${scheduleInterval},
         ${parsed.ctaUrl || null},
         ${customIds.length ? sql.array(customIds) : sql.array([])},
+        ${templateId},
         0,
         ${adminUuid},
         ${adminUuid},
@@ -5007,6 +5194,7 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
   const timezone = campaignTimezone
   const nextState = deliveryMode === 'scheduled' ? (existingRows[0].state === 'paused' ? 'paused' : 'scheduled') : 'draft'
+  const templateId = parsed.templateId || null
   const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
@@ -5024,6 +5212,7 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
           schedule_interval = ${scheduleInterval},
           cta_url = ${parsed.ctaUrl || null},
           custom_user_ids = ${customIds.length ? sql.array(customIds) : sql.array([])},
+          template_id = ${templateId},
           updated_by = ${adminUuid},
           next_run_at = ${nextRunAt},
           updated_at = now()
@@ -5263,6 +5452,791 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
     res.status(500).json({ error: err?.message || 'Failed to get debug info' })
   }
 })
+
+// ---- Recipient Count Endpoint ----
+app.get('/api/admin/notifications/recipient-count', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const audience = String(req.query?.audience || 'all').trim()
+  try {
+    let count = 0
+    if (audience === 'all') {
+      const rows = await sql`
+        select count(*)::bigint as count
+        from public.profiles p
+        where (p.notify_push is null or p.notify_push = true)
+      `
+      count = Number(rows?.[0]?.count || 0)
+    } else if (audience === 'tasks_open') {
+      // Users with incomplete tasks today
+      const rows = await sql`
+        select count(distinct p.id)::bigint as count
+        from public.profiles p
+        join public.garden_members gm on gm.user_id = p.id
+        join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
+          select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
+        )
+        where (p.notify_push is null or p.notify_push = true)
+          and occ.due_at::date = current_date
+          and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+      `
+      count = Number(rows?.[0]?.count || 0)
+    } else if (audience === 'inactive_week') {
+      // Users inactive for 7+ days (based on last_seen_at or updated_at)
+      const rows = await sql`
+        select count(*)::bigint as count
+        from public.profiles p
+        left join auth.users u on u.id = p.id
+        where (p.notify_push is null or p.notify_push = true)
+          and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+      `
+      count = Number(rows?.[0]?.count || 0)
+    } else if (audience === 'admins') {
+      const rows = await sql`
+        select count(*)::bigint as count
+        from public.profiles p
+        where p.is_admin = true
+          and (p.notify_push is null or p.notify_push = true)
+      `
+      count = Number(rows?.[0]?.count || 0)
+    } else if (audience === 'journal_yesterday') {
+      // Users who wrote in journal yesterday (for journal continue automation)
+      const rows = await sql`
+        select count(distinct p.id)::bigint as count
+        from public.profiles p
+        join public.garden_members gm on gm.user_id = p.id
+        join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
+        where (p.notify_push is null or p.notify_push = true)
+          and gal.action_type = 'journal_entry'
+          and gal.created_at::date = current_date - interval '1 day'
+      `
+      count = Number(rows?.[0]?.count || 0)
+    }
+    res.json({ count, audience })
+  } catch (err) {
+    console.error('[notifications] failed to count recipients', err)
+    res.status(500).json({ error: err?.message || 'Failed to count recipients' })
+  }
+})
+
+// ---- Notification Templates ----
+app.get('/api/admin/notification-templates', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    await ensureNotificationTables()
+    const rows = await sql`
+      select t.*,
+             stats.campaign_count,
+             auto_stats.automation_count,
+             trans.translations
+      from public.notification_templates t
+      left join lateral (
+        select count(*)::bigint as campaign_count
+        from public.notification_campaigns c
+        where c.template_id = t.id and c.deleted_at is null
+      ) stats on true
+      left join lateral (
+        select count(*)::bigint as automation_count
+        from public.notification_automations a
+        where a.template_id = t.id
+      ) auto_stats on true
+      left join lateral (
+        select jsonb_object_agg(ntt.language, ntt.message_variants) as translations
+        from public.notification_template_translations ntt
+        where ntt.template_id = t.id
+      ) trans on true
+      order by t.updated_at desc
+      limit 200
+    `
+    const templates = (rows || []).map((row) => normalizeNotificationTemplate(row)).filter(Boolean)
+    res.json({ templates })
+  } catch (err) {
+    console.error('[notification-templates] failed to load templates', err)
+    res.status(500).json({ error: err?.message || 'Failed to load templates' })
+  }
+})
+
+app.post('/api/admin/notification-templates', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  let parsed
+  try {
+    parsed = notificationTemplateInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const messageVariants = (parsed.messageVariants || [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+  if (!messageVariants.length) {
+    res.status(400).json({ error: 'At least one message variant is required' })
+    return
+  }
+  const adminUuid = toAdminUuid(adminId)
+  try {
+    const rows = await sql`
+      insert into public.notification_templates (
+        title, description, message_variants, randomize, is_active,
+        created_by, updated_by, created_at, updated_at
+      )
+      values (
+        ${parsed.title.trim()},
+        ${parsed.description || null},
+        ${sql.array(messageVariants)},
+        ${parsed.randomize !== false},
+        ${parsed.isActive !== false},
+        ${adminUuid},
+        ${adminUuid},
+        now(),
+        now()
+      )
+      returning *
+    `
+    const template = normalizeNotificationTemplate(rows?.[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[notification-templates] failed to create template', err)
+    res.status(500).json({ error: err?.message || 'Failed to create template' })
+  }
+})
+
+app.put('/api/admin/notification-templates/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = notificationTemplateInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const messageVariants = (parsed.messageVariants || [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+  if (!messageVariants.length) {
+    res.status(400).json({ error: 'At least one message variant is required' })
+    return
+  }
+  const adminUuid = toAdminUuid(adminId)
+  try {
+    const rows = await sql`
+      update public.notification_templates
+      set title = ${parsed.title.trim()},
+          description = ${parsed.description || null},
+          message_variants = ${sql.array(messageVariants)},
+          randomize = ${parsed.randomize !== false},
+          is_active = ${parsed.isActive !== false},
+          updated_by = ${adminUuid},
+          updated_at = now()
+      where id = ${templateId}
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    const template = normalizeNotificationTemplate(rows[0])
+    res.json({ template })
+  } catch (err) {
+    console.error('[notification-templates] failed to update template', err)
+    res.status(500).json({ error: err?.message || 'Failed to update template' })
+  }
+})
+
+app.delete('/api/admin/notification-templates/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  try {
+    // Check if template is in use by campaigns or automations
+    const usageCheck = await sql`
+      select 
+        (select count(*) from public.notification_campaigns where template_id = ${templateId} and deleted_at is null) as campaign_count,
+        (select count(*) from public.notification_automations where template_id = ${templateId}) as automation_count
+    `
+    const campaignCount = Number(usageCheck?.[0]?.campaign_count || 0)
+    const automationCount = Number(usageCheck?.[0]?.automation_count || 0)
+    if (campaignCount > 0 || automationCount > 0) {
+      res.status(400).json({ 
+        error: `Template is in use by ${campaignCount} campaign(s) and ${automationCount} automation(s). Remove references first.` 
+      })
+      return
+    }
+    const rows = await sql`
+      delete from public.notification_templates
+      where id = ${templateId}
+      returning id
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Template not found' })
+      return
+    }
+    res.json({ deleted: true, id: templateId })
+  } catch (err) {
+    console.error('[notification-templates] failed to delete template', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete template' })
+  }
+})
+
+// ---- Notification Template Translations ----
+app.get('/api/admin/notification-templates/:id/translations', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select language, message_variants, updated_at
+      from public.notification_template_translations
+      where template_id = ${templateId}
+      order by language
+    `
+    const translations = {}
+    for (const row of rows || []) {
+      translations[row.language] = {
+        messageVariants: toStringArray(row.message_variants),
+        updatedAt: isoOrNull(row.updated_at),
+      }
+    }
+    res.json({ templateId, translations })
+  } catch (err) {
+    console.error('[notification-templates] failed to load translations', err)
+    res.status(500).json({ error: err?.message || 'Failed to load translations' })
+  }
+})
+
+app.put('/api/admin/notification-templates/:id/translations/:lang', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  const language = String(req.params?.lang || '').trim().toLowerCase()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  if (!language || language.length > 10) {
+    res.status(400).json({ error: 'Invalid language code' })
+    return
+  }
+  const body = req.body || {}
+  const messageVariants = toStringArray(body.messageVariants || [])
+    .map(v => v.trim())
+    .filter(v => v.length > 0)
+  
+  if (!messageVariants.length) {
+    // Delete translation if no variants
+    try {
+      await sql`
+        delete from public.notification_template_translations
+        where template_id = ${templateId} and language = ${language}
+      `
+      res.json({ deleted: true, templateId, language })
+    } catch (err) {
+      console.error('[notification-templates] failed to delete translation', err)
+      res.status(500).json({ error: err?.message || 'Failed to delete translation' })
+    }
+    return
+  }
+  
+  try {
+    const rows = await sql`
+      insert into public.notification_template_translations (template_id, language, message_variants, updated_at)
+      values (${templateId}, ${language}, ${sql.array(messageVariants)}, now())
+      on conflict (template_id, language)
+      do update set message_variants = ${sql.array(messageVariants)}, updated_at = now()
+      returning *
+    `
+    res.json({
+      templateId,
+      language,
+      messageVariants: toStringArray(rows?.[0]?.message_variants),
+      updatedAt: isoOrNull(rows?.[0]?.updated_at),
+    })
+  } catch (err) {
+    console.error('[notification-templates] failed to save translation', err)
+    res.status(500).json({ error: err?.message || 'Failed to save translation' })
+  }
+})
+
+// Batch save all translations for a template
+app.put('/api/admin/notification-templates/:id/translations', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const templateId = String(req.params?.id || '').trim()
+  if (!templateId) {
+    res.status(400).json({ error: 'Missing template id' })
+    return
+  }
+  const body = req.body || {}
+  const translationsInput = body.translations || {}
+  
+  try {
+    // Delete all existing translations first
+    await sql`delete from public.notification_template_translations where template_id = ${templateId}`
+    
+    // Insert new translations
+    const savedTranslations = {}
+    for (const [language, variants] of Object.entries(translationsInput)) {
+      const lang = String(language).trim().toLowerCase()
+      if (!lang || lang.length > 10) continue
+      const messageVariants = toStringArray(variants)
+        .map(v => v.trim())
+        .filter(v => v.length > 0)
+      if (!messageVariants.length) continue
+      
+      await sql`
+        insert into public.notification_template_translations (template_id, language, message_variants, updated_at)
+        values (${templateId}, ${lang}, ${sql.array(messageVariants)}, now())
+      `
+      savedTranslations[lang] = messageVariants
+    }
+    
+    res.json({ templateId, translations: savedTranslations })
+  } catch (err) {
+    console.error('[notification-templates] failed to save translations', err)
+    res.status(500).json({ error: err?.message || 'Failed to save translations' })
+  }
+})
+
+// ---- Notification Automations ----
+// Ensure default automations exist in database
+async function ensureDefaultAutomations() {
+  if (!sql) {
+    console.log('[notification-automations] No SQL connection, skipping')
+    return
+  }
+  
+  console.log('[notification-automations] Starting to ensure default automations...')
+  
+  try {
+    // First check if the table exists
+    const tableCheck = await sql`
+      select exists (
+        select from information_schema.tables 
+        where table_schema = 'public' 
+        and table_name = 'notification_automations'
+      ) as table_exists
+    `
+    console.log('[notification-automations] Table exists:', tableCheck?.[0]?.table_exists)
+    
+    if (!tableCheck?.[0]?.table_exists) {
+      console.log('[notification-automations] Table does not exist, skipping seeding')
+      return
+    }
+    
+    const defaultAutomations = [
+      {
+        trigger_type: 'weekly_inactive_reminder',
+        display_name: 'Weekly Inactive User Reminder',
+        description: 'Sends a reminder to users who have been inactive for 7+ days',
+        send_hour: 10,
+      },
+      {
+        trigger_type: 'daily_task_reminder',
+        display_name: 'Daily Remaining Task Reminder',
+        description: 'Sends a reminder about incomplete tasks for today',
+        send_hour: 18,
+      },
+      {
+        trigger_type: 'journal_continue_reminder',
+        display_name: 'Journal Continue Reminder',
+        description: 'Encourages users who wrote in their journal yesterday to continue',
+        send_hour: 9,
+      },
+    ]
+    
+    for (const auto of defaultAutomations) {
+      try {
+        // First check if it exists
+        const existing = await sql`
+          select id from public.notification_automations where trigger_type = ${auto.trigger_type} limit 1
+        `
+        console.log(`[notification-automations] Checking ${auto.trigger_type}: exists=${existing?.length > 0}`)
+        
+        if (!existing || existing.length === 0) {
+          await sql`
+            insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+            values (${auto.trigger_type}, ${auto.display_name}, ${auto.description}, ${auto.send_hour})
+          `
+          console.log(`[notification-automations] Created automation: ${auto.trigger_type}`)
+        }
+      } catch (insertErr) {
+        console.error(`[notification-automations] Failed to create ${auto.trigger_type}:`, insertErr?.message || insertErr)
+      }
+    }
+    
+    // Verify what we have
+    const allAutomations = await sql`select trigger_type from public.notification_automations`
+    console.log('[notification-automations] All automations in DB:', allAutomations?.map(a => a.trigger_type))
+    
+  } catch (err) {
+    console.error('[notification-automations] failed to ensure defaults:', err?.message || err)
+  }
+}
+
+app.get('/api/admin/notification-automations', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    // Ensure notification tables exist first
+    console.log('[notification-automations] Ensuring tables exist...')
+    await ensureNotificationTables()
+    // Ensure default automations exist
+    console.log('[notification-automations] Ensuring default automations exist...')
+    await ensureDefaultAutomations()
+    
+    // First, get basic automations
+    const rows = await sql`
+      select a.*,
+             t.title as template_title
+      from public.notification_automations a
+      left join public.notification_templates t on t.id = a.template_id
+      order by a.created_at asc
+    `
+    console.log('[notification-automations] Query returned:', rows?.length || 0, 'rows')
+    
+    // Calculate recipient counts separately to avoid query failures
+    const automationsWithCounts = await Promise.all((rows || []).map(async (row) => {
+      let recipientCount = 0
+      try {
+        if (row.trigger_type === 'weekly_inactive_reminder') {
+          const countResult = await sql`
+            select count(*)::bigint as cnt
+            from public.profiles p
+            left join auth.users u on u.id = p.id
+            where (p.notify_push is null or p.notify_push = true)
+              and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+          `
+          recipientCount = Number(countResult?.[0]?.cnt || 0)
+        } else if (row.trigger_type === 'daily_task_reminder') {
+          try {
+            const countResult = await sql`
+              select count(distinct p.id)::bigint as cnt
+              from public.profiles p
+              join public.garden_members gm on gm.user_id = p.id
+              join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
+                select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
+              )
+              where (p.notify_push is null or p.notify_push = true)
+                and occ.due_at::date = current_date
+                and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+            `
+            recipientCount = Number(countResult?.[0]?.cnt || 0)
+          } catch (e) {
+            // Table might not exist
+            recipientCount = 0
+          }
+        } else if (row.trigger_type === 'journal_continue_reminder') {
+          try {
+            const countResult = await sql`
+              select count(distinct p.id)::bigint as cnt
+              from public.profiles p
+              join public.garden_members gm on gm.user_id = p.id
+              join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
+              where (p.notify_push is null or p.notify_push = true)
+                and gal.action_type = 'journal_entry'
+                and gal.created_at::date = current_date - interval '1 day'
+            `
+            recipientCount = Number(countResult?.[0]?.cnt || 0)
+          } catch (e) {
+            // Table might not exist
+            recipientCount = 0
+          }
+        }
+      } catch (countErr) {
+        console.error('[notification-automations] Error counting recipients for', row.trigger_type, countErr)
+      }
+      return { ...row, recipient_count: recipientCount }
+    }))
+    
+    const automations = automationsWithCounts.map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
+    console.log('[notification-automations] Returning:', automations.length, 'automations')
+    res.json({ automations })
+  } catch (err) {
+    console.error('[notification-automations] failed to load automations', err)
+    res.status(500).json({ error: err?.message || 'Failed to load automations' })
+  }
+})
+
+app.put('/api/admin/notification-automations/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const automationId = String(req.params?.id || '').trim()
+  if (!automationId) {
+    res.status(400).json({ error: 'Missing automation id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = notificationAutomationUpdateSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const adminUuid = toAdminUuid(adminId)
+  try {
+    // Convert undefined to null for SQL compatibility
+    const isEnabled = typeof parsed.isEnabled === 'boolean' ? parsed.isEnabled : null
+    const templateId = parsed.templateId !== undefined ? (parsed.templateId || null) : null
+    const sendHour = typeof parsed.sendHour === 'number' ? parsed.sendHour : null
+    const ctaUrl = parsed.ctaUrl !== undefined ? (parsed.ctaUrl || null) : null
+    
+    // Track which fields to update
+    const hasIsEnabled = typeof parsed.isEnabled === 'boolean'
+    const hasTemplateId = parsed.templateId !== undefined
+    const hasSendHour = typeof parsed.sendHour === 'number'
+    const hasCtaUrl = parsed.ctaUrl !== undefined
+    
+    const rows = await sql`
+      update public.notification_automations
+      set is_enabled = case when ${hasIsEnabled} then ${isEnabled} else is_enabled end,
+          template_id = case when ${hasTemplateId} then ${templateId} else template_id end,
+          send_hour = case when ${hasSendHour} then ${sendHour} else send_hour end,
+          cta_url = case when ${hasCtaUrl} then ${ctaUrl} else cta_url end,
+          updated_by = ${adminUuid},
+          updated_at = now()
+      where id = ${automationId}
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Automation not found' })
+      return
+    }
+    // Fetch with template info
+    const enriched = await sql`
+      select a.*, t.title as template_title
+      from public.notification_automations a
+      left join public.notification_templates t on t.id = a.template_id
+      where a.id = ${automationId}
+    `
+    const automation = normalizeNotificationAutomation(enriched?.[0] || rows[0])
+    res.json({ automation })
+  } catch (err) {
+    console.error('[notification-automations] failed to update automation', err)
+    res.status(500).json({ error: err?.message || 'Failed to update automation' })
+  }
+})
+
+// Trigger automation manually (for testing)
+app.post('/api/admin/notification-automations/:id/trigger', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const automationId = String(req.params?.id || '').trim()
+  if (!automationId) {
+    res.status(400).json({ error: 'Missing automation id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select a.*, t.message_variants, t.randomize
+      from public.notification_automations a
+      left join public.notification_templates t on t.id = a.template_id
+      where a.id = ${automationId}
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Automation not found' })
+      return
+    }
+    const automation = rows[0]
+    if (!automation.template_id || !automation.message_variants?.length) {
+      res.status(400).json({ error: 'Automation has no template configured' })
+      return
+    }
+    // Trigger automation run
+    const result = await runAutomation(automation)
+    // Update last_run_at
+    await sql`
+      update public.notification_automations
+      set last_run_at = now(),
+          last_run_summary = ${sql.json(result)}
+      where id = ${automationId}
+    `
+    res.json({ triggered: true, result })
+  } catch (err) {
+    console.error('[notification-automations] failed to trigger automation', err)
+    res.status(500).json({ error: err?.message || 'Failed to trigger automation' })
+  }
+})
+
+// Helper function to run an automation
+async function runAutomation(automation) {
+  if (!sql) return { error: 'Database not configured' }
+  
+  const defaultVariants = toStringArray(automation.message_variants)
+  if (!defaultVariants.length) return { error: 'No message variants' }
+  
+  // Load translations for the template
+  let translations = {}
+  if (automation.template_id) {
+    try {
+      const transRows = await sql`
+        select language, message_variants
+        from public.notification_template_translations
+        where template_id = ${automation.template_id}
+      `
+      for (const row of transRows || []) {
+        translations[row.language] = toStringArray(row.message_variants)
+      }
+    } catch (err) {
+      console.error('[automation] failed to load translations', err)
+    }
+  }
+  
+  const triggerType = automation.trigger_type
+  let recipientQuery
+  
+  if (triggerType === 'weekly_inactive_reminder') {
+    recipientQuery = sql`
+      select p.id as user_id, p.display_name, p.language
+      from public.profiles p
+      left join auth.users u on u.id = p.id
+      where (p.notify_push is null or p.notify_push = true)
+        and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+      limit 5000
+    `
+  } else if (triggerType === 'daily_task_reminder') {
+    recipientQuery = sql`
+      select distinct p.id as user_id, p.display_name, p.language
+      from public.profiles p
+      join public.garden_members gm on gm.user_id = p.id
+      join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
+        select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
+      )
+      where (p.notify_push is null or p.notify_push = true)
+        and occ.due_at::date = current_date
+        and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+      limit 5000
+    `
+  } else if (triggerType === 'journal_continue_reminder') {
+    recipientQuery = sql`
+      select distinct p.id as user_id, p.display_name, p.language
+      from public.profiles p
+      join public.garden_members gm on gm.user_id = p.id
+      join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
+      where (p.notify_push is null or p.notify_push = true)
+        and gal.action_type = 'journal_entry'
+        and gal.created_at::date = current_date - interval '1 day'
+      limit 5000
+    `
+  } else {
+    return { error: 'Unknown trigger type' }
+  }
+  
+  const recipients = await recipientQuery
+  if (!recipients || !recipients.length) {
+    return { recipients: 0, sent: 0, message: 'No recipients found' }
+  }
+  
+  // Create user_notifications entries
+  let insertedCount = 0
+  for (const recipient of recipients) {
+    // Get message variants for user's language (with fallback to default)
+    const userLang = (recipient.language || 'en').toLowerCase()
+    let messageVariants = defaultVariants
+    if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
+      messageVariants = translations[userLang]
+    }
+    
+    const messageIndex = automation.randomize 
+      ? Math.floor(Math.random() * messageVariants.length)
+      : 0
+    const message = messageVariants[messageIndex]
+      .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+    
+    try {
+      // Check if notification already exists for this automation + user today
+      const existing = await sql`
+        select id from public.user_notifications 
+        where automation_id = ${automation.id} 
+          and user_id = ${recipient.user_id}
+          and scheduled_for::date = current_date
+        limit 1
+      `
+      if (existing && existing.length > 0) {
+        continue // Skip, already sent today
+      }
+      
+      await sql`
+        insert into public.user_notifications (
+          automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
+        )
+        values (
+          ${automation.id},
+          ${recipient.user_id},
+          ${automation.display_name || 'Reminder'},
+          ${message},
+          ${automation.cta_url || null},
+          now(),
+          'pending'
+        )
+      `
+      insertedCount++
+    } catch (insertErr) {
+      console.error('[automation] insert error', insertErr)
+    }
+  }
+  
+  return { recipients: recipients.length, queued: insertedCount }
+}
 
 // ---- Admin email templates ----
 app.get('/api/admin/email-templates', async (req, res) => {
@@ -12879,6 +13853,8 @@ function normalizeNotificationCampaign(row) {
     deliveryMode: row.delivery_mode || 'send_now',
     state: row.state || 'draft',
     filters,
+    templateId: row.template_id || null,
+    templateTitle: row.template_title || null,
     messageVariants: toStringArray(row.message_variants),
     randomize: row.randomize !== false,
     timezone: row.timezone || DEFAULT_TIMEZONE,
@@ -12896,7 +13872,72 @@ function normalizeNotificationCampaign(row) {
     lastRunSummary: row.last_run_summary || null,
     createdAt: isoOrNull(row.created_at),
     updatedAt: isoOrNull(row.updated_at),
+    estimatedRecipients: Number(row.estimated_recipients || row.recipient_count || 0),
     stats,
+  }
+}
+
+function normalizeNotificationTemplate(row, translations = null) {
+  if (!row) return null
+  // Parse translations if provided as JSON
+  let parsedTranslations = {}
+  if (translations) {
+    parsedTranslations = translations
+  } else if (row.translations && typeof row.translations === 'object') {
+    parsedTranslations = row.translations
+  }
+  return {
+    id: row.id || null,
+    title: row.title || '',
+    description: row.description || null,
+    messageVariants: toStringArray(row.message_variants),
+    randomize: row.randomize !== false,
+    isActive: row.is_active !== false,
+    usageCount: Number(row.usage_count || 0),
+    campaignCount: Number(row.campaign_count || 0),
+    automationCount: Number(row.automation_count || 0),
+    createdBy: row.created_by || null,
+    updatedBy: row.updated_by || null,
+    createdAt: isoOrNull(row.created_at),
+    updatedAt: isoOrNull(row.updated_at),
+    translations: parsedTranslations,
+  }
+}
+
+// Get message variants for a specific language (with fallback to default)
+function getMessageVariantsForLanguage(template, userLanguage) {
+  const defaultVariants = toStringArray(template.message_variants)
+  if (!userLanguage || userLanguage === 'en') return defaultVariants
+  
+  // Check if translations exist for this language
+  const translations = template.translations || {}
+  if (translations[userLanguage] && translations[userLanguage].length > 0) {
+    return translations[userLanguage]
+  }
+  
+  // Fallback to default (English)
+  return defaultVariants
+}
+
+function normalizeNotificationAutomation(row) {
+  if (!row) return null
+  return {
+    id: row.id || null,
+    triggerType: row.trigger_type || '',
+    displayName: row.display_name || '',
+    description: row.description || null,
+    isEnabled: row.is_enabled === true,
+    templateId: row.template_id || null,
+    templateTitle: row.template_title || null,
+    sendHour: typeof row.send_hour === 'number' ? row.send_hour : 9,
+    ctaUrl: row.cta_url || null,
+    lastRunAt: isoOrNull(row.last_run_at),
+    lastRunSummary: row.last_run_summary || null,
+    createdBy: row.created_by || null,
+    updatedBy: row.updated_by || null,
+    createdAt: isoOrNull(row.created_at),
+    updatedAt: isoOrNull(row.updated_at),
+    recipientCount: Number(row.recipient_count || 0),
   }
 }
 
@@ -13772,11 +14813,167 @@ async function runNotificationWorkerTick() {
   notificationWorkerBusy = true
   try {
     await processDueNotificationCampaigns()
+    await processDueAutomations()
     await processDueUserNotifications()
   } catch (err) {
     console.error('[notifications] worker tick error', err)
   } finally {
     notificationWorkerBusy = false
+  }
+}
+
+// Process due automations based on user timezone and send_hour
+async function processDueAutomations() {
+  if (!sql) return
+  
+  try {
+    // Get all enabled automations with their templates and translations
+    const automations = await sql`
+      select a.*, t.message_variants, t.randomize, t.id as template_id,
+             trans.translations
+      from public.notification_automations a
+      left join public.notification_templates t on t.id = a.template_id
+      left join lateral (
+        select jsonb_object_agg(ntt.language, ntt.message_variants) as translations
+        from public.notification_template_translations ntt
+        where ntt.template_id = t.id
+      ) trans on true
+      where a.is_enabled = true
+        and a.template_id is not null
+    `
+    
+    if (!automations || !automations.length) return
+    
+    const now = new Date()
+    const currentHourUTC = now.getUTCHours()
+    
+    for (const automation of automations) {
+      try {
+        // Check if this automation should run based on current UTC hour
+        // We check if any timezone would currently be at the target send_hour
+        // This runs every hour, and we check all timezones where current local time = send_hour
+        const sendHour = automation.send_hour || 9
+        
+        // Parse translations from JSONB
+        const translations = automation.translations || {}
+        
+        // Get users eligible for this automation whose local time is at send_hour
+        let recipientQuery
+        
+        if (automation.trigger_type === 'weekly_inactive_reminder') {
+          recipientQuery = sql`
+            select p.id as user_id, p.display_name, p.language, p.timezone
+            from public.profiles p
+            left join auth.users u on u.id = p.id
+            where (p.notify_push is null or p.notify_push = true)
+              and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+              and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
+              and not exists (
+                select 1 from public.user_notifications un
+                where un.automation_id = ${automation.id}
+                  and un.user_id = p.id
+                  and un.scheduled_for::date = current_date
+              )
+            limit 1000
+          `
+        } else if (automation.trigger_type === 'daily_task_reminder') {
+          recipientQuery = sql`
+            select distinct p.id as user_id, p.display_name, p.language, p.timezone
+            from public.profiles p
+            join public.garden_members gm on gm.user_id = p.id
+            join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
+              select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
+            )
+            where (p.notify_push is null or p.notify_push = true)
+              and occ.due_at::date = current_date
+              and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+              and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
+              and not exists (
+                select 1 from public.user_notifications un
+                where un.automation_id = ${automation.id}
+                  and un.user_id = p.id
+                  and un.scheduled_for::date = current_date
+              )
+            limit 1000
+          `
+        } else if (automation.trigger_type === 'journal_continue_reminder') {
+          recipientQuery = sql`
+            select distinct p.id as user_id, p.display_name, p.language, p.timezone
+            from public.profiles p
+            join public.garden_members gm on gm.user_id = p.id
+            join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
+            where (p.notify_push is null or p.notify_push = true)
+              and gal.action_type = 'journal_entry'
+              and gal.created_at::date = current_date - interval '1 day'
+              and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
+              and not exists (
+                select 1 from public.user_notifications un
+                where un.automation_id = ${automation.id}
+                  and un.user_id = p.id
+                  and un.scheduled_for::date = current_date
+              )
+            limit 1000
+          `
+        } else {
+          continue
+        }
+        
+        const recipients = await recipientQuery
+        if (!recipients || !recipients.length) continue
+        
+        // Default message variants (English)
+        const defaultVariants = toStringArray(automation.message_variants)
+        if (!defaultVariants.length) continue
+        
+        console.log(`[automations] Processing ${automation.trigger_type}: ${recipients.length} recipients`)
+        
+        for (const recipient of recipients) {
+          // Get message variants for user's language (with fallback to default)
+          const userLang = (recipient.language || 'en').toLowerCase()
+          let messageVariants = defaultVariants
+          if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
+            messageVariants = translations[userLang]
+          }
+          
+          const messageIndex = automation.randomize 
+            ? Math.floor(Math.random() * messageVariants.length)
+            : 0
+          const message = messageVariants[messageIndex]
+            .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+          
+          try {
+            await sql`
+              insert into public.user_notifications (
+                automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
+              )
+              values (
+                ${automation.id},
+                ${recipient.user_id},
+                ${automation.display_name || 'Reminder'},
+                ${message},
+                ${automation.cta_url || null},
+                now(),
+                'pending'
+              )
+            `
+          } catch (insertErr) {
+            // Ignore errors (e.g. if notification already exists)
+          }
+        }
+        
+        // Update last_run_at
+        await sql`
+          update public.notification_automations
+          set last_run_at = now(),
+              last_run_summary = ${sql.json({ recipients: recipients.length, sentAt: new Date().toISOString() })}
+          where id = ${automation.id}
+        `
+      } catch (automationErr) {
+        console.error('[automations] error processing', automation.trigger_type, automationErr)
+      }
+    }
+  } catch (err) {
+    console.error('[automations] processDueAutomations error', err)
   }
 }
 
