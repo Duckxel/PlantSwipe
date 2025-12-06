@@ -1,5 +1,5 @@
 import React from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/context/AuthContext'
@@ -12,10 +12,12 @@ import { CreateBookmarkDialog } from '@/components/profile/CreateBookmarkDialog'
 import { AddPlantToBookmarkDialog } from '@/components/profile/AddPlantToBookmarkDialog'
 import { rarityTone } from '@/constants/badges'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { Link } from '@/components/i18n/Link'
+import { useLanguageNavigate } from '@/lib/i18nRouting'
 
 export const BookmarkPage = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const { t } = useTranslation('common')
   const { user } = useAuth()
   

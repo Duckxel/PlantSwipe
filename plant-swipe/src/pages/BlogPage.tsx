@@ -1,7 +1,6 @@
 import React from "react"
 import { Plus } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BlogCard } from "@/components/blog/BlogCard"
@@ -9,10 +8,11 @@ import { useAuth } from "@/context/AuthContext"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import type { BlogPost } from "@/types/blog"
 import { fetchBlogPosts } from "@/lib/blogs"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
 
 export default function BlogPage() {
   const { t } = useTranslation("common")
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const { profile } = useAuth()
   const [posts, setPosts] = React.useState<BlogPost[]>([])
   const [loading, setLoading] = React.useState(true)

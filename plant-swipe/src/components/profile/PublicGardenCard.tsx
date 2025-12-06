@@ -1,8 +1,8 @@
 import React from 'react'
-import { Link } from 'react-router-dom'
 import { Flame, Sprout, TreeDeciduous } from 'lucide-react'
 import type { PublicGardenWithPreview } from '@/lib/gardens'
 import { useTranslation } from 'react-i18next'
+import { Link } from '@/components/i18n/Link'
 
 interface PublicGardenCardProps {
   garden: PublicGardenWithPreview

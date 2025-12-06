@@ -1,9 +1,10 @@
 import React from "react"
 import { CloudUpload, ImageIcon, FolderOpen, HardDrive } from "lucide-react"
-import { Link, useLocation } from "react-router-dom"
+import { useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { AdminUploadPanel } from "@/components/admin/AdminUploadPanel"
 import { AdminMediaPanel } from "@/components/admin/AdminMediaPanel"
+import { Link } from "@/components/i18n/Link"
 
 type UploadMediaSection = "upload" | "media"
 type MediaBucketView = "utility" | "photos"

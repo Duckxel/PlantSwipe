@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,8 @@ import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
+import { Link } from "@/components/i18n/Link";
+import { useLanguageNavigate } from "@/lib/i18nRouting";
 // Re-export for convenience
 import {
   RefreshCw,
@@ -256,7 +258,7 @@ const toPromotionMonthSlug = (
 };
 
 export const AdminPage: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useLanguageNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
   const { effectiveTheme } = useTheme();

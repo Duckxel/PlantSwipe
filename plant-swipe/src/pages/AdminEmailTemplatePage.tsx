@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -37,6 +37,7 @@ import {
 } from "@/lib/emailTranslations"
 import { translateEmailToAllLanguages } from "@/lib/deepl"
 import { sanitizeEmailHtml } from "@/lib/emailWrapper"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
 
 // Language display names
 const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
@@ -97,7 +98,7 @@ async function buildAdminHeaders() {
 
 export const AdminEmailTemplatePage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const isNew = !id || id === "new"
 
   const [loading, setLoading] = React.useState(!isNew)
