@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
 import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
 import { useAuth } from "@/context/AuthContext";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp,
   TrendingDown,
@@ -605,16 +604,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       </div>
 
       {/* Overview Tab */}
-      <AnimatePresence mode="wait">
-        {activeTab === "overview" && (
-          <motion.div
-            key="overview"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
+      {activeTab === "overview" && (
+        <div className="space-y-6">
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Completion Rate */}
@@ -1237,19 +1228,12 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 )}
               </div>
             </Card>
-          </motion.div>
-        )}
+        </div>
+      )}
 
-        {/* Weather Tab */}
-        {activeTab === "weather" && (
-          <motion.div
-            key="weather"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
+      {/* Weather Tab */}
+      {activeTab === "weather" && (
+        <div className="space-y-6">
             {/* Weather from advice context */}
             {advice?.weatherContext?.current ? (
               <>
@@ -1495,19 +1479,12 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 </div>
               </Card>
             )}
-          </motion.div>
-        )}
+        </div>
+      )}
 
-        {/* Tasks Tab */}
-        {activeTab === "tasks" && (
-          <motion.div
-            key="tasks"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
+      {/* Tasks Tab */}
+      {activeTab === "tasks" && (
+        <div className="space-y-6">
             {/* Weekly Performance */}
             <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
               <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
@@ -1577,19 +1554,12 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 ))}
               </div>
             </Card>
-          </motion.div>
-        )}
+        </div>
+      )}
 
-        {/* Plants Tab */}
-        {activeTab === "plants" && (
-          <motion.div
-            key="plants"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
+      {/* Plants Tab */}
+      {activeTab === "plants" && (
+        <div className="space-y-6">
             {/* Plant Health Overview */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 text-center">
@@ -1679,19 +1649,12 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 </ChartSuspense>
               </div>
             </Card>
-          </motion.div>
-        )}
+        </div>
+      )}
 
-        {/* Members Tab */}
-        {activeTab === "members" && (
-          <motion.div
-            key="members"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
+      {/* Members Tab */}
+      {activeTab === "members" && (
+        <div className="space-y-6">
             {/* Member Contributions */}
             <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
               <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
@@ -1766,9 +1729,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 </div>
               )}
             </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 };
