@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
+import { validateUsername } from "@/lib/username"
 import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2 } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { useTranslation } from "react-i18next"
@@ -1074,9 +1075,15 @@ export default function PublicProfilePage() {
                 setEditError(null)
                 setEditSubmitting(true)
                 try {
-                  // Ensure display name unique and valid
-                  const dn = (vals.display_name || '').trim()
-                  if (dn.length === 0) { setEditError(t('profile.editProfile.displayNameRequired')); return }
+                  // Validate and normalize display name (username)
+                  const validationResult = validateUsername(vals.display_name || '')
+                  if (!validationResult.valid) {
+                    setEditError(validationResult.error || t('profile.editProfile.invalidDisplayName'))
+                    return
+                  }
+                  const dn = validationResult.normalized!
+                  
+                  // Check display name uniqueness (case-insensitive, using normalized lowercase)
                   const nameCheck = await supabase
                     .from('profiles')
                     .select('id')
