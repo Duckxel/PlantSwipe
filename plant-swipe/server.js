@@ -11824,13 +11824,18 @@ app.get('/api/garden/:id/advice', async (req, res) => {
 
     // Get garden info
     const gardenRows = await sql`
-      select id, name, created_at from public.gardens where id = ${gardenId} limit 1
+      select id, name, created_at, preferred_language from public.gardens where id = ${gardenId} limit 1
     `
     const garden = gardenRows[0]
     if (!garden) {
       res.status(404).json({ ok: false, error: 'Garden not found' })
       return
     }
+
+    // Determine target language: garden's preferred language or Accept-Language header
+    const acceptLang = req.headers['accept-language'] || ''
+    const headerLang = acceptLang.split(',')[0]?.split('-')[0]?.toUpperCase() || 'EN'
+    const targetLang = (garden.preferred_language || headerLang || 'EN').toUpperCase()
 
     // Check eligibility: garden must be older than 7 days and have at least 1 plant
     const gardenAge = Math.floor((Date.now() - new Date(garden.created_at).getTime()) / (1000 * 60 * 60 * 24))
@@ -11865,7 +11870,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
           try {
             existingAdvice = await sql`
               select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-                     improvement_score, generated_at, weather_context, location_context, model_used
+                     improvement_score, generated_at, weather_context, location_context, model_used, translations
               from public.garden_ai_advice
               where garden_id = ${gardenId} and week_start = ${weekStartIso}
               limit 1
@@ -11875,7 +11880,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
               disableGardenAdviceContextColumns('select', err)
               existingAdvice = await sql`
                 select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-                       improvement_score, generated_at, model_used
+                       improvement_score, generated_at, model_used, translations
                 from public.garden_ai_advice
                 where garden_id = ${gardenId} and week_start = ${weekStartIso}
                 limit 1
@@ -11887,7 +11892,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         } else {
           existingAdvice = await sql`
             select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-                   improvement_score, generated_at, model_used
+                   improvement_score, generated_at, model_used, translations
             from public.garden_ai_advice
             where garden_id = ${gardenId} and week_start = ${weekStartIso}
             limit 1
@@ -11898,21 +11903,56 @@ app.get('/api/garden/:id/advice', async (req, res) => {
           const adv = existingAdvice[0]
           const modelUsed = adv.model_used || 'unknown'
           if (modelUsed !== 'rule-based') {
-            res.json({
-              ok: true,
-              advice: {
-                id: String(adv.id),
-                weekStart: adv.week_start,
-                adviceText: adv.advice_text,
-                adviceSummary: adv.advice_summary,
-                focusAreas: adv.focus_areas || [],
-                plantSpecificTips: normalizeJsonArray(adv.plant_specific_tips),
-                improvementScore: adv.improvement_score,
-                generatedAt: adv.generated_at,
-                weatherContext: adv.weather_context || null,
-                locationContext: adv.location_context || null,
-              },
-            })
+            // Build base advice object
+            let adviceResponse = {
+              id: String(adv.id),
+              weekStart: adv.week_start,
+              adviceText: adv.advice_text,
+              adviceSummary: adv.advice_summary,
+              focusAreas: adv.focus_areas || [],
+              plantSpecificTips: normalizeJsonArray(adv.plant_specific_tips),
+              improvementScore: adv.improvement_score,
+              generatedAt: adv.generated_at,
+              weatherContext: adv.weather_context || null,
+              locationContext: adv.location_context || null,
+            }
+
+            // Check if translation is needed and exists
+            if (targetLang !== 'EN') {
+              const translations = adv.translations || {}
+              if (translations[targetLang]) {
+                // Use cached translation
+                console.log(`[garden-advice] Using cached ${targetLang} translation`)
+                adviceResponse = { ...adviceResponse, ...translations[targetLang] }
+              } else {
+                // Translate and cache the translation
+                console.log(`[garden-advice] Translating existing advice to ${targetLang}`)
+                try {
+                  const translatedAdvice = await translateAdvice(adviceResponse, targetLang)
+                  // Store the translation in the database
+                  const updatedTranslations = { ...translations, [targetLang]: {
+                    adviceText: translatedAdvice.adviceText,
+                    adviceSummary: translatedAdvice.adviceSummary,
+                    focusAreas: translatedAdvice.focusAreas,
+                    plantSpecificTips: translatedAdvice.plantSpecificTips,
+                    weeklyFocus: translatedAdvice.weeklyFocus,
+                    weatherAdvice: translatedAdvice.weatherAdvice,
+                    encouragement: translatedAdvice.encouragement,
+                  }}
+                  await sql`
+                    update public.garden_ai_advice
+                    set translations = ${JSON.stringify(updatedTranslations)}::jsonb
+                    where id = ${adv.id}
+                  `.catch(err => console.warn('[garden-advice] Failed to cache translation:', err))
+                  
+                  adviceResponse = { ...adviceResponse, ...translatedAdvice }
+                } catch (translateErr) {
+                  console.warn('[garden-advice] Translation failed, returning English:', translateErr)
+                }
+              }
+            }
+
+            res.json({ ok: true, advice: adviceResponse })
             return
           }
         }
@@ -12386,29 +12426,157 @@ Include specific observations from the photos in your advice.` }
     }
 
     const saved = insertResult[0]
-    res.json({
-      ok: true,
-      advice: {
-        id: String(saved.id),
-        weekStart: saved.week_start,
-        adviceText: saved.advice_text,
-        adviceSummary: saved.advice_summary,
-        focusAreas: saved.focus_areas || [],
-        plantSpecificTips: normalizeJsonArray(saved.plant_specific_tips),
-        improvementScore: saved.improvement_score,
-        generatedAt: saved.generated_at,
-        weeklyFocus: parsed.weeklyFocus || null,
-        weatherAdvice: parsed.weatherAdvice || null,
-        encouragement: parsed.encouragement || null,
-        weatherContext: saved.weather_context || null,
-        locationContext: saved.location_context || null,
-      },
-    })
+    
+    // Build the advice response
+    let adviceResponse = {
+      id: String(saved.id),
+      weekStart: saved.week_start,
+      adviceText: saved.advice_text,
+      adviceSummary: saved.advice_summary,
+      focusAreas: saved.focus_areas || [],
+      plantSpecificTips: normalizeJsonArray(saved.plant_specific_tips),
+      improvementScore: saved.improvement_score,
+      generatedAt: saved.generated_at,
+      weeklyFocus: parsed.weeklyFocus || null,
+      weatherAdvice: parsed.weatherAdvice || null,
+      encouragement: parsed.encouragement || null,
+      weatherContext: saved.weather_context || null,
+      locationContext: saved.location_context || null,
+    }
+
+    // Translate if target language is not English
+    if (targetLang !== 'EN') {
+      console.log(`[garden-advice] Translating new advice to ${targetLang}`)
+      try {
+        const translatedAdvice = await translateAdvice(adviceResponse, targetLang)
+        
+        // Store the translation in the database
+        const translations = { [targetLang]: {
+          adviceText: translatedAdvice.adviceText,
+          adviceSummary: translatedAdvice.adviceSummary,
+          focusAreas: translatedAdvice.focusAreas,
+          plantSpecificTips: translatedAdvice.plantSpecificTips,
+          weeklyFocus: translatedAdvice.weeklyFocus,
+          weatherAdvice: translatedAdvice.weatherAdvice,
+          encouragement: translatedAdvice.encouragement,
+        }}
+        await sql`
+          update public.garden_ai_advice
+          set translations = ${JSON.stringify(translations)}::jsonb
+          where id = ${saved.id}
+        `.catch(err => console.warn('[garden-advice] Failed to cache translation:', err))
+        
+        adviceResponse = { ...adviceResponse, ...translatedAdvice }
+      } catch (translateErr) {
+        console.warn('[garden-advice] Translation failed, returning English:', translateErr)
+      }
+    }
+
+    res.json({ ok: true, advice: adviceResponse })
   } catch (e) {
     console.error('[garden-advice] Error:', e)
     res.status(500).json({ ok: false, error: e?.message || 'Failed to get advice' })
   }
 })
+
+// Translate text using DeepL API
+async function translateWithDeepL(text, targetLang, sourceLang = 'EN') {
+  if (!text || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return text
+  }
+  
+  const deeplApiKey = process.env.DEEPL_API_KEY
+  if (!deeplApiKey) {
+    console.log('[translate] DeepL API key not configured, skipping translation')
+    return text
+  }
+  
+  try {
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        source_lang: sourceLang.toUpperCase(),
+        target_lang: targetLang.toUpperCase(),
+      }),
+    })
+    
+    if (!response.ok) {
+      console.warn('[translate] DeepL API error:', response.status)
+      return text
+    }
+    
+    const data = await response.json()
+    return data.translations?.[0]?.text || text
+  } catch (err) {
+    console.warn('[translate] DeepL translation failed:', err)
+    return text
+  }
+}
+
+// Translate array of strings using DeepL
+async function translateArrayWithDeepL(items, targetLang, sourceLang = 'EN') {
+  if (!items || items.length === 0 || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return items
+  }
+  
+  // Translate each item in parallel
+  const translated = await Promise.all(
+    items.map(item => translateWithDeepL(item, targetLang, sourceLang))
+  )
+  return translated
+}
+
+// Translate gardening advice object to target language
+async function translateAdvice(advice, targetLang, sourceLang = 'EN') {
+  if (!advice || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return advice
+  }
+  
+  console.log(`[translate] Translating advice to ${targetLang}...`)
+  
+  const translated = { ...advice }
+  
+  // Translate text fields in parallel where possible
+  const [adviceText, adviceSummary, weeklyFocus, weatherAdvice, encouragement] = await Promise.all([
+    advice.adviceText ? translateWithDeepL(advice.adviceText, targetLang, sourceLang) : advice.adviceText,
+    advice.adviceSummary ? translateWithDeepL(advice.adviceSummary, targetLang, sourceLang) : advice.adviceSummary,
+    advice.weeklyFocus ? translateWithDeepL(advice.weeklyFocus, targetLang, sourceLang) : advice.weeklyFocus,
+    advice.weatherAdvice ? translateWithDeepL(advice.weatherAdvice, targetLang, sourceLang) : advice.weatherAdvice,
+    advice.encouragement ? translateWithDeepL(advice.encouragement, targetLang, sourceLang) : advice.encouragement,
+  ])
+  
+  translated.adviceText = adviceText
+  translated.adviceSummary = adviceSummary
+  translated.weeklyFocus = weeklyFocus
+  translated.weatherAdvice = weatherAdvice
+  translated.encouragement = encouragement
+  
+  // Translate focus areas
+  if (advice.focusAreas && Array.isArray(advice.focusAreas)) {
+    translated.focusAreas = await translateArrayWithDeepL(advice.focusAreas, targetLang, sourceLang)
+  }
+  
+  // Translate plant-specific tips
+  if (advice.plantSpecificTips && Array.isArray(advice.plantSpecificTips)) {
+    translated.plantSpecificTips = await Promise.all(
+      advice.plantSpecificTips.map(async (tip) => ({
+        ...tip,
+        tip: tip.tip ? await translateWithDeepL(tip.tip, targetLang, sourceLang) : tip.tip,
+        reason: tip.reason ? await translateWithDeepL(tip.reason, targetLang, sourceLang) : tip.reason,
+        // Don't translate plant name - keep it in original language
+      }))
+    )
+  }
+  
+  console.log(`[translate] Advice translation to ${targetLang} complete`)
+  return translated
+}
 
 // Weather API helper
 async function fetchWeatherForLocation(lat, lon, city) {
@@ -12681,7 +12849,7 @@ app.put('/api/garden/:id/location', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
-    const { city, country, timezone, lat, lon } = req.body || {}
+    const { city, country, timezone, lat, lon, preferredLanguage } = req.body || {}
 
     // Verify membership with owner/admin role
     const membership = await sql`
@@ -12714,17 +12882,34 @@ app.put('/api/garden/:id/location', async (req, res) => {
       } catch {}
     }
 
-    console.log('[garden-location] Updating garden with:', { city, country, timezone, finalLat, finalLon })
-    const updateResult = await sql`
-      update public.gardens set
-        location_city = ${city || null},
-        location_country = ${country || null},
-        location_timezone = ${timezone || null},
-        location_lat = ${finalLat || null},
-        location_lon = ${finalLon || null}
-      where id = ${gardenId}
-      returning id, location_city, location_country
-    `
+    console.log('[garden-location] Updating garden with:', { city, country, timezone, finalLat, finalLon, preferredLanguage })
+    
+    // Build update query - only include preferred_language if explicitly provided
+    let updateResult
+    if (preferredLanguage !== undefined) {
+      updateResult = await sql`
+        update public.gardens set
+          location_city = ${city || null},
+          location_country = ${country || null},
+          location_timezone = ${timezone || null},
+          location_lat = ${finalLat || null},
+          location_lon = ${finalLon || null},
+          preferred_language = ${preferredLanguage || 'en'}
+        where id = ${gardenId}
+        returning id, location_city, location_country, preferred_language
+      `
+    } else {
+      updateResult = await sql`
+        update public.gardens set
+          location_city = ${city || null},
+          location_country = ${country || null},
+          location_timezone = ${timezone || null},
+          location_lat = ${finalLat || null},
+          location_lon = ${finalLon || null}
+        where id = ${gardenId}
+        returning id, location_city, location_country, preferred_language
+      `
+    }
     console.log('[garden-location] Update result:', updateResult)
 
     res.json({ ok: true, updated: updateResult?.[0] || null })
@@ -12754,8 +12939,32 @@ app.get('/api/garden/:id/weather', async (req, res) => {
       return
     }
 
-    const lat = garden.location_lat
-    const lon = garden.location_lon
+    let lat = garden.location_lat
+    let lon = garden.location_lon
+    
+    // If lat/lon missing but city is set, try to geocode
+    if ((!lat || !lon) && garden.location_city) {
+      try {
+        console.log('[garden-weather] Geocoding city:', garden.location_city)
+        const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(garden.location_city)}&count=1`)
+        if (geoResp.ok) {
+          const geoData = await geoResp.json()
+          if (geoData.results?.[0]) {
+            lat = geoData.results[0].latitude
+            lon = geoData.results[0].longitude
+            console.log('[garden-weather] Geocoded to:', lat, lon)
+            // Optionally update the garden record with the coordinates
+            await sql`
+              update public.gardens 
+              set location_lat = ${lat}, location_lon = ${lon}
+              where id = ${gardenId}
+            `.catch(() => {}) // Non-blocking update
+          }
+        }
+      } catch (geoErr) {
+        console.warn('[garden-weather] Geocoding failed:', geoErr)
+      }
+    }
     
     if (!lat || !lon) {
       res.status(400).json({ ok: false, error: 'Garden location not set', noLocation: true })

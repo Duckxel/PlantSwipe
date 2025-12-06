@@ -17,6 +17,7 @@ export interface Garden {
   locationTimezone?: string | null
   locationLat?: number | null
   locationLon?: number | null
+  preferredLanguage?: string | null
 }
 
 export interface GardenMember {

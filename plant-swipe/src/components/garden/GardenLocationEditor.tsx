@@ -4,8 +4,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
-import { MapPin, Loader2, Check, CloudSun, Search, X } from "lucide-react";
+import { MapPin, Loader2, Check, CloudSun, Search, X, Globe } from "lucide-react";
 import type { Garden } from "@/types/garden";
+
+// Supported languages for gardening advice
+const ADVICE_LANGUAGES = [
+  { code: "en", name: "English" },
+  { code: "fr", name: "Français" },
+  { code: "de", name: "Deutsch" },
+  { code: "es", name: "Español" },
+  { code: "it", name: "Italiano" },
+  { code: "nl", name: "Nederlands" },
+  { code: "pt", name: "Português" },
+  { code: "pl", name: "Polski" },
+  { code: "ru", name: "Русский" },
+  { code: "ja", name: "日本語" },
+  { code: "zh", name: "中文" },
+];
 
 interface LocationSuggestion {
   id: number;
@@ -34,6 +49,7 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
   const gardenCountry = garden?.locationCountry || "";
   const gardenLat = garden?.locationLat || null;
   const gardenLon = garden?.locationLon || null;
+  const gardenPreferredLanguage = garden?.preferredLanguage || "en";
   
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedLocation, setSelectedLocation] = React.useState<LocationSuggestion | null>(null);
@@ -43,6 +59,12 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [detectingLocation, setDetectingLocation] = React.useState(false);
+  const [preferredLanguage, setPreferredLanguage] = React.useState(gardenPreferredLanguage);
+  
+  // Update preferred language when garden data changes
+  React.useEffect(() => {
+    setPreferredLanguage(gardenPreferredLanguage);
+  }, [gardenPreferredLanguage]);
   
   const inputRef = React.useRef<HTMLInputElement>(null);
   const suggestionsRef = React.useRef<HTMLDivElement>(null);
@@ -180,9 +202,12 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
     inputRef.current?.focus();
   };
 
-  // Save location
+  // Save location and preferences
   const handleSave = async () => {
-    if (!garden?.id || !canEdit || !selectedLocation) return;
+    if (!garden?.id || !canEdit) return;
+    // Allow saving if we have a selected location or if only language changed
+    if (!selectedLocation && !languageChanged) return;
+    
     setSaving(true);
     setSaved(false);
 
@@ -190,13 +215,24 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
 
-      const payload = {
-        city: selectedLocation.name,
-        country: selectedLocation.country,
-        lat: selectedLocation.latitude,
-        lon: selectedLocation.longitude,
-        timezone: selectedLocation.timezone || null,
+      // Build payload - include location if selected, always include language
+      const payload: Record<string, unknown> = {
+        preferredLanguage: preferredLanguage || "en",
       };
+      
+      if (selectedLocation) {
+        payload.city = selectedLocation.name;
+        payload.country = selectedLocation.country;
+        payload.lat = selectedLocation.latitude;
+        payload.lon = selectedLocation.longitude;
+        payload.timezone = selectedLocation.timezone || null;
+      } else if (gardenCity) {
+        // Keep existing location if no new selection
+        payload.city = gardenCity;
+        payload.country = gardenCountry;
+        payload.lat = gardenLat;
+        payload.lon = gardenLon;
+      }
       
       console.log("[location] Saving location:", payload);
 
@@ -288,9 +324,11 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
   };
 
   // Check if there are changes
-  const hasChanges = selectedLocation
+  const locationChanged = selectedLocation
     ? selectedLocation.name !== gardenCity || selectedLocation.country !== gardenCountry
     : gardenCity !== "";
+  const languageChanged = preferredLanguage !== gardenPreferredLanguage;
+  const hasChanges = locationChanged || languageChanged;
 
   // Format location display
   const formatLocation = (loc: LocationSuggestion) => {
@@ -400,6 +438,32 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
         )}
       </div>
 
+      {/* Preferred Language for Advice */}
+      <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-stone-700">
+        <label className="text-sm font-medium flex items-center gap-2">
+          <Globe className="w-4 h-4" />
+          {t("gardenDashboard.settingsSection.adviceLanguage", "Advice Language")}
+        </label>
+        <p className="text-sm text-muted-foreground">
+          {t(
+            "gardenDashboard.settingsSection.adviceLanguageDescription",
+            "Choose the language for your personalized gardening advice."
+          )}
+        </p>
+        <select
+          value={preferredLanguage}
+          onChange={(e) => setPreferredLanguage(e.target.value)}
+          disabled={!canEdit}
+          className="w-full p-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1f1f1f] text-sm"
+        >
+          {ADVICE_LANGUAGES.map((lang) => (
+            <option key={lang.code} value={lang.code}>
+              {lang.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Actions */}
       <div className="flex items-center justify-between pt-2">
         <Button
@@ -426,7 +490,7 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
         {canEdit && (
           <Button
             onClick={handleSave}
-            disabled={saving || !selectedLocation || !hasChanges}
+            disabled={saving || (!selectedLocation && !languageChanged) || !hasChanges}
             className="rounded-xl gap-2"
             size="sm"
           >

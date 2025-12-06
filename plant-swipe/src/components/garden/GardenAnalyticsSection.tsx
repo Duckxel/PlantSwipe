@@ -3,6 +3,7 @@ import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
+import { useLanguage } from "@/lib/i18nRouting";
 import { supabase } from "@/lib/supabaseClient";
 import {
   ResponsiveContainer,
@@ -99,7 +100,7 @@ interface AnalyticsData {
     totalTasksCompleted: number;
     totalDaysActive: number;
     perfectDays: number;
-    mostActiveDay: string;
+    mostActiveDay: number;
     averageTasksPerDay: number;
     longestStreak: number;
     monthlyComparison: {
@@ -235,6 +236,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     return baseStreak;
   }, [baseStreak, serverToday, dailyStats]);
   const { t } = useTranslation("common");
+  const currentLang = useLanguage();
   const { user } = useAuth();
   const [loading, setLoading] = React.useState(true);
   const [adviceLoading, setAdviceLoading] = React.useState(false);
@@ -348,8 +350,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       dayOfWeekCounts[dayOfWeek] += d.completed || 0;
     });
     const mostActiveDayNum = Object.entries(dayOfWeekCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '0';
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const mostActiveDay = dayNames[parseInt(mostActiveDayNum)];
+    // Return the day number for translation in the render phase
+    const mostActiveDay = parseInt(mostActiveDayNum);
 
     // Monthly comparison
     const thisMonthStart = new Date(today);
@@ -541,13 +543,16 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   const fetchWeather = React.useCallback(async () => {
     if (!gardenId) return;
     
-    // Check if garden has location
-    const hasLocation = garden?.locationCity || garden?.locationLat;
-    if (!hasLocation) {
-      console.log("[Weather] No location set for garden");
+    // Check if garden has location - backend requires lat/lon for weather API
+    // We check for either lat/lon (required by API) or city (the API will geocode it)
+    const hasCoords = garden?.locationLat && garden?.locationLon;
+    const hasCity = !!garden?.locationCity;
+    if (!hasCoords && !hasCity) {
+      console.log("[Weather] No location set for garden - need lat/lon or city");
       setWeatherData(null);
       return;
     }
+    console.log("[Weather] Fetching weather for garden:", gardenId, { city: garden?.locationCity, lat: garden?.locationLat, lon: garden?.locationLon });
 
     setWeatherLoading(true);
     try {
@@ -577,15 +582,17 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     } finally {
       setWeatherLoading(false);
     }
-  }, [gardenId, garden?.locationCity, garden?.locationLat]);
+  }, [gardenId, garden?.locationCity, garden?.locationLat, garden?.locationLon]);
 
   // Fetch weather when tab is active or garden location changes
   React.useEffect(() => {
-    const hasLocation = garden?.locationCity || garden?.locationLat;
+    const hasCoords = garden?.locationLat && garden?.locationLon;
+    const hasCity = !!garden?.locationCity;
+    const hasLocation = hasCoords || hasCity;
     if (hasLocation && (activeTab === "weather" || activeTab === "overview")) {
       fetchWeather();
     }
-  }, [activeTab, garden?.locationCity, garden?.locationLat, fetchWeather]);
+  }, [activeTab, garden?.locationCity, garden?.locationLat, garden?.locationLon, fetchWeather]);
 
   // Merge server analytics with computed analytics to ensure all fields are present
   const analytics = React.useMemo(() => {
@@ -765,7 +772,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 <ResponsiveContainer width="100%" height={200}>
                   <ComposedChart
                     data={analytics.dailyStats.slice(-30).map((d) => ({
-                      date: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+                      date: new Date(d.date).toLocaleDateString(currentLang, { month: "short", day: "numeric" }),
                       completed: d.completed,
                       due: d.due,
                     }))}
@@ -919,7 +926,9 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   <div className="p-4 rounded-xl bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 text-center">
                     <div className="text-3xl mb-1">📅</div>
                     <div className="text-lg font-bold text-pink-600 dark:text-pink-400">
-                      {analytics.allTimeStats.mostActiveDay}
+                      {t(`gardenDashboard.analyticsSection.dayNames.${analytics.allTimeStats.mostActiveDay}`, { 
+                        defaultValue: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][analytics.allTimeStats.mostActiveDay] 
+                      })}
                     </div>
                     <div className="text-xs text-stone-500 dark:text-stone-400">
                       {t("gardenDashboard.analyticsSection.mostActiveDay", { defaultValue: "Most Active Day" })}
@@ -1074,7 +1083,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                             <div className="grid grid-cols-7 gap-1">
                               {advice.weatherContext.forecast.slice(0, 7).map((day, idx) => {
                                 const dayDate = new Date(day.date);
-                                const dayName = dayDate.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 2);
+                                const dayName = dayDate.toLocaleDateString(currentLang, { weekday: 'short' }).slice(0, 2);
                                 return (
                                   <div key={idx} className="text-center p-1.5 rounded-lg bg-white/50 dark:bg-black/20">
                                     <div className="text-[10px] font-medium text-stone-500 dark:text-stone-400 uppercase">
@@ -1374,7 +1383,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     <div className="grid grid-cols-7 gap-2">
                       {forecastData.slice(0, 7).map((day, idx) => {
                         const dayDate = new Date(day.date);
-                        const dayName = dayDate.toLocaleDateString(undefined, { weekday: 'short' });
+                        const dayName = dayDate.toLocaleDateString(currentLang, { weekday: 'short' });
                         const isToday = idx === 0;
                         return (
                           <div 
@@ -1563,7 +1572,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart
                   data={analytics.dailyStats.slice(-7).map((d) => ({
-                    day: new Date(d.date).toLocaleDateString(undefined, { weekday: "short" }),
+                    day: new Date(d.date).toLocaleDateString(currentLang, { weekday: "short" }),
                     completed: d.completed,
                     due: d.due - d.completed,
                   }))}
