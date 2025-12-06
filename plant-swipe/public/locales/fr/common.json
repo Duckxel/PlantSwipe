@@ -1642,6 +1642,8 @@
       "detectLocation": "Détecter ma position",
       "detecting": "Détection...",
       "locationSet": "Les conseils météo utiliseront cette localisation pour les prévisions.",
+      "searchLocation": "Rechercher une ville...",
+      "noResults": "Aucun lieu trouvé. Essayez une autre recherche.",
       "gardenName": "Nom du jardin",
       "coverImageUrl": "URL de l'image de couverture",
       "coverUploadButton": "Téléverser une image",

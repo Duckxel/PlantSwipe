@@ -1642,6 +1642,8 @@
       "detectLocation": "Detect Location",
       "detecting": "Detecting...",
       "locationSet": "Weather-based advice will use this location for forecasts.",
+      "searchLocation": "Search for a city...",
+      "noResults": "No locations found. Try a different search.",
       "gardenName": "Garden name",
       "coverImageUrl": "Cover image URL",
       "coverUploadButton": "Upload image",
