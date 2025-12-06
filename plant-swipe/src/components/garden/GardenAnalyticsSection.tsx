@@ -3,6 +3,7 @@ import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
+import { useLanguage } from "@/lib/i18nRouting";
 import { supabase } from "@/lib/supabaseClient";
 import {
   ResponsiveContainer,
@@ -79,6 +80,10 @@ interface AnalyticsData {
   memberContributions: Array<{
     userId: string;
     displayName: string;
+    role?: "owner" | "member";
+    avatarUrl?: string | null;
+    accentKey?: string | null;
+    joinedAt?: string;
     tasksCompleted: number;
     percentage: number;
     color: string;
@@ -99,7 +104,7 @@ interface AnalyticsData {
     totalTasksCompleted: number;
     totalDaysActive: number;
     perfectDays: number;
-    mostActiveDay: string;
+    mostActiveDay: number;
     averageTasksPerDay: number;
     longestStreak: number;
     monthlyComparison: {
@@ -175,6 +180,7 @@ interface GardenAnalyticsSectionProps {
     displayName?: string | null;
     role: "owner" | "member";
     accentKey?: string | null;
+    avatarUrl?: string | null;
   }>;
   dailyStats: Array<{
     date: string;
@@ -235,6 +241,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     return baseStreak;
   }, [baseStreak, serverToday, dailyStats]);
   const { t } = useTranslation("common");
+  const currentLang = useLanguage();
   const { user } = useAuth();
   const [loading, setLoading] = React.useState(true);
   const [adviceLoading, setAdviceLoading] = React.useState(false);
@@ -348,8 +355,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       dayOfWeekCounts[dayOfWeek] += d.completed || 0;
     });
     const mostActiveDayNum = Object.entries(dayOfWeekCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '0';
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const mostActiveDay = dayNames[parseInt(mostActiveDayNum)];
+    // Return the day number for translation in the render phase
+    const mostActiveDay = parseInt(mostActiveDayNum);
 
     // Monthly comparison
     const thisMonthStart = new Date(today);
@@ -383,6 +390,9 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       memberContributions: members.map((m, idx) => ({
         userId: m.userId,
         displayName: m.displayName || "Member",
+        role: m.role,
+        avatarUrl: m.avatarUrl || null,
+        accentKey: m.accentKey || null,
         tasksCompleted: Math.floor(currentWeekCompleted / members.length),
         percentage: Math.round(100 / members.length),
         color: MEMBER_COLORS[idx % MEMBER_COLORS.length],
@@ -541,13 +551,16 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   const fetchWeather = React.useCallback(async () => {
     if (!gardenId) return;
     
-    // Check if garden has location
-    const hasLocation = garden?.locationCity || garden?.locationLat;
-    if (!hasLocation) {
-      console.log("[Weather] No location set for garden");
+    // Check if garden has location - backend requires lat/lon for weather API
+    // We check for either lat/lon (required by API) or city (the API will geocode it)
+    const hasCoords = garden?.locationLat && garden?.locationLon;
+    const hasCity = !!garden?.locationCity;
+    if (!hasCoords && !hasCity) {
+      console.log("[Weather] No location set for garden - need lat/lon or city");
       setWeatherData(null);
       return;
     }
+    console.log("[Weather] Fetching weather for garden:", gardenId, { city: garden?.locationCity, lat: garden?.locationLat, lon: garden?.locationLon });
 
     setWeatherLoading(true);
     try {
@@ -577,15 +590,17 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     } finally {
       setWeatherLoading(false);
     }
-  }, [gardenId, garden?.locationCity, garden?.locationLat]);
+  }, [gardenId, garden?.locationCity, garden?.locationLat, garden?.locationLon]);
 
   // Fetch weather when tab is active or garden location changes
   React.useEffect(() => {
-    const hasLocation = garden?.locationCity || garden?.locationLat;
+    const hasCoords = garden?.locationLat && garden?.locationLon;
+    const hasCity = !!garden?.locationCity;
+    const hasLocation = hasCoords || hasCity;
     if (hasLocation && (activeTab === "weather" || activeTab === "overview")) {
       fetchWeather();
     }
-  }, [activeTab, garden?.locationCity, garden?.locationLat, fetchWeather]);
+  }, [activeTab, garden?.locationCity, garden?.locationLat, garden?.locationLon, fetchWeather]);
 
   // Merge server analytics with computed analytics to ensure all fields are present
   const analytics = React.useMemo(() => {
@@ -765,7 +780,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 <ResponsiveContainer width="100%" height={200}>
                   <ComposedChart
                     data={analytics.dailyStats.slice(-30).map((d) => ({
-                      date: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+                      date: new Date(d.date).toLocaleDateString(currentLang, { month: "short", day: "numeric" }),
                       completed: d.completed,
                       due: d.due,
                     }))}
@@ -919,7 +934,9 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   <div className="p-4 rounded-xl bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 text-center">
                     <div className="text-3xl mb-1">📅</div>
                     <div className="text-lg font-bold text-pink-600 dark:text-pink-400">
-                      {analytics.allTimeStats.mostActiveDay}
+                      {t(`gardenDashboard.analyticsSection.dayNames.${analytics.allTimeStats.mostActiveDay}`, { 
+                        defaultValue: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][analytics.allTimeStats.mostActiveDay] 
+                      })}
                     </div>
                     <div className="text-xs text-stone-500 dark:text-stone-400">
                       {t("gardenDashboard.analyticsSection.mostActiveDay", { defaultValue: "Most Active Day" })}
@@ -1074,7 +1091,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                             <div className="grid grid-cols-7 gap-1">
                               {advice.weatherContext.forecast.slice(0, 7).map((day, idx) => {
                                 const dayDate = new Date(day.date);
-                                const dayName = dayDate.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 2);
+                                const dayName = dayDate.toLocaleDateString(currentLang, { weekday: 'short' }).slice(0, 2);
                                 return (
                                   <div key={idx} className="text-center p-1.5 rounded-lg bg-white/50 dark:bg-black/20">
                                     <div className="text-[10px] font-medium text-stone-500 dark:text-stone-400 uppercase">
@@ -1374,7 +1391,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     <div className="grid grid-cols-7 gap-2">
                       {forecastData.slice(0, 7).map((day, idx) => {
                         const dayDate = new Date(day.date);
-                        const dayName = dayDate.toLocaleDateString(undefined, { weekday: 'short' });
+                        const dayName = dayDate.toLocaleDateString(currentLang, { weekday: 'short' });
                         const isToday = idx === 0;
                         return (
                           <div 
@@ -1563,7 +1580,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart
                   data={analytics.dailyStats.slice(-7).map((d) => ({
-                    day: new Date(d.date).toLocaleDateString(undefined, { weekday: "short" }),
+                    day: new Date(d.date).toLocaleDateString(currentLang, { weekday: "short" }),
                     completed: d.completed,
                     due: d.due - d.completed,
                   }))}
@@ -1725,69 +1742,104 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
                 <Users className="w-5 h-5 text-blue-500" />
                 {t("gardenDashboard.analyticsSection.memberContributions", { defaultValue: "Member Contributions" })}
+                <span className="text-sm font-normal text-muted-foreground">
+                  ({analytics.memberContributions.length} {analytics.memberContributions.length === 1 ? t("gardenDashboard.analyticsSection.member", { defaultValue: "member" }) : t("gardenDashboard.analyticsSection.members", { defaultValue: "members" })})
+                </span>
               </h3>
-              {analytics.memberContributions.length > 1 ? (
+              {analytics.memberContributions.length > 0 ? (
                 <>
-                  <div className="flex items-center gap-6 mb-6">
-                    <div className="w-32 h-32">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={analytics.memberContributions.map((m) => ({
-                              name: m.displayName,
-                              value: m.tasksCompleted,
-                              fill: m.color,
-                            }))}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={35}
-                            outerRadius={55}
-                            paddingAngle={3}
-                            dataKey="value"
-                          >
-                            {analytics.memberContributions.map((m, index) => (
-                              <Cell key={`cell-${index}`} fill={m.color} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
+                  {/* Show pie chart only if there are task completions and multiple members */}
+                  {analytics.memberContributions.length > 1 && analytics.memberContributions.some(m => m.tasksCompleted > 0) && (
+                    <div className="flex items-center gap-6 mb-6">
+                      <div className="w-32 h-32">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m) => ({
+                                name: m.displayName,
+                                value: m.tasksCompleted,
+                                fill: m.color,
+                              }))}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={35}
+                              outerRadius={55}
+                              paddingAngle={3}
+                              dataKey="value"
+                            >
+                              {analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m, index) => (
+                                <Cell key={`cell-${index}`} fill={m.color} />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="flex-1 text-sm text-muted-foreground">
+                        {t("gardenDashboard.analyticsSection.weeklyContributions", { defaultValue: "Weekly task contributions by member" })}
+                      </div>
                     </div>
-                    <div className="flex-1 space-y-3">
-                      {analytics.memberContributions.map((member, idx) => (
-                        <div key={member.userId} className="flex items-center gap-3">
+                  )}
+                  {/* Member list - always show all members */}
+                  <div className="space-y-3">
+                    {analytics.memberContributions.map((member) => (
+                      <div key={member.userId} className="flex items-center gap-3 p-2 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800/50 transition-colors">
+                        {/* Avatar */}
+                        {member.avatarUrl ? (
+                          <img
+                            src={member.avatarUrl}
+                            alt={member.displayName}
+                            className="w-10 h-10 rounded-full object-cover border-2"
+                            style={{ borderColor: member.color }}
+                          />
+                        ) : (
                           <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold"
                             style={{ backgroundColor: member.color }}
                           >
                             {member.displayName.slice(0, 2).toUpperCase()}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{member.displayName}</div>
-                            <div className="flex items-center gap-2">
-                              <div className="h-2 flex-1 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all"
-                                  style={{
-                                    width: `${member.percentage}%`,
-                                    backgroundColor: member.color,
-                                  }}
-                                />
-                              </div>
-                              <span className="text-xs text-muted-foreground w-12 text-right">
-                                {member.tasksCompleted}
+                        )}
+                        {/* Member info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium truncate">{member.displayName}</span>
+                            {member.role === "owner" && (
+                              <span className="text-xs px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded">
+                                {t("gardenDashboard.settingsSection.owner", { defaultValue: "Owner" })}
                               </span>
+                            )}
+                          </div>
+                          {/* Task completion bar */}
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="h-2 flex-1 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${member.percentage || 0}%`,
+                                  backgroundColor: member.color,
+                                }}
+                              />
                             </div>
+                            <span className="text-xs text-muted-foreground w-16 text-right">
+                              {member.tasksCompleted} {t("gardenDashboard.analyticsSection.tasks", { defaultValue: "tasks" })}
+                            </span>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
+                  {/* Show invite hint if only one member */}
+                  {analytics.memberContributions.length === 1 && (
+                    <div className="mt-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm">
+                      <p>{t("gardenDashboard.analyticsSection.inviteHint", { defaultValue: "Tip: Invite friends to your garden to share the workload and track contributions together!" })}</p>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-center py-8">
                   <div className="text-4xl mb-3">👤</div>
                   <p className="text-sm text-muted-foreground">
-                    {t("gardenDashboard.analyticsSection.soloGardener", { defaultValue: "You're the only gardener here. Invite friends to track contributions!" })}
+                    {t("gardenDashboard.analyticsSection.noMembers", { defaultValue: "No members found. This shouldn't happen - please refresh the page." })}
                   </p>
                 </div>
               )}

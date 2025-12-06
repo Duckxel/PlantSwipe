@@ -710,11 +710,13 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
   const idToName: Record<string, string | null> = {}
   const idToEmail: Record<string, string | null> = {}
   const idToAccent: Record<string, string | null> = {}
+  const idToAvatar: Record<string, string | null> = {}
   for (const r of (profilesData as any[]) || []) {
     const uid = String((r as any).user_id)
     idToName[uid] = (r as any).display_name || null
     idToEmail[uid] = (r as any).email || null
     idToAccent[uid] = (r as any).accent_key || null
+    idToAvatar[uid] = (r as any).avatar_url || null
   }
   return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
@@ -724,6 +726,7 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     displayName: idToName[String(r.user_id)] ?? null,
     email: idToEmail[String(r.user_id)] ?? null,
     accentKey: idToAccent[String(r.user_id)] ?? null,
+    avatarUrl: idToAvatar[String(r.user_id)] ?? null,
   }))
 }
 

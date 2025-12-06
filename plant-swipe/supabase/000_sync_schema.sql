@@ -2808,12 +2808,12 @@ $$;
 -- Drop and recreate to allow return type changes
 drop function if exists public.get_profiles_for_garden(uuid) cascade;
 create function public.get_profiles_for_garden(_garden_id uuid)
-returns table(user_id uuid, display_name text, email text, accent_key text)
+returns table(user_id uuid, display_name text, email text, accent_key text, avatar_url text)
 language sql
 security definer
 set search_path = public
 as $$
-  select p.id as user_id, p.display_name, u.email, p.accent_key
+  select p.id as user_id, p.display_name, u.email, p.accent_key, p.avatar_url
   from public.garden_members gm
   join public.profiles p on p.id = gm.user_id
   join auth.users u on u.id = gm.user_id
@@ -6702,3 +6702,10 @@ alter table if exists public.garden_ai_advice add column if not exists weather_c
 alter table if exists public.garden_ai_advice add column if not exists journal_context jsonb default '{}'::jsonb;
 alter table if exists public.garden_ai_advice add column if not exists avg_completion_time text;
 alter table if exists public.garden_ai_advice add column if not exists location_context jsonb default '{}'::jsonb;
+
+-- Add translations column to store translated versions of advice (keyed by language code)
+-- Structure: { "fr": { "adviceText": "...", "adviceSummary": "...", "focusAreas": [...], ... }, ... }
+alter table if exists public.garden_ai_advice add column if not exists translations jsonb default '{}'::jsonb;
+
+-- Add language preference to gardens for advice translation
+alter table if exists public.gardens add column if not exists preferred_language text default 'en';
