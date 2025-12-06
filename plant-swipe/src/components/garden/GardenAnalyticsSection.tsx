@@ -4,7 +4,24 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
-import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  RadialBarChart,
+  RadialBar,
+  PolarAngleAxis,
+} from "recharts";
 import { useAuth } from "@/context/AuthContext";
 import {
   TrendingUp,
@@ -32,24 +49,6 @@ import {
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
-const {
-  ResponsiveContainer,
-  ComposedChart,
-  Line,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell,
-  RadialBarChart,
-  RadialBar,
-  PolarAngleAxis,
-} = LazyCharts;
 
 interface AnalyticsData {
   dailyStats: Array<{
@@ -763,46 +762,44 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     {t("gardenDashboard.analyticsSection.last30Days", { defaultValue: "Last 30 days" })}
                   </span>
                 </div>
-                <ChartSuspense>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <ComposedChart
-                      data={analytics.dailyStats.slice(-30).map((d) => ({
-                        date: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-                        completed: d.completed,
-                        due: d.due,
-                      }))}
-                      margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-stone-200 dark:stroke-stone-700" />
-                      <XAxis 
-                        dataKey="date" 
-                        tick={{ fontSize: 10 }} 
-                        className="text-stone-500"
-                        interval={4}
-                      />
-                      <YAxis tick={{ fontSize: 10 }} className="text-stone-500" />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Area
-                        type="monotone"
-                        dataKey="due"
-                        name={t("gardenDashboard.analyticsSection.due", { defaultValue: "Due" })}
-                        fill={CHART_COLORS.muted}
-                        fillOpacity={0.2}
-                        stroke={CHART_COLORS.muted}
-                        strokeWidth={2}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="completed"
-                        name={t("gardenDashboard.analyticsSection.completed", { defaultValue: "Completed" })}
-                        stroke={CHART_COLORS.primary}
-                        strokeWidth={3}
-                        dot={{ r: 2 }}
-                        activeDot={{ r: 4 }}
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </ChartSuspense>
+                <ResponsiveContainer width="100%" height={200}>
+                  <ComposedChart
+                    data={analytics.dailyStats.slice(-30).map((d) => ({
+                      date: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+                      completed: d.completed,
+                      due: d.due,
+                    }))}
+                    margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-stone-200 dark:stroke-stone-700" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 10 }} 
+                      className="text-stone-500"
+                      interval={4}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} className="text-stone-500" />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="due"
+                      name={t("gardenDashboard.analyticsSection.due", { defaultValue: "Due" })}
+                      fill={CHART_COLORS.muted}
+                      fillOpacity={0.2}
+                      stroke={CHART_COLORS.muted}
+                      strokeWidth={2}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="completed"
+                      name={t("gardenDashboard.analyticsSection.completed", { defaultValue: "Completed" })}
+                      stroke={CHART_COLORS.primary}
+                      strokeWidth={3}
+                      dot={{ r: 2 }}
+                      activeDot={{ r: 4 }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </Card>
 
               {/* Task Type Distribution */}
@@ -814,33 +811,31 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </h3>
                 </div>
                 <div className="flex items-center gap-6">
-                  <ChartSuspense>
-                    <div className="w-32 h-32">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={[
-                              { name: "Water", value: analytics.weeklyStats.tasksByType.water, fill: CHART_COLORS.water },
-                              { name: "Fertilize", value: analytics.weeklyStats.tasksByType.fertilize, fill: CHART_COLORS.fertilize },
-                              { name: "Harvest", value: analytics.weeklyStats.tasksByType.harvest, fill: CHART_COLORS.harvest },
-                              { name: "Cut", value: analytics.weeklyStats.tasksByType.cut, fill: CHART_COLORS.cut },
-                              { name: "Custom", value: analytics.weeklyStats.tasksByType.custom, fill: CHART_COLORS.custom },
-                            ].filter((d) => d.value > 0)}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={35}
-                            outerRadius={55}
-                            paddingAngle={3}
-                            dataKey="value"
-                          >
-                            {[CHART_COLORS.water, CHART_COLORS.fertilize, CHART_COLORS.harvest, CHART_COLORS.cut, CHART_COLORS.custom].map((color, index) => (
-                              <Cell key={`cell-${index}`} fill={color} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </ChartSuspense>
+                  <div className="w-32 h-32">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: "Water", value: analytics.weeklyStats.tasksByType.water, fill: CHART_COLORS.water },
+                            { name: "Fertilize", value: analytics.weeklyStats.tasksByType.fertilize, fill: CHART_COLORS.fertilize },
+                            { name: "Harvest", value: analytics.weeklyStats.tasksByType.harvest, fill: CHART_COLORS.harvest },
+                            { name: "Cut", value: analytics.weeklyStats.tasksByType.cut, fill: CHART_COLORS.cut },
+                            { name: "Custom", value: analytics.weeklyStats.tasksByType.custom, fill: CHART_COLORS.custom },
+                          ].filter((d) => d.value > 0)}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={35}
+                          outerRadius={55}
+                          paddingAngle={3}
+                          dataKey="value"
+                        >
+                          {[CHART_COLORS.water, CHART_COLORS.fertilize, CHART_COLORS.harvest, CHART_COLORS.cut, CHART_COLORS.custom].map((color, index) => (
+                            <Cell key={`cell-${index}`} fill={color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
                   <div className="flex-1 space-y-2">
                     {[
                       { key: "water", label: t("garden.taskTypes.water", { defaultValue: "Water" }), icon: Droplets, color: CHART_COLORS.water },
@@ -1565,37 +1560,35 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 <Activity className="w-5 h-5 text-blue-500" />
                 {t("gardenDashboard.analyticsSection.weeklyPerformance", { defaultValue: "Weekly Performance" })}
               </h3>
-              <ChartSuspense>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart
-                    data={analytics.dailyStats.slice(-7).map((d) => ({
-                      day: new Date(d.date).toLocaleDateString(undefined, { weekday: "short" }),
-                      completed: d.completed,
-                      due: d.due - d.completed,
-                    }))}
-                    margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-stone-200 dark:stroke-stone-700" />
-                    <XAxis dataKey="day" tick={{ fontSize: 12 }} className="text-stone-500" />
-                    <YAxis tick={{ fontSize: 12 }} className="text-stone-500" />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar
-                      dataKey="completed"
-                      name={t("gardenDashboard.analyticsSection.completed", { defaultValue: "Completed" })}
-                      fill={CHART_COLORS.primary}
-                      radius={[4, 4, 0, 0]}
-                      stackId="stack"
-                    />
-                    <Bar
-                      dataKey="due"
-                      name={t("gardenDashboard.analyticsSection.remaining", { defaultValue: "Remaining" })}
-                      fill={CHART_COLORS.muted}
-                      radius={[4, 4, 0, 0]}
-                      stackId="stack"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartSuspense>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart
+                  data={analytics.dailyStats.slice(-7).map((d) => ({
+                    day: new Date(d.date).toLocaleDateString(undefined, { weekday: "short" }),
+                    completed: d.completed,
+                    due: d.due - d.completed,
+                  }))}
+                  margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-stone-200 dark:stroke-stone-700" />
+                  <XAxis dataKey="day" tick={{ fontSize: 12 }} className="text-stone-500" />
+                  <YAxis tick={{ fontSize: 12 }} className="text-stone-500" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar
+                    dataKey="completed"
+                    name={t("gardenDashboard.analyticsSection.completed", { defaultValue: "Completed" })}
+                    fill={CHART_COLORS.primary}
+                    radius={[4, 4, 0, 0]}
+                    stackId="stack"
+                  />
+                  <Bar
+                    dataKey="due"
+                    name={t("gardenDashboard.analyticsSection.remaining", { defaultValue: "Remaining" })}
+                    fill={CHART_COLORS.muted}
+                    radius={[4, 4, 0, 0]}
+                    stackId="stack"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             </Card>
 
             {/* Task Type Trends */}
@@ -1681,46 +1674,44 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 {t("gardenDashboard.analyticsSection.plantHealth", { defaultValue: "Plant Health" })}
               </h3>
               <div className="flex items-center justify-center">
-                <ChartSuspense>
-                  <ResponsiveContainer width={200} height={200}>
-                    <RadialBarChart
-                      cx="50%"
-                      cy="50%"
-                      innerRadius="70%"
-                      outerRadius="100%"
-                      barSize={20}
-                      data={[
-                        {
-                          name: "Health",
-                          value: (analytics.plantStats?.total ?? 0) > 0
-                            ? Math.round(((analytics.plantStats?.healthy ?? 0) / (analytics.plantStats?.total ?? 1)) * 100)
-                            : 100,
-                          fill: CHART_COLORS.primary,
-                        },
-                      ]}
-                      startAngle={90}
-                      endAngle={-270}
-                    >
-                      <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-                      <RadialBar
-                        background
-                        dataKey="value"
-                        cornerRadius={10}
-                      />
-                      <text
-                        x="50%"
-                        y="50%"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        className="fill-current text-3xl font-bold"
-                      >
-                        {(analytics.plantStats?.total ?? 0) > 0
+                <ResponsiveContainer width={200} height={200}>
+                  <RadialBarChart
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="70%"
+                    outerRadius="100%"
+                    barSize={20}
+                    data={[
+                      {
+                        name: "Health",
+                        value: (analytics.plantStats?.total ?? 0) > 0
                           ? Math.round(((analytics.plantStats?.healthy ?? 0) / (analytics.plantStats?.total ?? 1)) * 100)
-                          : 100}%
-                      </text>
-                    </RadialBarChart>
-                  </ResponsiveContainer>
-                </ChartSuspense>
+                          : 100,
+                        fill: CHART_COLORS.primary,
+                      },
+                    ]}
+                    startAngle={90}
+                    endAngle={-270}
+                  >
+                    <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                    <RadialBar
+                      background
+                      dataKey="value"
+                      cornerRadius={10}
+                    />
+                    <text
+                      x="50%"
+                      y="50%"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="fill-current text-3xl font-bold"
+                    >
+                      {(analytics.plantStats?.total ?? 0) > 0
+                        ? Math.round(((analytics.plantStats?.healthy ?? 0) / (analytics.plantStats?.total ?? 1)) * 100)
+                        : 100}%
+                    </text>
+                  </RadialBarChart>
+                </ResponsiveContainer>
               </div>
             </Card>
         </div>
@@ -1738,31 +1729,29 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               {analytics.memberContributions.length > 1 ? (
                 <>
                   <div className="flex items-center gap-6 mb-6">
-                    <ChartSuspense>
-                      <div className="w-32 h-32">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={analytics.memberContributions.map((m) => ({
-                                name: m.displayName,
-                                value: m.tasksCompleted,
-                                fill: m.color,
-                              }))}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={35}
-                              outerRadius={55}
-                              paddingAngle={3}
-                              dataKey="value"
-                            >
-                              {analytics.memberContributions.map((m, index) => (
-                                <Cell key={`cell-${index}`} fill={m.color} />
-                              ))}
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </ChartSuspense>
+                    <div className="w-32 h-32">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={analytics.memberContributions.map((m) => ({
+                              name: m.displayName,
+                              value: m.tasksCompleted,
+                              fill: m.color,
+                            }))}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={35}
+                            outerRadius={55}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {analytics.memberContributions.map((m, index) => (
+                              <Cell key={`cell-${index}`} fill={m.color} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
                     <div className="flex-1 space-y-3">
                       {analytics.memberContributions.map((member, idx) => (
                         <div key={member.userId} className="flex items-center gap-3">
