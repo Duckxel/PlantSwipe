@@ -114,6 +114,7 @@ export const GardenDashboardPage: React.FC = () => {
       role: "owner" | "member";
       joinedAt?: string;
       accentKey?: string | null;
+      avatarUrl?: string | null;
     }>
   >([]);
   const [loading, setLoading] = React.useState(true);
@@ -430,7 +431,8 @@ export const GardenDashboardPage: React.FC = () => {
                     email: m.email ?? null,
                     role: m.role,
                     joinedAt: m.joinedAt ?? m.joined_at ?? null,
-                    accentKey: m.accentKey ?? null,
+                    accentKey: m.accentKey ?? m.accent_key ?? null,
+                    avatarUrl: m.avatarUrl ?? m.avatar_url ?? null,
                   })),
                 );
                 hydratedMembers = true;
@@ -496,6 +498,7 @@ export const GardenDashboardPage: React.FC = () => {
               role: m.role,
               joinedAt: (m as any).joinedAt,
               accentKey: (m as any).accentKey ?? null,
+              avatarUrl: (m as any).avatarUrl ?? null,
             })),
           );
           todayLocal = nowIso.slice(0, 10);
@@ -1373,6 +1376,7 @@ export const GardenDashboardPage: React.FC = () => {
               role: m.role,
               joinedAt: (m as any).joinedAt,
               accentKey: (m as any).accentKey ?? null,
+              avatarUrl: (m as any).avatarUrl ?? null,
             })),
           );
         }

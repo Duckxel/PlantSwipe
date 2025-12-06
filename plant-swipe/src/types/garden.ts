@@ -28,6 +28,7 @@ export interface GardenMember {
   displayName?: string | null
   email?: string | null
   accentKey?: string | null
+  avatarUrl?: string | null
 }
 
 export type PlantHealthStatus = 'thriving' | 'healthy' | 'okay' | 'struggling' | 'critical'

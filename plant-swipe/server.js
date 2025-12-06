@@ -11714,31 +11714,65 @@ app.get('/api/garden/:id/analytics', async (req, res) => {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     let memberContributions = []
     try {
+      // First get all garden members
+      const allMembers = await sql`
+        select
+          gm.user_id,
+          gm.role,
+          gm.joined_at,
+          p.display_name,
+          p.accent_key,
+          p.avatar_url
+        from public.garden_members gm
+        left join public.profiles p on p.id = gm.user_id
+        where gm.garden_id = ${gardenId}
+        order by gm.joined_at asc
+      `
+      
+      // Then get task completion counts for this week
       const memberStats = await sql`
         select
           uc.user_id,
-          p.display_name,
-          p.accent_key,
           sum(uc.increment) as tasks_completed
         from public.garden_task_user_completions uc
         join public.garden_plant_task_occurrences o on o.id = uc.occurrence_id
         join public.garden_plant_tasks t on t.id = o.task_id
-        left join public.profiles p on p.id = uc.user_id
         where t.garden_id = ${gardenId}
           and uc.occurred_at >= ${weekAgo}::date
-        group by uc.user_id, p.display_name, p.accent_key
-        order by tasks_completed desc
+        group by uc.user_id
       `
+      
+      // Build a map of user_id -> tasks_completed
+      const completionMap = {}
+      for (const row of memberStats) {
+        completionMap[String(row.user_id)] = Number(row.tasks_completed || 0)
+      }
+      
+      // Merge all members with their completion counts
       const totalCompleted = memberStats.reduce((s, r) => s + Number(r.tasks_completed || 0), 0)
       const memberColors = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4', '#84cc16', '#f97316']
-      memberContributions = memberStats.map((r, i) => ({
-        userId: String(r.user_id),
-        displayName: r.display_name || 'Member',
-        tasksCompleted: Number(r.tasks_completed || 0),
-        percentage: totalCompleted > 0 ? Math.round((Number(r.tasks_completed || 0) / totalCompleted) * 100) : 0,
-        color: memberColors[i % memberColors.length],
-      }))
-    } catch {}
+      
+      memberContributions = allMembers.map((m, i) => {
+        const userId = String(m.user_id)
+        const tasksCompleted = completionMap[userId] || 0
+        return {
+          userId,
+          displayName: m.display_name || 'Member',
+          role: m.role || 'member',
+          avatarUrl: m.avatar_url || null,
+          accentKey: m.accent_key || null,
+          joinedAt: m.joined_at,
+          tasksCompleted,
+          percentage: totalCompleted > 0 ? Math.round((tasksCompleted / totalCompleted) * 100) : 0,
+          color: memberColors[i % memberColors.length],
+        }
+      })
+      
+      // Sort by tasks completed (descending), but keep showing all members
+      memberContributions.sort((a, b) => b.tasksCompleted - a.tasksCompleted)
+    } catch (err) {
+      console.warn('[analytics] Failed to get member contributions:', err)
+    }
 
     // Get plant stats
     const plantStats = await sql`

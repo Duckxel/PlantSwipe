@@ -80,6 +80,10 @@ interface AnalyticsData {
   memberContributions: Array<{
     userId: string;
     displayName: string;
+    role?: "owner" | "member";
+    avatarUrl?: string | null;
+    accentKey?: string | null;
+    joinedAt?: string;
     tasksCompleted: number;
     percentage: number;
     color: string;
@@ -176,6 +180,7 @@ interface GardenAnalyticsSectionProps {
     displayName?: string | null;
     role: "owner" | "member";
     accentKey?: string | null;
+    avatarUrl?: string | null;
   }>;
   dailyStats: Array<{
     date: string;
@@ -385,6 +390,9 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       memberContributions: members.map((m, idx) => ({
         userId: m.userId,
         displayName: m.displayName || "Member",
+        role: m.role,
+        avatarUrl: m.avatarUrl || null,
+        accentKey: m.accentKey || null,
         tasksCompleted: Math.floor(currentWeekCompleted / members.length),
         percentage: Math.round(100 / members.length),
         color: MEMBER_COLORS[idx % MEMBER_COLORS.length],
@@ -1734,69 +1742,104 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
                 <Users className="w-5 h-5 text-blue-500" />
                 {t("gardenDashboard.analyticsSection.memberContributions", { defaultValue: "Member Contributions" })}
+                <span className="text-sm font-normal text-muted-foreground">
+                  ({analytics.memberContributions.length} {analytics.memberContributions.length === 1 ? t("gardenDashboard.analyticsSection.member", { defaultValue: "member" }) : t("gardenDashboard.analyticsSection.members", { defaultValue: "members" })})
+                </span>
               </h3>
-              {analytics.memberContributions.length > 1 ? (
+              {analytics.memberContributions.length > 0 ? (
                 <>
-                  <div className="flex items-center gap-6 mb-6">
-                    <div className="w-32 h-32">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={analytics.memberContributions.map((m) => ({
-                              name: m.displayName,
-                              value: m.tasksCompleted,
-                              fill: m.color,
-                            }))}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={35}
-                            outerRadius={55}
-                            paddingAngle={3}
-                            dataKey="value"
-                          >
-                            {analytics.memberContributions.map((m, index) => (
-                              <Cell key={`cell-${index}`} fill={m.color} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
+                  {/* Show pie chart only if there are task completions and multiple members */}
+                  {analytics.memberContributions.length > 1 && analytics.memberContributions.some(m => m.tasksCompleted > 0) && (
+                    <div className="flex items-center gap-6 mb-6">
+                      <div className="w-32 h-32">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m) => ({
+                                name: m.displayName,
+                                value: m.tasksCompleted,
+                                fill: m.color,
+                              }))}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={35}
+                              outerRadius={55}
+                              paddingAngle={3}
+                              dataKey="value"
+                            >
+                              {analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m, index) => (
+                                <Cell key={`cell-${index}`} fill={m.color} />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="flex-1 text-sm text-muted-foreground">
+                        {t("gardenDashboard.analyticsSection.weeklyContributions", { defaultValue: "Weekly task contributions by member" })}
+                      </div>
                     </div>
-                    <div className="flex-1 space-y-3">
-                      {analytics.memberContributions.map((member, idx) => (
-                        <div key={member.userId} className="flex items-center gap-3">
+                  )}
+                  {/* Member list - always show all members */}
+                  <div className="space-y-3">
+                    {analytics.memberContributions.map((member) => (
+                      <div key={member.userId} className="flex items-center gap-3 p-2 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800/50 transition-colors">
+                        {/* Avatar */}
+                        {member.avatarUrl ? (
+                          <img
+                            src={member.avatarUrl}
+                            alt={member.displayName}
+                            className="w-10 h-10 rounded-full object-cover border-2"
+                            style={{ borderColor: member.color }}
+                          />
+                        ) : (
                           <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold"
                             style={{ backgroundColor: member.color }}
                           >
                             {member.displayName.slice(0, 2).toUpperCase()}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{member.displayName}</div>
-                            <div className="flex items-center gap-2">
-                              <div className="h-2 flex-1 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all"
-                                  style={{
-                                    width: `${member.percentage}%`,
-                                    backgroundColor: member.color,
-                                  }}
-                                />
-                              </div>
-                              <span className="text-xs text-muted-foreground w-12 text-right">
-                                {member.tasksCompleted}
+                        )}
+                        {/* Member info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium truncate">{member.displayName}</span>
+                            {member.role === "owner" && (
+                              <span className="text-xs px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded">
+                                {t("gardenDashboard.settingsSection.owner", { defaultValue: "Owner" })}
                               </span>
+                            )}
+                          </div>
+                          {/* Task completion bar */}
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="h-2 flex-1 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${member.percentage || 0}%`,
+                                  backgroundColor: member.color,
+                                }}
+                              />
                             </div>
+                            <span className="text-xs text-muted-foreground w-16 text-right">
+                              {member.tasksCompleted} {t("gardenDashboard.analyticsSection.tasks", { defaultValue: "tasks" })}
+                            </span>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
+                  {/* Show invite hint if only one member */}
+                  {analytics.memberContributions.length === 1 && (
+                    <div className="mt-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm">
+                      <p>{t("gardenDashboard.analyticsSection.inviteHint", { defaultValue: "Tip: Invite friends to your garden to share the workload and track contributions together!" })}</p>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-center py-8">
                   <div className="text-4xl mb-3">👤</div>
                   <p className="text-sm text-muted-foreground">
-                    {t("gardenDashboard.analyticsSection.soloGardener", { defaultValue: "You're the only gardener here. Invite friends to track contributions!" })}
+                    {t("gardenDashboard.analyticsSection.noMembers", { defaultValue: "No members found. This shouldn't happen - please refresh the page." })}
                   </p>
                 </div>
               )}
