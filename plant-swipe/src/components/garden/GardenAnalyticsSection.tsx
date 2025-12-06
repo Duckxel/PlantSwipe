@@ -241,7 +241,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   const [advice, setAdvice] = React.useState<GardenerAdvice | null>(null);
   const [adviceError, setAdviceError] = React.useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = React.useState<AnalyticsData | null>(null);
-  const [activeTab, setActiveTab] = React.useState<"overview" | "tasks" | "plants" | "members">("overview");
+  const [activeTab, setActiveTab] = React.useState<"overview" | "weather" | "tasks" | "plants" | "members">("overview");
   const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
@@ -586,8 +586,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex bg-stone-100 dark:bg-stone-800 rounded-xl p-1">
-            {(["overview", "tasks", "plants", "members"] as const).map((tab) => (
+          <div className="flex bg-stone-100 dark:bg-stone-800 rounded-xl p-1 overflow-x-auto">
+            {(["overview", "weather", "tasks", "plants", "members"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -964,7 +964,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-emerald-500 mr-2" />
                     <span className="text-sm text-muted-foreground">
-                      {t("gardenDashboard.analyticsSection.generatingAdvice", { defaultValue: "Analyzing your garden..." })}
+                      {t("gardenDashboard.analyticsSection.loadingAdvice", { defaultValue: "Preparing your weekly tips..." })}
                     </span>
                   </div>
                 ) : adviceError ? (
@@ -1184,25 +1184,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       </details>
                     )}
 
-                    {/* Generated timestamp and export */}
-                    <div className="flex items-center justify-between pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
-                      <p className="text-xs text-muted-foreground flex items-center gap-2">
-                        <span>
-                          {t("gardenDashboard.analyticsSection.generatedOn", { 
-                            defaultValue: "Generated on {{date}}",
-                            date: new Date(advice.generatedAt).toLocaleDateString(undefined, {
-                              weekday: "long",
-                              month: "long",
-                              day: "numeric",
-                            }),
-                          })}
-                        </span>
-                        {advice.weatherContext?.location && (
-                          <span className="text-blue-500">• Based on {advice.weatherContext.location} weather</span>
-                        )}
-                      </p>
-                      
-                      {/* Export button */}
+                    {/* Export button */}
+                    <div className="flex justify-end pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
                       <div className="relative" ref={exportMenuRef}>
                         <Button
                           variant="ghost"
@@ -1254,6 +1237,264 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 )}
               </div>
             </Card>
+          </motion.div>
+        )}
+
+        {/* Weather Tab */}
+        {activeTab === "weather" && (
+          <motion.div
+            key="weather"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-6"
+          >
+            {/* Weather from advice context */}
+            {advice?.weatherContext?.current ? (
+              <>
+                {/* Current Weather Card */}
+                <Card className={`rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br ${getWeatherBgClass(advice.weatherContext.current.condition || '')} p-6 relative overflow-hidden`}>
+                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/20 dark:bg-white/5 rounded-full blur-3xl" />
+                  <div className="relative">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-lg flex items-center gap-2">
+                        <span className="text-2xl">{getWeatherIcon(advice.weatherContext.current.condition || '')}</span>
+                        {t("gardenDashboard.analyticsSection.currentWeather", { defaultValue: "Current Weather" })}
+                      </h3>
+                      {advice.locationContext?.city && (
+                        <div className="text-sm font-medium text-stone-600 dark:text-stone-300 flex items-center gap-1">
+                          📍 {advice.locationContext.city}
+                          {advice.locationContext.country && `, ${advice.locationContext.country}`}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="p-4 rounded-xl bg-white/50 dark:bg-black/20 text-center">
+                        <div className="text-4xl mb-2">{getWeatherIcon(advice.weatherContext.current.condition || '')}</div>
+                        <div className="text-3xl font-bold text-stone-800 dark:text-stone-100">
+                          {advice.weatherContext.current.temp}°C
+                        </div>
+                        <div className="text-sm text-stone-600 dark:text-stone-300 capitalize">
+                          {advice.weatherContext.current.condition}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 rounded-xl bg-white/50 dark:bg-black/20 text-center">
+                        <div className="text-3xl mb-2">💧</div>
+                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                          {advice.weatherContext.current.humidity}%
+                        </div>
+                        <div className="text-sm text-stone-600 dark:text-stone-300">
+                          {t("gardenDashboard.analyticsSection.humidity", { defaultValue: "Humidity" })}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 rounded-xl bg-white/50 dark:bg-black/20 text-center col-span-2 md:col-span-2">
+                        <div className="text-lg font-medium text-stone-700 dark:text-stone-200 mb-2">
+                          {t("gardenDashboard.analyticsSection.gardeningConditions", { defaultValue: "Gardening Conditions" })}
+                        </div>
+                        <div className="text-sm text-stone-600 dark:text-stone-300">
+                          {advice.weatherContext.current.temp && advice.weatherContext.current.temp > 30 
+                            ? t("gardenDashboard.analyticsSection.weatherHot", { defaultValue: "🔥 Hot - water early morning or evening" })
+                            : advice.weatherContext.current.temp && advice.weatherContext.current.temp < 10
+                              ? t("gardenDashboard.analyticsSection.weatherCold", { defaultValue: "🥶 Cold - protect sensitive plants" })
+                              : t("gardenDashboard.analyticsSection.weatherIdeal", { defaultValue: "✅ Good conditions for gardening" })
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* 7-Day Forecast */}
+                {advice.weatherContext.forecast && advice.weatherContext.forecast.length > 0 && (
+                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
+                      <Calendar className="w-5 h-5 text-blue-500" />
+                      {t("gardenDashboard.analyticsSection.weeklyForecast", { defaultValue: "7-Day Forecast" })}
+                    </h3>
+                    
+                    <div className="grid grid-cols-7 gap-2">
+                      {advice.weatherContext.forecast.slice(0, 7).map((day, idx) => {
+                        const dayDate = new Date(day.date);
+                        const dayName = dayDate.toLocaleDateString(undefined, { weekday: 'short' });
+                        const isToday = idx === 0;
+                        return (
+                          <div 
+                            key={idx} 
+                            className={`p-3 rounded-xl text-center transition-all ${
+                              isToday 
+                                ? 'bg-emerald-100 dark:bg-emerald-900/30 ring-2 ring-emerald-500/50' 
+                                : 'bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-700/50'
+                            }`}
+                          >
+                            <div className={`text-xs font-medium uppercase mb-1 ${isToday ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-500 dark:text-stone-400'}`}>
+                              {isToday ? t("gardenDashboard.analyticsSection.today", { defaultValue: "Today" }) : dayName}
+                            </div>
+                            <div className="text-2xl my-2">{getWeatherIcon(day.condition)}</div>
+                            <div className="text-sm font-bold text-stone-800 dark:text-stone-100">
+                              {Math.round(day.tempMax)}°
+                            </div>
+                            <div className="text-xs text-stone-500 dark:text-stone-400">
+                              {Math.round(day.tempMin)}°
+                            </div>
+                            {day.precipProbability > 0 && (
+                              <div className={`text-xs mt-1 ${day.precipProbability >= 50 ? 'text-blue-600 font-medium' : 'text-blue-400'}`}>
+                                💧 {day.precipProbability}%
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Weather-Based Tips */}
+                {advice.weatherAdvice && (
+                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 p-6">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
+                      <span className="text-xl">🌤️</span>
+                      {t("gardenDashboard.analyticsSection.weatherAdvice", { defaultValue: "Weather-Based Tips" })}
+                    </h3>
+                    <p className="text-sm text-sky-800 dark:text-sky-200 leading-relaxed">
+                      {advice.weatherAdvice}
+                    </p>
+                  </Card>
+                )}
+
+                {/* Upcoming Alerts */}
+                {advice.weatherContext.forecast && advice.weatherContext.forecast.length > 0 && (
+                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
+                      <AlertCircle className="w-5 h-5 text-amber-500" />
+                      {t("gardenDashboard.analyticsSection.upcomingAlerts", { defaultValue: "What to Watch For" })}
+                    </h3>
+                    <div className="space-y-3">
+                      {(() => {
+                        const alerts = [];
+                        const forecast = advice.weatherContext.forecast || [];
+                        
+                        // Check for high precipitation days
+                        const rainyDays = forecast.filter(d => d.precipProbability >= 60);
+                        if (rainyDays.length > 0) {
+                          alerts.push({
+                            icon: "🌧️",
+                            title: t("gardenDashboard.analyticsSection.rainExpected", { defaultValue: "Rain Expected" }),
+                            description: t("gardenDashboard.analyticsSection.rainDescription", { 
+                              defaultValue: "{{count}} day(s) with high chance of rain. Hold off on watering!",
+                              count: rainyDays.length 
+                            }),
+                            type: "info"
+                          });
+                        }
+                        
+                        // Check for hot days
+                        const hotDays = forecast.filter(d => d.tempMax >= 30);
+                        if (hotDays.length > 0) {
+                          alerts.push({
+                            icon: "🔥",
+                            title: t("gardenDashboard.analyticsSection.heatwave", { defaultValue: "High Temperatures" }),
+                            description: t("gardenDashboard.analyticsSection.heatwaveDescription", { 
+                              defaultValue: "{{count}} day(s) above 30°C. Water early morning or late evening.",
+                              count: hotDays.length 
+                            }),
+                            type: "warning"
+                          });
+                        }
+                        
+                        // Check for cold nights
+                        const coldDays = forecast.filter(d => d.tempMin <= 5);
+                        if (coldDays.length > 0) {
+                          alerts.push({
+                            icon: "🥶",
+                            title: t("gardenDashboard.analyticsSection.coldNights", { defaultValue: "Cold Nights Ahead" }),
+                            description: t("gardenDashboard.analyticsSection.coldNightsDescription", { 
+                              defaultValue: "{{count}} night(s) below 5°C. Protect sensitive plants!",
+                              count: coldDays.length 
+                            }),
+                            type: "warning"
+                          });
+                        }
+                        
+                        // Check for ideal conditions
+                        const idealDays = forecast.filter(d => d.tempMax >= 15 && d.tempMax <= 28 && d.precipProbability < 40);
+                        if (idealDays.length >= 3 && alerts.length === 0) {
+                          alerts.push({
+                            icon: "✨",
+                            title: t("gardenDashboard.analyticsSection.idealConditions", { defaultValue: "Great Week Ahead!" }),
+                            description: t("gardenDashboard.analyticsSection.idealConditionsDescription", { 
+                              defaultValue: "Perfect gardening weather for the next few days."
+                            }),
+                            type: "success"
+                          });
+                        }
+                        
+                        if (alerts.length === 0) {
+                          alerts.push({
+                            icon: "👍",
+                            title: t("gardenDashboard.analyticsSection.normalConditions", { defaultValue: "Steady Conditions" }),
+                            description: t("gardenDashboard.analyticsSection.normalConditionsDescription", { 
+                              defaultValue: "No extreme weather expected. Keep your regular routine."
+                            }),
+                            type: "success"
+                          });
+                        }
+                        
+                        return alerts.map((alert, idx) => (
+                          <div 
+                            key={idx}
+                            className={`flex items-start gap-3 p-4 rounded-xl ${
+                              alert.type === 'warning' 
+                                ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+                                : alert.type === 'success'
+                                  ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800'
+                                  : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+                            }`}
+                          >
+                            <span className="text-2xl">{alert.icon}</span>
+                            <div>
+                              <div className="font-medium text-stone-800 dark:text-stone-100">{alert.title}</div>
+                              <div className="text-sm text-stone-600 dark:text-stone-300">{alert.description}</div>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </Card>
+                )}
+              </>
+            ) : (
+              /* No weather data available */
+              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-4xl">📍</span>
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">
+                    {t("gardenDashboard.analyticsSection.noWeatherData", { defaultValue: "Weather Data Unavailable" })}
+                  </h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
+                    {t("gardenDashboard.analyticsSection.noWeatherDescription", { 
+                      defaultValue: "Set your garden's location in settings to see local weather forecasts and get weather-based gardening tips."
+                    })}
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="rounded-xl"
+                    onClick={() => {
+                      // Navigate to settings tab (you can emit an event or use a callback)
+                      const settingsTab = document.querySelector('[data-tab="settings"]');
+                      if (settingsTab) (settingsTab as HTMLElement).click();
+                    }}
+                  >
+                    {t("gardenDashboard.analyticsSection.setLocation", { defaultValue: "Set Garden Location" })}
+                  </Button>
+                </div>
+              </Card>
+            )}
           </motion.div>
         )}
 

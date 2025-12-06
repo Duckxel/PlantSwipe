@@ -12026,6 +12026,24 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         .filter(Boolean)
     } catch {}
 
+    // Get previous week's advice to avoid repetition
+    let previousAdvice = null
+    try {
+      const prevWeekStart = new Date(weekStart)
+      prevWeekStart.setDate(prevWeekStart.getDate() - 7)
+      const prevWeekStartIso = prevWeekStart.toISOString().slice(0, 10)
+      
+      const prevAdviceRows = await sql`
+        select advice_text, advice_summary, focus_areas, plant_specific_tips
+        from public.garden_ai_advice
+        where garden_id = ${gardenId} and week_start = ${prevWeekStartIso}
+        limit 1
+      `
+      if (prevAdviceRows && prevAdviceRows.length > 0) {
+        previousAdvice = prevAdviceRows[0]
+      }
+    } catch {}
+
     // Build comprehensive plant list
     const plantList = plants.map(p => {
       const details = []
@@ -12130,7 +12148,14 @@ ${weatherContext}
 ${journalContext}
 ${photoContext}
 ${plantImages.length > 0 ? `\n📷 The gardener has uploaded ${plantImages.length} plant photos.` : ''}
-
+${previousAdvice ? `
+═══════════════════════════════════════════════════════════════
+📋 LAST WEEK'S ADVICE (DO NOT REPEAT THIS)
+═══════════════════════════════════════════════════════════════
+Summary: ${previousAdvice.advice_summary || 'N/A'}
+Focus areas given: ${(previousAdvice.focus_areas || []).join(', ') || 'N/A'}
+${previousAdvice.advice_text ? `Full text: "${previousAdvice.advice_text.slice(0, 500)}${previousAdvice.advice_text.length > 500 ? '...' : ''}"` : ''}
+` : ''}
 ═══════════════════════════════════════════════════════════════
 YOUR ADVICE
 ═══════════════════════════════════════════════════════════════
@@ -12140,7 +12165,9 @@ Based on ALL the above data, provide personalized advice. Consider:
 - Task completion patterns and timing
 - Specific plant needs based on their characteristics
 - Seasonal considerations for the current date and location
-
+${previousAdvice ? `
+IMPORTANT: The gardener received advice last week (shown above). DO NOT repeat the same tips or focus areas. Provide FRESH, NEW advice that builds on or differs from last week. If a previous tip is still relevant, phrase it differently and add new context.
+` : ''}
 Format your response as JSON with this structure:
 {
   "summary": "A warm, encouraging 2-3 sentence overview of the garden's status",
