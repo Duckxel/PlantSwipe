@@ -1842,6 +1842,7 @@
       "accentColor": "Accent color",
       "displayNameRequired": "Display name required",
       "displayNameTaken": "Display name already taken",
+      "invalidDisplayName": "Display name can only contain letters, numbers, underscores, hyphens, and periods",
       "failedToSendFriendRequest": "Failed to send friend request",
       "failedToAcceptFriendRequest": "Failed to accept friend request"
     },

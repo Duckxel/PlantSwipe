@@ -1842,6 +1842,7 @@
       "accentColor": "Couleur d'accent",
       "displayNameRequired": "Le nom d'affichage est requis",
       "displayNameTaken": "Le nom d'affichage est déjà pris",
+      "invalidDisplayName": "Le nom d'affichage ne peut contenir que des lettres, des chiffres, des tirets du bas, des tirets et des points",
       "failedToSendFriendRequest": "Échec de l'envoi de la demande d'ami",
       "failedToAcceptFriendRequest": "Échec de l'acceptation de la demande d'ami"
     },

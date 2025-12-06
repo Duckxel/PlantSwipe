@@ -1,6 +1,7 @@
 import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
+import { validateUsername, normalizeUsername } from '@/lib/username'
 
 // Default timezone for users who haven't set one
 const DEFAULT_TIMEZONE = 'Europe/London'
@@ -156,9 +157,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
       if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
     } catch {}
+    // Validate and normalize the display name (username)
+    const validationResult = validateUsername(displayName)
+    if (!validationResult.valid) {
+      return { error: validationResult.error || 'Invalid display name' }
+    }
+    const normalizedDisplayName = validationResult.normalized!
+
     // Ensure unique email handled by Supabase; ensure unique display_name in profiles
-    // First check display_name uniqueness (case-insensitive)
-    const existing = await supabase.from('profiles').select('id').ilike('display_name', displayName).maybeSingle()
+    // First check display_name uniqueness (case-insensitive, using normalized lowercase)
+    const existing = await supabase.from('profiles').select('id').ilike('display_name', normalizedDisplayName).maybeSingle()
     if (existing.data?.id) return { error: 'Display name already taken' }
 
     const { data, error } = await supabase.auth.signUp({ email, password })
@@ -183,9 +191,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Create profile row with detected timezone and language
     // Note: notify_push and notify_email columns will default to true once the migration is applied
+    // Use normalized (lowercase) display name for consistent uniqueness
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
-      display_name: displayName,
+      display_name: normalizedDisplayName,
       liked_plant_ids: [],
       timezone: detectedTimezone,
       language: detectedLanguage,
@@ -207,7 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           triggerType: 'WELCOME_EMAIL',
           userId: uid,
           userEmail: email,
-          userDisplayName: displayName,
+          userDisplayName: normalizedDisplayName,
           userLanguage: detectedLanguage,
         }),
         credentials: 'same-origin',
