@@ -462,7 +462,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
   
   const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon')
     .eq('id', gardenId)
     .maybeSingle()
   
@@ -470,7 +470,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     // New column doesn't exist, try old is_public column
     const fallback1 = await supabase
       .from('gardens')
-      .select('id, name, cover_image_url, created_by, created_at, streak, is_public')
+      .select('id, name, cover_image_url, created_by, created_at, streak, is_public, location_city, location_country, location_timezone, location_lat, location_lon')
       .eq('id', gardenId)
       .maybeSingle()
     
@@ -478,7 +478,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
       // Neither column exists, use base schema
       const fallback2 = await supabase
         .from('gardens')
-        .select('id, name, cover_image_url, created_by, created_at, streak')
+        .select('id, name, cover_image_url, created_by, created_at, streak, location_city, location_country, location_timezone, location_lat, location_lon')
         .eq('id', gardenId)
         .maybeSingle()
       data = fallback2.data
@@ -511,6 +511,11 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     createdAt: String(data.created_at),
     streak: Number((data as any).streak ?? 0),
     privacy,
+    locationCity: data.location_city || null,
+    locationCountry: data.location_country || null,
+    locationTimezone: data.location_timezone || null,
+    locationLat: data.location_lat || null,
+    locationLon: data.location_lon || null,
   }
 }
 

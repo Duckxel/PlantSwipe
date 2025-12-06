@@ -11104,11 +11104,12 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       let gRows = []
       let gardenQuerySuccess = false
       
-      // Attempt 1: Full query with privacy and streak
+      // Attempt 1: Full query with privacy, streak, and location
       try {
         console.log('[overview] Fetching garden', gardenId, '(attempt 1: full query)')
         gRows = await sql`
-          select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy
+          select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy,
+                 location_city, location_country, location_timezone, location_lat, location_lon
           from public.gardens where id = ${gardenId} limit 1
         `
         console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
@@ -11120,7 +11121,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         try {
           console.log('[overview] Fetching garden', gardenId, '(attempt 2: without privacy)')
           gRows = await sql`
-            select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy
+            select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy,
+                   location_city, location_country, location_timezone, location_lat, location_lon
             from public.gardens where id = ${gardenId} limit 1
           `
           console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
@@ -11132,7 +11134,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           try {
             console.log('[overview] Fetching garden', gardenId, '(attempt 3: minimal)')
             gRows = await sql`
-              select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy
+              select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy,
+                     location_city, location_country, location_timezone, location_lat, location_lon
               from public.gardens where id = ${gardenId} limit 1
             `
             console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
@@ -11279,14 +11282,14 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
 
-      // Garden (include privacy field if available)
-      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy&limit=1`
+      // Garden (include privacy field and location if available)
+      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy,location_city,location_country,location_timezone,location_lat,location_lon&limit=1`
       console.log('[overview] Fetching garden via REST API')
       const gResp = await fetch(gUrl, { headers })
       if (gResp.ok) {
         const arr = await gResp.json().catch(() => [])
         const row = Array.isArray(arr) && arr[0] ? arr[0] : null
-        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public' }
+        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public', location_city: row.location_city || null, location_country: row.location_country || null, location_timezone: row.location_timezone || null, location_lat: row.location_lat || null, location_lon: row.location_lon || null }
         console.log('[overview] Garden found via REST:', !!garden)
       } else {
         console.error('[overview] Garden REST query failed:', gResp.status, await gResp.text().catch(() => ''))
@@ -11380,6 +11383,11 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       createdAt: garden.created_at ? new Date(garden.created_at).toISOString() : (garden.createdAt || null),
       streak: Number(garden.streak ?? 0),
       privacy: garden.privacy || 'public',
+      locationCity: garden.location_city || null,
+      locationCountry: garden.location_country || null,
+      locationTimezone: garden.location_timezone || null,
+      locationLat: garden.location_lat || null,
+      locationLon: garden.location_lon || null,
     } : null
     
     // Check access: members always allowed, otherwise check privacy

@@ -185,6 +185,7 @@ interface GardenAnalyticsSectionProps {
   }>;
   serverToday?: string | null;
   streak?: number;
+  onNavigateToSettings?: () => void;
 }
 
 // Color palette for charts
@@ -221,6 +222,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   dailyStats,
   serverToday: serverTodayProp,
   streak: streakProp,
+  onNavigateToSettings,
 }) => {
   // Default serverToday to current date if not provided
   const serverToday = serverTodayProp || new Date().toISOString().slice(0, 10);
@@ -1468,11 +1470,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   <Button
                     variant="outline"
                     className="rounded-xl"
-                    onClick={() => {
-                      // Navigate to settings tab (you can emit an event or use a callback)
-                      const settingsTab = document.querySelector('[data-tab="settings"]');
-                      if (settingsTab) (settingsTab as HTMLElement).click();
-                    }}
+                    onClick={() => onNavigateToSettings?.()}
+                    disabled={!onNavigateToSettings}
                   >
                     {t("gardenDashboard.analyticsSection.setLocation", { defaultValue: "Set Garden Location" })}
                   </Button>

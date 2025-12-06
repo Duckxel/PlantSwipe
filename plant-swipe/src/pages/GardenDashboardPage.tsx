@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useParams, Routes, Route, useLocation } from "react-router-dom";
+import { useParams, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
 import { Navigate } from "@/components/i18n/Navigate";
 import { useLanguageNavigate, removeLanguagePrefix } from "@/lib/i18nRouting";
@@ -405,6 +405,11 @@ export const GardenDashboardPage: React.FC = () => {
                   createdAt: String(data.garden.createdAt || ""),
                   streak: Number(data.garden.streak || 0),
                   privacy: data.garden.privacy || 'public',
+                  locationCity: data.garden.locationCity || null,
+                  locationCountry: data.garden.locationCountry || null,
+                  locationTimezone: data.garden.locationTimezone || null,
+                  locationLat: data.garden.locationLat || null,
+                  locationLon: data.garden.locationLon || null,
                 });
                 hydratedGarden = true;
               }
@@ -2919,6 +2924,7 @@ export const GardenDashboardPage: React.FC = () => {
                       plants={plants}
                       members={members}
                       dailyStats={dailyStats}
+                      onNavigateToSettings={() => navigate(`/garden/${id}/settings`)}
                     />
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
