@@ -28,7 +28,9 @@ import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
 import { SearchInput } from "@/components/ui/search-input"
 import { supabase } from "@/lib/supabaseClient"
-import { useNavigate, useLocation, Link } from "react-router-dom"
+import { useLocation } from "react-router-dom"
+import { Link } from "@/components/i18n/Link"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
 
 type EmailTemplate = {
   id: string
@@ -158,7 +160,7 @@ const getStatusConfig = (status: string) => {
 }
 
 export const AdminEmailsPanel: React.FC = () => {
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const [templates, setTemplates] = React.useState<EmailTemplate[]>([])
   const [campaigns, setCampaigns] = React.useState<EmailCampaign[]>([])
   const [loadingCampaigns, setLoadingCampaigns] = React.useState(false)

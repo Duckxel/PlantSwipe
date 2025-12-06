@@ -13,7 +13,7 @@ import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
 import {
@@ -531,7 +531,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const { id } = useParams<{ id?: string }>()
   const [searchParams] = useSearchParams()
   const prefillFromId = searchParams.get('prefillFrom')
-  const navigate = useNavigate()
   const languageNavigate = useLanguageNavigate()
   const { profile } = useAuth()
   const initialLanguage: SupportedLanguage = 'en'
@@ -1323,11 +1322,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
   const handleBackClick = React.useCallback(() => {
     if (typeof window !== 'undefined' && window.history.length > 1) {
-      navigate(-1)
+      languageNavigate(-1)
       return
     }
     onCancel()
-  }, [navigate, onCancel])
+  }, [languageNavigate, onCancel])
 
   const handleViewPlantInfo = React.useCallback(() => {
     if (!id) return

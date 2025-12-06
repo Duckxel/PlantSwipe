@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, Link, useNavigate } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { createPortal } from "react-dom"
@@ -15,6 +15,8 @@ import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { BookmarksSection } from "@/components/profile/BookmarksSection"
 import { PublicGardensSection } from "@/components/profile/PublicGardensSection"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { Link } from "@/components/i18n/Link"
 
 type PublicProfile = {
   id: string
@@ -57,7 +59,7 @@ type ProfileSuggestion = {
 
 export default function PublicProfilePage() {
   const params = useParams()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const { user, profile, refreshProfile, signOut, deleteAccount } = useAuth()
   const { t } = useTranslation('common')
   const displayParam = String(params.username || '')

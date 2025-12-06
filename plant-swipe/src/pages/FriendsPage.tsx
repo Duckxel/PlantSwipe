@@ -1,5 +1,4 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +14,7 @@ import { User, UserPlus, Check, X, ArrowUpRight } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { useLanguageNavigate } from "@/lib/i18nRouting";
 
 type FriendRequest = {
   id: string;
@@ -56,7 +56,7 @@ type SearchResult = {
 
 export const FriendsPage: React.FC = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
   const [friends, setFriends] = React.useState<Friend[]>([]);
   const [pendingRequests, setPendingRequests] = React.useState<FriendRequest[]>(

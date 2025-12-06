@@ -1,5 +1,5 @@
 import React from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import { ArrowLeft, RefreshCcw, Sparkles, UploadCloud } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import type { BlogPost } from "@/types/blog"
 import { fetchBlogPost, saveBlogPost } from "@/lib/blogs"
 import { uploadBlogImage } from "@/lib/blogMedia"
 import { buildAdminRequestHeaders } from "@/lib/adminAuth"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
 
 const DEFAULT_EDITOR_HTML = `<h2>New Aphylia story</h2><p>Use the editor to share releases, field reports, or garden learnings.</p>`
 
@@ -54,7 +55,7 @@ export default function BlogComposerPage() {
   const { t } = useTranslation("common")
   const { postId } = useParams<{ postId?: string }>()
   const isEditing = Boolean(postId)
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
 
   const [postsError, setPostsError] = React.useState<string | null>(null)
