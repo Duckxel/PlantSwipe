@@ -11104,11 +11104,12 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       let gRows = []
       let gardenQuerySuccess = false
       
-      // Attempt 1: Full query with privacy and streak
+      // Attempt 1: Full query with privacy, streak, and location
       try {
         console.log('[overview] Fetching garden', gardenId, '(attempt 1: full query)')
         gRows = await sql`
-          select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy
+          select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy,
+                 location_city, location_country, location_timezone, location_lat, location_lon
           from public.gardens where id = ${gardenId} limit 1
         `
         console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
@@ -11120,7 +11121,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         try {
           console.log('[overview] Fetching garden', gardenId, '(attempt 2: without privacy)')
           gRows = await sql`
-            select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy
+            select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy,
+                   location_city, location_country, location_timezone, location_lat, location_lon
             from public.gardens where id = ${gardenId} limit 1
           `
           console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
@@ -11132,7 +11134,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           try {
             console.log('[overview] Fetching garden', gardenId, '(attempt 3: minimal)')
             gRows = await sql`
-              select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy
+              select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy,
+                     location_city, location_country, location_timezone, location_lat, location_lon
               from public.gardens where id = ${gardenId} limit 1
             `
             console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
@@ -11279,14 +11282,14 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
 
-      // Garden (include privacy field if available)
-      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy&limit=1`
+      // Garden (include privacy field and location if available)
+      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy,location_city,location_country,location_timezone,location_lat,location_lon&limit=1`
       console.log('[overview] Fetching garden via REST API')
       const gResp = await fetch(gUrl, { headers })
       if (gResp.ok) {
         const arr = await gResp.json().catch(() => [])
         const row = Array.isArray(arr) && arr[0] ? arr[0] : null
-        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public' }
+        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public', location_city: row.location_city || null, location_country: row.location_country || null, location_timezone: row.location_timezone || null, location_lat: row.location_lat || null, location_lon: row.location_lon || null }
         console.log('[overview] Garden found via REST:', !!garden)
       } else {
         console.error('[overview] Garden REST query failed:', gResp.status, await gResp.text().catch(() => ''))
@@ -11380,6 +11383,11 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       createdAt: garden.created_at ? new Date(garden.created_at).toISOString() : (garden.createdAt || null),
       streak: Number(garden.streak ?? 0),
       privacy: garden.privacy || 'public',
+      locationCity: garden.location_city || null,
+      locationCountry: garden.location_country || null,
+      locationTimezone: garden.location_timezone || null,
+      locationLat: garden.location_lat || null,
+      locationLon: garden.location_lon || null,
     } : null
     
     // Check access: members always allowed, otherwise check privacy
@@ -12026,6 +12034,24 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         .filter(Boolean)
     } catch {}
 
+    // Get previous week's advice to avoid repetition
+    let previousAdvice = null
+    try {
+      const prevWeekStart = new Date(weekStart)
+      prevWeekStart.setDate(prevWeekStart.getDate() - 7)
+      const prevWeekStartIso = prevWeekStart.toISOString().slice(0, 10)
+      
+      const prevAdviceRows = await sql`
+        select advice_text, advice_summary, focus_areas, plant_specific_tips
+        from public.garden_ai_advice
+        where garden_id = ${gardenId} and week_start = ${prevWeekStartIso}
+        limit 1
+      `
+      if (prevAdviceRows && prevAdviceRows.length > 0) {
+        previousAdvice = prevAdviceRows[0]
+      }
+    } catch {}
+
     // Build comprehensive plant list
     const plantList = plants.map(p => {
       const details = []
@@ -12130,7 +12156,14 @@ ${weatherContext}
 ${journalContext}
 ${photoContext}
 ${plantImages.length > 0 ? `\n📷 The gardener has uploaded ${plantImages.length} plant photos.` : ''}
-
+${previousAdvice ? `
+═══════════════════════════════════════════════════════════════
+📋 LAST WEEK'S ADVICE (DO NOT REPEAT THIS)
+═══════════════════════════════════════════════════════════════
+Summary: ${previousAdvice.advice_summary || 'N/A'}
+Focus areas given: ${(previousAdvice.focus_areas || []).join(', ') || 'N/A'}
+${previousAdvice.advice_text ? `Full text: "${previousAdvice.advice_text.slice(0, 500)}${previousAdvice.advice_text.length > 500 ? '...' : ''}"` : ''}
+` : ''}
 ═══════════════════════════════════════════════════════════════
 YOUR ADVICE
 ═══════════════════════════════════════════════════════════════
@@ -12140,7 +12173,9 @@ Based on ALL the above data, provide personalized advice. Consider:
 - Task completion patterns and timing
 - Specific plant needs based on their characteristics
 - Seasonal considerations for the current date and location
-
+${previousAdvice ? `
+IMPORTANT: The gardener received advice last week (shown above). DO NOT repeat the same tips or focus areas. Provide FRESH, NEW advice that builds on or differs from last week. If a previous tip is still relevant, phrase it differently and add new context.
+` : ''}
 Format your response as JSON with this structure:
 {
   "summary": "A warm, encouraging 2-3 sentence overview of the garden's status",
@@ -12639,8 +12674,10 @@ app.get('/api/garden/:id/weather', async (req, res) => {
 app.put('/api/garden/:id/location', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
+    console.log('[garden-location] PUT request for garden:', gardenId, 'body:', JSON.stringify(req.body))
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
+    console.log('[garden-location] User:', user?.id)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
@@ -12677,7 +12714,8 @@ app.put('/api/garden/:id/location', async (req, res) => {
       } catch {}
     }
 
-    await sql`
+    console.log('[garden-location] Updating garden with:', { city, country, timezone, finalLat, finalLon })
+    const updateResult = await sql`
       update public.gardens set
         location_city = ${city || null},
         location_country = ${country || null},
@@ -12685,12 +12723,99 @@ app.put('/api/garden/:id/location', async (req, res) => {
         location_lat = ${finalLat || null},
         location_lon = ${finalLon || null}
       where id = ${gardenId}
+      returning id, location_city, location_country
     `
+    console.log('[garden-location] Update result:', updateResult)
 
-    res.json({ ok: true })
+    res.json({ ok: true, updated: updateResult?.[0] || null })
   } catch (e) {
     console.error('[garden-location] Error:', e)
     res.status(500).json({ ok: false, error: e?.message || 'Failed to update location' })
+  }
+})
+
+// Get weather data for a garden based on its location
+app.get('/api/garden/:id/weather', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Get garden location
+    const gardenResult = await sql`
+      select location_city, location_country, location_lat, location_lon, location_timezone
+      from public.gardens
+      where id = ${gardenId}
+      limit 1
+    `
+    const garden = gardenResult?.[0]
+    if (!garden) {
+      res.status(404).json({ ok: false, error: 'Garden not found' })
+      return
+    }
+
+    const lat = garden.location_lat
+    const lon = garden.location_lon
+    
+    if (!lat || !lon) {
+      res.status(400).json({ ok: false, error: 'Garden location not set', noLocation: true })
+      return
+    }
+
+    // Fetch weather from Open-Meteo API
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=${garden.location_timezone || 'auto'}&forecast_days=7`
+    
+    const weatherResp = await fetch(weatherUrl)
+    if (!weatherResp.ok) {
+      res.status(502).json({ ok: false, error: 'Failed to fetch weather data' })
+      return
+    }
+    
+    const weatherJson = await weatherResp.json()
+    
+    // Convert weather code to condition string
+    const getConditionFromCode = (code) => {
+      if (code === 0) return 'clear'
+      if (code === 1 || code === 2) return 'partly cloudy'
+      if (code === 3) return 'cloudy'
+      if (code >= 45 && code <= 48) return 'foggy'
+      if (code >= 51 && code <= 67) return 'rain'
+      if (code >= 71 && code <= 77) return 'snow'
+      if (code >= 80 && code <= 82) return 'rain'
+      if (code >= 85 && code <= 86) return 'snow'
+      if (code >= 95) return 'thunderstorm'
+      return 'cloudy'
+    }
+
+    const weather = {
+      current: {
+        temp: weatherJson.current?.temperature_2m,
+        humidity: weatherJson.current?.relative_humidity_2m,
+        windSpeed: weatherJson.current?.wind_speed_10m,
+        condition: getConditionFromCode(weatherJson.current?.weather_code)
+      },
+      forecast: weatherJson.daily?.time?.map((date, idx) => ({
+        date,
+        tempMax: weatherJson.daily.temperature_2m_max?.[idx],
+        tempMin: weatherJson.daily.temperature_2m_min?.[idx],
+        precipProbability: weatherJson.daily.precipitation_probability_max?.[idx] || 0,
+        condition: getConditionFromCode(weatherJson.daily.weather_code?.[idx])
+      })) || []
+    }
+
+    res.json({
+      ok: true,
+      weather,
+      location: {
+        city: garden.location_city,
+        country: garden.location_country,
+        lat,
+        lon
+      }
+    })
+  } catch (e) {
+    console.error('[garden-weather] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to fetch weather' })
   }
 })
 

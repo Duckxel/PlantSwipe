@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useParams, Routes, Route, useLocation } from "react-router-dom";
+import { useParams, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
 import { Navigate } from "@/components/i18n/Navigate";
 import { useLanguageNavigate, removeLanguagePrefix } from "@/lib/i18nRouting";
@@ -405,6 +405,11 @@ export const GardenDashboardPage: React.FC = () => {
                   createdAt: String(data.garden.createdAt || ""),
                   streak: Number(data.garden.streak || 0),
                   privacy: data.garden.privacy || 'public',
+                  locationCity: data.garden.locationCity || null,
+                  locationCountry: data.garden.locationCountry || null,
+                  locationTimezone: data.garden.locationTimezone || null,
+                  locationLat: data.garden.locationLat || null,
+                  locationLon: data.garden.locationLon || null,
                 });
                 hydratedGarden = true;
               }
@@ -1405,6 +1410,21 @@ export const GardenDashboardPage: React.FC = () => {
       currentLang,
     ],
   );
+
+  // Simple callback to refresh just the garden data (for settings updates like location)
+  const refreshGarden = React.useCallback(async () => {
+    if (!id) return;
+    try {
+      console.log("[GardenDashboard] Refreshing garden data...");
+      const g = await getGarden(id);
+      if (g) {
+        console.log("[GardenDashboard] Garden refreshed:", g.locationCity, g.locationCountry);
+        setGarden(g);
+      }
+    } catch (e) {
+      console.warn("[GardenDashboard] Failed to refresh garden:", e);
+    }
+  }, [id]);
 
   const scheduleReload = React.useCallback(() => {
     const executeReload = async () => {
@@ -2919,6 +2939,7 @@ export const GardenDashboardPage: React.FC = () => {
                       plants={plants}
                       members={members}
                       dailyStats={dailyStats}
+                      onNavigateToSettings={() => navigate(`/garden/${id}/settings`)}
                     />
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
@@ -2974,7 +2995,7 @@ export const GardenDashboardPage: React.FC = () => {
                       <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
                         <GardenLocationEditor
                           garden={garden}
-                          onSaved={load}
+                          onSaved={refreshGarden}
                           canEdit={viewerIsOwner}
                         />
                       </Card>

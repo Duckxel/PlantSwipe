@@ -4,9 +4,25 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
-import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  RadialBarChart,
+  RadialBar,
+  PolarAngleAxis,
+} from "recharts";
 import { useAuth } from "@/context/AuthContext";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp,
   TrendingDown,
@@ -33,24 +49,6 @@ import {
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
-const {
-  ResponsiveContainer,
-  ComposedChart,
-  Line,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell,
-  RadialBarChart,
-  RadialBar,
-  PolarAngleAxis,
-} = LazyCharts;
 
 interface AnalyticsData {
   dailyStats: Array<{
@@ -186,6 +184,7 @@ interface GardenAnalyticsSectionProps {
   }>;
   serverToday?: string | null;
   streak?: number;
+  onNavigateToSettings?: () => void;
 }
 
 // Color palette for charts
@@ -222,6 +221,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   dailyStats,
   serverToday: serverTodayProp,
   streak: streakProp,
+  onNavigateToSettings,
 }) => {
   // Default serverToday to current date if not provided
   const serverToday = serverTodayProp || new Date().toISOString().slice(0, 10);
@@ -241,10 +241,18 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   const [advice, setAdvice] = React.useState<GardenerAdvice | null>(null);
   const [adviceError, setAdviceError] = React.useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = React.useState<AnalyticsData | null>(null);
-  const [activeTab, setActiveTab] = React.useState<"overview" | "tasks" | "plants" | "members">("overview");
+  const [activeTab, setActiveTab] = React.useState<"overview" | "weather" | "tasks" | "plants" | "members">("overview");
   const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
+  
+  // Direct weather data (independent of advice)
+  const [weatherData, setWeatherData] = React.useState<{
+    current?: { temp?: number; condition?: string; humidity?: number; windSpeed?: number };
+    forecast?: Array<{ date: string; condition: string; tempMax: number; tempMin: number; precipProbability: number }>;
+    location?: string;
+  } | null>(null);
+  const [weatherLoading, setWeatherLoading] = React.useState(false);
 
   // Close export menu when clicking outside
   React.useEffect(() => {
@@ -529,6 +537,56 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     }
   }, [isEligibleForAdvice, fetchAdvice]);
 
+  // Fetch weather data directly (independent of advice)
+  const fetchWeather = React.useCallback(async () => {
+    if (!gardenId) return;
+    
+    // Check if garden has location
+    const hasLocation = garden?.locationCity || garden?.locationLat;
+    if (!hasLocation) {
+      console.log("[Weather] No location set for garden");
+      setWeatherData(null);
+      return;
+    }
+
+    setWeatherLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const resp = await fetch(`/api/garden/${gardenId}/weather`, {
+        headers,
+        credentials: "same-origin",
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data?.ok && data.weather) {
+          console.log("[Weather] Fetched weather data:", data.weather);
+          setWeatherData({
+            current: data.weather.current,
+            forecast: data.weather.forecast,
+            location: data.location?.city || garden?.locationCity,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("[Weather] Failed to fetch weather:", err);
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, [gardenId, garden?.locationCity, garden?.locationLat]);
+
+  // Fetch weather when tab is active or garden location changes
+  React.useEffect(() => {
+    const hasLocation = garden?.locationCity || garden?.locationLat;
+    if (hasLocation && (activeTab === "weather" || activeTab === "overview")) {
+      fetchWeather();
+    }
+  }, [activeTab, garden?.locationCity, garden?.locationLat, fetchWeather]);
+
   // Merge server analytics with computed analytics to ensure all fields are present
   const analytics = React.useMemo(() => {
     if (!computedAnalytics) return analyticsData;
@@ -586,8 +644,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex bg-stone-100 dark:bg-stone-800 rounded-xl p-1">
-            {(["overview", "tasks", "plants", "members"] as const).map((tab) => (
+          <div className="flex bg-stone-100 dark:bg-stone-800 rounded-xl p-1 overflow-x-auto">
+            {(["overview", "weather", "tasks", "plants", "members"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -605,16 +663,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       </div>
 
       {/* Overview Tab */}
-      <AnimatePresence mode="wait">
-        {activeTab === "overview" && (
-          <motion.div
-            key="overview"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
+      {activeTab === "overview" && (
+        <div className="space-y-6">
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Completion Rate */}
@@ -712,46 +762,44 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     {t("gardenDashboard.analyticsSection.last30Days", { defaultValue: "Last 30 days" })}
                   </span>
                 </div>
-                <ChartSuspense>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <ComposedChart
-                      data={analytics.dailyStats.slice(-30).map((d) => ({
-                        date: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-                        completed: d.completed,
-                        due: d.due,
-                      }))}
-                      margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-stone-200 dark:stroke-stone-700" />
-                      <XAxis 
-                        dataKey="date" 
-                        tick={{ fontSize: 10 }} 
-                        className="text-stone-500"
-                        interval={4}
-                      />
-                      <YAxis tick={{ fontSize: 10 }} className="text-stone-500" />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Area
-                        type="monotone"
-                        dataKey="due"
-                        name={t("gardenDashboard.analyticsSection.due", { defaultValue: "Due" })}
-                        fill={CHART_COLORS.muted}
-                        fillOpacity={0.2}
-                        stroke={CHART_COLORS.muted}
-                        strokeWidth={2}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="completed"
-                        name={t("gardenDashboard.analyticsSection.completed", { defaultValue: "Completed" })}
-                        stroke={CHART_COLORS.primary}
-                        strokeWidth={3}
-                        dot={{ r: 2 }}
-                        activeDot={{ r: 4 }}
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </ChartSuspense>
+                <ResponsiveContainer width="100%" height={200}>
+                  <ComposedChart
+                    data={analytics.dailyStats.slice(-30).map((d) => ({
+                      date: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+                      completed: d.completed,
+                      due: d.due,
+                    }))}
+                    margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-stone-200 dark:stroke-stone-700" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 10 }} 
+                      className="text-stone-500"
+                      interval={4}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} className="text-stone-500" />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="due"
+                      name={t("gardenDashboard.analyticsSection.due", { defaultValue: "Due" })}
+                      fill={CHART_COLORS.muted}
+                      fillOpacity={0.2}
+                      stroke={CHART_COLORS.muted}
+                      strokeWidth={2}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="completed"
+                      name={t("gardenDashboard.analyticsSection.completed", { defaultValue: "Completed" })}
+                      stroke={CHART_COLORS.primary}
+                      strokeWidth={3}
+                      dot={{ r: 2 }}
+                      activeDot={{ r: 4 }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </Card>
 
               {/* Task Type Distribution */}
@@ -763,33 +811,31 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </h3>
                 </div>
                 <div className="flex items-center gap-6">
-                  <ChartSuspense>
-                    <div className="w-32 h-32">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={[
-                              { name: "Water", value: analytics.weeklyStats.tasksByType.water, fill: CHART_COLORS.water },
-                              { name: "Fertilize", value: analytics.weeklyStats.tasksByType.fertilize, fill: CHART_COLORS.fertilize },
-                              { name: "Harvest", value: analytics.weeklyStats.tasksByType.harvest, fill: CHART_COLORS.harvest },
-                              { name: "Cut", value: analytics.weeklyStats.tasksByType.cut, fill: CHART_COLORS.cut },
-                              { name: "Custom", value: analytics.weeklyStats.tasksByType.custom, fill: CHART_COLORS.custom },
-                            ].filter((d) => d.value > 0)}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={35}
-                            outerRadius={55}
-                            paddingAngle={3}
-                            dataKey="value"
-                          >
-                            {[CHART_COLORS.water, CHART_COLORS.fertilize, CHART_COLORS.harvest, CHART_COLORS.cut, CHART_COLORS.custom].map((color, index) => (
-                              <Cell key={`cell-${index}`} fill={color} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </ChartSuspense>
+                  <div className="w-32 h-32">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: "Water", value: analytics.weeklyStats.tasksByType.water, fill: CHART_COLORS.water },
+                            { name: "Fertilize", value: analytics.weeklyStats.tasksByType.fertilize, fill: CHART_COLORS.fertilize },
+                            { name: "Harvest", value: analytics.weeklyStats.tasksByType.harvest, fill: CHART_COLORS.harvest },
+                            { name: "Cut", value: analytics.weeklyStats.tasksByType.cut, fill: CHART_COLORS.cut },
+                            { name: "Custom", value: analytics.weeklyStats.tasksByType.custom, fill: CHART_COLORS.custom },
+                          ].filter((d) => d.value > 0)}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={35}
+                          outerRadius={55}
+                          paddingAngle={3}
+                          dataKey="value"
+                        >
+                          {[CHART_COLORS.water, CHART_COLORS.fertilize, CHART_COLORS.harvest, CHART_COLORS.cut, CHART_COLORS.custom].map((color, index) => (
+                            <Cell key={`cell-${index}`} fill={color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
                   <div className="flex-1 space-y-2">
                     {[
                       { key: "water", label: t("garden.taskTypes.water", { defaultValue: "Water" }), icon: Droplets, color: CHART_COLORS.water },
@@ -964,7 +1010,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-emerald-500 mr-2" />
                     <span className="text-sm text-muted-foreground">
-                      {t("gardenDashboard.analyticsSection.generatingAdvice", { defaultValue: "Analyzing your garden..." })}
+                      {t("gardenDashboard.analyticsSection.loadingAdvice", { defaultValue: "Preparing your weekly tips..." })}
                     </span>
                   </div>
                 ) : adviceError ? (
@@ -1184,25 +1230,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       </details>
                     )}
 
-                    {/* Generated timestamp and export */}
-                    <div className="flex items-center justify-between pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
-                      <p className="text-xs text-muted-foreground flex items-center gap-2">
-                        <span>
-                          {t("gardenDashboard.analyticsSection.generatedOn", { 
-                            defaultValue: "Generated on {{date}}",
-                            date: new Date(advice.generatedAt).toLocaleDateString(undefined, {
-                              weekday: "long",
-                              month: "long",
-                              day: "numeric",
-                            }),
-                          })}
-                        </span>
-                        {advice.weatherContext?.location && (
-                          <span className="text-blue-500">• Based on {advice.weatherContext.location} weather</span>
-                        )}
-                      </p>
-                      
-                      {/* Export button */}
+                    {/* Export button */}
+                    <div className="flex justify-end pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
                       <div className="relative" ref={exportMenuRef}>
                         <Button
                           variant="ghost"
@@ -1254,56 +1283,312 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 )}
               </div>
             </Card>
-          </motion.div>
-        )}
+        </div>
+      )}
 
-        {/* Tasks Tab */}
-        {activeTab === "tasks" && (
-          <motion.div
-            key="tasks"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
+      {/* Weather Tab */}
+      {activeTab === "weather" && (() => {
+        // Merge weather sources: prefer direct fetch, fallback to advice context
+        const currentWeather = weatherData?.current || advice?.weatherContext?.current;
+        const forecastData = weatherData?.forecast || advice?.weatherContext?.forecast;
+        const locationName = weatherData?.location || advice?.locationContext?.city || garden?.locationCity;
+        const locationCountry = advice?.locationContext?.country || garden?.locationCountry;
+        
+        return (
+        <div className="space-y-6">
+            {/* Loading state */}
+            {weatherLoading ? (
+              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-500 mr-2" />
+                  <span className="text-sm text-muted-foreground">
+                    {t("gardenDashboard.analyticsSection.loadingWeather", { defaultValue: "Loading weather data..." })}
+                  </span>
+                </div>
+              </Card>
+            ) : currentWeather ? (
+              <>
+                {/* Current Weather Card */}
+                <Card className={`rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br ${getWeatherBgClass(currentWeather.condition || '')} p-6 relative overflow-hidden`}>
+                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/20 dark:bg-white/5 rounded-full blur-3xl" />
+                  <div className="relative">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-lg flex items-center gap-2">
+                        <span className="text-2xl">{getWeatherIcon(currentWeather.condition || '')}</span>
+                        {t("gardenDashboard.analyticsSection.currentWeather", { defaultValue: "Current Weather" })}
+                      </h3>
+                      {locationName && (
+                        <div className="text-sm font-medium text-stone-600 dark:text-stone-300 flex items-center gap-1">
+                          📍 {locationName}
+                          {locationCountry && `, ${locationCountry}`}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="p-4 rounded-xl bg-white/50 dark:bg-black/20 text-center">
+                        <div className="text-4xl mb-2">{getWeatherIcon(currentWeather.condition || '')}</div>
+                        <div className="text-3xl font-bold text-stone-800 dark:text-stone-100">
+                          {currentWeather.temp}°C
+                        </div>
+                        <div className="text-sm text-stone-600 dark:text-stone-300 capitalize">
+                          {currentWeather.condition}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 rounded-xl bg-white/50 dark:bg-black/20 text-center">
+                        <div className="text-3xl mb-2">💧</div>
+                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                          {currentWeather.humidity}%
+                        </div>
+                        <div className="text-sm text-stone-600 dark:text-stone-300">
+                          {t("gardenDashboard.analyticsSection.humidity", { defaultValue: "Humidity" })}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 rounded-xl bg-white/50 dark:bg-black/20 text-center col-span-2 md:col-span-2">
+                        <div className="text-lg font-medium text-stone-700 dark:text-stone-200 mb-2">
+                          {t("gardenDashboard.analyticsSection.gardeningConditions", { defaultValue: "Gardening Conditions" })}
+                        </div>
+                        <div className="text-sm text-stone-600 dark:text-stone-300">
+                          {currentWeather.temp && currentWeather.temp > 30 
+                            ? t("gardenDashboard.analyticsSection.weatherHot", { defaultValue: "🔥 Hot - water early morning or evening" })
+                            : currentWeather.temp && currentWeather.temp < 10
+                              ? t("gardenDashboard.analyticsSection.weatherCold", { defaultValue: "🥶 Cold - protect sensitive plants" })
+                              : t("gardenDashboard.analyticsSection.weatherIdeal", { defaultValue: "✅ Good conditions for gardening" })
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* 7-Day Forecast */}
+                {forecastData && forecastData.length > 0 && (
+                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
+                      <Calendar className="w-5 h-5 text-blue-500" />
+                      {t("gardenDashboard.analyticsSection.weeklyForecast", { defaultValue: "7-Day Forecast" })}
+                    </h3>
+                    
+                    <div className="grid grid-cols-7 gap-2">
+                      {forecastData.slice(0, 7).map((day, idx) => {
+                        const dayDate = new Date(day.date);
+                        const dayName = dayDate.toLocaleDateString(undefined, { weekday: 'short' });
+                        const isToday = idx === 0;
+                        return (
+                          <div 
+                            key={idx} 
+                            className={`p-3 rounded-xl text-center transition-all ${
+                              isToday 
+                                ? 'bg-emerald-100 dark:bg-emerald-900/30 ring-2 ring-emerald-500/50' 
+                                : 'bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-700/50'
+                            }`}
+                          >
+                            <div className={`text-xs font-medium uppercase mb-1 ${isToday ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-500 dark:text-stone-400'}`}>
+                              {isToday ? t("gardenDashboard.analyticsSection.today", { defaultValue: "Today" }) : dayName}
+                            </div>
+                            <div className="text-2xl my-2">{getWeatherIcon(day.condition)}</div>
+                            <div className="text-sm font-bold text-stone-800 dark:text-stone-100">
+                              {Math.round(day.tempMax)}°
+                            </div>
+                            <div className="text-xs text-stone-500 dark:text-stone-400">
+                              {Math.round(day.tempMin)}°
+                            </div>
+                            {day.precipProbability > 0 && (
+                              <div className={`text-xs mt-1 ${day.precipProbability >= 50 ? 'text-blue-600 font-medium' : 'text-blue-400'}`}>
+                                💧 {day.precipProbability}%
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Weather-Based Tips */}
+                {advice?.weatherAdvice && (
+                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 p-6">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
+                      <span className="text-xl">🌤️</span>
+                      {t("gardenDashboard.analyticsSection.weatherAdvice", { defaultValue: "Weather-Based Tips" })}
+                    </h3>
+                    <p className="text-sm text-sky-800 dark:text-sky-200 leading-relaxed">
+                      {advice.weatherAdvice}
+                    </p>
+                  </Card>
+                )}
+
+                {/* Upcoming Alerts */}
+                {forecastData && forecastData.length > 0 && (
+                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
+                      <AlertCircle className="w-5 h-5 text-amber-500" />
+                      {t("gardenDashboard.analyticsSection.upcomingAlerts", { defaultValue: "What to Watch For" })}
+                    </h3>
+                    <div className="space-y-3">
+                      {(() => {
+                        const alerts = [];
+                        const forecast = forecastData || [];
+                        
+                        // Check for high precipitation days
+                        const rainyDays = forecast.filter(d => d.precipProbability >= 60);
+                        if (rainyDays.length > 0) {
+                          alerts.push({
+                            icon: "🌧️",
+                            title: t("gardenDashboard.analyticsSection.rainExpected", { defaultValue: "Rain Expected" }),
+                            description: t("gardenDashboard.analyticsSection.rainDescription", { 
+                              defaultValue: "{{count}} day(s) with high chance of rain. Hold off on watering!",
+                              count: rainyDays.length 
+                            }),
+                            type: "info"
+                          });
+                        }
+                        
+                        // Check for hot days
+                        const hotDays = forecast.filter(d => d.tempMax >= 30);
+                        if (hotDays.length > 0) {
+                          alerts.push({
+                            icon: "🔥",
+                            title: t("gardenDashboard.analyticsSection.heatwave", { defaultValue: "High Temperatures" }),
+                            description: t("gardenDashboard.analyticsSection.heatwaveDescription", { 
+                              defaultValue: "{{count}} day(s) above 30°C. Water early morning or late evening.",
+                              count: hotDays.length 
+                            }),
+                            type: "warning"
+                          });
+                        }
+                        
+                        // Check for cold nights
+                        const coldDays = forecast.filter(d => d.tempMin <= 5);
+                        if (coldDays.length > 0) {
+                          alerts.push({
+                            icon: "🥶",
+                            title: t("gardenDashboard.analyticsSection.coldNights", { defaultValue: "Cold Nights Ahead" }),
+                            description: t("gardenDashboard.analyticsSection.coldNightsDescription", { 
+                              defaultValue: "{{count}} night(s) below 5°C. Protect sensitive plants!",
+                              count: coldDays.length 
+                            }),
+                            type: "warning"
+                          });
+                        }
+                        
+                        // Check for ideal conditions
+                        const idealDays = forecast.filter(d => d.tempMax >= 15 && d.tempMax <= 28 && d.precipProbability < 40);
+                        if (idealDays.length >= 3 && alerts.length === 0) {
+                          alerts.push({
+                            icon: "✨",
+                            title: t("gardenDashboard.analyticsSection.idealConditions", { defaultValue: "Great Week Ahead!" }),
+                            description: t("gardenDashboard.analyticsSection.idealConditionsDescription", { 
+                              defaultValue: "Perfect gardening weather for the next few days."
+                            }),
+                            type: "success"
+                          });
+                        }
+                        
+                        if (alerts.length === 0) {
+                          alerts.push({
+                            icon: "👍",
+                            title: t("gardenDashboard.analyticsSection.normalConditions", { defaultValue: "Steady Conditions" }),
+                            description: t("gardenDashboard.analyticsSection.normalConditionsDescription", { 
+                              defaultValue: "No extreme weather expected. Keep your regular routine."
+                            }),
+                            type: "success"
+                          });
+                        }
+                        
+                        return alerts.map((alert, idx) => (
+                          <div 
+                            key={idx}
+                            className={`flex items-start gap-3 p-4 rounded-xl ${
+                              alert.type === 'warning' 
+                                ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+                                : alert.type === 'success'
+                                  ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800'
+                                  : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+                            }`}
+                          >
+                            <span className="text-2xl">{alert.icon}</span>
+                            <div>
+                              <div className="font-medium text-stone-800 dark:text-stone-100">{alert.title}</div>
+                              <div className="text-sm text-stone-600 dark:text-stone-300">{alert.description}</div>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </Card>
+                )}
+              </>
+            ) : (
+              /* No weather data available */
+              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-4xl">📍</span>
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">
+                    {t("gardenDashboard.analyticsSection.noWeatherData", { defaultValue: "Weather Data Unavailable" })}
+                  </h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
+                    {t("gardenDashboard.analyticsSection.noWeatherDescription", { 
+                      defaultValue: "Set your garden's location in settings to see local weather forecasts and get weather-based gardening tips."
+                    })}
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="rounded-xl"
+                    onClick={() => onNavigateToSettings?.()}
+                    disabled={!onNavigateToSettings}
+                  >
+                    {t("gardenDashboard.analyticsSection.setLocation", { defaultValue: "Set Garden Location" })}
+                  </Button>
+                </div>
+              </Card>
+            )}
+        </div>
+        );
+      })()}
+
+      {/* Tasks Tab */}
+      {activeTab === "tasks" && (
+        <div className="space-y-6">
             {/* Weekly Performance */}
             <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
               <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
                 <Activity className="w-5 h-5 text-blue-500" />
                 {t("gardenDashboard.analyticsSection.weeklyPerformance", { defaultValue: "Weekly Performance" })}
               </h3>
-              <ChartSuspense>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart
-                    data={analytics.dailyStats.slice(-7).map((d) => ({
-                      day: new Date(d.date).toLocaleDateString(undefined, { weekday: "short" }),
-                      completed: d.completed,
-                      due: d.due - d.completed,
-                    }))}
-                    margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-stone-200 dark:stroke-stone-700" />
-                    <XAxis dataKey="day" tick={{ fontSize: 12 }} className="text-stone-500" />
-                    <YAxis tick={{ fontSize: 12 }} className="text-stone-500" />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar
-                      dataKey="completed"
-                      name={t("gardenDashboard.analyticsSection.completed", { defaultValue: "Completed" })}
-                      fill={CHART_COLORS.primary}
-                      radius={[4, 4, 0, 0]}
-                      stackId="stack"
-                    />
-                    <Bar
-                      dataKey="due"
-                      name={t("gardenDashboard.analyticsSection.remaining", { defaultValue: "Remaining" })}
-                      fill={CHART_COLORS.muted}
-                      radius={[4, 4, 0, 0]}
-                      stackId="stack"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartSuspense>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart
+                  data={analytics.dailyStats.slice(-7).map((d) => ({
+                    day: new Date(d.date).toLocaleDateString(undefined, { weekday: "short" }),
+                    completed: d.completed,
+                    due: d.due - d.completed,
+                  }))}
+                  margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-stone-200 dark:stroke-stone-700" />
+                  <XAxis dataKey="day" tick={{ fontSize: 12 }} className="text-stone-500" />
+                  <YAxis tick={{ fontSize: 12 }} className="text-stone-500" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar
+                    dataKey="completed"
+                    name={t("gardenDashboard.analyticsSection.completed", { defaultValue: "Completed" })}
+                    fill={CHART_COLORS.primary}
+                    radius={[4, 4, 0, 0]}
+                    stackId="stack"
+                  />
+                  <Bar
+                    dataKey="due"
+                    name={t("gardenDashboard.analyticsSection.remaining", { defaultValue: "Remaining" })}
+                    fill={CHART_COLORS.muted}
+                    radius={[4, 4, 0, 0]}
+                    stackId="stack"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             </Card>
 
             {/* Task Type Trends */}
@@ -1336,19 +1621,12 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 ))}
               </div>
             </Card>
-          </motion.div>
-        )}
+        </div>
+      )}
 
-        {/* Plants Tab */}
-        {activeTab === "plants" && (
-          <motion.div
-            key="plants"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
+      {/* Plants Tab */}
+      {activeTab === "plants" && (
+        <div className="space-y-6">
             {/* Plant Health Overview */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 text-center">
@@ -1396,61 +1674,52 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 {t("gardenDashboard.analyticsSection.plantHealth", { defaultValue: "Plant Health" })}
               </h3>
               <div className="flex items-center justify-center">
-                <ChartSuspense>
-                  <ResponsiveContainer width={200} height={200}>
-                    <RadialBarChart
-                      cx="50%"
-                      cy="50%"
-                      innerRadius="70%"
-                      outerRadius="100%"
-                      barSize={20}
-                      data={[
-                        {
-                          name: "Health",
-                          value: (analytics.plantStats?.total ?? 0) > 0
-                            ? Math.round(((analytics.plantStats?.healthy ?? 0) / (analytics.plantStats?.total ?? 1)) * 100)
-                            : 100,
-                          fill: CHART_COLORS.primary,
-                        },
-                      ]}
-                      startAngle={90}
-                      endAngle={-270}
-                    >
-                      <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-                      <RadialBar
-                        background
-                        dataKey="value"
-                        cornerRadius={10}
-                      />
-                      <text
-                        x="50%"
-                        y="50%"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        className="fill-current text-3xl font-bold"
-                      >
-                        {(analytics.plantStats?.total ?? 0) > 0
+                <ResponsiveContainer width={200} height={200}>
+                  <RadialBarChart
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="70%"
+                    outerRadius="100%"
+                    barSize={20}
+                    data={[
+                      {
+                        name: "Health",
+                        value: (analytics.plantStats?.total ?? 0) > 0
                           ? Math.round(((analytics.plantStats?.healthy ?? 0) / (analytics.plantStats?.total ?? 1)) * 100)
-                          : 100}%
-                      </text>
-                    </RadialBarChart>
-                  </ResponsiveContainer>
-                </ChartSuspense>
+                          : 100,
+                        fill: CHART_COLORS.primary,
+                      },
+                    ]}
+                    startAngle={90}
+                    endAngle={-270}
+                  >
+                    <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                    <RadialBar
+                      background
+                      dataKey="value"
+                      cornerRadius={10}
+                    />
+                    <text
+                      x="50%"
+                      y="50%"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="fill-current text-3xl font-bold"
+                    >
+                      {(analytics.plantStats?.total ?? 0) > 0
+                        ? Math.round(((analytics.plantStats?.healthy ?? 0) / (analytics.plantStats?.total ?? 1)) * 100)
+                        : 100}%
+                    </text>
+                  </RadialBarChart>
+                </ResponsiveContainer>
               </div>
             </Card>
-          </motion.div>
-        )}
+        </div>
+      )}
 
-        {/* Members Tab */}
-        {activeTab === "members" && (
-          <motion.div
-            key="members"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
+      {/* Members Tab */}
+      {activeTab === "members" && (
+        <div className="space-y-6">
             {/* Member Contributions */}
             <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6">
               <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
@@ -1460,31 +1729,29 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               {analytics.memberContributions.length > 1 ? (
                 <>
                   <div className="flex items-center gap-6 mb-6">
-                    <ChartSuspense>
-                      <div className="w-32 h-32">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={analytics.memberContributions.map((m) => ({
-                                name: m.displayName,
-                                value: m.tasksCompleted,
-                                fill: m.color,
-                              }))}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={35}
-                              outerRadius={55}
-                              paddingAngle={3}
-                              dataKey="value"
-                            >
-                              {analytics.memberContributions.map((m, index) => (
-                                <Cell key={`cell-${index}`} fill={m.color} />
-                              ))}
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </ChartSuspense>
+                    <div className="w-32 h-32">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={analytics.memberContributions.map((m) => ({
+                              name: m.displayName,
+                              value: m.tasksCompleted,
+                              fill: m.color,
+                            }))}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={35}
+                            outerRadius={55}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {analytics.memberContributions.map((m, index) => (
+                              <Cell key={`cell-${index}`} fill={m.color} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
                     <div className="flex-1 space-y-3">
                       {analytics.memberContributions.map((member, idx) => (
                         <div key={member.userId} className="flex items-center gap-3">
@@ -1525,9 +1792,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 </div>
               )}
             </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 };

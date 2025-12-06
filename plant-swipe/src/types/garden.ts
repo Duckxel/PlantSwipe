@@ -12,6 +12,11 @@ export interface Garden {
   createdAt: string
   streak?: number
   privacy: GardenPrivacy
+  locationCity?: string | null
+  locationCountry?: string | null
+  locationTimezone?: string | null
+  locationLat?: number | null
+  locationLon?: number | null
 }
 
 export interface GardenMember {
