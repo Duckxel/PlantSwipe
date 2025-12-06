@@ -1,7 +1,7 @@
 import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
-import { validateUsername, normalizeUsername } from '@/lib/username'
+import { validateUsername } from '@/lib/username'
 
 // Default timezone for users who haven't set one
 const DEFAULT_TIMEZONE = 'Europe/London'
