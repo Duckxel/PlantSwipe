@@ -15478,6 +15478,79 @@ app.get('/sitemap.xml', async (req, res) => {
   </url>`
         }).join('\n')
       }
+      
+      // Public user profiles (with lastmod based on last activity)
+      // Join with gardens to get last activity date
+      const { data: profiles } = await supabaseServer
+        .from('profiles')
+        .select(`
+          id, 
+          display_name, 
+          username,
+          updated_at,
+          gardens!gardens_created_by_fkey(updated_at)
+        `)
+        .eq('is_private', false)
+        .not('display_name', 'is', null)
+        .order('updated_at', { ascending: false })
+        .limit(200)
+      
+      if (profiles?.length) {
+        urls += '\n' + profiles.map(profile => {
+          // Use the most recent date: profile update or latest garden update
+          const profileDate = profile.updated_at ? new Date(profile.updated_at) : null
+          const gardenDates = (profile.gardens || [])
+            .map(g => g.updated_at ? new Date(g.updated_at) : null)
+            .filter(Boolean)
+          const allDates = [profileDate, ...gardenDates].filter(Boolean)
+          const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
+          const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
+          
+          // Use username if available, otherwise display_name
+          const urlPath = profile.username || profile.display_name
+          return `  <url>
+    <loc>${siteUrl}/u/${encodeURIComponent(urlPath)}</loc>${lastmodStr}
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>`
+        }).join('\n')
+      }
+      
+      // Public gardens (with lastmod based on last activity)
+      // Join with garden_plants to get last plant activity
+      const { data: gardens } = await supabaseServer
+        .from('gardens')
+        .select(`
+          id,
+          updated_at,
+          created_at,
+          privacy,
+          garden_plants(created_at, updated_at)
+        `)
+        .or('privacy.eq.public,privacy.is.null')
+        .order('updated_at', { ascending: false })
+        .limit(300)
+      
+      if (gardens?.length) {
+        urls += '\n' + gardens.map(garden => {
+          // Use the most recent date: garden update or latest plant activity
+          const gardenDate = garden.updated_at || garden.created_at
+          const gardenDateTime = gardenDate ? new Date(gardenDate) : null
+          const plantDates = (garden.garden_plants || [])
+            .flatMap(p => [p.updated_at, p.created_at])
+            .filter(Boolean)
+            .map(d => new Date(d))
+          const allDates = [gardenDateTime, ...plantDates].filter(Boolean)
+          const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
+          const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
+          
+          return `  <url>
+    <loc>${siteUrl}/garden/${garden.id}</loc>${lastmodStr}
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>`
+        }).join('\n')
+      }
     } catch (err) {
       console.error('[sitemap] Error fetching dynamic content:', err?.message)
     }
