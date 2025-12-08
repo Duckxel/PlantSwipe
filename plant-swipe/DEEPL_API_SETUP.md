@@ -39,8 +39,12 @@ app.post('/api/translate', async (req, res) => {
       return res.status(500).json({ error: 'DeepL API key not configured' })
     }
     
-    // Use DeepL API (Pro: https://api.deepl.com)
-    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+    // Auto-detect API endpoint based on key format (Free keys end with ':fx')
+    const isFreeKey = deeplApiKey.endsWith(':fx')
+    const defaultUrl = isFreeKey 
+      ? 'https://api-free.deepl.com/v2/translate'
+      : 'https://api.deepl.com/v2/translate'
+    const deeplUrl = process.env.DEEPL_API_URL || defaultUrl
     
     const response = await fetch(deeplUrl, {
       method: 'POST',
@@ -76,10 +80,18 @@ app.post('/api/translate', async (req, res) => {
  * Environment Variables Required:
  * 
  * DEEPL_API_KEY=your-deepl-api-key-here
- * DEEPL_API_URL=https://api.deepl.com/v2/translate (optional, defaults to Pro API)
+ * DEEPL_API_URL (optional) - Override the auto-detected endpoint
+ * 
+ * API Endpoint Auto-Detection:
+ * The correct endpoint is automatically detected based on your API key:
+ * - Free API keys end with ':fx' → uses https://api-free.deepl.com/v2/translate
+ * - Pro API keys (no ':fx' suffix) → uses https://api.deepl.com/v2/translate
  * 
  * To get a DeepL API key:
  * 1. Sign up at https://www.deepl.com/pro-api
  * 2. Get your API key from the dashboard
  * 3. Add it to your .env file
+ * 
+ * Note: Free and Pro API keys are NOT interchangeable!
+ * Make sure you're using the correct key for your subscription tier.
  */
