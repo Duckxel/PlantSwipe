@@ -15827,6 +15827,12 @@ async function generateCrawlerHtml(req, pagePath) {
         bookmarksCurated: 'Curated by',
         bookmarksCarefully: 'A carefully curated plant collection',
         bookmarksView: 'View this collection on Aphylia',
+        bookmarkTitle: 'Plant Bookmark',
+        bookmarkDesc: 'Bookmark',
+        bookmarkMadeBy: 'made by',
+        bookmarkSaved: 'saved',
+        bookmarkPlant: 'plant',
+        bookmarkPlants: 'plants',
         // Homepage
         homeTitle: 'Aphylia - Discover & Grow Your Perfect Garden',
         homeDesc: 'Swipe to discover plants, track your garden, get care reminders. Join gardeners growing their dream gardens!',
@@ -15989,6 +15995,12 @@ async function generateCrawlerHtml(req, pagePath) {
         bookmarksCurated: 'Sélectionné par',
         bookmarksCarefully: 'Une collection de plantes soigneusement sélectionnée',
         bookmarksView: 'Voir cette collection sur Aphylia',
+        bookmarkTitle: 'Signet de Plantes',
+        bookmarkDesc: 'Signet',
+        bookmarkMadeBy: 'créé par',
+        bookmarkSaved: 'sauvegardées',
+        bookmarkPlant: 'plante',
+        bookmarkPlants: 'plantes',
         homeTitle: 'Aphylia - Découvrez & Cultivez Votre Jardin Parfait',
         homeDesc: 'Swipez pour découvrir des plantes, suivez votre jardin, recevez des rappels. Rejoignez les jardiniers !',
         homeWelcome: 'Bienvenue sur Aphylia',
@@ -16784,25 +16796,27 @@ async function generateCrawlerHtml(req, pagePath) {
           }
         } catch {}
         
-        const listEmoji = plantCount > 20 ? '📚' : plantCount > 10 ? '📖' : '📑'
-        title = `${listEmoji} ${bookmarkList.name || tr.bookmarksCollection} | Aphylia`
+        // Title: "🔖 FAV_MTP - Plant Bookmark | Aphylia"
+        title = `🔖 ${bookmarkList.name || tr.bookmarksCollection} - ${tr.bookmarkTitle} | Aphylia`
         
-        const descParts = []
-        if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
-        if (ownerName) descParts.push(`👤 ${tr.bookmarksCurated} ${ownerName}`)
+        // Description: "📌 Bookmark "FAV_MTP" made by Username 🌿 4 plants saved 🌱"
+        const bookmarkName = bookmarkList.name || tr.bookmarksCollection
+        const plantWord = plantCount === 1 ? tr.bookmarkPlant : tr.bookmarkPlants
         
-        description = descParts.length > 0 
-          ? descParts.join(' • ')
-          : tr.bookmarksCarefully
+        if (ownerName) {
+          description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" ${tr.bookmarkMadeBy} ${ownerName} 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
+        } else {
+          description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
+        }
         
         if (listImage) image = listImage
         
         pageContent = `
           <article>
-            <h1>${listEmoji} ${escapeHtml(bookmarkList.name || tr.bookmarksCollection)}</h1>
+            <h1>🔖 ${escapeHtml(bookmarkName)} - ${tr.bookmarkTitle}</h1>
             <div class="plant-meta">
-              ${plantCount > 0 ? `🌿 ${plantCount} ${tr.profilePlants}` : ''}
-              ${ownerName ? ` · 👤 ${tr.bookmarksCurated} ${escapeHtml(ownerName)}` : ''}
+              🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved}
+              ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} ${escapeHtml(ownerName)}` : ''}
             </div>
             <p>${tr.bookmarksCarefully} 🌱</p>
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
