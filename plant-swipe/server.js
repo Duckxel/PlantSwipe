@@ -15846,6 +15846,9 @@ async function generateCrawlerHtml(req, pagePath) {
         gardenBy: 'By',
         gardenOld: 'old',
         gardenNew: 'New garden!',
+        gardenOnAphylia: 'on Aphylia',
+        gardenPrivate: 'This garden is private.',
+        gardenViewOn: 'View on',
         gardenMonths: 'month(s)',
         gardenYears: 'year(s)',
         gardenExploreThis: 'Explore this garden on Aphylia',
@@ -16027,6 +16030,9 @@ async function generateCrawlerHtml(req, pagePath) {
         gardenBy: 'Par',
         gardenOld: 'd\'ancienneté',
         gardenNew: 'Nouveau jardin !',
+        gardenOnAphylia: 'sur Aphylia',
+        gardenPrivate: 'Ce jardin est privé.',
+        gardenViewOn: 'Voir sur',
         gardenMonths: 'mois',
         gardenYears: 'an(s)',
         gardenExploreThis: 'Explorer ce jardin sur Aphylia',
@@ -16577,11 +16583,14 @@ async function generateCrawlerHtml(req, pagePath) {
     else if (isGardenRoute && supabaseServer) {
       const gardenId = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'garden'
-      ssrDebug('garden_route_matched', { gardenId, supabaseAvailable: !!supabaseServer })
+      ssrDebug('garden_route_matched', { gardenId, supabaseAvailable: !!supabaseServer, serviceClientAvailable: !!supabaseServiceClient })
       console.log(`[ssr] Looking up garden: ${gardenId}`)
       
+      // Use service client to bypass RLS (gardens may have privacy restrictions)
+      const dbClient = supabaseServiceClient || supabaseServer
+      
       const { data: garden, error: gardenError } = await ssrQuery(
-        supabaseServer
+        dbClient
           .from('gardens')
           .select('id, name, created_by, created_at, privacy, location_city, location_country, cover_image_url')
           .eq('id', gardenId)
@@ -16589,116 +16598,152 @@ async function generateCrawlerHtml(req, pagePath) {
         'garden_lookup'
       )
       
+      ssrDebug('garden_query_result', { found: !!garden, name: garden?.name, privacy: garden?.privacy, error: gardenError?.message })
+      
       if (gardenError) {
         console.log(`[ssr] Garden query error: ${gardenError.message}`)
       } else if (garden) {
-        console.log(`[ssr] ✓ Found garden: ${garden.name}`)
+        const isPrivate = garden.privacy === 'private'
+        const gardenName = garden.name || tr.gardenBeautiful
+        console.log(`[ssr] ✓ Found garden: ${gardenName} (privacy: ${garden.privacy || 'public'})`)
         
-        // Get owner name and plant count
+        // Get owner name (needed for both public and private gardens)
         let ownerName = null
-        let plantCount = 0
-        let gardenImage = null
-        
-        try {
-          // Use garden cover image if available
-          if (garden.cover_image_url) {
-            gardenImage = ensureAbsoluteUrl(garden.cover_image_url)
+        if (garden.created_by) {
+          const { data: owner } = await ssrQuery(
+            dbClient
+              .from('profiles')
+              .select('display_name, avatar_url')
+              .eq('id', garden.created_by)
+              .maybeSingle(),
+            'garden_owner'
+          )
+          if (owner) {
+            ownerName = owner.display_name
           }
+        }
+        
+        // For private gardens, show limited info
+        if (isPrivate) {
+          const gardenEmoji = '🏡'
+          title = `${gardenEmoji} ${gardenName} | Aphylia`
+          description = `${gardenName} ${tr.gardenOnAphylia || 'on Aphylia'} 🌱 ${tr.gardenPrivate || 'This is a private garden.'}`
+          if (garden.cover_image_url) image = ensureAbsoluteUrl(garden.cover_image_url)
           
-          // Get owner (with timeout)
-          if (garden.created_by) {
-            const { data: owner } = await ssrQuery(
-              supabaseServer
-                .from('profiles')
-                .select('display_name, avatar_url')
-                .eq('id', garden.created_by)
-                .maybeSingle(),
-              'garden_owner'
-            )
-            if (owner) {
-              ownerName = owner.display_name
-              if (!gardenImage && owner.avatar_url) gardenImage = ensureAbsoluteUrl(owner.avatar_url)
+          pageContent = `
+            <article itemscope itemtype="https://schema.org/Place">
+              <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
+              ${ownerName ? `<p>👤 ${tr.gardenBy} ${escapeHtml(ownerName)}</p>` : ''}
+              <p>🔒 ${tr.gardenPrivate || 'This garden is private.'}</p>
+              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenViewOn || 'View on'} Aphylia →</a></p>
+            </article>
+          `
+          console.log(`[ssr] Private garden - showing limited preview`)
+        } else {
+          // Public garden - show full details
+          let plantCount = 0
+          let gardenImage = null
+          
+          try {
+            // Use garden cover image if available
+            if (garden.cover_image_url) {
+              gardenImage = ensureAbsoluteUrl(garden.cover_image_url)
             }
-          }
-          
-          // Get plant count (with timeout)
-          const { count } = await ssrQuery(
-            supabaseServer
-              .from('garden_plants')
-              .select('id', { count: 'exact', head: true })
-              .eq('garden_id', gardenId),
-            'garden_plant_count'
-          )
-          plantCount = count || 0
-          
-          // Try to get a plant image from the garden (with timeout)
-          const { data: gardenPlants } = await ssrQuery(
-            supabaseServer
-              .from('garden_plants')
-              .select('plant_id')
-              .eq('garden_id', gardenId)
-              .limit(1),
-            'garden_plants_for_img'
-          )
-          if (gardenPlants?.[0]?.plant_id) {
-            const { data: plantImg } = await ssrQuery(
-              supabaseServer
-                .from('plant_images')
-                .select('link')
-                .eq('plant_id', gardenPlants[0].plant_id)
-                .eq('use', 'primary')
-                .maybeSingle(),
-              'garden_plant_img'
+            
+            // Get owner avatar if no garden cover
+            if (!gardenImage && garden.created_by) {
+              const { data: ownerForAvatar } = await ssrQuery(
+                dbClient
+                  .from('profiles')
+                  .select('avatar_url')
+                  .eq('id', garden.created_by)
+                  .maybeSingle(),
+                'garden_owner_avatar'
+              )
+              if (ownerForAvatar?.avatar_url) gardenImage = ensureAbsoluteUrl(ownerForAvatar.avatar_url)
+            }
+            
+            // Get plant count (with timeout)
+            const { count } = await ssrQuery(
+              dbClient
+                .from('garden_plants')
+                .select('id', { count: 'exact', head: true })
+                .eq('garden_id', gardenId),
+              'garden_plant_count'
             )
-            if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
-          }
-        } catch {}
-        
-        // Get garden age - with translations
-        const createdDate = garden.created_at ? new Date(garden.created_at) : null
-        const gardenAge = createdDate ? (() => {
-          const months = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 30))
-          if (months < 1) return tr.gardenNew
-          if (months < 12) return `${months} ${tr.gardenMonths} ${tr.gardenOld}`
-          const years = Math.floor(months / 12)
-          return `${years} ${tr.gardenYears} ${tr.gardenOld}`
-        })() : null
-        
-        // Create engaging title
-        const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
-        title = `${gardenEmoji} ${garden.name || tr.gardenBeautiful} | Aphylia`
-        
-        // Create rich description
-        const descParts = []
-        // Build location string from city/country
-        const locationParts = [garden.location_city, garden.location_country].filter(Boolean)
-        const gardenLocation = locationParts.length > 0 ? locationParts.join(', ') : null
-        
-        if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.gardenPlantsGrowing}`)
-        if (ownerName) descParts.push(`👤 ${tr.gardenBy} ${ownerName}`)
-        if (gardenLocation) descParts.push(`📍 ${gardenLocation}`)
-        if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
-        
-        description = descParts.length > 0 
-          ? descParts.join(' • ')
-          : `${tr.gardenExploreThis}. ${tr.gardenDiscover}`
-        
-        if (gardenImage) image = gardenImage
-        
-        pageContent = `
-          <article itemscope itemtype="https://schema.org/Place">
-            <h1 itemprop="name">${gardenEmoji} ${escapeHtml(garden.name || tr.gardenBeautiful)}</h1>
-            <div class="plant-meta">
-              ${plantCount > 0 ? `🌿 ${plantCount} ${tr.gardenPlantsGrowing}` : `🌱 ${tr.gardenStartingFresh}`}
-              ${ownerName ? ` · 👤 ${tr.gardenBy} ${escapeHtml(ownerName)}` : ''}
-              ${gardenLocation ? ` · 📍 ${escapeHtml(gardenLocation)}` : ''}
-              ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
-            </div>
-            <p>${tr.gardenFilled} 🌸</p>
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenExploreThis} →</a></p>
-          </article>
-        `
-        console.log(`[ssr] Garden image: ${image}`)
+            plantCount = count || 0
+            
+            // Try to get a plant image from the garden (with timeout)
+            if (!gardenImage) {
+              const { data: gardenPlants } = await ssrQuery(
+                dbClient
+                  .from('garden_plants')
+                  .select('plant_id')
+                  .eq('garden_id', gardenId)
+                  .limit(1),
+                'garden_plants_for_img'
+              )
+              if (gardenPlants?.[0]?.plant_id) {
+                const { data: plantImg } = await ssrQuery(
+                  dbClient
+                    .from('plant_images')
+                    .select('link')
+                    .eq('plant_id', gardenPlants[0].plant_id)
+                    .eq('use', 'primary')
+                    .maybeSingle(),
+                  'garden_plant_img'
+                )
+                if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
+              }
+            }
+          } catch {}
+          
+          // Get garden age - with translations
+          const createdDate = garden.created_at ? new Date(garden.created_at) : null
+          const gardenAge = createdDate ? (() => {
+            const months = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 30))
+            if (months < 1) return tr.gardenNew
+            if (months < 12) return `${months} ${tr.gardenMonths} ${tr.gardenOld}`
+            const years = Math.floor(months / 12)
+            return `${years} ${tr.gardenYears} ${tr.gardenOld}`
+          })() : null
+          
+          // Create engaging title
+          const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
+          title = `${gardenEmoji} ${gardenName} | Aphylia`
+          
+          // Create rich description
+          const descParts = []
+          // Build location string from city/country
+          const locationParts = [garden.location_city, garden.location_country].filter(Boolean)
+          const gardenLocation = locationParts.length > 0 ? locationParts.join(', ') : null
+          
+          if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.gardenPlantsGrowing}`)
+          if (ownerName) descParts.push(`👤 ${tr.gardenBy} ${ownerName}`)
+          if (gardenLocation) descParts.push(`📍 ${gardenLocation}`)
+          if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
+          
+          description = descParts.length > 0 
+            ? descParts.join(' • ')
+            : `${tr.gardenExploreThis}. ${tr.gardenDiscover}`
+          
+          if (gardenImage) image = gardenImage
+          
+          pageContent = `
+            <article itemscope itemtype="https://schema.org/Place">
+              <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
+              <div class="plant-meta">
+                ${plantCount > 0 ? `🌿 ${plantCount} ${tr.gardenPlantsGrowing}` : `🌱 ${tr.gardenStartingFresh}`}
+                ${ownerName ? ` · 👤 ${tr.gardenBy} ${escapeHtml(ownerName)}` : ''}
+                ${gardenLocation ? ` · 📍 ${escapeHtml(gardenLocation)}` : ''}
+                ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
+              </div>
+              <p>${tr.gardenFilled} 🌸</p>
+              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenExploreThis} →</a></p>
+            </article>
+          `
+          console.log(`[ssr] Garden image: ${image}`)
+        }
       }
     }
     
