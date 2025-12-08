@@ -17,6 +17,7 @@ export interface Garden {
   locationTimezone?: string | null
   locationLat?: number | null
   locationLon?: number | null
+  preferredLanguage?: string | null
 }
 
 export interface GardenMember {
@@ -27,6 +28,7 @@ export interface GardenMember {
   displayName?: string | null
   email?: string | null
   accentKey?: string | null
+  avatarUrl?: string | null
 }
 
 export type PlantHealthStatus = 'thriving' | 'healthy' | 'okay' | 'struggling' | 'critical'

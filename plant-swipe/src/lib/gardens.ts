@@ -462,7 +462,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
   
   const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language')
     .eq('id', gardenId)
     .maybeSingle()
   
@@ -470,7 +470,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     // New column doesn't exist, try old is_public column
     const fallback1 = await supabase
       .from('gardens')
-      .select('id, name, cover_image_url, created_by, created_at, streak, is_public, location_city, location_country, location_timezone, location_lat, location_lon')
+      .select('id, name, cover_image_url, created_by, created_at, streak, is_public, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language')
       .eq('id', gardenId)
       .maybeSingle()
     
@@ -478,7 +478,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
       // Neither column exists, use base schema
       const fallback2 = await supabase
         .from('gardens')
-        .select('id, name, cover_image_url, created_by, created_at, streak, location_city, location_country, location_timezone, location_lat, location_lon')
+        .select('id, name, cover_image_url, created_by, created_at, streak, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language')
         .eq('id', gardenId)
         .maybeSingle()
       data = fallback2.data
@@ -516,6 +516,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     locationTimezone: data.location_timezone || null,
     locationLat: data.location_lat || null,
     locationLon: data.location_lon || null,
+    preferredLanguage: data.preferred_language || null,
   }
 }
 
@@ -710,11 +711,13 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
   const idToName: Record<string, string | null> = {}
   const idToEmail: Record<string, string | null> = {}
   const idToAccent: Record<string, string | null> = {}
+  const idToAvatar: Record<string, string | null> = {}
   for (const r of (profilesData as any[]) || []) {
     const uid = String((r as any).user_id)
     idToName[uid] = (r as any).display_name || null
     idToEmail[uid] = (r as any).email || null
     idToAccent[uid] = (r as any).accent_key || null
+    idToAvatar[uid] = (r as any).avatar_url || null
   }
   return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
@@ -724,6 +727,7 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     displayName: idToName[String(r.user_id)] ?? null,
     email: idToEmail[String(r.user_id)] ?? null,
     accentKey: idToAccent[String(r.user_id)] ?? null,
+    avatarUrl: idToAvatar[String(r.user_id)] ?? null,
   }))
 }
 

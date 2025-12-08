@@ -183,6 +183,7 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
   // Save location
   const handleSave = async () => {
     if (!garden?.id || !canEdit || !selectedLocation) return;
+    
     setSaving(true);
     setSaved(false);
 
@@ -290,7 +291,7 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
   // Check if there are changes
   const hasChanges = selectedLocation
     ? selectedLocation.name !== gardenCity || selectedLocation.country !== gardenCountry
-    : gardenCity !== "";
+    : false;
 
   // Format location display
   const formatLocation = (loc: LocationSuggestion) => {

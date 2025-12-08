@@ -8,7 +8,7 @@ type UseTaskNotificationOptions = {
 }
 
 const ERROR_LOGGED = new Set<string>()
-const REFRESH_INTERVAL_MS = 60_000 // Refresh every 60 seconds
+const REFRESH_INTERVAL_MS = 30_000 // Refresh every 30 seconds (more responsive)
 
 export function useTaskNotification(userId: string | null | undefined, options?: UseTaskNotificationOptions) {
   const channelKey = options?.channelKey ?? "default"
@@ -19,6 +19,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
   const refreshTimerRef = React.useRef<number | null>(null)
   const intervalRef = React.useRef<number | null>(null)
   const initialRefreshDoneRef = React.useRef(false)
+  const lastRefreshTimeRef = React.useRef<number>(0)
 
   const setState = React.useCallback((value: boolean) => {
     stateRef.current = value
@@ -61,7 +62,14 @@ export function useTaskNotification(userId: string | null | undefined, options?:
       return false
     }
 
+    const now = Date.now()
     const today = new Date().toISOString().slice(0, 10)
+    
+    // Throttle refreshes - don't refresh more than once per 500ms unless forced
+    if (!forceRefreshCache && now - lastRefreshTimeRef.current < 500) {
+      return stateRef.current
+    }
+    lastRefreshTimeRef.current = now
 
     try {
       // If forcing cache refresh, do it first (but don't wait too long)
@@ -69,7 +77,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
         try {
           await Promise.race([
             refreshUserTaskCache(userId, today),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
           ])
         } catch {
           // Ignore timeout/errors - continue with cached read
@@ -91,13 +99,13 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     }
   }, [userId, setState])
 
-  const scheduleRefresh = React.useCallback(() => {
+  const scheduleRefresh = React.useCallback((forceCache = true) => {
     if (!userId) {
       setState(false)
       return
     }
     if (typeof window === "undefined") {
-      void refreshNotification()
+      void refreshNotification(forceCache)
       return
     }
     if (refreshTimerRef.current !== null) {
@@ -105,7 +113,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     }
     refreshTimerRef.current = window.setTimeout(() => {
       refreshTimerRef.current = null
-      void refreshNotification()
+      void refreshNotification(forceCache)
     }, 80)
   }, [userId, refreshNotification, setState])
 
@@ -181,7 +189,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     addGardenBroadcastListener((message) => {
       if (!active) return
       if (message.kind === "tasks" || message.kind === "general") {
-        scheduleRefresh()
+        scheduleRefresh(true) // Always force cache refresh on broadcast
       }
     })
       .then((unsubscribe) => {
@@ -210,17 +218,17 @@ export function useTaskNotification(userId: string | null | undefined, options?:
         event: "*",
         schema: "public",
         table: "garden_plant_task_occurrences",
-      }, () => scheduleRefresh())
+      }, () => scheduleRefresh(true)) // Force cache refresh
       .on("postgres_changes", {
         event: "*",
         schema: "public",
         table: "garden_plant_tasks",
-      }, () => scheduleRefresh())
+      }, () => scheduleRefresh(true)) // Force cache refresh
       .on("postgres_changes", {
         event: "*",
         schema: "public",
         table: "garden_plants",
-      }, () => scheduleRefresh())
+      }, () => scheduleRefresh(true)) // Force cache refresh
 
     const subscription = channel.subscribe()
     if (subscription instanceof Promise) {
