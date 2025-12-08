@@ -141,8 +141,12 @@ function parseSupabaseError(error: any, context?: string): string {
   const errorContext = error.context || context
   
   // Handle common constraint violations
-  if (message.includes('plants_name_unique') || (message.includes('duplicate key') && message.includes('name'))) {
+  if (message.includes('plants_name_unique') || (message.includes('duplicate key') && message.includes('name') && !message.includes('scientific'))) {
     return 'A plant with this name already exists. Please choose a different name.'
+  }
+  
+  if (message.includes('plants_scientific_name_unique') || (message.includes('duplicate key') && message.includes('scientific_name'))) {
+    return 'A plant with this scientific name already exists. Please enter a different scientific name or leave it empty.'
   }
   
   if (message.includes('plant_translations_plant_id_fkey') || (message.includes('foreign key') && message.includes('plant_translations'))) {
@@ -791,6 +795,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               // Clear images to avoid duplicate link constraint violations
               // Users can re-add images or the images will be handled during save
               images: [],
+              // Clear/modify identity fields that have unique constraints
+              identity: {
+                ...sourcePlant.identity,
+                // Clear scientific name to avoid unique constraint violation
+                // The user should enter a new scientific name for the cloned plant
+                scientificName: undefined,
+              },
               meta: {
                 ...sourcePlant.meta,
                 status: IN_PROGRESS_STATUS,

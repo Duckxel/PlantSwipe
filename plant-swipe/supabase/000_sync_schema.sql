@@ -400,6 +400,11 @@ create table if not exists public.plants (
 );
 create unique index if not exists plants_name_unique on public.plants (lower(name));
 
+-- Drop the scientific_name unique constraint if it exists
+-- Multiple plants can have the same scientific name (different cultivars, varieties, etc.)
+drop index if exists plants_scientific_name_unique;
+alter table if exists public.plants drop constraint if exists plants_scientific_name_unique;
+
 -- Ensure meta columns exist on older deployments (add columns before referencing them)
 alter table if exists public.plants add column if not exists status text check (status in ('in progres','rework','review','approved'));
 alter table if exists public.plants add column if not exists admin_commentary text;
