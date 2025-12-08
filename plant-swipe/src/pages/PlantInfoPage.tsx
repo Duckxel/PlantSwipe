@@ -351,7 +351,21 @@ const PlantInfoPage: React.FC = () => {
           defaultValue: `${plant.name} care tips, meaning, and highlights.`,
         })
       : fallbackDescription)
-  usePageMetadata({ title: resolvedTitle, description: resolvedDescription })
+  
+  // Get the primary image for SEO/link previews
+  const primaryImage = React.useMemo(() => {
+    if (!plant?.images?.length) return undefined
+    const primary = plant.images.find((img) => img.use === 'primary')
+    const discovery = plant.images.find((img) => img.use === 'discovery')
+    return primary?.link || discovery?.link || plant.images[0]?.link
+  }, [plant?.images])
+  
+  usePageMetadata({ 
+    title: resolvedTitle, 
+    description: resolvedDescription,
+    image: primaryImage,
+    url: id ? `/plants/${id}` : undefined,
+  })
 
   React.useEffect(() => {
     const arr = Array.isArray((profile as any)?.liked_plant_ids)

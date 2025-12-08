@@ -76,7 +76,12 @@ export default function BlogPostPage() {
       date: publishedLabel,
       defaultValue: 'Stories from Aphylia.',
     })
-  usePageMetadata({ title: seoTitle, description: seoDescription })
+  usePageMetadata({ 
+    title: seoTitle, 
+    description: seoDescription,
+    image: post?.coverImageUrl ?? undefined,
+    url: slug ? `/blog/${slug}` : '/blog',
+  })
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 pb-20 space-y-8">

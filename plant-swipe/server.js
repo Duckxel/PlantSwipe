@@ -15295,6 +15295,19 @@ async function generateCrawlerHtml(req, pagePath) {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
   const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
   
+  // Helper to ensure image URLs are absolute (required for og:image)
+  const ensureAbsoluteUrl = (url) => {
+    if (!url) return null
+    // Already absolute
+    if (url.startsWith('http://') || url.startsWith('https://')) return url
+    // Protocol-relative URL
+    if (url.startsWith('//')) return `https:${url}`
+    // Relative URL - prepend site URL
+    if (url.startsWith('/')) return `${siteUrl.replace(/\/+$/, '')}${url}`
+    // No leading slash - treat as relative
+    return `${siteUrl.replace(/\/+$/, '')}/${url}`
+  }
+  
   // Default meta tags
   let title = 'Aphylia - Discover, Swipe and Manage Plants for Your Garden'
   let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
@@ -15756,11 +15769,11 @@ async function generateCrawlerHtml(req, pagePath) {
           const anyImg = images?.[0]
           
           if (primaryImg?.link) {
-            image = primaryImg.link
+            image = ensureAbsoluteUrl(primaryImg.link) || image
           } else if (discoveryImg?.link) {
-            image = discoveryImg.link
+            image = ensureAbsoluteUrl(discoveryImg.link) || image
           } else if (anyImg?.link) {
-            image = anyImg.link
+            image = ensureAbsoluteUrl(anyImg.link) || image
           }
           
           // Build structured content for the page
@@ -15847,7 +15860,7 @@ async function generateCrawlerHtml(req, pagePath) {
         
         description = descParts.join(' • ')
         
-        if (post.cover_image_url) image = post.cover_image_url
+        if (post.cover_image_url) image = ensureAbsoluteUrl(post.cover_image_url) || image
         
         // Use locale-specific date format
         const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
@@ -15937,7 +15950,7 @@ async function generateCrawlerHtml(req, pagePath) {
         
         description = descParts.join(' • ')
         
-        if (profile.avatar_url) image = profile.avatar_url
+        if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
         
         pageContent = `
           <article itemscope itemtype="https://schema.org/Person">
@@ -15986,7 +15999,7 @@ async function generateCrawlerHtml(req, pagePath) {
               .maybeSingle()
             if (owner) {
               ownerName = owner.display_name
-              if (owner.avatar_url) gardenImage = owner.avatar_url
+              if (owner.avatar_url) gardenImage = ensureAbsoluteUrl(owner.avatar_url)
             }
           }
           
@@ -16010,7 +16023,7 @@ async function generateCrawlerHtml(req, pagePath) {
               .eq('plant_id', gardenPlants[0].plant_id)
               .eq('use', 'primary')
               .maybeSingle()
-            if (plantImg?.link) gardenImage = plantImg.link
+            if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
           }
         } catch {}
         
@@ -16118,7 +16131,7 @@ async function generateCrawlerHtml(req, pagePath) {
         if (posts?.length) {
           // Use the most recent post's cover image
           const latestWithImage = posts.find(p => p.cover_image_url)
-          if (latestWithImage) image = latestWithImage.cover_image_url
+          if (latestWithImage) image = ensureAbsoluteUrl(latestWithImage.cover_image_url) || image
           
           pageContent = `
             <article>
@@ -16339,7 +16352,7 @@ async function generateCrawlerHtml(req, pagePath) {
               .eq('plant_id', listPlants[0].plant_id)
               .eq('use', 'primary')
               .maybeSingle()
-            if (plantImg?.link) listImage = plantImg.link
+            if (plantImg?.link) listImage = ensureAbsoluteUrl(plantImg.link)
           }
         } catch {}
         
