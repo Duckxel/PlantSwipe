@@ -79,6 +79,7 @@ import { getPrimaryPhotoUrl } from "@/lib/photos";
 import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSection";
 import { GardenJournalSection } from "@/components/garden/GardenJournalSection";
 import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
+import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLanguageEditor";
 
 type TabKey = "overview" | "plants" | "routine" | "journal" | "analytics" | "settings";
 
@@ -411,6 +412,7 @@ export const GardenDashboardPage: React.FC = () => {
                   locationTimezone: data.garden.locationTimezone || null,
                   locationLat: data.garden.locationLat || null,
                   locationLon: data.garden.locationLon || null,
+                  preferredLanguage: data.garden.preferredLanguage || null,
                 });
                 hydratedGarden = true;
               }
@@ -2999,6 +3001,21 @@ export const GardenDashboardPage: React.FC = () => {
                       <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
                         <GardenLocationEditor
                           garden={garden}
+                          onSaved={refreshGarden}
+                          canEdit={viewerIsOwner}
+                        />
+                      </Card>
+                    </div>
+                    {/* Advice Language Settings */}
+                    <div className="space-y-3">
+                      <div className="text-lg font-medium flex items-center gap-2">
+                        <Globe className="w-5 h-5" />
+                        {t("gardenDashboard.settingsSection.adviceLanguage", "Advice Language")}
+                      </div>
+                      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
+                        <GardenAdviceLanguageEditor
+                          garden={garden}
+                          userProfileLanguage={profile?.language}
                           onSaved={refreshGarden}
                           canEdit={viewerIsOwner}
                         />

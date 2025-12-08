@@ -11104,12 +11104,12 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       let gRows = []
       let gardenQuerySuccess = false
       
-      // Attempt 1: Full query with privacy, streak, and location
+      // Attempt 1: Full query with privacy, streak, location, and preferred_language
       try {
         console.log('[overview] Fetching garden', gardenId, '(attempt 1: full query)')
         gRows = await sql`
           select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy,
-                 location_city, location_country, location_timezone, location_lat, location_lon
+                 location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language
           from public.gardens where id = ${gardenId} limit 1
         `
         console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
@@ -11122,7 +11122,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           console.log('[overview] Fetching garden', gardenId, '(attempt 2: without privacy)')
           gRows = await sql`
             select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy,
-                   location_city, location_country, location_timezone, location_lat, location_lon
+                   location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language
             from public.gardens where id = ${gardenId} limit 1
           `
           console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
@@ -11135,7 +11135,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             console.log('[overview] Fetching garden', gardenId, '(attempt 3: minimal)')
             gRows = await sql`
               select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy,
-                     location_city, location_country, location_timezone, location_lat, location_lon
+                     location_city, location_country, location_timezone, location_lat, location_lon, 'en' as preferred_language
               from public.gardens where id = ${gardenId} limit 1
             `
             console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
@@ -11388,6 +11388,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       locationTimezone: garden.location_timezone || null,
       locationLat: garden.location_lat || null,
       locationLon: garden.location_lon || null,
+      preferredLanguage: garden.preferred_language || 'en',
     } : null
     
     // Check access: members always allowed, otherwise check privacy
@@ -12950,6 +12951,58 @@ app.put('/api/garden/:id/location', async (req, res) => {
   } catch (e) {
     console.error('[garden-location] Error:', e)
     res.status(500).json({ ok: false, error: e?.message || 'Failed to update location' })
+  }
+})
+
+// Update garden advice language preference
+app.put('/api/garden/:id/language', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    console.log('[garden-language] PUT request for garden:', gardenId, 'body:', JSON.stringify(req.body))
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    console.log('[garden-language] User:', user?.id)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    const { preferredLanguage } = req.body || {}
+
+    // Verify membership with owner/admin role
+    const membership = await sql`
+      select role from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership?.[0] || membership[0].role !== 'owner') {
+      // Check if admin
+      const adminCheck = await sql`select is_admin from public.profiles where id = ${user.id}`
+      if (!adminCheck?.[0]?.is_admin) {
+        res.status(403).json({ ok: false, error: 'Only garden owners can update language preference' })
+        return
+      }
+    }
+
+    // Validate language code (basic check)
+    const validLanguages = ['en', 'fr', 'de', 'es', 'it', 'nl', 'pt', 'pl', 'ru', 'ja', 'zh']
+    const lang = String(preferredLanguage || 'en').toLowerCase()
+    if (!validLanguages.includes(lang)) {
+      res.status(400).json({ ok: false, error: 'Invalid language code' })
+      return
+    }
+
+    console.log('[garden-language] Updating garden language to:', lang)
+    const updateResult = await sql`
+      update public.gardens set
+        preferred_language = ${lang}
+      where id = ${gardenId}
+      returning id, preferred_language
+    `
+    console.log('[garden-language] Update result:', updateResult)
+
+    res.json({ ok: true, updated: updateResult?.[0] || null })
+  } catch (e) {
+    console.error('[garden-language] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to update language preference' })
   }
 })
 
