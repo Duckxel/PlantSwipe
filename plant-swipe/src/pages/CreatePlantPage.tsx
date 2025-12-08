@@ -496,9 +496,11 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   if (!data) return null
   
   // Load translation if language is provided
-  // For English, also check if there's a translation entry to ensure consistency
+  // For English, the plants.name is the authoritative source (has unique constraint)
+  // For other languages, use plant_translations
+  const isEnglish = !language || language === 'en'
   let translation: any = null
-  if (language) {
+  if (language && !isEnglish) {
     const { data: translationData } = await supabase
       .from('plant_translations')
       .select('*')
@@ -522,9 +524,14 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       url: translation?.source_url || data.source_url || undefined,
     })
   }
-    const plant: Plant = {
+  
+  // For English: ALWAYS use data.name from plants table (authoritative, has unique constraint)
+  // For other languages: use translation name, fallback to plants.name
+  const plantName = isEnglish ? data.name : (translation?.name || data.name)
+  
+  const plant: Plant = {
       id: data.id,
-      name: translation?.name || data.name,
+      name: plantName,
       plantType: (plantTypeEnum.toUi(data.plant_type) as Plant["plantType"]) || undefined,
       utility: utilityEnum.toUiArray(data.utility) as Plant["utility"],
       comestiblePart: comestiblePartEnum.toUiArray(data.comestible_part) as Plant["comestiblePart"],
@@ -861,6 +868,23 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       setError(null)
       try {
         const plantId = existingPlantId || generateUUIDv4()
+        
+        // For English saves, check if a plant with this name already exists (for a DIFFERENT plant)
+        // This prevents the confusing 409 error from Supabase
+        if (isEnglish) {
+          const { data: existingPlantWithName } = await supabase
+            .from('plants')
+            .select('id, name')
+            .ilike('name', trimmedName)
+            .maybeSingle()
+          
+          // If a plant with this name exists AND it's not the same plant we're editing
+          if (existingPlantWithName && existingPlantWithName.id !== plantId) {
+            setError(`A plant with the name "${trimmedName}" already exists. Please choose a different name.`)
+            setSaving(false)
+            return
+          }
+        }
         // For new plants: set creator to current user's display name, preserve existing if already set
         // For existing plants: preserve the original creator
         const createdByValue = existingLoaded 
