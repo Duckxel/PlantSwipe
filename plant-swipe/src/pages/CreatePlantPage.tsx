@@ -192,26 +192,31 @@ function parseSupabaseError(error: any, context?: string): string {
 async function generateUniquePlantName(baseName: string): Promise<string> {
   // First, check if the base name with "(Copy)" suffix exists
   const copyName = `${baseName} (Copy)`
-  const { data: existingCopy } = await supabase
+  
+  // Get all plants that might conflict (case-insensitive)
+  const { data: existingPlants } = await supabase
     .from('plants')
     .select('name')
-    .ilike('name', copyName)
-    .maybeSingle()
+    .or(`name.ilike.${copyName},name.ilike.${baseName} (Copy %)`)
   
-  if (!existingCopy) {
+  console.log('[generateUniquePlantName] Checking for:', { baseName, copyName, existingPlants })
+  
+  // Check if exact copy name exists (case-insensitive)
+  const copyNameLower = copyName.toLowerCase()
+  const copyExists = (existingPlants || []).some(
+    (p) => p.name.toLowerCase() === copyNameLower
+  )
+  
+  if (!copyExists) {
+    console.log('[generateUniquePlantName] Returning:', copyName)
     return copyName
   }
   
-  // If it exists, find all similar names and generate next number
-  const { data: existingNames } = await supabase
-    .from('plants')
-    .select('name')
-    .ilike('name', `${baseName} (Copy%)`)
-  
+  // Find all used numbers
   const usedNumbers = new Set<number>([1])
   const copyRegex = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(Copy(?: (\\d+))?\\)$`, 'i')
   
-  for (const row of existingNames || []) {
+  for (const row of existingPlants || []) {
     const match = row.name?.match(copyRegex)
     if (match) {
       const num = match[1] ? parseInt(match[1], 10) : 1
@@ -225,7 +230,9 @@ async function generateUniquePlantName(baseName: string): Promise<string> {
     nextNum++
   }
   
-  return `${baseName} (Copy ${nextNum})`
+  const result = `${baseName} (Copy ${nextNum})`
+  console.log('[generateUniquePlantName] Returning:', result)
+  return result
 }
 
 const emptyPlant: Plant = {
@@ -896,18 +903,46 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       try {
         const plantId = existingPlantId || generateUUIDv4()
         
+        // Debug logging
+        console.log('[savePlant] Starting save:', {
+          plantId,
+          trimmedName,
+          isEnglish,
+          existingLoaded,
+          existingPlantId,
+        })
+        
         // For English saves, check if a plant with this name already exists (for a DIFFERENT plant)
         // This prevents the confusing 409 error from Supabase
+        // The DB has a unique index on lower(name), so we need to check case-insensitively
         if (isEnglish) {
-          const { data: existingPlantWithName } = await supabase
+          // Use filter with lower() to match exactly how the DB unique index works
+          const { data: existingPlants, error: checkError } = await supabase
             .from('plants')
             .select('id, name')
-            .ilike('name', trimmedName)
-            .maybeSingle()
+            .filter('name', 'ilike', trimmedName)
+          
+          // Find any plant with matching name (case-insensitive) that isn't the current plant
+          const conflictingPlant = (existingPlants || []).find(
+            (p) => p.name.toLowerCase() === trimmedName.toLowerCase() && p.id !== plantId
+          )
+          
+          console.log('[savePlant] Name check result:', {
+            trimmedName,
+            trimmedNameLower: trimmedName.toLowerCase(),
+            existingPlants,
+            conflictingPlant,
+            checkError,
+            plantId,
+          })
+          
+          if (checkError) {
+            console.error('[savePlant] Error checking for existing plant:', checkError)
+          }
           
           // If a plant with this name exists AND it's not the same plant we're editing
-          if (existingPlantWithName && existingPlantWithName.id !== plantId) {
-            setError(`A plant with the name "${trimmedName}" already exists. Please choose a different name.`)
+          if (conflictingPlant) {
+            setError(`A plant with the name "${conflictingPlant.name}" already exists. Please choose a different name.`)
             setSaving(false)
             return
           }
@@ -1178,7 +1213,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           // Use parseSupabaseError for user-friendly messages
           const userFriendlyError = parseSupabaseError(e, 'Please check the plant details.')
           setError(userFriendlyError)
-          console.error('[savePlant] Error:', e)
+          // Enhanced error logging
+          console.error('[savePlant] Error details:', {
+            message: e?.message,
+            code: e?.code,
+            details: e?.details,
+            hint: e?.hint,
+            context: e?.context,
+            fullError: e,
+          })
       } finally {
         setSaving(false)
       }
