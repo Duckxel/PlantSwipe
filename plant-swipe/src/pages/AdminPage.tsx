@@ -57,6 +57,7 @@ import {
   TrendingUp,
   Package,
   Sparkles,
+  Clock,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -1794,6 +1795,31 @@ export const AdminPage: React.FC = () => {
   const [healthRefreshing, setHealthRefreshing] =
     React.useState<boolean>(false);
 
+  // --- System Health Stats ---
+  type SystemHealthStats = {
+    uptime: number | null; // seconds
+    memory: { used: number; total: number; percent: number } | null;
+    cpu: { percent: number; cores: number } | null;
+    disk: { used: number; total: number; percent: number; path: string } | null;
+    connections: number | null;
+    nodeVersion: string | null;
+    platform: string | null;
+    loadAvg: number[] | null;
+  };
+  const emptySystemHealth: SystemHealthStats = {
+    uptime: null,
+    memory: null,
+    cpu: null,
+    disk: null,
+    connections: null,
+    nodeVersion: null,
+    platform: null,
+    loadAvg: null,
+  };
+  const [systemHealth, setSystemHealth] = React.useState<SystemHealthStats>(emptySystemHealth);
+  const [systemHealthLoading, setSystemHealthLoading] = React.useState<boolean>(true);
+  const [systemHealthError, setSystemHealthError] = React.useState<string | null>(null);
+
   // Track mount state to avoid setState on unmounted component during async probes
   const isMountedRef = React.useRef(true);
   React.useEffect(() => {
@@ -2030,6 +2056,96 @@ export const AdminPage: React.FC = () => {
       refreshHealth();
     } catch {}
   }, [refreshHealth]);
+
+  // --- System Health Stats fetching ---
+  const loadSystemHealth = React.useCallback(async () => {
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/system-health", {
+        headers,
+        credentials: "same-origin",
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      if (isMountedRef.current) {
+        setSystemHealth({
+          uptime: typeof data?.uptime === "number" ? data.uptime : null,
+          memory: data?.memory && typeof data.memory.percent === "number" ? data.memory : null,
+          cpu: data?.cpu && typeof data.cpu.percent === "number" ? data.cpu : null,
+          disk: data?.disk && typeof data.disk.percent === "number" ? data.disk : null,
+          connections: typeof data?.connections === "number" ? data.connections : null,
+          nodeVersion: typeof data?.nodeVersion === "string" ? data.nodeVersion : null,
+          platform: typeof data?.platform === "string" ? data.platform : null,
+          loadAvg: Array.isArray(data?.loadAvg) ? data.loadAvg : null,
+        });
+        setSystemHealthError(null);
+      }
+    } catch (e: unknown) {
+      if (isMountedRef.current) {
+        setSystemHealthError(e instanceof Error ? e.message : "Failed to load system health");
+      }
+    } finally {
+      if (isMountedRef.current) setSystemHealthLoading(false);
+    }
+  }, [safeJson]);
+
+  // Load system health on mount and periodically
+  React.useEffect(() => {
+    loadSystemHealth();
+    const intervalId = setInterval(() => {
+      loadSystemHealth();
+    }, 30000); // Every 30 seconds
+    return () => clearInterval(intervalId);
+  }, [loadSystemHealth]);
+
+  // Helper to format uptime
+  const formatUptime = (seconds: number | null): string => {
+    if (seconds === null) return "-";
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h ${mins}m`;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  };
+
+  // Helper to format bytes
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  };
+
+  // Progress bar component for system health
+  const HealthProgressBar: React.FC<{
+    percent: number;
+    colorClass?: string;
+    showWarning?: boolean;
+  }> = ({ percent, colorClass, showWarning = true }) => {
+    const getColor = () => {
+      if (colorClass) return colorClass;
+      if (!showWarning) return "bg-emerald-500";
+      if (percent >= 90) return "bg-rose-500";
+      if (percent >= 75) return "bg-amber-500";
+      return "bg-emerald-500";
+    };
+    return (
+      <div className="h-2 w-full bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${getColor()}`}
+          style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
+        />
+      </div>
+    );
+  };
 
   const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({
     ok,
@@ -3972,6 +4088,130 @@ export const AdminPage: React.FC = () => {
                               )}
                             </div>
                           </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* System Health Stats */}
+                    <Card className={glassCardClass}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 dark:from-cyan-900/40 dark:to-blue-900/40 flex items-center justify-center">
+                              <Server className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold">System Health</div>
+                              <div className="text-xs text-stone-500 dark:text-stone-400">
+                                {systemHealth.platform || "Server"} • {systemHealth.nodeVersion || "Node.js"}
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Refresh system health"
+                            onClick={() => { setSystemHealthLoading(true); loadSystemHealth(); }}
+                            disabled={systemHealthLoading}
+                            className="h-8 w-8 rounded-xl"
+                          >
+                            <RefreshCw className={`h-4 w-4 ${systemHealthLoading ? "animate-spin" : ""}`} />
+                          </Button>
+                        </div>
+
+                        {systemHealthError && !systemHealth.uptime && (
+                          <div className="text-xs text-amber-600 dark:text-amber-400 mb-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+                            ⚠️ {systemHealthError}
+                          </div>
+                        )}
+
+                        {/* Uptime & Connections Row */}
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-900/10 dark:to-teal-900/10 p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                                <Clock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                              </div>
+                              <span className="text-xs font-medium text-stone-500 dark:text-stone-400">Uptime</span>
+                            </div>
+                            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+                              {formatUptime(systemHealth.uptime)}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-900/10 dark:to-pink-900/10 p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center">
+                                <Users className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                              </div>
+                              <span className="text-xs font-medium text-stone-500 dark:text-stone-400">Connections</span>
+                            </div>
+                            <div className="text-lg font-bold text-purple-700 dark:text-purple-400">
+                              {systemHealth.connections !== null ? systemHealth.connections : "-"}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* CPU Usage */}
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-md bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                                <Sparkles className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <span className="text-xs font-medium">CPU</span>
+                            </div>
+                            <span className="text-xs font-semibold tabular-nums">
+                              {systemHealth.cpu ? `${systemHealth.cpu.percent.toFixed(1)}%` : "-"}
+                              {systemHealth.cpu?.cores && (
+                                <span className="text-stone-400 font-normal ml-1">({systemHealth.cpu.cores} cores)</span>
+                              )}
+                            </span>
+                          </div>
+                          <HealthProgressBar percent={systemHealth.cpu?.percent ?? 0} />
+                          {systemHealth.loadAvg && (
+                            <div className="text-[10px] text-stone-400 mt-1">
+                              Load avg: {systemHealth.loadAvg.map(l => l.toFixed(2)).join(" / ")}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Memory Usage */}
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-md bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
+                                <Database className="h-3 w-3 text-violet-600 dark:text-violet-400" />
+                              </div>
+                              <span className="text-xs font-medium">Memory</span>
+                            </div>
+                            <span className="text-xs font-semibold tabular-nums">
+                              {systemHealth.memory
+                                ? `${formatBytes(systemHealth.memory.used)} / ${formatBytes(systemHealth.memory.total)}`
+                                : "-"}
+                            </span>
+                          </div>
+                          <HealthProgressBar percent={systemHealth.memory?.percent ?? 0} />
+                        </div>
+
+                        {/* Disk Usage */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-md bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                                <Server className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                              </div>
+                              <span className="text-xs font-medium">Disk</span>
+                              {systemHealth.disk?.path && (
+                                <span className="text-[10px] text-stone-400 font-mono">{systemHealth.disk.path}</span>
+                              )}
+                            </div>
+                            <span className="text-xs font-semibold tabular-nums">
+                              {systemHealth.disk
+                                ? `${formatBytes(systemHealth.disk.used)} / ${formatBytes(systemHealth.disk.total)}`
+                                : "-"}
+                            </span>
+                          </div>
+                          <HealthProgressBar percent={systemHealth.disk?.percent ?? 0} />
                         </div>
                       </CardContent>
                     </Card>

@@ -14,6 +14,7 @@ import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
 import net from 'net'
+import os from 'os'
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { zodResponseFormat } from 'openai/helpers/zod'
@@ -2660,6 +2661,102 @@ app.get('/api/health', async (_req, res) => {
       ok: true,
       db: { ok: false, latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' },
     })
+  }
+})
+
+// Admin: System health stats (CPU, memory, disk, uptime, connections)
+app.get('/api/admin/system-health', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+
+    // Get CPU usage (averaged over cores)
+    const cpus = os.cpus()
+    const cpuCount = cpus.length
+    let totalIdle = 0, totalTick = 0
+    for (const cpu of cpus) {
+      for (const type in cpu.times) {
+        totalTick += cpu.times[type]
+      }
+      totalIdle += cpu.times.idle
+    }
+    const cpuPercent = 100 - (100 * totalIdle / totalTick)
+
+    // Memory stats
+    const totalMem = os.totalmem()
+    const freeMem = os.freemem()
+    const usedMem = totalMem - freeMem
+    const memPercent = (usedMem / totalMem) * 100
+
+    // Disk stats (for root or /home depending on platform)
+    let diskStats = null
+    try {
+      const { promisify } = await import('util')
+      const execAsync = promisify(execCb)
+      // Try df command for disk usage
+      const diskPath = process.platform === 'win32' ? 'C:' : '/'
+      const dfResult = await execAsync(`df -B1 ${diskPath} 2>/dev/null || df -k ${diskPath} 2>/dev/null`).catch(() => null)
+      if (dfResult && dfResult.stdout) {
+        const lines = dfResult.stdout.trim().split('\n')
+        if (lines.length >= 2) {
+          const parts = lines[1].split(/\s+/)
+          if (parts.length >= 4) {
+            // df -B1 output: Filesystem 1B-blocks Used Available Use% Mounted
+            // df -k output: Filesystem 1K-blocks Used Available Use% Mounted
+            const multiplier = dfResult.stdout.includes('1B-blocks') ? 1 : 1024
+            const total = parseInt(parts[1], 10) * multiplier
+            const used = parseInt(parts[2], 10) * multiplier
+            if (!isNaN(total) && !isNaN(used) && total > 0) {
+              diskStats = {
+                total,
+                used,
+                percent: (used / total) * 100,
+                path: diskPath
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+
+    // Count active HTTP connections (approximation via server connections)
+    let activeConnections = 0
+    try {
+      if (app._httpServer && typeof app._httpServer.getConnections === 'function') {
+        activeConnections = await new Promise((resolve) => {
+          app._httpServer.getConnections((err, count) => resolve(err ? 0 : count))
+        })
+      }
+    } catch {}
+
+    // Load average (1, 5, 15 min)
+    const loadAvg = os.loadavg()
+
+    res.json({
+      ok: true,
+      uptime: Math.floor(os.uptime()),
+      memory: {
+        total: totalMem,
+        used: usedMem,
+        free: freeMem,
+        percent: Math.round(memPercent * 10) / 10
+      },
+      cpu: {
+        percent: Math.round(cpuPercent * 10) / 10,
+        cores: cpuCount
+      },
+      disk: diskStats,
+      connections: activeConnections,
+      loadAvg: loadAvg.map(l => Math.round(l * 100) / 100),
+      platform: `${os.platform()} ${os.release()}`,
+      nodeVersion: process.version,
+      hostname: os.hostname()
+    })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to get system health' })
   }
 })
 
@@ -17076,7 +17173,7 @@ const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase()
 if (shouldListen) {
   const port = process.env.PORT || 3000
   const host = process.env.HOST || '127.0.0.1' // Bind to localhost only for security
-  app.listen(port, host, () => {
+  const httpServer = app.listen(port, host, () => {
     console.log(`[server] listening on http://${host}:${port}`)
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => {})
@@ -17084,6 +17181,8 @@ if (shouldListen) {
     ensureNotificationTables().catch(() => {})
     scheduleNotificationWorker()
   })
+  // Store reference for system-health endpoint to count connections
+  app._httpServer = httpServer
 } else {
   ensureNotificationTables().catch(() => {})
   scheduleNotificationWorker()
