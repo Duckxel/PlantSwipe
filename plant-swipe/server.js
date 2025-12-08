@@ -15767,9 +15767,40 @@ app.get('/api/debug-ssr', async (req, res) => {
     isCrawler: isCrawlerResult,
     testPath,
     supabaseAvailable: !!supabaseServer,
-    crawlerList: CRAWLER_USER_AGENTS.slice(0, 10),
-    tip: 'Add ?ua=discordbot to test with a fake user agent'
+    supabaseUrl: supabaseUrlEnv ? 'configured' : 'NOT configured',
+    crawlerListSample: CRAWLER_USER_AGENTS.slice(0, 15),
+    tip: 'Use /api/preview-ssr?path=/plants/ID to test SSR output'
   })
+})
+
+// Force SSR endpoint - always returns SSR HTML for any path (for testing)
+app.get('/api/force-ssr/*', async (req, res) => {
+  const testPath = req.params[0] ? `/${req.params[0]}` : '/'
+  console.log(`[force-ssr] Generating SSR for: ${testPath}`)
+  
+  try {
+    const fakeReq = {
+      ...req,
+      originalUrl: testPath,
+      path: testPath,
+      get: (header) => {
+        if (header === 'user-agent') return 'Discordbot/2.0 (force-ssr-test)'
+        return req.get(header)
+      }
+    }
+    
+    const html = await generateCrawlerHtml(fakeReq, testPath)
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('X-SSR-Test', 'force-ssr')
+    res.send(html)
+  } catch (err) {
+    console.error('[force-ssr] Error:', err)
+    res.status(500).json({ 
+      error: err.message,
+      stack: err.stack,
+      supabaseAvailable: !!supabaseServer
+    })
+  }
 })
 
 // Test endpoint to preview what crawlers see
@@ -15795,14 +15826,20 @@ app.get('*', async (req, res) => {
   const userAgent = req.get('user-agent') || ''
   const pagePath = req.originalUrl || req.path || '/'
   
-  // Debug logging for crawler detection
+  // Always log incoming requests (first 100 chars of UA)
+  const uaShort = userAgent.slice(0, 80)
+  console.log(`[request] ${req.method} ${pagePath} | UA: ${uaShort}...`)
+  
+  // Check if this is a crawler
   const detectedAsCrawler = isCrawler(userAgent)
-  if (detectedAsCrawler) {
-    console.log(`[ssr] Crawler detected: ${userAgent.slice(0, 100)} -> ${pagePath}`)
-  }
   
   // Check if this is a crawler requesting a page (not an asset)
-  const isAssetRequest = /\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|map|json)$/i.test(pagePath)
+  const isAssetRequest = /\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|map|json|xml|txt|webmanifest)$/i.test(pagePath)
+  
+  // Log crawler detection result
+  if (detectedAsCrawler) {
+    console.log(`[ssr] ✓ Crawler DETECTED: ${uaShort} -> ${pagePath} (isAsset: ${isAssetRequest})`)
+  }
   
   if (!isAssetRequest && isCrawler(userAgent)) {
     try {
