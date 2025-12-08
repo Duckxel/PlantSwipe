@@ -860,8 +860,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (!trimmedName) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
       const isEnglish = saveLanguage === 'en'
       const existingPlantId = plantToSave.id || id
-      if (!isEnglish && !existingPlantId) {
-        setError(t('plantAdmin.translationRequiresBase', 'Save the English version before editing translations.'))
+      
+      // For non-English saves, the plant MUST exist in the database first
+      // Use existingLoaded (not just existingPlantId) because "Add From" generates a new ID
+      // in memory that doesn't exist in the database yet
+      if (!isEnglish && !existingLoaded) {
+        setError(t('plantAdmin.translationRequiresBase', 'Please save the English version first before adding translations.'))
         return
       }
       setSaving(true)
