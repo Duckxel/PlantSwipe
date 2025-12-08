@@ -15301,9 +15301,13 @@ async function generateCrawlerHtml(req, pagePath) {
   let image = `${siteUrl}/icons/icon-512x512.png`
   let pageContent = ''
   
+  console.log(`[ssr] Generating HTML for: ${pagePath}`)
+  
   try {
     // Parse the path to determine content type
     const pathParts = pagePath.split('/').filter(Boolean)
+    console.log(`[ssr] Path parts: ${JSON.stringify(pathParts)}`)
+    
     // Remove language prefix if present (e.g., /fr/plants/123 -> /plants/123)
     const langPrefixes = ['en', 'fr', 'es', 'de', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh']
     let effectivePath = pathParts
@@ -15312,17 +15316,30 @@ async function generateCrawlerHtml(req, pagePath) {
       detectedLang = pathParts[0]
       effectivePath = pathParts.slice(1)
     }
+    console.log(`[ssr] Effective path: ${JSON.stringify(effectivePath)}, lang: ${detectedLang}`)
     
     // Plant detail page: /plants/:id
-    if (effectivePath[0] === 'plants' && effectivePath[1] && supabaseServer) {
+    if (effectivePath[0] === 'plants' && effectivePath[1]) {
       const plantId = decodeURIComponent(effectivePath[1])
-      const { data: plant } = await supabaseServer
-        .from('plants')
-        .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level')
-        .eq('id', plantId)
-        .maybeSingle()
+      console.log(`[ssr] Looking up plant: ${plantId}, supabase available: ${!!supabaseServer}`)
       
-      if (plant) {
+      if (!supabaseServer) {
+        console.log(`[ssr] WARNING: Supabase not available, using defaults`)
+      } else {
+        const { data: plant, error: plantError } = await supabaseServer
+          .from('plants')
+          .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level')
+          .eq('id', plantId)
+          .maybeSingle()
+        
+        if (plantError) {
+          console.log(`[ssr] Plant query error: ${plantError.message}`)
+        } else if (!plant) {
+          console.log(`[ssr] Plant not found: ${plantId}`)
+        }
+        
+        if (plant) {
+          console.log(`[ssr] ✓ Found plant: ${plant.name} (${plant.id})`)
         // Create an engaging title with plant type emoji
         const plantEmoji = {
           'vegetable': '🥬',
@@ -15399,6 +15416,10 @@ async function generateCrawlerHtml(req, pagePath) {
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">View full plant profile on Aphylia →</a></p>
           </article>
         `
+        
+          // Log the image being used
+          console.log(`[ssr] Plant image: ${image}`)
+        }
       }
     }
     
