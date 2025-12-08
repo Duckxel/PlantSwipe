@@ -15834,6 +15834,9 @@ async function generateCrawlerHtml(req, pagePath) {
         profilePlants: 'plant(s)',
         profileMemberSince: 'Member since',
         profileExploreGardens: 'Explore gardens',
+        profileOnAphylia: 'on Aphylia',
+        profilePrivateAccount: 'This profile is private.',
+        profileViewOn: 'View on',
         profilePlantEnthusiast: 'A passionate plant enthusiast growing their collection on Aphylia',
         // Garden
         gardenExplore: 'Explore Gardens',
@@ -16013,6 +16016,9 @@ async function generateCrawlerHtml(req, pagePath) {
         profilePlants: 'plante(s)',
         profileMemberSince: 'Membre depuis',
         profileExploreGardens: 'Explorer les jardins',
+        profileOnAphylia: 'sur Aphylia',
+        profilePrivateAccount: 'Ce profil est privé.',
+        profileViewOn: 'Voir sur',
         profilePlantEnthusiast: 'Un passionné de plantes qui agrandit sa collection sur Aphylia',
         gardenExplore: 'Explorer les Jardins',
         gardenBeautiful: 'Un Beau Jardin',
@@ -16426,111 +16432,144 @@ async function generateCrawlerHtml(req, pagePath) {
       ssrDebug('profile_route_matched', { username, supabaseAvailable: !!supabaseServer })
       console.log(`[ssr] Looking up user profile: ${username}`)
       
-      // Note: Also try matching by username field (some profiles use username instead of display_name)
+      // Use the same RPC function as the frontend for consistent results
+      // This handles all the display_name/username matching logic in the database
       let profile = null
       let profileError = null
       
-      // Try case-insensitive search by display_name first, then username
-      const { data: profileByDisplayName, error: err1 } = await ssrQuery(
-        supabaseServer
-          .from('profiles')
-          .select('id, display_name, bio, avatar_url, is_private, country, favorite_plant')
-          .ilike('display_name', username)
-          .eq('is_private', false)
-          .maybeSingle(),
-        'profile_lookup_by_display_name'
+      // Try RPC function first (same as frontend)
+      const { data: rpcResult, error: rpcErr } = await ssrQuery(
+        supabaseServer.rpc('get_profile_public_by_display_name', { _name: username }),
+        'profile_lookup_rpc'
       )
       
-      if (profileByDisplayName) {
-        profile = profileByDisplayName
-      } else {
-        // Try by username field (case-insensitive) if display_name didn't match
-        const { data: profileByUsername, error: err2 } = await ssrQuery(
-          supabaseServer
-            .from('profiles')
-            .select('id, display_name, bio, avatar_url, is_private, country, favorite_plant')
-            .ilike('username', username)
-            .eq('is_private', false)
-            .maybeSingle(),
-          'profile_lookup_by_username'
-        )
-        profile = profileByUsername
-        profileError = err2
+      if (rpcResult) {
+        // RPC returns array or single object
+        profile = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
       }
       
-      ssrDebug('profile_query_result', { found: !!profile, displayName: profile?.display_name, error: profileError?.message })
+      // Fallback: direct query if RPC fails or doesn't exist
+      // Search WITHOUT is_private filter first - we'll handle privacy after
+      if (!profile && !rpcErr) {
+        const { data: profileByDisplayName, error: err1 } = await ssrQuery(
+          supabaseServer
+            .from('profiles')
+            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant')
+            .ilike('display_name', username)
+            .maybeSingle(),
+          'profile_lookup_by_display_name'
+        )
+        
+        if (profileByDisplayName) {
+          profile = profileByDisplayName
+        } else {
+          // Try by username field (case-insensitive) if display_name didn't match
+          const { data: profileByUsername, error: err2 } = await ssrQuery(
+            supabaseServer
+              .from('profiles')
+              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant')
+              .ilike('username', username)
+              .maybeSingle(),
+            'profile_lookup_by_username'
+          )
+          profile = profileByUsername
+          profileError = err2
+        }
+      } else if (rpcErr) {
+        profileError = rpcErr
+      }
+      
+      ssrDebug('profile_query_result', { found: !!profile, displayName: profile?.display_name, isPrivate: profile?.is_private, error: profileError?.message })
       
       if (profileError) {
         console.log(`[ssr] Profile query error: ${profileError.message}`)
       } else if (profile) {
-        console.log(`[ssr] ✓ Found profile: ${profile.display_name}`)
+        const isPrivate = Boolean(profile.is_private)
+        const displayName = profile.display_name || profile.username || username
+        console.log(`[ssr] ✓ Found profile: ${displayName} (private: ${isPrivate})`)
         
-        // Get garden and plant counts (with timeouts to avoid blocking)
-        let gardenCount = 0
-        let plantCount = 0
-        try {
-          const { count: gCount } = await ssrQuery(
-            supabaseServer
-              .from('gardens')
-              .select('id', { count: 'exact', head: true })
-              .eq('created_by', profile.id),
-            'profile_garden_count'
-          )
-          gardenCount = gCount || 0
+        // Always set the title with the user's name
+        title = `🌱 ${displayName} | ${tr.profileGardenProfile} | Aphylia`
+        
+        // For private profiles, show limited info
+        if (isPrivate) {
+          description = `${displayName} ${tr.profileOnAphylia || 'on Aphylia'} 🌱 ${tr.profilePrivateAccount || 'This is a private profile.'}`
+          if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
           
-          // Get total plants across all gardens
-          const { data: gardens } = await ssrQuery(
-            supabaseServer
-              .from('gardens')
-              .select('id')
-              .eq('created_by', profile.id),
-            'profile_gardens'
-          )
-          if (gardens?.length) {
-            const gardenIds = gardens.map(g => g.id)
-            const { count: pCount } = await ssrQuery(
-              supabaseServer
-                .from('garden_plants')
-                .select('id', { count: 'exact', head: true })
-                .in('garden_id', gardenIds),
-              'profile_plant_count'
-            )
-            plantCount = pCount || 0
-          }
-        } catch {}
-        
-        // Create engaging title
-        title = `🌱 ${profile.display_name} | ${tr.profileGardenProfile} | Aphylia`
-        
-        // Create rich description
-        const descParts = []
-        if (profile.bio) {
-          descParts.push(profile.bio.slice(0, 100))
+          pageContent = `
+            <article itemscope itemtype="https://schema.org/Person">
+              <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
+              <p>🔒 ${tr.profilePrivateAccount || 'This profile is private.'}</p>
+              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileViewOn || 'View on'} Aphylia →</a></p>
+            </article>
+          `
+          console.log(`[ssr] Private profile - showing limited preview`)
         } else {
-          descParts.push(`${tr.profileCheckOut} ${profile.display_name}'s ${tr.profileGrowingJourney}`)
+          // Public profile - show full details
+          // Get garden and plant counts (with timeouts to avoid blocking)
+          let gardenCount = 0
+          let plantCount = 0
+          try {
+            const { count: gCount } = await ssrQuery(
+              supabaseServer
+                .from('gardens')
+                .select('id', { count: 'exact', head: true })
+                .eq('created_by', profile.id),
+              'profile_garden_count'
+            )
+            gardenCount = gCount || 0
+            
+            // Get total plants across all gardens
+            const { data: gardens } = await ssrQuery(
+              supabaseServer
+                .from('gardens')
+                .select('id')
+                .eq('created_by', profile.id),
+              'profile_gardens'
+            )
+            if (gardens?.length) {
+              const gardenIds = gardens.map(g => g.id)
+              const { count: pCount } = await ssrQuery(
+                supabaseServer
+                  .from('garden_plants')
+                  .select('id', { count: 'exact', head: true })
+                  .in('garden_id', gardenIds),
+                'profile_plant_count'
+              )
+              plantCount = pCount || 0
+            }
+          } catch {}
+          
+          // Create rich description
+          const descParts = []
+          if (profile.bio) {
+            descParts.push(profile.bio.slice(0, 100))
+          } else {
+            descParts.push(`${tr.profileCheckOut} ${displayName}'s ${tr.profileGrowingJourney}`)
+          }
+          if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} ${tr.profileGardens}`)
+          if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
+          if (profile.country) descParts.push(`📍 ${profile.country}`)
+          if (profile.favorite_plant) descParts.push(`❤️ ${profile.favorite_plant}`)
+          
+          description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
+          
+          if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
+          
+          pageContent = `
+            <article itemscope itemtype="https://schema.org/Person">
+              <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
+              <div class="plant-meta">
+                ${gardenCount > 0 ? `🏡 ${gardenCount} ${tr.profileGardens}` : ''}
+                ${plantCount > 0 ? ` · 🌿 ${plantCount} ${tr.profilePlants}` : ''}
+                ${profile.country ? ` · 📍 ${escapeHtml(profile.country)}` : ''}
+              </div>
+              ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
+              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileExploreGardens} ${escapeHtml(displayName)} →</a></p>
+            </article>
+          `
+          console.log(`[ssr] Profile image: ${image}`)
         }
-        if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} ${tr.profileGardens}`)
-        if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
-        if (profile.country) descParts.push(`📍 ${profile.country}`)
-        if (profile.favorite_plant) descParts.push(`❤️ ${profile.favorite_plant}`)
-        
-        description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
-        
-        if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
-        
-        pageContent = `
-          <article itemscope itemtype="https://schema.org/Person">
-            <h1 itemprop="name">🌱 ${escapeHtml(profile.display_name)}</h1>
-            <div class="plant-meta">
-              ${gardenCount > 0 ? `🏡 ${gardenCount} ${tr.profileGardens}` : ''}
-              ${plantCount > 0 ? ` · 🌿 ${plantCount} ${tr.profilePlants}` : ''}
-              ${profile.country ? ` · 📍 ${escapeHtml(profile.country)}` : ''}
-            </div>
-            ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileExploreGardens} ${escapeHtml(profile.display_name)} →</a></p>
-          </article>
-        `
-        console.log(`[ssr] Profile image: ${image}`)
       }
     }
     
