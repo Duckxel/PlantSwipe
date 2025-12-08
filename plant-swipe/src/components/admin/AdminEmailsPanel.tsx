@@ -92,7 +92,8 @@ async function buildAdminHeaders() {
     "Content-Type": "application/json",
   }
   if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`
-  const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+  const globalEnv = globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } }
+  const adminToken = globalEnv.__ENV__?.VITE_ADMIN_STATIC_TOKEN
   if (adminToken) headers["X-Admin-Token"] = adminToken
   return headers
 }

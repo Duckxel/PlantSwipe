@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,21 +21,17 @@ import {
   Loader2,
   Sparkles,
   BookOpen,
-  Heart,
-  AlertCircle,
   CheckCircle2,
   X,
   Upload,
   Tag,
   Lock,
   Globe,
-  RefreshCw,
   Play,
   Pause,
   Download,
   Film,
   Images,
-  ZoomIn,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
@@ -79,10 +74,16 @@ interface JournalPhoto {
   uploadedAt: string;
 }
 
+interface GardenPlantInfo {
+  id: string;
+  name?: string;
+  [key: string]: unknown;
+}
+
 interface GardenJournalSectionProps {
   gardenId: string;
   garden: Garden | null;
-  plants: any[];
+  plants: GardenPlantInfo[];
   members: Array<{
     userId: string;
     displayName?: string | null;
@@ -110,8 +111,8 @@ const PLANT_HEALTH = [
 export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   gardenId,
   garden,
-  plants,
-  members,
+  plants: _plants,
+  members: _members,
 }) => {
   const { t } = useTranslation("common");
   const { user } = useAuth();
@@ -119,7 +120,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   // State
   const [loading, setLoading] = React.useState(true);
   const [entries, setEntries] = React.useState<JournalEntry[]>([]);
-  const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
+  const [_selectedDate, _setSelectedDate] = React.useState<Date>(new Date());
   const [isEditing, setIsEditing] = React.useState(false);
   const [editingEntry, setEditingEntry] = React.useState<JournalEntry | null>(null);
   const [showNewEntry, setShowNewEntry] = React.useState(false);
@@ -456,7 +457,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       // First, upload photos if any
-      let uploadedPhotoUrls: string[] = [];
+      const uploadedPhotoUrls: string[] = [];
       if (pendingPhotos.length > 0) {
         setUploadingPhotos(true);
         for (const file of pendingPhotos) {

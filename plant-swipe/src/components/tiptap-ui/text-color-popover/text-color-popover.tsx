@@ -212,7 +212,9 @@ export function TextColorPopoverContent({
 export function TextColorPopover({
   editor: providedEditor,
   colors = DEFAULT_TEXT_COLORS,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   hideWhenUnavailable = false,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onApplied,
   ...props
 }: TextColorPopoverProps) {

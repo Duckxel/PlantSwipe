@@ -43,7 +43,7 @@ type MediaEntry = {
     storageName?: string | null
     displayName?: string | null
     typeSegment?: string | null
-    [key: string]: any
+    [key: string]: unknown
   } | null
   createdAt: string | null
 }

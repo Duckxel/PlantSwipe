@@ -95,7 +95,7 @@ export async function fetchAiPlantFill({
   const allowedSet = Array.isArray(fields) && fields.length ? new Set(fields) : null
   const schemaKeys = Object.keys(schemaObject)
   const filteredKeys = allowedSet
-    ? fields!.filter((key) => schemaObject.hasOwnProperty(key))
+    ? fields!.filter((key) => Object.prototype.hasOwnProperty.call(schemaObject, key))
     : schemaKeys
   const fieldEntries = filteredKeys.filter(
     (key) => !disallowedFields.has(key) && !disallowedFields.has(key.toLowerCase())

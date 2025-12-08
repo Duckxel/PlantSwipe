@@ -30,7 +30,7 @@ const LogsTab: React.FC = () => {
       admin_name: string | null
       action: string
       target: string | null
-      detail: any
+      detail: Record<string, unknown> | null
     }>
   >([])
   const [loading, setLoading] = React.useState(false)
@@ -48,7 +48,9 @@ const LogsTab: React.FC = () => {
           await navigator.clipboard.writeText(text)
           return true
         }
-      } catch {}
+      } catch {
+        // Clipboard API not available
+      }
       try {
         const ta = document.createElement("textarea")
         ta.value = text
@@ -74,7 +76,7 @@ const LogsTab: React.FC = () => {
       admin_name: string | null
       action: string
       target: string | null
-      detail: any
+      detail: Record<string, unknown> | null
     }): string => {
       const ts = l.occurred_at ? new Date(l.occurred_at).toLocaleString() : ""
       const who = (l.admin_name && String(l.admin_name).trim()) || "Admin"
@@ -101,9 +103,12 @@ const LogsTab: React.FC = () => {
       const headers: Record<string, string> = { Accept: "application/json" }
       if (token) headers["Authorization"] = `Bearer ${token}`
       try {
-        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        const globalEnv = globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } }
+        const adminToken = globalEnv.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers["X-Admin-Token"] = String(adminToken)
-      } catch {}
+      } catch {
+        // Ignore env access errors
+      }
       const r = await fetch("/api/admin/admin-logs?days=30", {
         headers,
         credentials: "same-origin",
@@ -113,8 +118,9 @@ const LogsTab: React.FC = () => {
       const list = Array.isArray(data?.logs) ? data.logs : []
       setLogs(list)
       setVisibleCount(Math.min(20, list.length || 20))
-    } catch (e: any) {
-      setError(e?.message || "Failed to load logs")
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      setError(err?.message || "Failed to load logs")
     } finally {
       setLoading(false)
     }
@@ -134,10 +140,11 @@ const LogsTab: React.FC = () => {
         const token = session?.access_token
         let adminToken: string | null = null
         try {
-          adminToken =
-            String((globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN || "") ||
-            null
-        } catch {}
+          const globalEnv = globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } }
+          adminToken = String(globalEnv.__ENV__?.VITE_ADMIN_STATIC_TOKEN || "") || null
+        } catch {
+          // Ignore env access errors
+        }
         const q: string[] = []
         if (token) q.push(`token=${encodeURIComponent(token)}`)
         if (adminToken) q.push(`admin_token=${encodeURIComponent(adminToken)}`)
@@ -149,7 +156,9 @@ const LogsTab: React.FC = () => {
             const list = Array.isArray(data?.logs) ? data.logs : []
             setLogs(list)
             setVisibleCount(Math.min(20, list.length || 20))
-          } catch {}
+          } catch {
+            // Ignore parse errors
+          }
         })
         es.addEventListener("append", (ev: MessageEvent) => {
           try {
@@ -160,15 +169,23 @@ const LogsTab: React.FC = () => {
             setTimeout(() => {
               updating = false
             }, 0)
-          } catch {}
+          } catch {
+            // Ignore parse errors
+          }
         })
-        es.onerror = () => {}
-      } catch {}
+        es.onerror = () => {
+          // Ignore SSE errors - connection will retry automatically
+        }
+      } catch {
+        // Ignore SSE setup errors
+      }
     })()
     return () => {
       try {
         es?.close()
-      } catch {}
+      } catch {
+        // Ignore close errors
+      }
     }
   }, [])
 
@@ -270,8 +287,9 @@ const SitemapTab: React.FC = () => {
         priority: urlEl.querySelector("priority")?.textContent || undefined,
       }))
       setEntries(parsed)
-    } catch (e: any) {
-      setError(e?.message || "Failed to load sitemap")
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      setError(err?.message || "Failed to load sitemap")
     } finally {
       setLoading(false)
     }
@@ -388,7 +406,9 @@ const SitemapTab: React.FC = () => {
                       let pathname = entry.loc
                       try {
                         pathname = new URL(entry.loc).pathname
-                      } catch {}
+                      } catch {
+                        // Keep original value if URL parsing fails
+                      }
                       return (
                         <div
                           key={idx}
@@ -467,9 +487,12 @@ const ErrorLogsTab: React.FC = () => {
       const headers: Record<string, string> = { Accept: "application/json" }
       if (token) headers["Authorization"] = `Bearer ${token}`
       try {
-        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        const globalEnv = globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } }
+        const adminToken = globalEnv.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers["X-Admin-Token"] = String(adminToken)
-      } catch {}
+      } catch {
+        // Ignore env access errors
+      }
       
       const r = await fetch("/api/admin/error-logs?days=7", {
         headers,
@@ -479,8 +502,9 @@ const ErrorLogsTab: React.FC = () => {
       if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`)
       const list = Array.isArray(data?.logs) ? data.logs : []
       setLogs(list)
-    } catch (e: any) {
-      setError(e?.message || "Failed to load error logs")
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      setError(err?.message || "Failed to load error logs")
       // Show placeholder data if API doesn't exist yet
       setLogs([])
     } finally {
@@ -542,7 +566,7 @@ const ErrorLogsTab: React.FC = () => {
             <div className="flex items-center gap-2">
               <select
                 value={sourceFilter}
-                onChange={(e) => setSourceFilter(e.target.value as any)}
+                onChange={(e) => setSourceFilter(e.target.value as "all" | "api" | "admin_api")}
                 className="h-9 px-3 text-sm rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               >
                 <option value="all">All Sources</option>

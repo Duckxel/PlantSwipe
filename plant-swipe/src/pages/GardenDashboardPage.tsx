@@ -1,14 +1,13 @@
 // @ts-nocheck
 import React from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useParams, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { useParams, Routes, Route, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
 import { Navigate } from "@/components/i18n/Navigate";
 import { useLanguageNavigate, removeLanguagePrefix } from "@/lib/i18nRouting";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SearchInput } from "@/components/ui/search-input";
 import {
   Dialog,
@@ -23,8 +22,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { PlantDetails } from "@/components/plant/PlantDetails";
 import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2 } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
@@ -177,7 +174,7 @@ export const GardenDashboardPage: React.FC = () => {
       dayIndex: number;
     }>
   >([]);
-  const [instanceCounts, setInstanceCounts] = React.useState<
+  const [_instanceCounts, setInstanceCounts] = React.useState<
     Record<string, number>
   >({});
   // Derive totalOnHand and speciesOnHand from plants to avoid flashing
@@ -294,9 +291,9 @@ export const GardenDashboardPage: React.FC = () => {
     Set<string>
   >(new Set());
 
-  const [infoPlant, setInfoPlant] = React.useState<Plant | null>(null);
+  const [_infoPlant, _setInfoPlant] = React.useState<Plant | null>(null);
   // Favorites (liked plants)
-  const [likedIds, setLikedIds] = React.useState<string[]>([]);
+  const [_likedIds, setLikedIds] = React.useState<string[]>([]);
   React.useEffect(() => {
     const arr = Array.isArray((profile as any)?.liked_plant_ids)
       ? ((profile as any).liked_plant_ids as any[]).map(String)
@@ -313,7 +310,7 @@ export const GardenDashboardPage: React.FC = () => {
   );
   const lastReloadRef = React.useRef<number>(0);
   const pendingReloadRef = React.useRef<boolean>(false);
-  const [inviteEmail, setInviteEmail] = React.useState("");
+  const [_inviteEmail, _setInviteEmail] = React.useState("");
   const [inviteAny, setInviteAny] = React.useState("");
   const [inviteError, setInviteError] = React.useState<string | null>(null);
   const [friends, setFriends] = React.useState<
@@ -572,7 +569,7 @@ export const GardenDashboardPage: React.FC = () => {
         // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
         const start = new Date(today);
         start.setDate(start.getDate() - 29);
-        const startIso = start.toISOString().slice(0, 10);
+        const _startIso = start.toISOString().slice(0, 10);
         // Defer heavy computations; garden_tasks fetched later for stats
         // Compute current week (Mon-Sun) in UTC based on server 'today'
         const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`);
@@ -841,7 +838,7 @@ export const GardenDashboardPage: React.FC = () => {
 
       setHeavyLoading(true);
       try {
-        let weekDaysIso: string[] = [];
+        const weekDaysIso: string[] = [];
         if (needsTasksData) {
           const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`);
           const anchorUTC = parseUTC(todayValue);
@@ -1250,7 +1247,7 @@ export const GardenDashboardPage: React.FC = () => {
             setTodayTaskOccurrences((prev) => {
               // Replace with new data but preserve object references for unchanged items to avoid re-renders
               const prevMap = new Map(prev.map((o) => [o.id, o]));
-              const newMap = new Map(occsWithType.map((o) => [o.id, o]));
+              const _newMap = new Map(occsWithType.map((o) => [o.id, o]));
               const result: any[] = [];
 
               // Use new data order, but keep existing object references when data hasn't changed
@@ -2255,7 +2252,7 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, user?.id, t]);
 
-  const openEditSchedule = async (gardenPlant: any) => {
+  const _openEditSchedule = async (gardenPlant: any) => {
     try {
       const schedule = await getGardenPlantSchedule(gardenPlant.id);
       const period = (schedule?.period ||
@@ -2287,7 +2284,7 @@ export const GardenDashboardPage: React.FC = () => {
       setScheduleLockYear(false);
       setScheduleAllowedPeriods([period]);
       setScheduleOpen(true);
-    } catch (e) {
+    } catch (_e) {
       // Fallback: open with inferred defaults
       const period = (gardenPlant.overrideWaterFreqUnit ||
         gardenPlant.plant?.waterFreqPeriod ||
@@ -2373,7 +2370,7 @@ export const GardenDashboardPage: React.FC = () => {
     }
   };
 
-  const logWater = async (gardenPlantId: string) => {
+  const _logWater = async (_gardenPlantId: string) => {
     try {
       // Transition path: no legacy watering schedule updates; users should complete occurrences instead
       if (serverToday && garden?.id) {
@@ -2475,7 +2472,7 @@ export const GardenDashboardPage: React.FC = () => {
       await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
       // Signal other UI (nav bars) to refresh notification badges
       emitGardenRealtime("tasks");
-    } catch (e) {
+    } catch (_e) {
       // swallow; global error display exists
     } finally {
       // Clear loading state
@@ -2488,7 +2485,7 @@ export const GardenDashboardPage: React.FC = () => {
   };
 
   // Toggle like for a plant and sync to profile
-  const toggleLiked = async (plantId: string) => {
+  const _toggleLiked = async (plantId: string) => {
     if (!user?.id) return;
     setLikedIds((prev) => {
       const has = prev.includes(plantId);
@@ -3097,7 +3094,7 @@ export const GardenDashboardPage: React.FC = () => {
                         try {
                           await deleteGarden(id);
                           navigate("/gardens");
-                        } catch (e) {
+                        } catch (_e) {
                           alert(t("gardenDashboard.settingsSection.failedToDeleteGarden"));
                         }
                       }}
@@ -3107,7 +3104,7 @@ export const GardenDashboardPage: React.FC = () => {
                         try {
                           await removeGardenMember({ gardenId: id, userId: currentUserId });
                           navigate("/gardens");
-                        } catch (e) {
+                        } catch (_e) {
                           alert(t("gardenDashboard.settingsSection.failedToQuitGarden"));
                         }
                       }}
@@ -3490,9 +3487,11 @@ export const GardenDashboardPage: React.FC = () => {
   );
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RoutineSection({
   plants,
   duePlantIds,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onLogWater,
   weekDays,
   weekCounts,
@@ -3535,6 +3534,7 @@ function RoutineSection({
   completeAllTodayForPlant: (gardenPlantId: string) => Promise<void>;
 }) {
   const { t } = useTranslation("common");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const duePlants = React.useMemo(() => {
     if (!duePlantIds) return [];
     return plants.filter((gp: any) => duePlantIds.has(gp.id));
@@ -3620,7 +3620,7 @@ function RoutineSection({
             const count = weekCounts[idx] || 0;
             const heightPct =
               count === 0 ? 0 : Math.round((count / maxCount) * 100);
-            const d = new Date(ds);
+            const _d = new Date(ds);
             const labels = dayLabels;
             const isToday = serverToday === ds;
             const water = weekCountsByType.water[idx] || 0;
@@ -4544,7 +4544,7 @@ function OverviewSection({
   );
 }
 
-function colorForName(
+function _colorForName(
   name?: string | null,
   colorToken?: string | null,
 ): string {
@@ -4695,7 +4695,7 @@ function EditPlantButton({
       } catch {}
       await onChanged();
       setOpen(false);
-    } catch (e) {
+    } catch (_e) {
       // swallow; page has global error area
     } finally {
       setSubmitting(false);
@@ -4921,7 +4921,7 @@ function MemberCard({
         });
       } catch {}
       await onChanged();
-    } catch (e) {
+    } catch (_e) {
       // swallow; page has global error
     } finally {
       setBusy(false);

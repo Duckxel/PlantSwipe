@@ -1,6 +1,5 @@
 // @ts-nocheck
 import React from 'react'
-import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
@@ -186,9 +185,9 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
           className="rounded-2xl"
           onOpenAutoFocus={(e) => { e.preventDefault() }}
         // Allow outside pointer events so absolutely positioned menu stays interactive
-          onPointerDownOutside={(e) => { /* allow */ }}
-          onInteractOutside={(e) => { /* allow */ }}
-          onCloseAutoFocus={(e) => { /* allow */ }}
+          onPointerDownOutside={(_e) => { /* allow */ }}
+          onInteractOutside={(_e) => { /* allow */ }}
+          onCloseAutoFocus={(_e) => { /* allow */ }}
           aria-describedby={undefined}
       >
         <DialogHeader>

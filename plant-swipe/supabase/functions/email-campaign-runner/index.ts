@@ -38,6 +38,7 @@ type EmailTranslation = {
 }
 
 // Supported languages - should match frontend i18n config
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const SUPPORTED_LANGUAGES = ['en', 'fr'] as const
 type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]
 const DEFAULT_LANGUAGE: SupportedLanguage = 'en'
@@ -385,7 +386,7 @@ async function processCampaign(
     summary.pendingCount = future.length
     summary.nextScheduledFor = future.length ? future[0].sendAt : null
 
-    let remainingBudget =
+    const remainingBudget =
       typeof options.recipientLimit === "number"
         ? Math.max(options.recipientLimit - summary.sentCount, 0)
         : Number.POSITIVE_INFINITY
@@ -992,7 +993,7 @@ async function finalizeCampaign(
     try {
       // Ensure send_summary can be serialized to JSON
       payload.send_summary = JSON.parse(JSON.stringify(payload.send_summary))
-    } catch (e) {
+    } catch (_e) {
       console.warn("[email-campaign-runner] Could not serialize send_summary, removing it")
       delete payload.send_summary
     }

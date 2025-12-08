@@ -61,7 +61,7 @@ type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 type ColorOption = { id: string; name: string; hexCode: string }
 
 type ExtendedWindow = Window & {
-  requestIdleCallback?: (callback: (...args: any[]) => void, options?: { timeout?: number }) => number
+  requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
   cancelIdleCallback?: (handle: number) => void
 }
 
@@ -158,7 +158,9 @@ export default function PlantSwipe() {
           return parsed
         }
       }
-    } catch {}
+    } catch {
+      // Ignore localStorage errors
+    }
     return []
   })
   const [loading, setLoading] = useState(() => {
@@ -167,6 +169,7 @@ export default function PlantSwipe() {
       const cached = localStorage.getItem(`plantswipe.plants.${currentLang}`)
       return !cached
     } catch {
+      // Ignore localStorage errors
       return true
     }
   })
@@ -211,9 +214,9 @@ export default function PlantSwipe() {
 
   // Hydrate liked ids from profile when available
   React.useEffect(() => {
-    const arr = Array.isArray(profile?.liked_plant_ids) ? profile!.liked_plant_ids!.map(String) : []
+    const arr = Array.isArray(profile?.liked_plant_ids) ? profile.liked_plant_ids.map(String) : []
     setLikedIds(arr)
-  }, [profile?.liked_plant_ids])
+  }, [profile])
 
   const loadPlants = React.useCallback(async () => {
     // Only show loading if we don't have plants
@@ -235,7 +238,9 @@ export default function PlantSwipe() {
         if (plantsWithTranslations.length > 0) {
           localStorage.setItem(`plantswipe.plants.${currentLang}`, JSON.stringify(plantsWithTranslations))
         }
-      } catch {}
+      } catch {
+        // Ignore localStorage errors
+      }
       
       ok = true
     } catch (e: unknown) {
@@ -245,7 +250,7 @@ export default function PlantSwipe() {
       setLoading(false)
     }
     return ok
-  }, [currentLang])
+  }, [currentLang, plants.length])
 
 
   React.useEffect(() => {
@@ -293,8 +298,12 @@ export default function PlantSwipe() {
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
     const onRefresh = () => { loadPlants() }
-    try { window.addEventListener('plants:refresh', onRefresh as EventListener) } catch {}
-    return () => { try { window.removeEventListener('plants:refresh', onRefresh as EventListener) } catch {} }
+    try { window.addEventListener('plants:refresh', onRefresh as EventListener) } catch {
+      // Ignore event listener errors
+    }
+    return () => { try { window.removeEventListener('plants:refresh', onRefresh as EventListener) } catch {
+      // Ignore event listener errors
+    } }
   }, [loadPlants])
 
   // Global presence tracking so Admin can see "currently online" users
@@ -310,23 +319,28 @@ export default function PlantSwipe() {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         if (token) headers.Authorization = `Bearer ${token}`
         const ref = document.referrer || ''
+        const nav = navigator as Navigator & { hardwareConcurrency?: number; deviceMemory?: number }
         const extra = {
           viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 },
-          screen: { w: window.screen?.width || null, h: window.screen?.height || null, colorDepth: (window.screen as any)?.colorDepth || null },
+          screen: { w: window.screen?.width || null, h: window.screen?.height || null, colorDepth: window.screen?.colorDepth || null },
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
           platform: navigator.platform || null,
           vendor: navigator.vendor || null,
-          hardwareConcurrency: (navigator as any).hardwareConcurrency || null,
-          memoryGB: (navigator as any).deviceMemory || null,
+          hardwareConcurrency: nav.hardwareConcurrency || null,
+          memoryGB: nav.deviceMemory || null,
           webgl: (() => {
             try {
               const c = document.createElement('canvas')
               const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | WebGL2RenderingContext | null
               if (!gl) return null
-              const vendor = (gl as any).getParameter?.((gl as any).VENDOR)
-              const renderer = (gl as any).getParameter?.((gl as any).RENDERER)
+              const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
+              const vendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : null
+              const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : null
               return { vendor: vendor ?? null, renderer: renderer ?? null }
-            } catch { return null }
+            } catch {
+              // WebGL not available
+              return null
+            }
           })(),
         }
         await fetch(`${base}/api/track-visit`, {
@@ -337,17 +351,21 @@ export default function PlantSwipe() {
             referrer: ref,
             userId: user?.id || null,
             pageTitle: document.title || null,
-            language: navigator.language || (navigator as any).languages?.[0] || null,
+            language: navigator.language || navigator.languages?.[0] || null,
             // utm removed from server; not sent anymore
             extra,
           }),
           keepalive: true,
         })
-      } catch {}
+      } catch {
+        // Ignore visit tracking errors
+      }
     }
 
     const cancelIdleVisit = scheduleIdleTask(() => {
-      sendVisit(location.pathname + location.search).catch(() => {})
+      sendVisit(location.pathname + location.search).catch(() => {
+        // Ignore errors
+      })
     }, 2000)
 
     return () => { cancelIdleVisit() }
@@ -371,14 +389,18 @@ export default function PlantSwipe() {
             referrer: document.referrer || '',
             userId: user?.id || null,
             pageTitle: document.title || null,
-            language: navigator.language || (navigator as any).languages?.[0] || null,
+            language: navigator.language || navigator.languages?.[0] || null,
             extra: { source: 'heartbeat' },
           }),
           keepalive: true,
         })
-      } catch {}
+      } catch {
+        // Ignore heartbeat errors
+      }
     }
-    timer = setInterval(() => { sendHeartbeat().catch(() => {}) }, HEARTBEAT_MS)
+    timer = setInterval(() => { sendHeartbeat().catch(() => {
+      // Ignore errors
+    }) }, HEARTBEAT_MS)
     return () => { if (timer) clearInterval(timer) }
   }, [location.pathname, location.search, user?.id])
 
@@ -391,7 +413,9 @@ export default function PlantSwipe() {
         anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
         localStorage.setItem('plantswipe.anon_id', anonId)
       }
-    } catch {}
+    } catch {
+      // Ignore localStorage errors
+    }
 
     const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
     const channel = supabase.channel('global-presence', { config: { presence: { key } } })
@@ -408,13 +432,17 @@ export default function PlantSwipe() {
               display_name: profile?.display_name || null,
               online_at: new Date().toISOString(),
             })
-          } catch {}
+          } catch {
+            // Ignore tracking errors
+          }
         }
       })
 
     presenceRef.current = channel
     return () => {
-      try { channel.untrack() } catch {}
+      try { channel.untrack() } catch {
+        // Ignore untrack errors
+      }
       supabase.removeChannel(channel)
     }
   }, [user?.id, profile?.display_name])
@@ -480,6 +508,8 @@ export default function PlantSwipe() {
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
   const swipeList = useMemo(() => {
+    // shuffleEpoch is used to trigger a reshuffle when user completes a cycle
+    void shuffleEpoch
     if (filtered.length === 0) return []
     const shuffleList = (list: Plant[]) => {
       const arr = list.slice()
@@ -567,7 +597,9 @@ export default function PlantSwipe() {
     link.href = href
     try {
       (link as HTMLLinkElement & { fetchPriority?: string }).fetchPriority = "high"
-    } catch {}
+    } catch {
+      // Ignore fetchPriority assignment errors
+    }
     link.setAttribute("fetchpriority", "high")
     link.setAttribute("data-aphylia-preload", "hero")
     document.head.appendChild(link)
@@ -576,7 +608,7 @@ export default function PlantSwipe() {
         link.parentNode.removeChild(link)
       }
     }
-  }, [currentView, heroImageCandidate, index])
+  }, [currentView, heroImageCandidate, index, current])
 
   const handlePass = () => {
     if (swipeList.length === 0) return

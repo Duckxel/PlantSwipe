@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -171,10 +170,16 @@ const getWeatherBgClass = (condition: string): string => {
   return 'from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20';
 };
 
+interface GardenPlant {
+  id: string;
+  name?: string;
+  [key: string]: unknown;
+}
+
 interface GardenAnalyticsSectionProps {
   gardenId: string;
   garden: Garden | null;
-  plants: any[];
+  plants: GardenPlant[];
   members: Array<{
     userId: string;
     displayName?: string | null;
@@ -242,8 +247,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   }, [baseStreak, serverToday, dailyStats]);
   const { t } = useTranslation("common");
   const currentLang = useLanguage();
-  const { user } = useAuth();
-  const [loading, setLoading] = React.useState(true);
+  const { user: _user } = useAuth();
+  const [_loading, setLoading] = React.useState(true);
   const [adviceLoading, setAdviceLoading] = React.useState(false);
   const [advice, setAdvice] = React.useState<GardenerAdvice | null>(null);
   const [adviceError, setAdviceError] = React.useState<string | null>(null);
@@ -483,9 +488,10 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
         const data = await resp.json().catch(() => ({}));
         setAdviceError(data?.error || "Failed to load advice");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn("[Analytics] Failed to fetch advice:", err);
-      setAdviceError(err?.message || "Failed to load advice");
+      const errMsg = err instanceof Error ? err.message : "Failed to load advice";
+      setAdviceError(errMsg);
     } finally {
       setAdviceLoading(false);
     }
@@ -529,7 +535,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       URL.revokeObjectURL(url);
       
       setExportMenuOpen(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[Analytics] Export failed:", err);
       alert(t("gardenDashboard.analyticsSection.exportError", { defaultValue: "Failed to export analysis" }));
     } finally {
@@ -631,12 +637,18 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   }
 
   // Custom tooltip for charts
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  interface TooltipPayloadEntry {
+    color?: string;
+    name?: string;
+    value?: number | string;
+  }
+  
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadEntry[]; label?: string }) => {
     if (!active || !payload?.length) return null;
     return (
       <div className="bg-white dark:bg-[#1f1f1f] rounded-xl shadow-lg border border-stone-200 dark:border-stone-700 p-3 min-w-[140px]">
         <p className="text-sm font-medium mb-1">{label}</p>
-        {payload.map((entry: any, idx: number) => (
+        {payload.map((entry: TooltipPayloadEntry, idx: number) => (
           <p key={idx} className="text-xs" style={{ color: entry.color }}>
             {entry.name}: {entry.value}
           </p>
