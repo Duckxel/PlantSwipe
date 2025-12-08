@@ -15594,6 +15594,19 @@ async function generateCrawlerHtml(req, pagePath) {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
   const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
   
+  // SSR timeout for database queries (Discord/social bots typically timeout after 5-10 seconds)
+  const SSR_QUERY_TIMEOUT = Number(process.env.SSR_QUERY_TIMEOUT_MS) || 4000
+  
+  // Helper to wrap Supabase queries with a timeout to prevent slow responses
+  const ssrQuery = async (queryPromise, label = 'query') => {
+    try {
+      return await withTimeout(queryPromise, SSR_QUERY_TIMEOUT, `SSR_${label.toUpperCase()}_TIMEOUT`)
+    } catch (err) {
+      console.warn(`[ssr] ${label} timed out after ${SSR_QUERY_TIMEOUT}ms:`, err?.message || err)
+      return { data: null, error: err }
+    }
+  }
+  
   // Helper to ensure image URLs are absolute (required for og:image)
   const ensureAbsoluteUrl = (url) => {
     if (!url) return null
@@ -15983,11 +15996,14 @@ async function generateCrawlerHtml(req, pagePath) {
       if (!supabaseServer) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
       } else {
-        const { data: plant, error: plantError } = await supabaseServer
-          .from('plants')
-          .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level, watering, flowering_season, hardiness_zones')
-          .eq('id', plantId)
-          .maybeSingle()
+        const { data: plant, error: plantError } = await ssrQuery(
+          supabaseServer
+            .from('plants')
+            .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level, watering, flowering_season, hardiness_zones')
+            .eq('id', plantId)
+            .maybeSingle(),
+          'plant_lookup'
+        )
         
         if (plantError) {
           console.log(`[ssr] Plant query error: ${plantError.message}`)
@@ -16053,14 +16069,17 @@ async function generateCrawlerHtml(req, pagePath) {
             ? descParts.join(' • ').slice(0, 200)
             : `${tr.plantLearnGrow} ${plant.name}. ${tr.plantExpertTips} 🌱`
           
-          // Fetch primary image, fallback to discovery image
-          const { data: images } = await supabaseServer
-            .from('plant_images')
-            .select('link, use')
-            .eq('plant_id', plantId)
-            .in('use', ['primary', 'discovery', 'other'])
-            .order('use', { ascending: true })
-            .limit(3)
+          // Fetch primary image, fallback to discovery image (with timeout)
+          const { data: images } = await ssrQuery(
+            supabaseServer
+              .from('plant_images')
+              .select('link, use')
+              .eq('plant_id', plantId)
+              .in('use', ['primary', 'discovery', 'other'])
+              .order('use', { ascending: true })
+              .limit(3),
+            'plant_images'
+          )
           
           // Prefer primary, then discovery, then any other
           const primaryImg = images?.find(img => img.use === 'primary')
@@ -16128,12 +16147,15 @@ async function generateCrawlerHtml(req, pagePath) {
       const slug = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up blog post: ${slug}`)
       
-      const { data: post, error: postError } = await supabaseServer
-        .from('blog_posts')
-        .select('id, title, excerpt, content, cover_image_url, author_name, published_at, reading_time_minutes')
-        .eq('slug', slug)
-        .eq('is_published', true)
-        .maybeSingle()
+      const { data: post, error: postError } = await ssrQuery(
+        supabaseServer
+          .from('blog_posts')
+          .select('id, title, excerpt, content, cover_image_url, author_name, published_at, reading_time_minutes')
+          .eq('slug', slug)
+          .eq('is_published', true)
+          .maybeSingle(),
+        'blog_lookup'
+      )
       
       if (postError) {
         console.log(`[ssr] Blog query error: ${postError.message}`)
@@ -16191,39 +16213,51 @@ async function generateCrawlerHtml(req, pagePath) {
       const username = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up user profile: ${username}`)
       
-      const { data: profile, error: profileError } = await supabaseServer
-        .from('profiles')
-        .select('id, display_name, bio, avatar_url, is_private, created_at')
-        .eq('display_name', username)
-        .eq('is_private', false)
-        .maybeSingle()
+      const { data: profile, error: profileError } = await ssrQuery(
+        supabaseServer
+          .from('profiles')
+          .select('id, display_name, bio, avatar_url, is_private, created_at')
+          .eq('display_name', username)
+          .eq('is_private', false)
+          .maybeSingle(),
+        'profile_lookup'
+      )
       
       if (profileError) {
         console.log(`[ssr] Profile query error: ${profileError.message}`)
       } else if (profile) {
         console.log(`[ssr] ✓ Found profile: ${profile.display_name}`)
         
-        // Get garden and plant counts
+        // Get garden and plant counts (with timeouts to avoid blocking)
         let gardenCount = 0
         let plantCount = 0
         try {
-          const { count: gCount } = await supabaseServer
-            .from('gardens')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', profile.id)
+          const { count: gCount } = await ssrQuery(
+            supabaseServer
+              .from('gardens')
+              .select('id', { count: 'exact', head: true })
+              .eq('user_id', profile.id),
+            'profile_garden_count'
+          )
           gardenCount = gCount || 0
           
           // Get total plants across all gardens
-          const { data: gardens } = await supabaseServer
-            .from('gardens')
-            .select('id')
-            .eq('user_id', profile.id)
+          const { data: gardens } = await ssrQuery(
+            supabaseServer
+              .from('gardens')
+              .select('id')
+              .eq('user_id', profile.id),
+            'profile_gardens'
+          )
           if (gardens?.length) {
             const gardenIds = gardens.map(g => g.id)
-            const { count: pCount } = await supabaseServer
-              .from('garden_plants')
-              .select('id', { count: 'exact', head: true })
-              .in('garden_id', gardenIds)
+            const { count: pCount } = await ssrQuery(
+              supabaseServer
+                .from('garden_plants')
+                .select('id', { count: 'exact', head: true })
+                .in('garden_id', gardenIds),
+              'profile_plant_count'
+            )
             plantCount = pCount || 0
           }
         } catch {}
@@ -16272,11 +16306,14 @@ async function generateCrawlerHtml(req, pagePath) {
       const gardenId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up garden: ${gardenId}`)
       
-      const { data: garden, error: gardenError } = await supabaseServer
-        .from('gardens')
-        .select('id, name, description, user_id, created_at, location, climate_zone')
-        .eq('id', gardenId)
-        .maybeSingle()
+      const { data: garden, error: gardenError } = await ssrQuery(
+        supabaseServer
+          .from('gardens')
+          .select('id, name, description, user_id, created_at, location, climate_zone')
+          .eq('id', gardenId)
+          .maybeSingle(),
+        'garden_lookup'
+      )
       
       if (gardenError) {
         console.log(`[ssr] Garden query error: ${gardenError.message}`)
@@ -16289,39 +16326,51 @@ async function generateCrawlerHtml(req, pagePath) {
         let gardenImage = null
         
         try {
-          // Get owner
+          // Get owner (with timeout)
           if (garden.user_id) {
-            const { data: owner } = await supabaseServer
-              .from('profiles')
-              .select('display_name, avatar_url')
-              .eq('id', garden.user_id)
-              .maybeSingle()
+            const { data: owner } = await ssrQuery(
+              supabaseServer
+                .from('profiles')
+                .select('display_name, avatar_url')
+                .eq('id', garden.user_id)
+                .maybeSingle(),
+              'garden_owner'
+            )
             if (owner) {
               ownerName = owner.display_name
               if (owner.avatar_url) gardenImage = ensureAbsoluteUrl(owner.avatar_url)
             }
           }
           
-          // Get plant count
-          const { count } = await supabaseServer
-            .from('garden_plants')
-            .select('id', { count: 'exact', head: true })
-            .eq('garden_id', gardenId)
+          // Get plant count (with timeout)
+          const { count } = await ssrQuery(
+            supabaseServer
+              .from('garden_plants')
+              .select('id', { count: 'exact', head: true })
+              .eq('garden_id', gardenId),
+            'garden_plant_count'
+          )
           plantCount = count || 0
           
-          // Try to get a plant image from the garden
-          const { data: gardenPlants } = await supabaseServer
-            .from('garden_plants')
-            .select('plant_id')
-            .eq('garden_id', gardenId)
-            .limit(1)
+          // Try to get a plant image from the garden (with timeout)
+          const { data: gardenPlants } = await ssrQuery(
+            supabaseServer
+              .from('garden_plants')
+              .select('plant_id')
+              .eq('garden_id', gardenId)
+              .limit(1),
+            'garden_plants_for_img'
+          )
           if (gardenPlants?.[0]?.plant_id) {
-            const { data: plantImg } = await supabaseServer
-              .from('plant_images')
-              .select('link')
-              .eq('plant_id', gardenPlants[0].plant_id)
-              .eq('use', 'primary')
-              .maybeSingle()
+            const { data: plantImg } = await ssrQuery(
+              supabaseServer
+                .from('plant_images')
+                .select('link')
+                .eq('plant_id', gardenPlants[0].plant_id)
+                .eq('use', 'primary')
+                .maybeSingle(),
+              'garden_plant_img'
+            )
             if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
           }
         } catch {}
@@ -16420,12 +16469,15 @@ async function generateCrawlerHtml(req, pagePath) {
       
       // Fetch recent blog posts for the listing
       if (supabaseServer) {
-        const { data: posts } = await supabaseServer
-          .from('blog_posts')
-          .select('title, slug, excerpt, published_at, cover_image_url')
-          .eq('is_published', true)
-          .order('published_at', { ascending: false })
-          .limit(10)
+        const { data: posts } = await ssrQuery(
+          supabaseServer
+            .from('blog_posts')
+            .select('title, slug, excerpt, published_at, cover_image_url')
+            .eq('is_published', true)
+            .order('published_at', { ascending: false })
+            .limit(10),
+          'blog_listing'
+        )
         
         if (posts?.length) {
           // Use the most recent post's cover image
@@ -16606,12 +16658,15 @@ async function generateCrawlerHtml(req, pagePath) {
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
       
       // Try to get the bookmark list info
-      const { data: bookmarkList } = await supabaseServer
-        .from('plant_lists')
-        .select('id, name, description, user_id, is_public')
-        .eq('id', listId)
-        .eq('is_public', true)
-        .maybeSingle()
+      const { data: bookmarkList } = await ssrQuery(
+        supabaseServer
+          .from('plant_lists')
+          .select('id, name, description, user_id, is_public')
+          .eq('id', listId)
+          .eq('is_public', true)
+          .maybeSingle(),
+        'bookmark_lookup'
+      )
       
       if (bookmarkList) {
         console.log(`[ssr] ✓ Found bookmark list: ${bookmarkList.name}`)
@@ -16623,34 +16678,46 @@ async function generateCrawlerHtml(req, pagePath) {
         
         try {
           if (bookmarkList.user_id) {
-            const { data: owner } = await supabaseServer
-              .from('profiles')
-              .select('display_name')
-              .eq('id', bookmarkList.user_id)
-              .maybeSingle()
+            const { data: owner } = await ssrQuery(
+              supabaseServer
+                .from('profiles')
+                .select('display_name')
+                .eq('id', bookmarkList.user_id)
+                .maybeSingle(),
+              'bookmark_owner'
+            )
             if (owner) ownerName = owner.display_name
           }
           
-          // Get plant count
-          const { count } = await supabaseServer
-            .from('plant_list_items')
-            .select('id', { count: 'exact', head: true })
-            .eq('list_id', listId)
+          // Get plant count (with timeout)
+          const { count } = await ssrQuery(
+            supabaseServer
+              .from('plant_list_items')
+              .select('id', { count: 'exact', head: true })
+              .eq('list_id', listId),
+            'bookmark_plant_count'
+          )
           plantCount = count || 0
           
-          // Get first plant image
-          const { data: listPlants } = await supabaseServer
-            .from('plant_list_items')
-            .select('plant_id')
-            .eq('list_id', listId)
-            .limit(1)
+          // Get first plant image (with timeout)
+          const { data: listPlants } = await ssrQuery(
+            supabaseServer
+              .from('plant_list_items')
+              .select('plant_id')
+              .eq('list_id', listId)
+              .limit(1),
+            'bookmark_plants_for_img'
+          )
           if (listPlants?.[0]?.plant_id) {
-            const { data: plantImg } = await supabaseServer
-              .from('plant_images')
-              .select('link')
-              .eq('plant_id', listPlants[0].plant_id)
-              .eq('use', 'primary')
-              .maybeSingle()
+            const { data: plantImg } = await ssrQuery(
+              supabaseServer
+                .from('plant_images')
+                .select('link')
+                .eq('plant_id', listPlants[0].plant_id)
+                .eq('use', 'primary')
+                .maybeSingle(),
+              'bookmark_plant_img'
+            )
             if (plantImg?.link) listImage = ensureAbsoluteUrl(plantImg.link)
           }
         } catch {}
@@ -16690,14 +16757,17 @@ async function generateCrawlerHtml(req, pagePath) {
       title = `🌱 ${tr.homeTitle}`
       description = tr.homeDesc
       
-      // Try to get some stats
+      // Try to get some stats (with timeout to avoid blocking)
       let plantCountStat = '5,000+'
       let userCount = '10,000+'
       try {
         if (supabaseServer) {
-          const { count: pCount } = await supabaseServer
-            .from('plants')
-            .select('id', { count: 'exact', head: true })
+          const { count: pCount } = await ssrQuery(
+            supabaseServer
+              .from('plants')
+              .select('id', { count: 'exact', head: true }),
+            'home_plant_count'
+          )
           if (pCount) plantCountStat = pCount.toLocaleString() + '+'
         }
       } catch {}
@@ -17044,16 +17114,22 @@ app.get('*', async (req, res) => {
   }
   
   if (!isAssetRequest && detectedAsCrawler) {
+    const ssrStartTime = Date.now()
     try {
       // Use path without query params for SSR
       const html = await generateCrawlerHtml(req, pathWithoutQuery)
+      const ssrDuration = Date.now() - ssrStartTime
+      console.log(`[ssr] ✓ Generated HTML for ${pathWithoutQuery} in ${ssrDuration}ms (${html.length} bytes)`)
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
       res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
       res.setHeader('X-Robots-Tag', 'index, follow')
+      res.setHeader('X-SSR-Duration', String(ssrDuration))
       return res.send(html)
     } catch (err) {
-      console.error('[ssr] Crawler render failed, falling back to SPA:', err?.message || err)
+      const ssrDuration = Date.now() - ssrStartTime
+      console.error(`[ssr] ✗ Crawler render FAILED after ${ssrDuration}ms, falling back to SPA:`, err?.message || err)
       console.error('[ssr] Full error stack:', err?.stack || 'no stack')
+      console.error('[ssr] Request details:', { path: pathWithoutQuery, ua: uaShort })
       // Fall through to normal SPA serving
     }
   }
