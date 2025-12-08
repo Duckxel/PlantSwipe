@@ -11,6 +11,7 @@ import {
   Sparkles,
   Calendar,
   Clock,
+  Flower2,
 } from "lucide-react";
 import { listCompletionsForOccurrences } from "@/lib/gardens";
 
@@ -24,6 +25,19 @@ interface TaskOccurrence {
   completedAt: string | null;
   taskType?: "water" | "fertilize" | "harvest" | "cut" | "custom";
   taskEmoji?: string;
+}
+
+interface WeekTaskOccurrence {
+  id: string;
+  taskId: string;
+  gardenPlantId: string;
+  dueAt: string;
+  requiredCount: number;
+  completedCount: number;
+  completedAt: string | null;
+  taskType: "water" | "fertilize" | "harvest" | "cut" | "custom";
+  taskEmoji?: string | null;
+  dayIndex: number;
 }
 
 interface Plant {
@@ -56,43 +70,54 @@ interface GardenTasksSectionProps {
   serverToday: string | null;
   dueThisWeekByPlant: Record<string, number[]>;
   duePlantIds: Set<string> | null;
+  weekTaskOccurrences?: WeekTaskOccurrence[];
 }
 
 const taskTypeConfig = {
   water: {
     icon: Droplets,
     color: "text-blue-500",
-    bg: "bg-blue-100 dark:bg-blue-900/30",
+    bg: "bg-blue-50 dark:bg-blue-900/20",
+    border: "border-blue-200 dark:border-blue-800/50",
     barColor: "bg-blue-500",
     emoji: "💧",
+    gradient: "from-blue-500/10 to-blue-500/5",
   },
   fertilize: {
     icon: Leaf,
     color: "text-green-500",
-    bg: "bg-green-100 dark:bg-green-900/30",
+    bg: "bg-green-50 dark:bg-green-900/20",
+    border: "border-green-200 dark:border-green-800/50",
     barColor: "bg-green-500",
     emoji: "🌱",
+    gradient: "from-green-500/10 to-green-500/5",
   },
   harvest: {
     icon: Package,
-    color: "text-yellow-500",
-    bg: "bg-yellow-100 dark:bg-yellow-900/30",
-    barColor: "bg-yellow-500",
+    color: "text-amber-500",
+    bg: "bg-amber-50 dark:bg-amber-900/20",
+    border: "border-amber-200 dark:border-amber-800/50",
+    barColor: "bg-amber-500",
     emoji: "🌾",
+    gradient: "from-amber-500/10 to-amber-500/5",
   },
   cut: {
     icon: Scissors,
     color: "text-orange-500",
-    bg: "bg-orange-100 dark:bg-orange-900/30",
+    bg: "bg-orange-50 dark:bg-orange-900/20",
+    border: "border-orange-200 dark:border-orange-800/50",
     barColor: "bg-orange-500",
     emoji: "✂️",
+    gradient: "from-orange-500/10 to-orange-500/5",
   },
   custom: {
     icon: Sparkles,
     color: "text-purple-500",
-    bg: "bg-purple-100 dark:bg-purple-900/30",
+    bg: "bg-purple-50 dark:bg-purple-900/20",
+    border: "border-purple-200 dark:border-purple-800/50",
     barColor: "bg-purple-500",
     emoji: "🪴",
+    gradient: "from-purple-500/10 to-purple-500/5",
   },
 };
 
@@ -109,6 +134,7 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
   serverToday,
   dueThisWeekByPlant,
   duePlantIds,
+  weekTaskOccurrences = [],
 }) => {
   const { t } = useTranslation("common");
   const [completionsByOcc, setCompletionsByOcc] = React.useState<
@@ -173,7 +199,7 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
     t("gardenDashboard.routineSection.dayLabels.sun"),
   ];
 
-  // Full day names for mobile
+  // Full day names
   const dayLabelsFull = [
     t("gardenDashboard.routineSection.dayLabelsFull.mon", "Monday"),
     t("gardenDashboard.routineSection.dayLabelsFull.tue", "Tuesday"),
@@ -186,34 +212,63 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
 
   const maxCount = Math.max(1, ...weekCounts);
 
-  // Plants with upcoming tasks (not due today)
+  // Get upcoming week tasks (not due today) with task details
+  const upcomingWeekTasks = React.useMemo(() => {
+    const today = serverToday;
+    if (!today) return [];
+
+    // Filter week occurrences that are upcoming (after today) and incomplete
+    return weekTaskOccurrences
+      .filter((o) => {
+        const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
+        const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0));
+        return remaining > 0 && dayIso > today;
+      })
+      .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+  }, [weekTaskOccurrences, serverToday]);
+
+  // Plants with upcoming tasks (fallback if no weekTaskOccurrences)
   const plantsWithUpcoming = plants.filter(
     (gp) =>
       (dueThisWeekByPlant[gp.id]?.length || 0) > 0 && !duePlantIds?.has(gp.id)
   );
 
-  const getTaskIcon = (taskType: string, emoji?: string) => {
+  const getTaskIcon = (taskType: string, emoji?: string | null) => {
     if (emoji && emoji !== "??" && emoji !== "???" && emoji.trim() !== "") {
       return emoji;
     }
     return taskTypeConfig[taskType as keyof typeof taskTypeConfig]?.emoji || "🪴";
   };
 
+  const getPlantName = (gardenPlantId: string) => {
+    const plant = plants.find((p) => p.id === gardenPlantId);
+    return plant?.nickname || plant?.plant?.name || t("garden.plant", "Plant");
+  };
+
+  const formatTaskDate = (dueAt: string, dayIndex: number) => {
+    const date = new Date(dueAt);
+    const dayName = dayLabelsFull[dayIndex] || dayLabels[dayIndex];
+    const dayNum = date.getDate();
+    return { dayName, dayNum };
+  };
+
   return (
-    <div className="space-y-4 md:space-y-6">
-      {/* Weekly Overview Card - Compact on mobile */}
-      <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur overflow-hidden">
-        <div className="p-3 md:p-4 border-b border-stone-200/50 dark:border-stone-700/50 bg-gradient-to-r from-blue-50/80 to-white dark:from-blue-900/20 dark:to-[#1f1f1f]">
+    <div className="space-y-6 md:space-y-8">
+      {/* Weekly Overview Card */}
+      <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#1f1f1f]/95 backdrop-blur overflow-hidden shadow-sm">
+        <div className="p-4 md:p-5 border-b border-stone-100 dark:border-stone-800/50 bg-gradient-to-r from-blue-50/50 to-indigo-50/30 dark:from-blue-900/10 dark:to-indigo-900/10">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-base md:text-lg flex items-center gap-2">
-              <Calendar className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
+            <h3 className="font-semibold text-base md:text-lg flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Calendar className="w-4 h-4 md:w-5 md:h-5 text-blue-600 dark:text-blue-400" />
+              </div>
               {t("gardenDashboard.routineSection.thisWeek", "This Week")}
             </h3>
           </div>
         </div>
-        <div className="p-3 md:p-4">
-          {/* Compact bar chart for mobile */}
-          <div className="grid grid-cols-7 gap-1 md:gap-2">
+        <div className="p-4 md:p-5">
+          {/* Week bar chart */}
+          <div className="grid grid-cols-7 gap-1.5 md:gap-2.5">
             {weekDays.map((ds, idx) => {
               const count = weekCounts[idx] || 0;
               const isToday = serverToday === ds;
@@ -226,73 +281,73 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
               return (
                 <div
                   key={ds}
-                  className="flex flex-col items-center gap-0.5 md:gap-1"
+                  className="flex flex-col items-center gap-1 md:gap-1.5"
                 >
-                  <div className="text-[10px] md:text-xs text-muted-foreground">
+                  <div className={`text-[10px] md:text-xs font-medium ${isToday ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
                     {dayLabels[idx]}
                   </div>
                   <div
-                    className={`w-full h-14 md:h-20 rounded-md md:rounded-lg overflow-hidden flex flex-col justify-end ${
+                    className={`w-full h-16 md:h-24 rounded-lg md:rounded-xl overflow-hidden flex flex-col justify-end transition-all ${
                       isToday
-                        ? "ring-2 ring-emerald-500 ring-offset-1"
-                        : "bg-stone-100 dark:bg-stone-800"
+                        ? "ring-2 ring-emerald-500 ring-offset-2 ring-offset-white dark:ring-offset-[#1f1f1f]"
+                        : "bg-stone-100 dark:bg-stone-800/50"
                     }`}
                   >
                     {count > 0 ? (
                       <>
                         {water > 0 && (
                           <div
-                            className="bg-blue-500"
+                            className="bg-gradient-to-t from-blue-500 to-blue-400 transition-all"
                             style={{ height: `${(water / maxCount) * 100}%` }}
                           />
                         )}
                         {fert > 0 && (
                           <div
-                            className="bg-green-500"
+                            className="bg-gradient-to-t from-green-500 to-green-400 transition-all"
                             style={{ height: `${(fert / maxCount) * 100}%` }}
                           />
                         )}
                         {harv > 0 && (
                           <div
-                            className="bg-yellow-500"
+                            className="bg-gradient-to-t from-amber-500 to-amber-400 transition-all"
                             style={{ height: `${(harv / maxCount) * 100}%` }}
                           />
                         )}
                         {cut > 0 && (
                           <div
-                            className="bg-orange-500"
+                            className="bg-gradient-to-t from-orange-500 to-orange-400 transition-all"
                             style={{ height: `${(cut / maxCount) * 100}%` }}
                           />
                         )}
                         {cust > 0 && (
                           <div
-                            className="bg-purple-500"
+                            className="bg-gradient-to-t from-purple-500 to-purple-400 transition-all"
                             style={{ height: `${(cust / maxCount) * 100}%` }}
                           />
                         )}
                       </>
                     ) : (
-                      <div className="w-full h-full bg-stone-100 dark:bg-stone-800" />
+                      <div className="w-full h-full bg-stone-100 dark:bg-stone-800/50" />
                     )}
                   </div>
-                  <div className={`text-[10px] md:text-xs font-medium ${isToday ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                  <div className={`text-xs md:text-sm font-semibold ${isToday ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
                     {count}
                   </div>
                 </div>
               );
             })}
           </div>
-          {/* Legend - hide on very small screens */}
-          <div className="hidden sm:flex flex-wrap gap-2 md:gap-3 mt-3 md:mt-4 justify-center">
+          {/* Legend */}
+          <div className="flex flex-wrap gap-3 md:gap-4 mt-4 md:mt-5 justify-center">
             {[
               { key: "water", label: t("garden.taskTypes.water"), color: "bg-blue-500" },
               { key: "fertilize", label: t("garden.taskTypes.fertilize"), color: "bg-green-500" },
-              { key: "harvest", label: t("garden.taskTypes.harvest"), color: "bg-yellow-500" },
+              { key: "harvest", label: t("garden.taskTypes.harvest"), color: "bg-amber-500" },
               { key: "cut", label: t("garden.taskTypes.cut"), color: "bg-orange-500" },
               { key: "custom", label: t("garden.taskTypes.custom"), color: "bg-purple-500" },
             ].map((item) => (
-              <div key={item.key} className="flex items-center gap-1 text-[10px] md:text-xs">
-                <div className={`w-2 h-2 md:w-3 md:h-3 rounded ${item.color}`} />
+              <div key={item.key} className="flex items-center gap-1.5 text-xs md:text-sm">
+                <div className={`w-2.5 h-2.5 md:w-3 md:h-3 rounded-full ${item.color}`} />
                 <span className="text-muted-foreground">{item.label}</span>
               </div>
             ))}
@@ -300,43 +355,43 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
         </div>
       </Card>
 
-      {/* Today's Tasks - Mobile-optimized layout */}
-      <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur overflow-hidden">
-        <div className="p-3 md:p-4 border-b border-stone-200/50 dark:border-stone-700/50 bg-gradient-to-r from-emerald-50/80 to-white dark:from-emerald-900/20 dark:to-[#1f1f1f]">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="font-semibold text-base md:text-lg flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-500" />
-              {t("gardenDashboard.routineSection.today", "Today")}
-            </h3>
-            <div className="flex items-center gap-2 md:gap-3">
-              <span className="text-xs md:text-sm font-medium">
-                {completedTasks}/{totalTasks}
-              </span>
-              <div className="w-16 md:w-24 h-1.5 md:h-2 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <span className="text-xs md:text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                {progressPct}%
-              </span>
+      {/* Today's Tasks Section */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg md:text-xl flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+              <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-600 dark:text-emerald-400" />
             </div>
+            {t("gardenDashboard.routineSection.today", "Today")}
+          </h3>
+          <div className="flex items-center gap-3">
+            <span className="text-sm md:text-base font-medium text-muted-foreground">
+              {completedTasks}/{totalTasks}
+            </span>
+            <div className="w-20 md:w-32 h-2 md:h-2.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <span className="text-sm md:text-base font-semibold text-emerald-600 dark:text-emerald-400">
+              {progressPct}%
+            </span>
           </div>
         </div>
 
         {plantsWithTasks.length === 0 ? (
-          <div className="p-6 md:p-8 text-center">
-            <div className="text-3xl md:text-4xl mb-2 md:mb-3">🌿</div>
-            <p className="text-base md:text-lg font-medium text-muted-foreground">
+          <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#1f1f1f]/95 p-8 md:p-12 text-center">
+            <div className="text-4xl md:text-5xl mb-3">🌿</div>
+            <p className="text-lg md:text-xl font-medium text-foreground">
               {t("gardenDashboard.todaysTasks.allDone", "All done for today!")}
             </p>
-            <p className="text-xs md:text-sm text-muted-foreground mt-1">
+            <p className="text-sm md:text-base text-muted-foreground mt-2">
               {t("gardenDashboard.todaysTasks.enjoyYourDay", "Enjoy your day, your plants are happy.")}
             </p>
-          </div>
+          </Card>
         ) : (
-          <div className="p-2 md:p-3 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {plantsWithTasks.map((plant) => {
               const occs = occsByPlant[plant.id] || [];
               const plantTotalReq = occs.reduce(
@@ -354,45 +409,87 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
               );
               const allDone = plantTotalDone >= plantTotalReq;
               const isCompleting = completingPlantIds.has(plant.id);
+              const plantProgressPct = plantTotalReq > 0 ? Math.round((plantTotalDone / plantTotalReq) * 100) : 100;
 
               return (
-                <div key={plant.id} className="bg-stone-50/50 dark:bg-stone-900/30 rounded-xl p-2 md:p-3">
+                <Card 
+                  key={plant.id} 
+                  className={`rounded-2xl border overflow-hidden transition-all duration-300 ${
+                    allDone 
+                      ? "border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/10" 
+                      : "border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#1f1f1f]/95"
+                  }`}
+                >
                   {/* Plant Header */}
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-sm md:text-base truncate">
-                        {plant.nickname || plant.plant?.name || "Plant"}
+                  <div className={`p-4 border-b ${allDone ? "border-emerald-100 dark:border-emerald-800/30 bg-emerald-50/30 dark:bg-emerald-900/5" : "border-stone-100 dark:border-stone-800/50"}`}>
+                    {/* Plant info row */}
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        allDone 
+                          ? "bg-emerald-100 dark:bg-emerald-900/30" 
+                          : "bg-stone-100 dark:bg-stone-800"
+                      }`}>
+                        <Flower2 className={`w-5 h-5 md:w-6 md:h-6 ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-stone-500 dark:text-stone-400"}`} />
                       </div>
-                      <div className="text-[10px] md:text-xs text-muted-foreground">
-                        {plantTotalDone}/{plantTotalReq} {t("garden.done", "done")}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-semibold text-sm md:text-base line-clamp-2">
+                            {plant.nickname || plant.plant?.name || "Plant"}
+                          </div>
+                          {allDone && (
+                            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0">
+                              <CheckCircle2 className="w-5 h-5" />
+                              <span className="text-sm font-medium hidden sm:inline">
+                                {t("gardenDashboard.routineSection.completed", "Done")}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {plant.nickname && plant.plant?.name && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {plant.plant.name}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    {!allDone && (
-                      <Button
-                        size="sm"
-                        className="rounded-lg text-xs h-7 px-2 md:px-3 flex-shrink-0"
-                        onClick={() => completeAllTodayForPlant(plant.id)}
-                        disabled={isCompleting}
-                      >
-                        {isCompleting ? (
-                          <span className="animate-pulse">⏳</span>
-                        ) : (
-                          t("garden.completeAll", "Complete All")
-                        )}
-                      </Button>
-                    )}
-                    {allDone && (
-                      <span className="text-emerald-500 text-xs md:text-sm font-medium flex items-center gap-1 flex-shrink-0">
-                        <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4" />
-                        {t("gardenDashboard.routineSection.completed", "Done")}
-                      </span>
-                    )}
+
+                    {/* Progress bar and Complete All button */}
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="flex-1 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              allDone ? "bg-emerald-500" : "bg-blue-500"
+                            }`}
+                            style={{ width: `${plantProgressPct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                          {plantTotalDone}/{plantTotalReq}
+                        </span>
+                      </div>
+                      {!allDone && (
+                        <Button
+                          size="sm"
+                          className="rounded-xl text-xs h-8 px-3 flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => completeAllTodayForPlant(plant.id)}
+                          disabled={isCompleting}
+                        >
+                          {isCompleting ? (
+                            <span className="animate-pulse">⏳</span>
+                          ) : (
+                            t("garden.completeAll", "Complete All")
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Task List - Clean mobile layout */}
-                  <div className="space-y-1.5">
+                  {/* Task List */}
+                  <div className="p-3 space-y-2">
                     {occs.map((occ) => {
                       const taskType = occ.taskType || "custom";
+                      const config = taskTypeConfig[taskType] || taskTypeConfig.custom;
                       const isDone =
                         (occ.completedCount || 0) >=
                         Math.max(1, occ.requiredCount || 1);
@@ -406,30 +503,34 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                       return (
                         <div
                           key={occ.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg ${
+                          className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
                             isDone
-                              ? "bg-white/50 dark:bg-stone-800/30 opacity-60"
-                              : "bg-white dark:bg-stone-800/50"
+                              ? "bg-stone-50/50 dark:bg-stone-800/20 opacity-70"
+                              : `${config.bg} ${config.border} border`
                           }`}
                         >
                           {/* Task Icon */}
-                          <span className="text-lg md:text-xl flex-shrink-0">
-                            {getTaskIcon(taskType, occ.taskEmoji)}
-                          </span>
+                          <div className={`w-9 h-9 md:w-10 md:h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                            isDone ? "bg-stone-200/50 dark:bg-stone-700/30" : "bg-white/80 dark:bg-stone-900/50"
+                          }`}>
+                            <span className="text-lg md:text-xl">
+                              {getTaskIcon(taskType, occ.taskEmoji)}
+                            </span>
+                          </div>
                           
                           {/* Task Info */}
                           <div className="flex-1 min-w-0">
-                            <div className={`text-xs md:text-sm font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
+                            <div className={`text-sm md:text-base font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
                               {t(`garden.taskTypes.${taskType}`, taskType)}
                             </div>
                             {occ.requiredCount > 1 && !isDone && (
-                              <div className="text-[10px] md:text-xs text-muted-foreground">
-                                {occ.completedCount || 0}/{occ.requiredCount}
+                              <div className="text-xs text-muted-foreground">
+                                {occ.completedCount || 0}/{occ.requiredCount} {t("garden.times", "times")}
                               </div>
                             )}
                             {isDone && completions.length > 0 && (
-                              <div className="text-[10px] md:text-xs text-muted-foreground truncate">
-                                {completions
+                              <div className="text-xs text-muted-foreground truncate">
+                                {t("gardenDashboard.routineSection.doneBy", "Done by")} {completions
                                   .map((c) => c.displayName || t("garden.someone", "Someone"))
                                   .join(", ")}
                               </div>
@@ -441,93 +542,151 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                             <Button
                               size="sm"
                               variant="secondary"
-                              className="rounded-lg h-7 px-2 text-xs flex-shrink-0"
+                              className={`rounded-lg h-8 px-3 text-xs flex-shrink-0 ${config.color} bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800 border ${config.border}`}
                               onClick={() => onProgressOccurrence(occ.id, remaining)}
                               disabled={isProgressing}
                             >
                               {isProgressing ? (
                                 <span className="animate-spin">⏳</span>
                               ) : (
-                                t("garden.complete", "Complete")
+                                <CheckCircle2 className="w-4 h-4" />
                               )}
                             </Button>
                           ) : (
-                            <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-500 flex-shrink-0" />
+                            <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
                           )}
                         </div>
                       );
                     })}
                   </div>
-                </div>
+                </Card>
               );
             })}
           </div>
         )}
-      </Card>
+      </div>
 
-      {/* Upcoming Tasks - Better mobile layout */}
-      {plantsWithUpcoming.length > 0 && (
-        <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur overflow-hidden">
-          <div className="p-3 md:p-4 border-b border-stone-200/50 dark:border-stone-700/50 bg-gradient-to-r from-amber-50/80 to-white dark:from-amber-900/20 dark:to-[#1f1f1f]">
-            <h3 className="font-semibold text-base md:text-lg flex items-center gap-2">
-              <Clock className="w-4 h-4 md:w-5 md:h-5 text-amber-500" />
-              {t("gardenDashboard.routineSection.dueThisWeek", "Upcoming This Week")}
+      {/* Due This Week Section */}
+      {(upcomingWeekTasks.length > 0 || plantsWithUpcoming.length > 0) && (
+        <div>
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+              <Clock className="w-4 h-4 md:w-5 md:h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <h3 className="font-semibold text-lg md:text-xl">
+              {t("gardenDashboard.routineSection.dueThisWeek", "Due This Week")}
             </h3>
           </div>
-          <div className="p-2 md:p-3 space-y-2">
-            {plantsWithUpcoming.map((plant) => {
-              const dueDays = dueThisWeekByPlant[plant.id] || [];
 
-              return (
-                <div 
-                  key={plant.id} 
-                  className="bg-stone-50/50 dark:bg-stone-900/30 rounded-xl p-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-sm md:text-base">
-                        {plant.nickname || plant.plant?.name || "Plant"}
+          {upcomingWeekTasks.length > 0 ? (
+            /* Grid of individual task cards when we have full task data */
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {upcomingWeekTasks.map((task) => {
+                const taskType = task.taskType || "custom";
+                const config = taskTypeConfig[taskType] || taskTypeConfig.custom;
+                const { dayName, dayNum } = formatTaskDate(task.dueAt, task.dayIndex);
+                const plantName = getPlantName(task.gardenPlantId);
+
+                return (
+                  <Card 
+                    key={task.id}
+                    className={`rounded-xl border overflow-hidden transition-all hover:shadow-md hover:scale-[1.02] ${config.border} ${config.bg}`}
+                  >
+                    <div className={`p-3 bg-gradient-to-br ${config.gradient}`}>
+                      {/* Date badge */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-lg md:text-xl font-bold ${config.color}`}>
+                            {dayNum}
+                          </span>
+                          <span className="text-[10px] md:text-xs text-muted-foreground uppercase tracking-wide">
+                            {dayName.slice(0, 3)}
+                          </span>
+                        </div>
                       </div>
-                      {plant.nickname && plant.plant?.name && (
-                        <div className="text-[10px] md:text-xs text-muted-foreground">
-                          {plant.plant.name}
+
+                      {/* Task type icon */}
+                      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center mb-3 bg-white/80 dark:bg-stone-900/50 shadow-sm`}>
+                        <span className="text-xl md:text-2xl">
+                          {getTaskIcon(taskType, task.taskEmoji)}
+                        </span>
+                      </div>
+
+                      {/* Task type name */}
+                      <div className={`text-xs md:text-sm font-semibold mb-1 ${config.color}`}>
+                        {t(`garden.taskTypes.${taskType}`, taskType)}
+                      </div>
+
+                      {/* Plant name */}
+                      <div className="text-xs text-muted-foreground line-clamp-2 leading-tight" title={plantName}>
+                        {plantName}
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            /* Fallback: Plant-based cards when we don't have full task data */
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {plantsWithUpcoming.map((plant) => {
+                const dueDays = dueThisWeekByPlant[plant.id] || [];
+
+                return (
+                  <Card
+                    key={plant.id}
+                    className="rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 overflow-hidden"
+                  >
+                    <div className="p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                          <Flower2 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-sm truncate">
+                            {plant.nickname || plant.plant?.name || "Plant"}
+                          </div>
+                          {plant.nickname && plant.plant?.name && (
+                            <div className="text-xs text-muted-foreground truncate">
+                              {plant.plant.name}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Days displayed as badges */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {dueDays.map((dayIdx) => (
+                          <span
+                            key={dayIdx}
+                            className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                          >
+                            {dayLabelsFull[dayIdx]}
+                          </span>
+                        ))}
+                      </div>
+                      {plant.plant?.care?.water && (
+                        <div className="mt-3 pt-3 border-t border-amber-200/50 dark:border-amber-800/30 text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Droplets className="w-3.5 h-3.5" />
+                          <span className="truncate">{plant.plant.care.water}</span>
                         </div>
                       )}
                     </div>
-                  </div>
-                  {/* Days displayed as list on mobile for better readability */}
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {dueDays.map((dayIdx) => (
-                      <span
-                        key={dayIdx}
-                        className="inline-flex items-center px-2 py-1 text-xs rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-                      >
-                        <span className="hidden sm:inline">{dayLabelsFull[dayIdx]}</span>
-                        <span className="sm:hidden">{dayLabels[dayIdx]}</span>
-                      </span>
-                    ))}
-                  </div>
-                  {plant.plant?.care?.water && (
-                    <div className="mt-2 text-[10px] md:text-xs text-muted-foreground flex items-center gap-1">
-                      <Droplets className="w-3 h-3" />
-                      {plant.plant.care.water}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Empty state if no tasks at all */}
-      {plantsWithTasks.length === 0 && plantsWithUpcoming.length === 0 && weekCounts.every((c) => c === 0) && (
-        <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 p-6 md:p-8 text-center">
-          <div className="text-3xl md:text-4xl mb-2 md:mb-3">📋</div>
-          <p className="text-base md:text-lg font-medium">
+      {plantsWithTasks.length === 0 && plantsWithUpcoming.length === 0 && upcomingWeekTasks.length === 0 && weekCounts.every((c) => c === 0) && (
+        <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#1f1f1f]/95 p-8 md:p-12 text-center">
+          <div className="text-4xl md:text-5xl mb-3">📋</div>
+          <p className="text-lg md:text-xl font-medium">
             {t("gardenDashboard.routineSection.noTasks", "No tasks scheduled")}
           </p>
-          <p className="text-xs md:text-sm text-muted-foreground mt-1">
+          <p className="text-sm md:text-base text-muted-foreground mt-2">
             {t("gardenDashboard.routineSection.noTasksHint", "Add tasks to your plants to see them here")}
           </p>
         </Card>
