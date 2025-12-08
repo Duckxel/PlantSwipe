@@ -16424,7 +16424,8 @@ async function generateCrawlerHtml(req, pagePath) {
     }
     
   } catch (err) {
-    console.warn('[ssr] Error generating crawler content:', err?.message || err)
+    console.error('[ssr] Error generating crawler content:', err?.message || err)
+    console.error('[ssr] Stack trace:', err?.stack || 'no stack')
   }
   
   // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
@@ -16620,22 +16621,40 @@ app.get('/api/debug-ssr', async (req, res) => {
   const testPath = req.query.path || '/plants/test'
   const isCrawlerResult = isCrawler(userAgent)
   
+  // Test Supabase connection
+  let supabaseTest = { ok: false, error: null }
+  if (supabaseServer) {
+    try {
+      const { data, error } = await supabaseServer.from('plants').select('id').limit(1)
+      supabaseTest = { ok: !error, error: error?.message || null, hasData: !!data?.length }
+    } catch (e) {
+      supabaseTest = { ok: false, error: e?.message || 'Connection failed' }
+    }
+  }
+  
   res.json({
     userAgent,
     isCrawler: isCrawlerResult,
     testPath,
     supabaseAvailable: !!supabaseServer,
     supabaseUrl: supabaseUrlEnv ? 'configured' : 'NOT configured',
+    supabaseTest,
     crawlerListSample: CRAWLER_USER_AGENTS.slice(0, 15),
-    tip: 'Use /api/preview-ssr?path=/plants/ID to test SSR output'
+    tips: [
+      'Use /api/force-ssr?path=/plants/ID to test SSR output',
+      'Use /api/preview-ssr?path=/plants/ID (simulates Discordbot)',
+      'Add ?_ssr=1 to any URL to force SSR'
+    ]
   })
 })
 
 // Force SSR endpoint - always returns SSR HTML for any path (for testing)
 // Usage: /api/force-ssr?path=/plants/abc-123
+// Add &json=1 to get JSON response with title/description/image
 app.get('/api/force-ssr', async (req, res) => {
   const testPath = req.query.path || '/'
-  console.log(`[force-ssr] Generating SSR for: ${testPath}`)
+  const jsonMode = req.query.json === '1' || req.query.json === 'true'
+  console.log(`[force-ssr] Generating SSR for: ${testPath} (json: ${jsonMode})`)
   
   try {
     const fakeReq = {
@@ -16649,9 +16668,28 @@ app.get('/api/force-ssr', async (req, res) => {
     }
     
     const html = await generateCrawlerHtml(fakeReq, testPath)
-    res.setHeader('Content-Type', 'text/html; charset=utf-8')
-    res.setHeader('X-SSR-Test', 'force-ssr')
-    res.send(html)
+    
+    if (jsonMode) {
+      // Extract title, og:title, og:description, og:image from HTML
+      const titleMatch = html.match(/<title>([^<]*)<\/title>/)
+      const ogTitleMatch = html.match(/<meta property="og:title" content="([^"]*)"/)
+      const ogDescMatch = html.match(/<meta property="og:description" content="([^"]*)"/)
+      const ogImageMatch = html.match(/<meta property="og:image" content="([^"]*)"/)
+      
+      res.json({
+        path: testPath,
+        title: titleMatch?.[1] || null,
+        ogTitle: ogTitleMatch?.[1] || null,
+        ogDescription: ogDescMatch?.[1] || null,
+        ogImage: ogImageMatch?.[1] || null,
+        htmlLength: html.length,
+        supabaseAvailable: !!supabaseServer
+      })
+    } else {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('X-SSR-Test', 'force-ssr')
+      res.send(html)
+    }
   } catch (err) {
     console.error('[force-ssr] Error:', err)
     res.status(500).json({ 
@@ -16715,7 +16753,8 @@ app.get('*', async (req, res) => {
       res.setHeader('X-Robots-Tag', 'index, follow')
       return res.send(html)
     } catch (err) {
-      console.warn('[ssr] Crawler render failed, falling back to SPA:', err?.message || err)
+      console.error('[ssr] Crawler render failed, falling back to SPA:', err?.message || err)
+      console.error('[ssr] Full error stack:', err?.stack || 'no stack')
       // Fall through to normal SPA serving
     }
   }
