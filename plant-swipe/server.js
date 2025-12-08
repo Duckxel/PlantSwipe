@@ -15318,6 +15318,672 @@ async function generateCrawlerHtml(req, pagePath) {
     }
     console.log(`[ssr] Effective path: ${JSON.stringify(effectivePath)}, lang: ${detectedLang}`)
     
+    // Translations for SSR previews
+    const t = {
+      en: {
+        siteName: 'Aphylia',
+        siteTagline: 'Discover, Swipe and Manage Plants for Your Garden',
+        siteDesc: 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.',
+        // Plant page
+        plantCareGuide: 'Care Guide & Growing Tips',
+        plantAbout: 'About',
+        plantQuickCare: 'Quick Care Guide',
+        plantGreatFor: 'What It\'s Great For',
+        plantViewFull: 'View complete care guide on Aphylia',
+        plantLearnGrow: 'Learn how to grow and care for',
+        plantExpertTips: 'Expert tips, watering guide, and everything you need!',
+        plantType: { vegetable: 'Grow your own', herb: 'Fresh herbs at your fingertips', fruit: 'Homegrown delight', flower: 'Beautiful flowering plant', succulent: 'Low-maintenance beauty', cactus: 'Desert survivor', tree: 'Majestic addition to any garden' },
+        difficulty: { easy: '✅ Easy', beginner: '✅ Beginner-friendly', moderate: '⚡ Moderate', medium: '⚡ Moderate', hard: '🔥 Advanced', difficult: '🔥 Advanced', expert: '💎 Expert' },
+        light: { 'full sun': '☀️ Full Sun', 'partial sun': '🌤️ Partial Sun', 'partial shade': '⛅ Partial Shade', 'full shade': '🌑 Shade', 'low light': '🌑 Low Light', 'bright indirect': '💡 Bright Indirect' },
+        blooms: 'Blooms',
+        zones: 'Zones',
+        family: 'Family',
+        origin: 'Origin',
+        tags: 'Tags',
+        // Blog
+        blogTitle: 'Aphylia Blog',
+        blogTagline: 'Gardening Tips & Guides',
+        blogDesc: 'Expert gardening advice, seasonal tips, plant care guides, and growing inspiration. Learn something new today!',
+        blogBy: 'By',
+        blogMinRead: 'min read',
+        blogReadFull: 'Read full article on Aphylia',
+        blogLatest: 'Latest Articles',
+        blogReadAll: 'Read all articles',
+        // Profile
+        profileGardenProfile: 'Garden Profile',
+        profileCheckOut: 'Check out',
+        profileGrowingJourney: 'growing journey',
+        profileGardens: 'garden(s)',
+        profilePlants: 'plant(s)',
+        profileMemberSince: 'Member since',
+        profileExploreGardens: 'Explore gardens',
+        profilePlantEnthusiast: 'A passionate plant enthusiast growing their collection on Aphylia',
+        // Garden
+        gardenExplore: 'Explore Gardens',
+        gardenBeautiful: 'A Beautiful Garden',
+        gardenPlantsGrowing: 'plant(s) growing',
+        gardenStartingFresh: 'Starting fresh',
+        gardenBy: 'By',
+        gardenOld: 'old',
+        gardenNew: 'New garden!',
+        gardenMonths: 'month(s)',
+        gardenYears: 'year(s)',
+        gardenExploreThis: 'Explore this garden on Aphylia',
+        gardenDiscover: 'Discover the plants growing here!',
+        gardenFilled: 'A growing garden filled with beautiful plants',
+        // Gardens listing
+        gardensTitle: 'Explore Gardens',
+        gardensDesc: 'Discover beautiful gardens from our community. Get inspired by what others are growing and share your own!',
+        gardensCommunity: 'Community Gardens',
+        gardensExploreWorld: 'Explore gardens from plant enthusiasts around the world.',
+        gardensInspired: 'Get Inspired',
+        gardensThrive: 'See what plants thrive together',
+        gardensClimate: 'Discover gardens in your climate zone',
+        gardensIdeas: 'Get layout and design ideas',
+        gardensConnect: 'Connect with other gardeners',
+        // Discovery
+        discoveryTitle: 'Discover Plants | Swipe Your Way to a Dream Garden',
+        discoveryDesc: 'Like Tinder, but for plants! Swipe right on plants you love, left on ones you don\'t. Build your perfect garden wishlist!',
+        discoveryPlant: 'Plant Discovery',
+        discoveryFind: 'Find your perfect plant matches by swiping!',
+        discoveryHow: 'How It Works',
+        discoveryRight: 'Swipe Right - Love it! Add to your wishlist',
+        discoveryLeft: 'Swipe Left - Not for you? Skip it',
+        discoveryUp: 'Swipe Up - Super like! Add to favorites',
+        discoveryKeep: 'Keep Swiping - Discover your perfect matches',
+        discoveryStart: 'Start swiping and build your dream garden collection!',
+        // About
+        aboutTitle: 'About Aphylia - Your Plant Companion',
+        aboutDesc: 'Meet Aphylia: the app that helps you discover, grow, and nurture plants. Join gardeners on their growing journey!',
+        aboutPersonal: 'Your personal plant companion, helping you discover, identify, and care for the perfect plants.',
+        aboutMission: 'Our Mission',
+        aboutBelieve: 'We believe everyone deserves access to plant knowledge. Whether you\'re a beginner with your first succulent or an expert with a botanical garden, Aphylia helps you grow.',
+        aboutOffer: 'What We Offer',
+        aboutDatabase: 'Extensive plant database with care guides',
+        aboutGarden: 'Garden management and tracking',
+        aboutReminders: 'Smart care reminders',
+        aboutCommunity: 'Community of plant lovers',
+        // Search
+        searchTitle: 'Find Your Perfect Plants',
+        searchDesc: 'Search plants by name, care level, light needs, or growing conditions. Find the perfect plants for YOUR space!',
+        searchPlant: 'Plant Search',
+        searchFind: 'Find your perfect plant match from our database of thousands of species.',
+        searchBy: 'Search By',
+        searchName: 'Plant name or scientific name',
+        searchLight: 'Light requirements',
+        searchWater: 'Watering needs',
+        searchIndoor: 'Indoor or outdoor',
+        searchClimate: 'Climate zone',
+        searchDifficulty: 'Difficulty level',
+        // Pricing
+        pricingTitle: 'Aphylia Pricing - Free Forever & Premium Plans',
+        pricingDesc: 'Aphylia is free to use! Discover plants, track your garden, get care reminders. Premium features available for power gardeners',
+        pricingPlans: 'Pricing Plans',
+        pricingFree: 'Free Forever',
+        pricingEverything: 'Everything you need to start your gardening journey:',
+        pricingDiscovery: 'Unlimited plant discovery',
+        pricingTracking: 'Garden tracking',
+        pricingCare: 'Care reminders',
+        pricingIdentify: 'Plant identification',
+        pricingAccess: 'Community access',
+        pricingPremium: 'Premium (Coming Soon)',
+        pricingSerious: 'For serious plant enthusiasts:',
+        pricingAnalytics: 'Advanced analytics',
+        pricingSupport: 'Priority support',
+        pricingExclusive: 'Exclusive features',
+        // Download
+        downloadTitle: 'Download Aphylia - Your Plant Companion App',
+        downloadDesc: 'Get Aphylia on your device! Available as a web app, PWA, and soon on iOS & Android. Start your plant journey today!',
+        downloadGet: 'Download Aphylia',
+        downloadWeb: 'Web App',
+        downloadWebDesc: 'Use Aphylia directly in your browser - no download required!',
+        downloadPwa: 'Install as PWA',
+        downloadPwaDesc: 'Add to your home screen for an app-like experience:',
+        downloadIos: 'iOS: Safari → Share → Add to Home Screen',
+        downloadAndroid: 'Android: Chrome → Menu → Install App',
+        downloadNative: 'Native Apps (Coming Soon)',
+        downloadNativeDesc: 'iOS and Android apps are in development!',
+        // Terms
+        termsTitle: 'Terms of Service',
+        termsDesc: 'Read Aphylia\'s Terms of Service. We keep it simple: be respectful, don\'t spam, and enjoy growing plants!',
+        termsUpdated: 'Last updated',
+        termsWelcome: 'Welcome to Aphylia! By using our service, you agree to these terms.',
+        termsSimple: 'The Simple Version',
+        termsRespect: 'Be respectful to others',
+        termsSpam: 'Don\'t spam or abuse the service',
+        termsSecure: 'Keep your account secure',
+        termsEnjoy: 'Enjoy growing plants!',
+        termsRead: 'Read full terms',
+        // Contact
+        contactTitle: 'Contact Aphylia - We\'d Love to Hear From You!',
+        contactDesc: 'Have questions, feedback, or just want to say hi? Reach out to the Aphylia team. We typically respond within 24 hours!',
+        contactGet: 'Get in Touch',
+        contactLove: 'We\'d love to hear from you!',
+        contactReach: 'Reach Out For',
+        contactQuestions: 'Questions about Aphylia',
+        contactFeatures: 'Feature suggestions',
+        contactBugs: 'Bug reports',
+        contactPartnership: 'Partnership inquiries',
+        contactHello: 'Just saying hello!',
+        contactRespond: 'We typically respond within 24 hours.',
+        // Business contact
+        businessTitle: 'Business Partnerships',
+        businessDesc: 'Partner with Aphylia! We work with nurseries, garden centers, and plant brands. Let\'s grow together!',
+        businessInterested: 'Interested in partnering with Aphylia? We love working with:',
+        businessNurseries: 'Nurseries & Garden Centers',
+        businessShops: 'Plant Shops',
+        businessBrands: 'Garden Product Brands',
+        businessCreators: 'Gardening Content Creators',
+        businessExplore: 'Get in touch to explore collaboration opportunities!',
+        // Bookmarks
+        bookmarksCollection: 'Plant Collection',
+        bookmarksCurated: 'Curated by',
+        bookmarksCarefully: 'A carefully curated plant collection',
+        bookmarksView: 'View this collection on Aphylia',
+        // Homepage
+        homeTitle: 'Aphylia - Discover & Grow Your Perfect Garden',
+        homeDesc: 'Swipe to discover plants, track your garden, get care reminders. Join gardeners growing their dream gardens!',
+        homeWelcome: 'Welcome to Aphylia',
+        homePersonal: 'Your personal plant companion for discovering, managing, and growing beautiful gardens.',
+        homeWhy: 'Why Gardeners Love Us',
+        homeSwipe: 'Swipe to Discover - Find your perfect plants, Tinder-style!',
+        homeTracker: 'Garden Tracker - Manage all your plants in one place',
+        homeReminders: 'Smart Reminders - Never forget to water again',
+        homeCareGuides: 'Care Guides - Expert advice for',
+        homePlants: 'plants',
+        homeCommunityJoin: 'Community - Join',
+        homePlantLovers: 'plant lovers',
+        homeStart: 'Start Growing Today',
+        homeFree: 'Free to use. No credit card required. Just plants!',
+      },
+      fr: {
+        siteName: 'Aphylia',
+        siteTagline: 'Découvrez, Swipez et Gérez les Plantes de Votre Jardin',
+        siteDesc: 'Découvrez et gérez les plantes parfaites pour votre jardin. Suivez la croissance, recevez des rappels d\'entretien et créez le jardin de vos rêves.',
+        plantCareGuide: 'Guide d\'Entretien & Conseils de Culture',
+        plantAbout: 'À propos de',
+        plantQuickCare: 'Guide d\'Entretien Rapide',
+        plantGreatFor: 'Idéal Pour',
+        plantViewFull: 'Voir le guide complet sur Aphylia',
+        plantLearnGrow: 'Apprenez à cultiver et entretenir',
+        plantExpertTips: 'Conseils d\'experts, guide d\'arrosage et tout ce dont vous avez besoin !',
+        plantType: { vegetable: 'Cultivez vos propres', herb: 'Herbes fraîches à portée de main', fruit: 'Délices du jardin', flower: 'Belle plante à fleurs', succulent: 'Beauté facile d\'entretien', cactus: 'Survivant du désert', tree: 'Ajout majestueux à tout jardin' },
+        difficulty: { easy: '✅ Facile', beginner: '✅ Débutant', moderate: '⚡ Modéré', medium: '⚡ Modéré', hard: '🔥 Avancé', difficult: '🔥 Avancé', expert: '💎 Expert' },
+        light: { 'full sun': '☀️ Plein Soleil', 'partial sun': '🌤️ Mi-Soleil', 'partial shade': '⛅ Mi-Ombre', 'full shade': '🌑 Ombre', 'low light': '🌑 Faible Lumière', 'bright indirect': '💡 Lumière Indirecte' },
+        blooms: 'Floraison',
+        zones: 'Zones',
+        family: 'Famille',
+        origin: 'Origine',
+        tags: 'Tags',
+        blogTitle: 'Blog Aphylia',
+        blogTagline: 'Conseils Jardinage & Guides',
+        blogDesc: 'Conseils d\'experts en jardinage, astuces saisonnières et guides d\'entretien. Apprenez quelque chose de nouveau aujourd\'hui !',
+        blogBy: 'Par',
+        blogMinRead: 'min de lecture',
+        blogReadFull: 'Lire l\'article complet sur Aphylia',
+        blogLatest: 'Derniers Articles',
+        blogReadAll: 'Voir tous les articles',
+        profileGardenProfile: 'Profil Jardinier',
+        profileCheckOut: 'Découvrez',
+        profileGrowingJourney: 'parcours de jardinage',
+        profileGardens: 'jardin(s)',
+        profilePlants: 'plante(s)',
+        profileMemberSince: 'Membre depuis',
+        profileExploreGardens: 'Explorer les jardins',
+        profilePlantEnthusiast: 'Un passionné de plantes qui agrandit sa collection sur Aphylia',
+        gardenExplore: 'Explorer les Jardins',
+        gardenBeautiful: 'Un Beau Jardin',
+        gardenPlantsGrowing: 'plante(s) en culture',
+        gardenStartingFresh: 'Nouveau départ',
+        gardenBy: 'Par',
+        gardenOld: 'd\'ancienneté',
+        gardenNew: 'Nouveau jardin !',
+        gardenMonths: 'mois',
+        gardenYears: 'an(s)',
+        gardenExploreThis: 'Explorer ce jardin sur Aphylia',
+        gardenDiscover: 'Découvrez les plantes qui y poussent !',
+        gardenFilled: 'Un jardin en croissance rempli de belles plantes',
+        gardensTitle: 'Explorer les Jardins',
+        gardensDesc: 'Découvrez les beaux jardins de notre communauté. Inspirez-vous et partagez le vôtre !',
+        gardensCommunity: 'Jardins de la Communauté',
+        gardensExploreWorld: 'Explorez les jardins des passionnés du monde entier.',
+        gardensInspired: 'Inspirez-vous',
+        gardensThrive: 'Voyez quelles plantes s\'épanouissent ensemble',
+        gardensClimate: 'Découvrez des jardins dans votre zone climatique',
+        gardensIdeas: 'Trouvez des idées d\'aménagement',
+        gardensConnect: 'Connectez-vous avec d\'autres jardiniers',
+        discoveryTitle: 'Découvrir des Plantes | Swipez vers le Jardin de vos Rêves',
+        discoveryDesc: 'Comme Tinder, mais pour les plantes ! Swipez à droite sur celles que vous aimez. Créez votre liste de souhaits !',
+        discoveryPlant: 'Découverte de Plantes',
+        discoveryFind: 'Trouvez vos plantes idéales en swipant !',
+        discoveryHow: 'Comment ça marche',
+        discoveryRight: 'Swipe Droite - J\'adore ! Ajouter à ma liste',
+        discoveryLeft: 'Swipe Gauche - Pas pour moi ? Passer',
+        discoveryUp: 'Swipe Haut - Super like ! Ajouter aux favoris',
+        discoveryKeep: 'Continuez à swiper - Découvrez vos plantes parfaites',
+        discoveryStart: 'Commencez à swiper et créez votre collection de rêve !',
+        aboutTitle: 'À Propos d\'Aphylia - Votre Compagnon Végétal',
+        aboutDesc: 'Découvrez Aphylia : l\'appli qui vous aide à découvrir et cultiver des plantes. Rejoignez les jardiniers !',
+        aboutPersonal: 'Votre compagnon végétal personnel pour découvrir, identifier et prendre soin des plantes parfaites.',
+        aboutMission: 'Notre Mission',
+        aboutBelieve: 'Nous croyons que tout le monde mérite d\'accéder aux connaissances végétales. Que vous soyez débutant ou expert, Aphylia vous aide à grandir.',
+        aboutOffer: 'Ce Que Nous Offrons',
+        aboutDatabase: 'Base de données de plantes avec guides d\'entretien',
+        aboutGarden: 'Gestion et suivi de jardin',
+        aboutReminders: 'Rappels d\'entretien intelligents',
+        aboutCommunity: 'Communauté de passionnés de plantes',
+        searchTitle: 'Trouvez Vos Plantes Parfaites',
+        searchDesc: 'Recherchez des plantes par nom, niveau d\'entretien ou conditions de culture. Trouvez les plantes parfaites pour VOTRE espace !',
+        searchPlant: 'Recherche de Plantes',
+        searchFind: 'Trouvez votre plante idéale parmi des milliers d\'espèces.',
+        searchBy: 'Rechercher Par',
+        searchName: 'Nom de la plante ou nom scientifique',
+        searchLight: 'Besoins en lumière',
+        searchWater: 'Besoins en eau',
+        searchIndoor: 'Intérieur ou extérieur',
+        searchClimate: 'Zone climatique',
+        searchDifficulty: 'Niveau de difficulté',
+        pricingTitle: 'Tarifs Aphylia - Gratuit Pour Toujours',
+        pricingDesc: 'Aphylia est gratuit ! Découvrez des plantes, suivez votre jardin, recevez des rappels. Fonctions premium disponibles',
+        pricingPlans: 'Nos Forfaits',
+        pricingFree: 'Gratuit Pour Toujours',
+        pricingEverything: 'Tout ce dont vous avez besoin pour commencer :',
+        pricingDiscovery: 'Découverte illimitée de plantes',
+        pricingTracking: 'Suivi de jardin',
+        pricingCare: 'Rappels d\'entretien',
+        pricingIdentify: 'Identification de plantes',
+        pricingAccess: 'Accès à la communauté',
+        pricingPremium: 'Premium (Bientôt)',
+        pricingSerious: 'Pour les passionnés :',
+        pricingAnalytics: 'Analyses avancées',
+        pricingSupport: 'Support prioritaire',
+        pricingExclusive: 'Fonctionnalités exclusives',
+        downloadTitle: 'Télécharger Aphylia - Votre Appli Jardinage',
+        downloadDesc: 'Obtenez Aphylia ! Disponible en web app, PWA, et bientôt sur iOS & Android. Commencez votre aventure végétale !',
+        downloadGet: 'Télécharger Aphylia',
+        downloadWeb: 'Application Web',
+        downloadWebDesc: 'Utilisez Aphylia dans votre navigateur - aucun téléchargement requis !',
+        downloadPwa: 'Installer en PWA',
+        downloadPwaDesc: 'Ajoutez à votre écran d\'accueil :',
+        downloadIos: 'iOS : Safari → Partager → Sur l\'écran d\'accueil',
+        downloadAndroid: 'Android : Chrome → Menu → Installer',
+        downloadNative: 'Apps Natives (Bientôt)',
+        downloadNativeDesc: 'Les apps iOS et Android sont en développement !',
+        termsTitle: 'Conditions d\'Utilisation',
+        termsDesc: 'Lisez les conditions d\'Aphylia. C\'est simple : soyez respectueux et profitez des plantes !',
+        termsUpdated: 'Dernière mise à jour',
+        termsWelcome: 'Bienvenue sur Aphylia ! En utilisant notre service, vous acceptez ces conditions.',
+        termsSimple: 'En Résumé',
+        termsRespect: 'Soyez respectueux envers les autres',
+        termsSpam: 'Ne spammez pas',
+        termsSecure: 'Gardez votre compte sécurisé',
+        termsEnjoy: 'Profitez des plantes !',
+        termsRead: 'Lire les conditions complètes',
+        contactTitle: 'Contactez Aphylia - On Adore Vous Entendre !',
+        contactDesc: 'Des questions ou des commentaires ? Contactez l\'équipe Aphylia. Nous répondons généralement sous 24h !',
+        contactGet: 'Nous Contacter',
+        contactLove: 'Nous serions ravis de vous entendre !',
+        contactReach: 'Contactez-nous Pour',
+        contactQuestions: 'Questions sur Aphylia',
+        contactFeatures: 'Suggestions de fonctionnalités',
+        contactBugs: 'Signaler des bugs',
+        contactPartnership: 'Demandes de partenariat',
+        contactHello: 'Juste dire bonjour !',
+        contactRespond: 'Nous répondons généralement sous 24h.',
+        businessTitle: 'Partenariats Professionnels',
+        businessDesc: 'Partenaires avec Aphylia ! Nous travaillons avec pépinières et jardineries. Grandissons ensemble !',
+        businessInterested: 'Intéressé par un partenariat ? Nous adorons travailler avec :',
+        businessNurseries: 'Pépinières & Jardineries',
+        businessShops: 'Boutiques de Plantes',
+        businessBrands: 'Marques de Jardinage',
+        businessCreators: 'Créateurs de Contenu Jardinage',
+        businessExplore: 'Contactez-nous pour explorer les opportunités !',
+        bookmarksCollection: 'Collection de Plantes',
+        bookmarksCurated: 'Sélectionné par',
+        bookmarksCarefully: 'Une collection de plantes soigneusement sélectionnée',
+        bookmarksView: 'Voir cette collection sur Aphylia',
+        homeTitle: 'Aphylia - Découvrez & Cultivez Votre Jardin Parfait',
+        homeDesc: 'Swipez pour découvrir des plantes, suivez votre jardin, recevez des rappels. Rejoignez les jardiniers !',
+        homeWelcome: 'Bienvenue sur Aphylia',
+        homePersonal: 'Votre compagnon végétal pour découvrir, gérer et faire pousser de beaux jardins.',
+        homeWhy: 'Pourquoi les Jardiniers Nous Adorent',
+        homeSwipe: 'Swipez pour Découvrir - Trouvez vos plantes parfaites !',
+        homeTracker: 'Suivi de Jardin - Gérez toutes vos plantes en un seul endroit',
+        homeReminders: 'Rappels Intelligents - N\'oubliez plus jamais d\'arroser',
+        homeCareGuides: 'Guides d\'Entretien - Conseils d\'experts pour',
+        homePlants: 'plantes',
+        homeCommunityJoin: 'Communauté - Rejoignez',
+        homePlantLovers: 'passionnés de plantes',
+        homeStart: 'Commencez à Jardiner',
+        homeFree: 'Gratuit. Pas de carte bancaire. Juste des plantes !',
+      },
+      es: {
+        siteName: 'Aphylia',
+        siteTagline: 'Descubre, Desliza y Gestiona las Plantas de Tu Jardín',
+        siteDesc: 'Descubre y gestiona las plantas perfectas para tu jardín. Sigue el crecimiento, recibe recordatorios y crea el jardín de tus sueños.',
+        plantCareGuide: 'Guía de Cuidados & Consejos de Cultivo',
+        plantAbout: 'Sobre',
+        plantQuickCare: 'Guía Rápida de Cuidados',
+        plantGreatFor: 'Ideal Para',
+        plantViewFull: 'Ver guía completa en Aphylia',
+        plantLearnGrow: 'Aprende a cultivar y cuidar',
+        plantExpertTips: '¡Consejos de expertos, guía de riego y todo lo que necesitas!',
+        plantType: { vegetable: 'Cultiva tus propias', herb: 'Hierbas frescas al alcance', fruit: 'Delicias caseras', flower: 'Hermosa planta con flores', succulent: 'Belleza fácil de cuidar', cactus: 'Sobreviviente del desierto', tree: 'Majestuosa adición al jardín' },
+        difficulty: { easy: '✅ Fácil', beginner: '✅ Principiante', moderate: '⚡ Moderado', medium: '⚡ Moderado', hard: '🔥 Avanzado', difficult: '🔥 Avanzado', expert: '💎 Experto' },
+        light: { 'full sun': '☀️ Sol Pleno', 'partial sun': '🌤️ Semi-Sol', 'partial shade': '⛅ Semi-Sombra', 'full shade': '🌑 Sombra', 'low light': '🌑 Poca Luz', 'bright indirect': '💡 Luz Indirecta' },
+        blooms: 'Floración',
+        zones: 'Zonas',
+        family: 'Familia',
+        origin: 'Origen',
+        tags: 'Etiquetas',
+        blogTitle: 'Blog Aphylia',
+        blogTagline: 'Consejos de Jardinería & Guías',
+        blogDesc: 'Consejos de expertos, tips de temporada y guías de cuidado. ¡Aprende algo nuevo hoy!',
+        blogBy: 'Por',
+        blogMinRead: 'min de lectura',
+        blogReadFull: 'Leer artículo completo en Aphylia',
+        blogLatest: 'Últimos Artículos',
+        blogReadAll: 'Ver todos los artículos',
+        profileGardenProfile: 'Perfil de Jardinero',
+        profileCheckOut: 'Descubre',
+        profileGrowingJourney: 'viaje de jardinería',
+        profileGardens: 'jardín(es)',
+        profilePlants: 'planta(s)',
+        profileMemberSince: 'Miembro desde',
+        profileExploreGardens: 'Explorar jardines',
+        profilePlantEnthusiast: 'Un apasionado de las plantas que cultiva su colección en Aphylia',
+        gardenExplore: 'Explorar Jardines',
+        gardenBeautiful: 'Un Hermoso Jardín',
+        gardenPlantsGrowing: 'planta(s) creciendo',
+        gardenStartingFresh: 'Empezando de nuevo',
+        gardenBy: 'Por',
+        gardenOld: 'de antigüedad',
+        gardenNew: '¡Jardín nuevo!',
+        gardenMonths: 'mes(es)',
+        gardenYears: 'año(s)',
+        gardenExploreThis: 'Explorar este jardín en Aphylia',
+        gardenDiscover: '¡Descubre las plantas que crecen aquí!',
+        gardenFilled: 'Un jardín en crecimiento lleno de hermosas plantas',
+        gardensTitle: 'Explorar Jardines',
+        gardensDesc: 'Descubre hermosos jardines de nuestra comunidad. ¡Inspírate y comparte el tuyo!',
+        gardensCommunity: 'Jardines de la Comunidad',
+        gardensExploreWorld: 'Explora jardines de entusiastas de todo el mundo.',
+        gardensInspired: 'Inspírate',
+        gardensThrive: 'Mira qué plantas prosperan juntas',
+        gardensClimate: 'Descubre jardines en tu zona climática',
+        gardensIdeas: 'Encuentra ideas de diseño',
+        gardensConnect: 'Conecta con otros jardineros',
+        discoveryTitle: 'Descubre Plantas | Desliza Hacia Tu Jardín Soñado',
+        discoveryDesc: '¡Como Tinder, pero para plantas! Desliza a la derecha las que te gustan. ¡Crea tu lista de deseos!',
+        discoveryPlant: 'Descubrimiento de Plantas',
+        discoveryFind: '¡Encuentra tus plantas perfectas deslizando!',
+        discoveryHow: 'Cómo Funciona',
+        discoveryRight: 'Desliza Derecha - ¡Me encanta! Añadir a mi lista',
+        discoveryLeft: 'Desliza Izquierda - ¿No es para ti? Pasar',
+        discoveryUp: 'Desliza Arriba - ¡Super like! Añadir a favoritos',
+        discoveryKeep: 'Sigue Deslizando - Descubre tus plantas perfectas',
+        discoveryStart: '¡Empieza a deslizar y crea tu colección soñada!',
+        aboutTitle: 'Sobre Aphylia - Tu Compañero Vegetal',
+        aboutDesc: 'Conoce Aphylia: la app que te ayuda a descubrir y cuidar plantas. ¡Únete a los jardineros!',
+        aboutPersonal: 'Tu compañero vegetal personal para descubrir, identificar y cuidar las plantas perfectas.',
+        aboutMission: 'Nuestra Misión',
+        aboutBelieve: 'Creemos que todos merecen acceso al conocimiento vegetal. Seas principiante o experto, Aphylia te ayuda a crecer.',
+        aboutOffer: 'Lo Que Ofrecemos',
+        aboutDatabase: 'Base de datos de plantas con guías de cuidado',
+        aboutGarden: 'Gestión y seguimiento de jardín',
+        aboutReminders: 'Recordatorios inteligentes',
+        aboutCommunity: 'Comunidad de amantes de las plantas',
+        searchTitle: 'Encuentra Tus Plantas Perfectas',
+        searchDesc: 'Busca plantas por nombre, nivel de cuidado o condiciones. ¡Encuentra las plantas perfectas para TU espacio!',
+        searchPlant: 'Búsqueda de Plantas',
+        searchFind: 'Encuentra tu planta ideal entre miles de especies.',
+        searchBy: 'Buscar Por',
+        searchName: 'Nombre de planta o científico',
+        searchLight: 'Requisitos de luz',
+        searchWater: 'Necesidades de agua',
+        searchIndoor: 'Interior o exterior',
+        searchClimate: 'Zona climática',
+        searchDifficulty: 'Nivel de dificultad',
+        pricingTitle: 'Precios Aphylia - Gratis Para Siempre',
+        pricingDesc: '¡Aphylia es gratis! Descubre plantas, sigue tu jardín, recibe recordatorios. Funciones premium disponibles',
+        pricingPlans: 'Nuestros Planes',
+        pricingFree: 'Gratis Para Siempre',
+        pricingEverything: 'Todo lo que necesitas para empezar:',
+        pricingDiscovery: 'Descubrimiento ilimitado',
+        pricingTracking: 'Seguimiento de jardín',
+        pricingCare: 'Recordatorios de cuidado',
+        pricingIdentify: 'Identificación de plantas',
+        pricingAccess: 'Acceso a la comunidad',
+        pricingPremium: 'Premium (Próximamente)',
+        pricingSerious: 'Para los apasionados:',
+        pricingAnalytics: 'Análisis avanzados',
+        pricingSupport: 'Soporte prioritario',
+        pricingExclusive: 'Funciones exclusivas',
+        downloadTitle: 'Descargar Aphylia - Tu App de Jardinería',
+        downloadDesc: '¡Obtén Aphylia! Disponible como web app, PWA, y pronto en iOS & Android. ¡Empieza tu aventura vegetal!',
+        downloadGet: 'Descargar Aphylia',
+        downloadWeb: 'Aplicación Web',
+        downloadWebDesc: 'Usa Aphylia en tu navegador - ¡sin descargas!',
+        downloadPwa: 'Instalar como PWA',
+        downloadPwaDesc: 'Añade a tu pantalla de inicio:',
+        downloadIos: 'iOS: Safari → Compartir → Añadir a inicio',
+        downloadAndroid: 'Android: Chrome → Menú → Instalar',
+        downloadNative: 'Apps Nativas (Próximamente)',
+        downloadNativeDesc: '¡Apps iOS y Android en desarrollo!',
+        termsTitle: 'Términos de Servicio',
+        termsDesc: 'Lee los términos de Aphylia. Es simple: sé respetuoso y ¡disfruta de las plantas!',
+        termsUpdated: 'Última actualización',
+        termsWelcome: '¡Bienvenido a Aphylia! Al usar nuestro servicio, aceptas estos términos.',
+        termsSimple: 'En Resumen',
+        termsRespect: 'Sé respetuoso con los demás',
+        termsSpam: 'No hagas spam',
+        termsSecure: 'Mantén tu cuenta segura',
+        termsEnjoy: '¡Disfruta de las plantas!',
+        termsRead: 'Leer términos completos',
+        contactTitle: '¡Contacta Aphylia - Nos Encanta Escucharte!',
+        contactDesc: '¿Preguntas o comentarios? Contacta al equipo Aphylia. ¡Respondemos en 24h!',
+        contactGet: 'Contáctanos',
+        contactLove: '¡Nos encantaría saber de ti!',
+        contactReach: 'Contáctanos Para',
+        contactQuestions: 'Preguntas sobre Aphylia',
+        contactFeatures: 'Sugerencias de funciones',
+        contactBugs: 'Reportar errores',
+        contactPartnership: 'Consultas de asociación',
+        contactHello: '¡Solo saludar!',
+        contactRespond: 'Respondemos en 24h.',
+        businessTitle: 'Asociaciones Comerciales',
+        businessDesc: '¡Asóciate con Aphylia! Trabajamos con viveros y centros de jardinería. ¡Crezcamos juntos!',
+        businessInterested: '¿Interesado en asociarte? Nos encanta trabajar con:',
+        businessNurseries: 'Viveros y Centros de Jardinería',
+        businessShops: 'Tiendas de Plantas',
+        businessBrands: 'Marcas de Jardinería',
+        businessCreators: 'Creadores de Contenido',
+        businessExplore: '¡Contáctanos para explorar oportunidades!',
+        bookmarksCollection: 'Colección de Plantas',
+        bookmarksCurated: 'Seleccionada por',
+        bookmarksCarefully: 'Una colección cuidadosamente seleccionada',
+        bookmarksView: 'Ver esta colección en Aphylia',
+        homeTitle: 'Aphylia - Descubre y Cultiva Tu Jardín Perfecto',
+        homeDesc: 'Desliza para descubrir plantas, sigue tu jardín, recibe recordatorios. ¡Únete a los jardineros!',
+        homeWelcome: 'Bienvenido a Aphylia',
+        homePersonal: 'Tu compañero vegetal para descubrir, gestionar y cultivar hermosos jardines.',
+        homeWhy: 'Por Qué Nos Adoran los Jardineros',
+        homeSwipe: 'Desliza para Descubrir - ¡Encuentra tus plantas perfectas!',
+        homeTracker: 'Seguimiento de Jardín - Gestiona todas tus plantas en un lugar',
+        homeReminders: 'Recordatorios - Nunca olvides regar',
+        homeCareGuides: 'Guías de Cuidado - Consejos de expertos para',
+        homePlants: 'plantas',
+        homeCommunityJoin: 'Comunidad - Únete a',
+        homePlantLovers: 'amantes de las plantas',
+        homeStart: 'Empieza a Cultivar',
+        homeFree: '¡Gratis. Sin tarjeta. Solo plantas!',
+      },
+      de: {
+        siteName: 'Aphylia',
+        siteTagline: 'Entdecke, Swipe und Verwalte Deine Gartenpflanzen',
+        siteDesc: 'Entdecke und verwalte die perfekten Pflanzen für deinen Garten. Verfolge das Wachstum und erstelle deinen Traumgarten.',
+        plantCareGuide: 'Pflegeanleitung & Anbautipps',
+        plantAbout: 'Über',
+        plantQuickCare: 'Schnelle Pflegeanleitung',
+        plantGreatFor: 'Ideal Für',
+        plantViewFull: 'Vollständige Anleitung auf Aphylia',
+        plantLearnGrow: 'Lerne, wie du pflegst und anbaust',
+        plantExpertTips: 'Expertentipps, Gießanleitung und alles was du brauchst!',
+        plantType: { vegetable: 'Baue dein eigenes an', herb: 'Frische Kräuter griffbereit', fruit: 'Hausgemachte Köstlichkeiten', flower: 'Wunderschöne Blühpflanze', succulent: 'Pflegeleichte Schönheit', cactus: 'Wüstenüberlebender', tree: 'Majestätische Bereicherung' },
+        difficulty: { easy: '✅ Einfach', beginner: '✅ Anfänger', moderate: '⚡ Mittel', medium: '⚡ Mittel', hard: '🔥 Fortgeschritten', difficult: '🔥 Fortgeschritten', expert: '💎 Experte' },
+        light: { 'full sun': '☀️ Volle Sonne', 'partial sun': '🌤️ Halbsonne', 'partial shade': '⛅ Halbschatten', 'full shade': '🌑 Schatten', 'low light': '🌑 Wenig Licht', 'bright indirect': '💡 Indirektes Licht' },
+        blooms: 'Blütezeit',
+        zones: 'Zonen',
+        family: 'Familie',
+        origin: 'Herkunft',
+        tags: 'Tags',
+        blogTitle: 'Aphylia Blog',
+        blogTagline: 'Gartentipps & Anleitungen',
+        blogDesc: 'Expertentipps, saisonale Ratschläge und Pflegeanleitungen. Lerne heute etwas Neues!',
+        blogBy: 'Von',
+        blogMinRead: 'Min. Lesezeit',
+        blogReadFull: 'Vollständigen Artikel auf Aphylia lesen',
+        blogLatest: 'Neueste Artikel',
+        blogReadAll: 'Alle Artikel ansehen',
+        profileGardenProfile: 'Gärtnerprofil',
+        profileCheckOut: 'Entdecke',
+        profileGrowingJourney: 'Gartenreise',
+        profileGardens: 'Garten/Gärten',
+        profilePlants: 'Pflanze(n)',
+        profileMemberSince: 'Mitglied seit',
+        profileExploreGardens: 'Gärten erkunden',
+        profilePlantEnthusiast: 'Ein Pflanzenliebhaber, der seine Sammlung auf Aphylia erweitert',
+        gardenExplore: 'Gärten Erkunden',
+        gardenBeautiful: 'Ein Schöner Garten',
+        gardenPlantsGrowing: 'Pflanze(n) wachsend',
+        gardenStartingFresh: 'Neuanfang',
+        gardenBy: 'Von',
+        gardenOld: 'alt',
+        gardenNew: 'Neuer Garten!',
+        gardenMonths: 'Monat(e)',
+        gardenYears: 'Jahr(e)',
+        gardenExploreThis: 'Diesen Garten auf Aphylia erkunden',
+        gardenDiscover: 'Entdecke die Pflanzen, die hier wachsen!',
+        gardenFilled: 'Ein wachsender Garten voller schöner Pflanzen',
+        gardensTitle: 'Gärten Erkunden',
+        gardensDesc: 'Entdecke schöne Gärten unserer Community. Lass dich inspirieren und teile deinen!',
+        gardensCommunity: 'Community-Gärten',
+        gardensExploreWorld: 'Erkunde Gärten von Enthusiasten weltweit.',
+        gardensInspired: 'Lass dich inspirieren',
+        gardensThrive: 'Sieh, welche Pflanzen zusammen gedeihen',
+        gardensClimate: 'Entdecke Gärten in deiner Klimazone',
+        gardensIdeas: 'Finde Gestaltungsideen',
+        gardensConnect: 'Verbinde dich mit anderen Gärtnern',
+        discoveryTitle: 'Pflanzen Entdecken | Swipe zu Deinem Traumgarten',
+        discoveryDesc: 'Wie Tinder, aber für Pflanzen! Swipe nach rechts für Favoriten. Erstelle deine Wunschliste!',
+        discoveryPlant: 'Pflanzen-Entdeckung',
+        discoveryFind: 'Finde deine perfekten Pflanzen durch Swipen!',
+        discoveryHow: 'So funktioniert\'s',
+        discoveryRight: 'Swipe Rechts - Liebe es! Zur Liste hinzufügen',
+        discoveryLeft: 'Swipe Links - Nichts für dich? Überspringen',
+        discoveryUp: 'Swipe Hoch - Super Like! Zu Favoriten',
+        discoveryKeep: 'Weiter swipen - Entdecke deine perfekten Pflanzen',
+        discoveryStart: 'Starte jetzt und erstelle deine Traumsammlung!',
+        aboutTitle: 'Über Aphylia - Dein Pflanzenbegleiter',
+        aboutDesc: 'Lerne Aphylia kennen: Die App, die dir hilft, Pflanzen zu entdecken und zu pflegen!',
+        aboutPersonal: 'Dein persönlicher Pflanzenbegleiter zum Entdecken, Identifizieren und Pflegen.',
+        aboutMission: 'Unsere Mission',
+        aboutBelieve: 'Wir glauben, dass jeder Zugang zu Pflanzenwissen verdient. Ob Anfänger oder Experte, Aphylia hilft dir zu wachsen.',
+        aboutOffer: 'Was Wir Bieten',
+        aboutDatabase: 'Pflanzendatenbank mit Pflegeanleitungen',
+        aboutGarden: 'Gartenverwaltung und -verfolgung',
+        aboutReminders: 'Intelligente Pflegeerinnerungen',
+        aboutCommunity: 'Gemeinschaft von Pflanzenliebhabern',
+        searchTitle: 'Finde Deine Perfekten Pflanzen',
+        searchDesc: 'Suche Pflanzen nach Name, Pflegeaufwand oder Bedingungen. Finde die perfekten Pflanzen für DEINEN Raum!',
+        searchPlant: 'Pflanzensuche',
+        searchFind: 'Finde deine ideale Pflanze unter Tausenden von Arten.',
+        searchBy: 'Suchen Nach',
+        searchName: 'Pflanzenname oder wissenschaftlicher Name',
+        searchLight: 'Lichtbedarf',
+        searchWater: 'Wasserbedarf',
+        searchIndoor: 'Innen oder außen',
+        searchClimate: 'Klimazone',
+        searchDifficulty: 'Schwierigkeitsgrad',
+        pricingTitle: 'Aphylia Preise - Für Immer Kostenlos',
+        pricingDesc: 'Aphylia ist kostenlos! Entdecke Pflanzen, verfolge deinen Garten, erhalte Erinnerungen.',
+        pricingPlans: 'Unsere Pläne',
+        pricingFree: 'Für Immer Kostenlos',
+        pricingEverything: 'Alles, was du zum Start brauchst:',
+        pricingDiscovery: 'Unbegrenzte Pflanzenentdeckung',
+        pricingTracking: 'Gartenverfolgung',
+        pricingCare: 'Pflegeerinnerungen',
+        pricingIdentify: 'Pflanzenidentifikation',
+        pricingAccess: 'Community-Zugang',
+        pricingPremium: 'Premium (Bald)',
+        pricingSerious: 'Für Enthusiasten:',
+        pricingAnalytics: 'Erweiterte Analysen',
+        pricingSupport: 'Prioritäts-Support',
+        pricingExclusive: 'Exklusive Funktionen',
+        downloadTitle: 'Aphylia Herunterladen - Deine Garten-App',
+        downloadDesc: 'Hol dir Aphylia! Verfügbar als Web-App, PWA, und bald für iOS & Android!',
+        downloadGet: 'Aphylia Herunterladen',
+        downloadWeb: 'Web-App',
+        downloadWebDesc: 'Nutze Aphylia direkt im Browser - kein Download nötig!',
+        downloadPwa: 'Als PWA Installieren',
+        downloadPwaDesc: 'Zum Startbildschirm hinzufügen:',
+        downloadIos: 'iOS: Safari → Teilen → Zum Home-Bildschirm',
+        downloadAndroid: 'Android: Chrome → Menü → Installieren',
+        downloadNative: 'Native Apps (Bald)',
+        downloadNativeDesc: 'iOS und Android Apps in Entwicklung!',
+        termsTitle: 'Nutzungsbedingungen',
+        termsDesc: 'Lies die Aphylia-Bedingungen. Einfach: Sei respektvoll und genieße die Pflanzen!',
+        termsUpdated: 'Letzte Aktualisierung',
+        termsWelcome: 'Willkommen bei Aphylia! Mit der Nutzung akzeptierst du diese Bedingungen.',
+        termsSimple: 'Kurzfassung',
+        termsRespect: 'Sei respektvoll zu anderen',
+        termsSpam: 'Kein Spam',
+        termsSecure: 'Halte dein Konto sicher',
+        termsEnjoy: 'Genieße die Pflanzen!',
+        termsRead: 'Vollständige Bedingungen lesen',
+        contactTitle: 'Kontaktiere Aphylia - Wir Freuen Uns Von Dir Zu Hören!',
+        contactDesc: 'Fragen oder Feedback? Kontaktiere das Aphylia-Team. Wir antworten in 24h!',
+        contactGet: 'Kontaktiere Uns',
+        contactLove: 'Wir würden gerne von dir hören!',
+        contactReach: 'Kontaktiere Uns Für',
+        contactQuestions: 'Fragen zu Aphylia',
+        contactFeatures: 'Funktionsvorschläge',
+        contactBugs: 'Fehler melden',
+        contactPartnership: 'Partnerschaftsanfragen',
+        contactHello: 'Einfach Hallo sagen!',
+        contactRespond: 'Wir antworten in 24h.',
+        businessTitle: 'Geschäftspartnerschaften',
+        businessDesc: 'Partner mit Aphylia! Wir arbeiten mit Gärtnereien und Gartencentern. Lasst uns zusammen wachsen!',
+        businessInterested: 'Interessiert an einer Partnerschaft? Wir arbeiten gerne mit:',
+        businessNurseries: 'Gärtnereien & Gartencenter',
+        businessShops: 'Pflanzengeschäfte',
+        businessBrands: 'Gartenmarken',
+        businessCreators: 'Garten-Content-Creator',
+        businessExplore: 'Kontaktiere uns für Möglichkeiten!',
+        bookmarksCollection: 'Pflanzensammlung',
+        bookmarksCurated: 'Kuratiert von',
+        bookmarksCarefully: 'Eine sorgfältig kuratierte Sammlung',
+        bookmarksView: 'Diese Sammlung auf Aphylia ansehen',
+        homeTitle: 'Aphylia - Entdecke & Pflege Deinen Perfekten Garten',
+        homeDesc: 'Swipe um Pflanzen zu entdecken, verfolge deinen Garten, erhalte Erinnerungen. Tritt den Gärtnern bei!',
+        homeWelcome: 'Willkommen bei Aphylia',
+        homePersonal: 'Dein Pflanzenbegleiter zum Entdecken, Verwalten und Pflegen schöner Gärten.',
+        homeWhy: 'Warum Gärtner Uns Lieben',
+        homeSwipe: 'Swipe zum Entdecken - Finde deine perfekten Pflanzen!',
+        homeTracker: 'Garten-Tracker - Verwalte alle Pflanzen an einem Ort',
+        homeReminders: 'Smarte Erinnerungen - Vergiss nie wieder zu gießen',
+        homeCareGuides: 'Pflegeanleitungen - Expertentipps für',
+        homePlants: 'Pflanzen',
+        homeCommunityJoin: 'Community - Tritt',
+        homePlantLovers: 'Pflanzenliebhabern bei',
+        homeStart: 'Starte Heute',
+        homeFree: 'Kostenlos. Keine Kreditkarte. Nur Pflanzen!',
+      },
+    }
+    
+    // Get translations for detected language, fallback to English
+    const tr = t[detectedLang] || t.en
+    
     // Plant detail page: /plants/:id
     if (effectivePath[0] === 'plants' && effectivePath[1]) {
       const plantId = decodeURIComponent(effectivePath[1])
@@ -15364,57 +16030,37 @@ async function generateCrawlerHtml(req, pagePath) {
           const typeKey = (plant.plant_type || '').toLowerCase()
           const emoji = plantEmoji[typeKey] || '🌱'
           
-          // Care difficulty indicator
-          const difficultyEmoji = {
-            'easy': '✅ Easy',
-            'beginner': '✅ Beginner-friendly',
-            'moderate': '⚡ Moderate',
-            'medium': '⚡ Moderate',
-            'hard': '🔥 Advanced',
-            'difficult': '🔥 Advanced',
-            'expert': '💎 Expert',
-          }
-          const difficulty = difficultyEmoji[(plant.maintenance_level || '').toLowerCase()] || ''
+          // Care difficulty indicator - use translations
+          const difficulty = tr.difficulty[(plant.maintenance_level || '').toLowerCase()] || ''
           
-          // Light requirement indicator
-          const lightEmoji = {
-            'full sun': '☀️ Full Sun',
-            'partial sun': '🌤️ Partial Sun',
-            'partial shade': '⛅ Partial Shade',
-            'full shade': '🌑 Shade',
-            'low light': '🌑 Low Light',
-            'bright indirect': '💡 Bright Indirect',
-          }
-          const light = lightEmoji[(plant.level_sun || '').toLowerCase()] || ''
+          // Light requirement indicator - use translations
+          const light = tr.light[(plant.level_sun || '').toLowerCase()] || ''
           
-          title = `${emoji} ${plant.name} | Care Guide & Growing Tips`
+          title = `${emoji} ${plant.name} | ${tr.plantCareGuide}`
           
           // Create a compelling, informative description
           const descParts = []
           
-          // Add catchy intro based on plant type
+          // Add catchy intro based on plant type - use translations
           if (plant.plant_type) {
-            const typeIntros = {
-              'flower': `Beautiful flowering plant`,
-              'vegetable': `Grow your own ${plant.name.toLowerCase()}`,
-              'herb': `Fresh herbs at your fingertips`,
-              'fruit': `Homegrown ${plant.name.toLowerCase()} delight`,
-              'succulent': `Low-maintenance beauty`,
-              'cactus': `Desert survivor`,
-              'tree': `Majestic addition to any garden`,
+            const typeKey = plant.plant_type.toLowerCase()
+            const typeIntro = tr.plantType[typeKey]
+            if (typeIntro) {
+              descParts.push(typeIntro)
+            } else {
+              descParts.push(plant.plant_type)
             }
-            descParts.push(typeIntros[plant.plant_type.toLowerCase()] || `${plant.plant_type}`)
           }
           
           if (plant.scientific_name) descParts.push(`(${plant.scientific_name})`)
           if (difficulty) descParts.push(difficulty)
           if (light) descParts.push(light)
           if (plant.watering) descParts.push(`💧 ${plant.watering}`)
-          if (plant.flowering_season) descParts.push(`🌸 Blooms: ${plant.flowering_season}`)
+          if (plant.flowering_season) descParts.push(`🌸 ${tr.blooms}: ${plant.flowering_season}`)
           
           description = descParts.length > 0 
             ? descParts.join(' • ').slice(0, 200)
-            : `Learn how to grow and care for ${plant.name}. Expert tips, watering guide, and everything you need! 🌱`
+            : `${tr.plantLearnGrow} ${plant.name}. ${tr.plantExpertTips} 🌱`
           
           // Fetch primary image, fallback to discovery image
           const { data: images } = await supabaseServer
@@ -15441,15 +16087,15 @@ async function generateCrawlerHtml(req, pagePath) {
           // Build structured content for the page
           const quickFacts = []
           if (plant.scientific_name) quickFacts.push(`🔬 <em>${escapeHtml(plant.scientific_name)}</em>`)
-          if (plant.family) quickFacts.push(`👨‍👩‍👧 Family: ${escapeHtml(plant.family)}`)
+          if (plant.family) quickFacts.push(`👨‍👩‍👧 ${tr.family}: ${escapeHtml(plant.family)}`)
           if (plant.plant_type) quickFacts.push(`${emoji} ${escapeHtml(plant.plant_type)}`)
-          if (plant.origin?.length) quickFacts.push(`🌍 Origin: ${plant.origin.slice(0, 2).map(o => escapeHtml(o)).join(', ')}`)
+          if (plant.origin?.length) quickFacts.push(`🌍 ${tr.origin}: ${plant.origin.slice(0, 2).map(o => escapeHtml(o)).join(', ')}`)
           
           const careInfo = []
           if (light) careInfo.push(light)
           if (plant.watering) careInfo.push(`💧 ${escapeHtml(plant.watering)}`)
           if (difficulty) careInfo.push(difficulty)
-          if (plant.hardiness_zones) careInfo.push(`🌡️ Zones: ${escapeHtml(plant.hardiness_zones)}`)
+          if (plant.hardiness_zones) careInfo.push(`🌡️ ${tr.zones}: ${escapeHtml(plant.hardiness_zones)}`)
           
           pageContent = `
             <article itemscope itemtype="https://schema.org/Product">
@@ -15458,25 +16104,25 @@ async function generateCrawlerHtml(req, pagePath) {
               
               ${plant.overview ? `
                 <div itemprop="description">
-                  <h2>About ${escapeHtml(plant.name)}</h2>
+                  <h2>${tr.plantAbout} ${escapeHtml(plant.name)}</h2>
                   <p>${escapeHtml(plant.overview)}</p>
                 </div>
               ` : ''}
               
               ${careInfo.length ? `
-                <h2>🌱 Quick Care Guide</h2>
+                <h2>🌱 ${tr.plantQuickCare}</h2>
                 <div class="plant-meta">${careInfo.join(' · ')}</div>
               ` : ''}
               
               ${plant.utility?.length ? `
-                <h2>✨ What It's Great For</h2>
+                <h2>✨ ${tr.plantGreatFor}</h2>
                 <ul>${plant.utility.slice(0, 5).map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
               ` : ''}
               
-              ${plant.tags?.length ? `<p><strong>Tags:</strong> ${plant.tags.slice(0, 8).map(t => `#${escapeHtml(t)}`).join(' ')}</p>` : ''}
+              ${plant.tags?.length ? `<p><strong>${tr.tags}:</strong> ${plant.tags.slice(0, 8).map(t => `#${escapeHtml(t)}`).join(' ')}</p>` : ''}
               
               <p style="margin-top: 20px;">
-                <a href="${escapeHtml(canonicalUrl)}">📖 View complete care guide on Aphylia →</a>
+                <a href="${escapeHtml(canonicalUrl)}">📖 ${tr.plantViewFull} →</a>
               </p>
             </article>
           `
@@ -15507,7 +16153,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const readTime = post.reading_time_minutes || (post.content ? Math.ceil(post.content.replace(/<[^>]*>/g, '').split(/\s+/).length / 200) : 5)
         
         // Create engaging title
-        title = `${post.title} | Aphylia Blog 📖`
+        title = `${post.title} | ${tr.blogTitle} 📖`
         
         // Create compelling description with read time
         const descParts = []
@@ -15517,14 +16163,16 @@ async function generateCrawlerHtml(req, pagePath) {
           const plainText = post.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
           descParts.push(plainText.slice(0, 150))
         }
-        descParts.push(`📚 ${readTime} min read`)
-        if (post.author_name) descParts.push(`✍️ By ${post.author_name}`)
+        descParts.push(`📚 ${readTime} ${tr.blogMinRead}`)
+        if (post.author_name) descParts.push(`✍️ ${tr.blogBy} ${post.author_name}`)
         
         description = descParts.join(' • ')
         
         if (post.cover_image_url) image = post.cover_image_url
         
-        const publishDate = post.published_at ? new Date(post.published_at).toLocaleDateString('en-US', { 
+        // Use locale-specific date format
+        const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
+        const publishDate = post.published_at ? new Date(post.published_at).toLocaleDateString(dateLocales[detectedLang] || 'en-US', { 
           year: 'numeric', 
           month: 'long', 
           day: 'numeric' 
@@ -15534,13 +16182,13 @@ async function generateCrawlerHtml(req, pagePath) {
           <article itemscope itemtype="https://schema.org/BlogPosting">
             <h1 itemprop="headline">📖 ${escapeHtml(post.title)}</h1>
             <div class="plant-meta">
-              ${post.author_name ? `✍️ By <span itemprop="author">${escapeHtml(post.author_name)}</span>` : ''}
+              ${post.author_name ? `✍️ ${tr.blogBy} <span itemprop="author">${escapeHtml(post.author_name)}</span>` : ''}
               ${publishDate ? ` · 📅 <time itemprop="datePublished" datetime="${post.published_at}">${publishDate}</time>` : ''}
-              · 📚 ${readTime} min read
+              · 📚 ${readTime} ${tr.blogMinRead}
             </div>
             ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
             <div itemprop="articleBody">${post.content || ''}</div>
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">Read full article on Aphylia →</a></p>
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadFull} →</a></p>
           </article>
         `
         console.log(`[ssr] Blog image: ${image}`)
@@ -15589,23 +16237,24 @@ async function generateCrawlerHtml(req, pagePath) {
           }
         } catch {}
         
-        // Calculate membership duration
+        // Calculate membership duration - locale-specific
+        const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
         const joinDate = profile.created_at ? new Date(profile.created_at) : null
-        const memberSince = joinDate ? joinDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null
+        const memberSince = joinDate ? joinDate.toLocaleDateString(dateLocales[detectedLang] || 'en-US', { month: 'short', year: 'numeric' }) : null
         
         // Create engaging title
-        title = `🌱 ${profile.display_name}'s Garden Profile | Aphylia`
+        title = `🌱 ${profile.display_name} | ${tr.profileGardenProfile} | Aphylia`
         
         // Create rich description
         const descParts = []
         if (profile.bio) {
           descParts.push(profile.bio.slice(0, 100))
         } else {
-          descParts.push(`Check out ${profile.display_name}'s growing journey`)
+          descParts.push(`${tr.profileCheckOut} ${profile.display_name}'s ${tr.profileGrowingJourney}`)
         }
-        if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} garden${gardenCount > 1 ? 's' : ''}`)
-        if (plantCount > 0) descParts.push(`🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}`)
-        if (memberSince) descParts.push(`📅 Member since ${memberSince}`)
+        if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} ${tr.profileGardens}`)
+        if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
+        if (memberSince) descParts.push(`📅 ${tr.profileMemberSince} ${memberSince}`)
         
         description = descParts.join(' • ')
         
@@ -15615,12 +16264,12 @@ async function generateCrawlerHtml(req, pagePath) {
           <article itemscope itemtype="https://schema.org/Person">
             <h1 itemprop="name">🌱 ${escapeHtml(profile.display_name)}</h1>
             <div class="plant-meta">
-              ${gardenCount > 0 ? `🏡 ${gardenCount} garden${gardenCount > 1 ? 's' : ''}` : ''}
-              ${plantCount > 0 ? ` · 🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}` : ''}
-              ${memberSince ? ` · 📅 Member since ${memberSince}` : ''}
+              ${gardenCount > 0 ? `🏡 ${gardenCount} ${tr.profileGardens}` : ''}
+              ${plantCount > 0 ? ` · 🌿 ${plantCount} ${tr.profilePlants}` : ''}
+              ${memberSince ? ` · 📅 ${tr.profileMemberSince} ${memberSince}` : ''}
             </div>
-            ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : '<p>A passionate plant enthusiast growing their collection on Aphylia 🌱</p>'}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">Explore ${escapeHtml(profile.display_name)}'s gardens →</a></p>
+            ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileExploreGardens} ${escapeHtml(profile.display_name)} →</a></p>
           </article>
         `
         console.log(`[ssr] Profile image: ${image}`)
@@ -15686,47 +16335,47 @@ async function generateCrawlerHtml(req, pagePath) {
           }
         } catch {}
         
-        // Get garden age
+        // Get garden age - with translations
         const createdDate = garden.created_at ? new Date(garden.created_at) : null
         const gardenAge = createdDate ? (() => {
           const months = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 30))
-          if (months < 1) return 'New garden!'
-          if (months < 12) return `${months} month${months > 1 ? 's' : ''} old`
+          if (months < 1) return tr.gardenNew
+          if (months < 12) return `${months} ${tr.gardenMonths} ${tr.gardenOld}`
           const years = Math.floor(months / 12)
-          return `${years} year${years > 1 ? 's' : ''} old`
+          return `${years} ${tr.gardenYears} ${tr.gardenOld}`
         })() : null
         
         // Create engaging title
         const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
-        title = `${gardenEmoji} ${garden.name || 'A Beautiful Garden'} | Aphylia`
+        title = `${gardenEmoji} ${garden.name || tr.gardenBeautiful} | Aphylia`
         
         // Create rich description
         const descParts = []
         if (garden.description) {
           descParts.push(garden.description.slice(0, 100))
         }
-        if (plantCount > 0) descParts.push(`🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''} growing`)
-        if (ownerName) descParts.push(`👤 By ${ownerName}`)
+        if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.gardenPlantsGrowing}`)
+        if (ownerName) descParts.push(`👤 ${tr.gardenBy} ${ownerName}`)
         if (garden.location) descParts.push(`📍 ${garden.location}`)
         if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
         
         description = descParts.length > 0 
           ? descParts.join(' • ')
-          : `Explore this beautiful garden on Aphylia. Discover the plants growing here!`
+          : `${tr.gardenExploreThis}. ${tr.gardenDiscover}`
         
         if (gardenImage) image = gardenImage
         
         pageContent = `
           <article itemscope itemtype="https://schema.org/Place">
-            <h1 itemprop="name">${gardenEmoji} ${escapeHtml(garden.name || 'Garden')}</h1>
+            <h1 itemprop="name">${gardenEmoji} ${escapeHtml(garden.name || tr.gardenBeautiful)}</h1>
             <div class="plant-meta">
-              ${plantCount > 0 ? `🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}` : '🌱 Starting fresh'}
-              ${ownerName ? ` · 👤 By ${escapeHtml(ownerName)}` : ''}
+              ${plantCount > 0 ? `🌿 ${plantCount} ${tr.gardenPlantsGrowing}` : `🌱 ${tr.gardenStartingFresh}`}
+              ${ownerName ? ` · 👤 ${tr.gardenBy} ${escapeHtml(ownerName)}` : ''}
               ${garden.location ? ` · 📍 ${escapeHtml(garden.location)}` : ''}
               ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
             </div>
-            ${garden.description ? `<p itemprop="description">${escapeHtml(garden.description)}</p>` : '<p>A growing garden filled with beautiful plants 🌸</p>'}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">Explore this garden on Aphylia →</a></p>
+            ${garden.description ? `<p itemprop="description">${escapeHtml(garden.description)}</p>` : `<p>${tr.gardenFilled} 🌸</p>`}
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenExploreThis} →</a></p>
           </article>
         `
         console.log(`[ssr] Garden image: ${image}`)
@@ -15735,48 +16384,48 @@ async function generateCrawlerHtml(req, pagePath) {
     
     // Static pages with enhanced previews
     else if (effectivePath[0] === 'about' || pagePath === '/about') {
-      title = '🌱 About Aphylia - Your Plant Companion'
-      description = 'Meet Aphylia: the app that helps you discover, grow, and nurture plants. Join 10,000+ gardeners on their growing journey! 🌿'
+      title = `🌱 ${tr.aboutTitle}`
+      description = tr.aboutDesc
       pageContent = `
         <article>
-          <h1>🌱 About Aphylia</h1>
-          <p>Your personal plant companion, helping you discover, identify, and care for the perfect plants.</p>
-          <h2>Our Mission</h2>
-          <p>We believe everyone deserves access to plant knowledge. Whether you're a beginner with your first succulent or an expert with a botanical garden, Aphylia helps you grow.</p>
-          <h2>What We Offer</h2>
+          <h1>🌱 ${tr.siteName}</h1>
+          <p>${tr.aboutPersonal}</p>
+          <h2>${tr.aboutMission}</h2>
+          <p>${tr.aboutBelieve}</p>
+          <h2>${tr.aboutOffer}</h2>
           <ul>
-            <li>🔍 Extensive plant database with care guides</li>
-            <li>🏡 Garden management and tracking</li>
-            <li>⏰ Smart care reminders</li>
-            <li>👥 Community of plant lovers</li>
+            <li>🔍 ${tr.aboutDatabase}</li>
+            <li>🏡 ${tr.aboutGarden}</li>
+            <li>⏰ ${tr.aboutReminders}</li>
+            <li>👥 ${tr.aboutCommunity}</li>
           </ul>
         </article>
       `
     }
     
     else if (effectivePath[0] === 'search' || pagePath === '/search') {
-      title = '🔍 Find Your Perfect Plants | Aphylia'
-      description = 'Search 5,000+ plants by name, care level, light needs, or growing conditions. Find the perfect plants for YOUR space! 🌿'
+      title = `🔍 ${tr.searchTitle} | Aphylia`
+      description = tr.searchDesc
       pageContent = `
         <article>
-          <h1>🔍 Plant Search</h1>
-          <p>Find your perfect plant match from our database of thousands of species.</p>
-          <h2>Search By</h2>
+          <h1>🔍 ${tr.searchPlant}</h1>
+          <p>${tr.searchFind}</p>
+          <h2>${tr.searchBy}</h2>
           <ul>
-            <li>🏷️ Plant name or scientific name</li>
-            <li>☀️ Light requirements</li>
-            <li>💧 Watering needs</li>
-            <li>🏠 Indoor or outdoor</li>
-            <li>🌡️ Climate zone</li>
-            <li>🎯 Difficulty level</li>
+            <li>🏷️ ${tr.searchName}</li>
+            <li>☀️ ${tr.searchLight}</li>
+            <li>💧 ${tr.searchWater}</li>
+            <li>🏠 ${tr.searchIndoor}</li>
+            <li>🌡️ ${tr.searchClimate}</li>
+            <li>🎯 ${tr.searchDifficulty}</li>
           </ul>
         </article>
       `
     }
     
     else if (effectivePath[0] === 'blog' && !effectivePath[1]) {
-      title = '📚 Aphylia Blog - Gardening Tips & Guides'
-      description = 'Expert gardening advice, seasonal tips, plant care guides, and growing inspiration. Learn something new today! 🌱'
+      title = `📚 ${tr.blogTitle} - ${tr.blogTagline}`
+      description = tr.blogDesc
       
       // Fetch recent blog posts for the listing
       if (supabaseServer) {
@@ -15794,9 +16443,9 @@ async function generateCrawlerHtml(req, pagePath) {
           
           pageContent = `
             <article>
-              <h1>📚 Aphylia Blog</h1>
-              <p>Your source for gardening wisdom, plant care tips, and growing inspiration.</p>
-              <h2>Latest Articles</h2>
+              <h1>📚 ${tr.blogTitle}</h1>
+              <p>${tr.blogDesc}</p>
+              <h2>${tr.blogLatest}</h2>
               <ul>
                 ${posts.slice(0, 5).map(p => `
                   <li>
@@ -15805,7 +16454,7 @@ async function generateCrawlerHtml(req, pagePath) {
                   </li>
                 `).join('')}
               </ul>
-              <p><a href="${escapeHtml(canonicalUrl)}">Read all articles →</a></p>
+              <p><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadAll} →</a></p>
             </article>
           `
         }
@@ -15814,18 +16463,18 @@ async function generateCrawlerHtml(req, pagePath) {
     
     // Gardens listing page
     else if (effectivePath[0] === 'gardens' && !effectivePath[1]) {
-      title = '🏡 Explore Gardens | Aphylia'
-      description = 'Discover beautiful gardens from our community. Get inspired by what others are growing and share your own! 🌿'
+      title = `🏡 ${tr.gardensTitle} | Aphylia`
+      description = tr.gardensDesc
       pageContent = `
         <article>
-          <h1>🏡 Community Gardens</h1>
-          <p>Explore gardens from plant enthusiasts around the world.</p>
-          <h2>Get Inspired</h2>
+          <h1>🏡 ${tr.gardensCommunity}</h1>
+          <p>${tr.gardensExploreWorld}</p>
+          <h2>${tr.gardensInspired}</h2>
           <ul>
-            <li>🌸 See what plants thrive together</li>
-            <li>📍 Discover gardens in your climate zone</li>
-            <li>💡 Get layout and design ideas</li>
-            <li>🤝 Connect with other gardeners</li>
+            <li>🌸 ${tr.gardensThrive}</li>
+            <li>📍 ${tr.gardensClimate}</li>
+            <li>💡 ${tr.gardensIdeas}</li>
+            <li>🤝 ${tr.gardensConnect}</li>
           </ul>
         </article>
       `
@@ -15833,46 +16482,46 @@ async function generateCrawlerHtml(req, pagePath) {
     
     // Discovery/Swipe page
     else if (effectivePath[0] === 'discovery') {
-      title = '🎴 Discover Plants | Swipe Your Way to a Dream Garden'
-      description = 'Like Tinder, but for plants! Swipe right on plants you love, left on ones you don\'t. Build your perfect garden wishlist! 🌱💚'
+      title = `🎴 ${tr.discoveryTitle}`
+      description = tr.discoveryDesc
       pageContent = `
         <article>
-          <h1>🎴 Plant Discovery</h1>
-          <p>Find your perfect plant matches by swiping!</p>
-          <h2>How It Works</h2>
+          <h1>🎴 ${tr.discoveryPlant}</h1>
+          <p>${tr.discoveryFind}</p>
+          <h2>${tr.discoveryHow}</h2>
           <ul>
-            <li>👉 <strong>Swipe Right</strong> - Love it! Add to your wishlist</li>
-            <li>👈 <strong>Swipe Left</strong> - Not for you? Skip it</li>
-            <li>⬆️ <strong>Swipe Up</strong> - Super like! Add to favorites</li>
-            <li>🔄 <strong>Keep Swiping</strong> - Discover your perfect matches</li>
+            <li>👉 ${tr.discoveryRight}</li>
+            <li>👈 ${tr.discoveryLeft}</li>
+            <li>⬆️ ${tr.discoveryUp}</li>
+            <li>🔄 ${tr.discoveryKeep}</li>
           </ul>
-          <p>Start swiping and build your dream garden collection! 🌿</p>
+          <p>${tr.discoveryStart} 🌿</p>
         </article>
       `
     }
     
     // Pricing page
     else if (effectivePath[0] === 'pricing') {
-      title = '💎 Aphylia Pricing - Free Forever & Premium Plans'
-      description = 'Aphylia is free to use! Discover 5,000+ plants, track your garden, get care reminders. Premium features available for power gardeners 🌱'
+      title = `💎 ${tr.pricingTitle}`
+      description = tr.pricingDesc
       pageContent = `
         <article>
-          <h1>💎 Pricing Plans</h1>
-          <h2>🆓 Free Forever</h2>
-          <p>Everything you need to start your gardening journey:</p>
+          <h1>💎 ${tr.pricingPlans}</h1>
+          <h2>🆓 ${tr.pricingFree}</h2>
+          <p>${tr.pricingEverything}</p>
           <ul>
-            <li>✅ Unlimited plant discovery</li>
-            <li>✅ Garden tracking</li>
-            <li>✅ Care reminders</li>
-            <li>✅ Plant identification</li>
-            <li>✅ Community access</li>
+            <li>✅ ${tr.pricingDiscovery}</li>
+            <li>✅ ${tr.pricingTracking}</li>
+            <li>✅ ${tr.pricingCare}</li>
+            <li>✅ ${tr.pricingIdentify}</li>
+            <li>✅ ${tr.pricingAccess}</li>
           </ul>
-          <h2>✨ Premium (Coming Soon)</h2>
-          <p>For serious plant enthusiasts:</p>
+          <h2>✨ ${tr.pricingPremium}</h2>
+          <p>${tr.pricingSerious}</p>
           <ul>
-            <li>🌟 Advanced analytics</li>
-            <li>🌟 Priority support</li>
-            <li>🌟 Exclusive features</li>
+            <li>🌟 ${tr.pricingAnalytics}</li>
+            <li>🌟 ${tr.pricingSupport}</li>
+            <li>🌟 ${tr.pricingExclusive}</li>
           </ul>
         </article>
       `
@@ -15880,81 +16529,82 @@ async function generateCrawlerHtml(req, pagePath) {
     
     // Download page
     else if (effectivePath[0] === 'download') {
-      title = '📲 Download Aphylia - Your Plant Companion App'
-      description = 'Get Aphylia on your device! Available as a web app, PWA, and soon on iOS & Android. Start your plant journey today! 🌱📱'
+      title = `📲 ${tr.downloadTitle}`
+      description = tr.downloadDesc
       pageContent = `
         <article>
-          <h1>📲 Download Aphylia</h1>
-          <h2>🌐 Web App</h2>
-          <p>Use Aphylia directly in your browser - no download required!</p>
-          <h2>📱 Install as PWA</h2>
-          <p>Add to your home screen for an app-like experience:</p>
+          <h1>📲 ${tr.downloadGet}</h1>
+          <h2>🌐 ${tr.downloadWeb}</h2>
+          <p>${tr.downloadWebDesc}</p>
+          <h2>📱 ${tr.downloadPwa}</h2>
+          <p>${tr.downloadPwaDesc}</p>
           <ul>
-            <li><strong>iOS:</strong> Safari → Share → Add to Home Screen</li>
-            <li><strong>Android:</strong> Chrome → Menu → Install App</li>
+            <li>${tr.downloadIos}</li>
+            <li>${tr.downloadAndroid}</li>
           </ul>
-          <h2>🚀 Native Apps (Coming Soon)</h2>
-          <p>iOS and Android apps are in development!</p>
+          <h2>🚀 ${tr.downloadNative}</h2>
+          <p>${tr.downloadNativeDesc}</p>
         </article>
       `
     }
     
     // Terms page
     else if (effectivePath[0] === 'terms') {
-      title = '📜 Terms of Service | Aphylia'
-      description = 'Read Aphylia\'s Terms of Service. We keep it simple: be respectful, don\'t spam, and enjoy growing plants! 🌱'
+      const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
+      title = `📜 ${tr.termsTitle} | Aphylia`
+      description = tr.termsDesc
       pageContent = `
         <article>
-          <h1>📜 Terms of Service</h1>
-          <p>Last updated: ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
-          <p>Welcome to Aphylia! By using our service, you agree to these terms.</p>
-          <h2>The Simple Version</h2>
+          <h1>📜 ${tr.termsTitle}</h1>
+          <p>${tr.termsUpdated}: ${new Date().toLocaleDateString(dateLocales[detectedLang] || 'en-US', { month: 'long', year: 'numeric' })}</p>
+          <p>${tr.termsWelcome}</p>
+          <h2>${tr.termsSimple}</h2>
           <ul>
-            <li>✅ Be respectful to others</li>
-            <li>✅ Don't spam or abuse the service</li>
-            <li>✅ Keep your account secure</li>
-            <li>✅ Enjoy growing plants!</li>
+            <li>✅ ${tr.termsRespect}</li>
+            <li>✅ ${tr.termsSpam}</li>
+            <li>✅ ${tr.termsSecure}</li>
+            <li>✅ ${tr.termsEnjoy}</li>
           </ul>
-          <p><a href="${escapeHtml(canonicalUrl)}">Read full terms →</a></p>
+          <p><a href="${escapeHtml(canonicalUrl)}">${tr.termsRead} →</a></p>
         </article>
       `
     }
     
     // Contact page
     else if (effectivePath[0] === 'contact' && effectivePath[1] === 'business') {
-      title = '🤝 Business Partnerships | Aphylia'
-      description = 'Partner with Aphylia! We work with nurseries, garden centers, and plant brands. Let\'s grow together! 🌱🤝'
+      title = `🤝 ${tr.businessTitle} | Aphylia`
+      description = tr.businessDesc
       pageContent = `
         <article>
-          <h1>🤝 Business Partnerships</h1>
-          <p>Interested in partnering with Aphylia? We love working with:</p>
+          <h1>🤝 ${tr.businessTitle}</h1>
+          <p>${tr.businessInterested}</p>
           <ul>
-            <li>🌿 Nurseries & Garden Centers</li>
-            <li>🏪 Plant Shops</li>
-            <li>🎯 Garden Product Brands</li>
-            <li>📚 Gardening Content Creators</li>
+            <li>🌿 ${tr.businessNurseries}</li>
+            <li>🏪 ${tr.businessShops}</li>
+            <li>🎯 ${tr.businessBrands}</li>
+            <li>📚 ${tr.businessCreators}</li>
           </ul>
-          <p>Get in touch to explore collaboration opportunities!</p>
+          <p>${tr.businessExplore}</p>
         </article>
       `
     }
     
     else if (effectivePath[0] === 'contact') {
-      title = '💬 Contact Aphylia - We\'d Love to Hear From You!'
-      description = 'Have questions, feedback, or just want to say hi? Reach out to the Aphylia team. We typically respond within 24 hours! 🌱💬'
+      title = `💬 ${tr.contactTitle}`
+      description = tr.contactDesc
       pageContent = `
         <article>
-          <h1>💬 Get in Touch</h1>
-          <p>We'd love to hear from you!</p>
-          <h2>Reach Out For</h2>
+          <h1>💬 ${tr.contactGet}</h1>
+          <p>${tr.contactLove}</p>
+          <h2>${tr.contactReach}</h2>
           <ul>
-            <li>❓ Questions about Aphylia</li>
-            <li>💡 Feature suggestions</li>
-            <li>🐛 Bug reports</li>
-            <li>🤝 Partnership inquiries</li>
-            <li>👋 Just saying hello!</li>
+            <li>❓ ${tr.contactQuestions}</li>
+            <li>💡 ${tr.contactFeatures}</li>
+            <li>🐛 ${tr.contactBugs}</li>
+            <li>🤝 ${tr.contactPartnership}</li>
+            <li>👋 ${tr.contactHello}</li>
           </ul>
-          <p>We typically respond within 24 hours. 🌱</p>
+          <p>${tr.contactRespond} 🌱</p>
         </article>
       `
     }
@@ -16015,30 +16665,30 @@ async function generateCrawlerHtml(req, pagePath) {
         } catch {}
         
         const listEmoji = plantCount > 20 ? '📚' : plantCount > 10 ? '📖' : '📑'
-        title = `${listEmoji} ${bookmarkList.name || 'Plant Collection'} | Aphylia`
+        title = `${listEmoji} ${bookmarkList.name || tr.bookmarksCollection} | Aphylia`
         
         const descParts = []
         if (bookmarkList.description) {
           descParts.push(bookmarkList.description.slice(0, 100))
         }
-        if (plantCount > 0) descParts.push(`🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}`)
-        if (ownerName) descParts.push(`👤 Curated by ${ownerName}`)
+        if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
+        if (ownerName) descParts.push(`👤 ${tr.bookmarksCurated} ${ownerName}`)
         
         description = descParts.length > 0 
           ? descParts.join(' • ')
-          : `A curated collection of plants on Aphylia`
+          : tr.bookmarksCarefully
         
         if (listImage) image = listImage
         
         pageContent = `
           <article>
-            <h1>${listEmoji} ${escapeHtml(bookmarkList.name || 'Plant Collection')}</h1>
+            <h1>${listEmoji} ${escapeHtml(bookmarkList.name || tr.bookmarksCollection)}</h1>
             <div class="plant-meta">
-              ${plantCount > 0 ? `🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}` : ''}
-              ${ownerName ? ` · 👤 Curated by ${escapeHtml(ownerName)}` : ''}
+              ${plantCount > 0 ? `🌿 ${plantCount} ${tr.profilePlants}` : ''}
+              ${ownerName ? ` · 👤 ${tr.bookmarksCurated} ${escapeHtml(ownerName)}` : ''}
             </div>
-            ${bookmarkList.description ? `<p>${escapeHtml(bookmarkList.description)}</p>` : '<p>A carefully curated plant collection 🌱</p>'}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">View this collection on Aphylia →</a></p>
+            ${bookmarkList.description ? `<p>${escapeHtml(bookmarkList.description)}</p>` : `<p>${tr.bookmarksCarefully} 🌱</p>`}
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
           </article>
         `
       }
@@ -16046,37 +16696,37 @@ async function generateCrawlerHtml(req, pagePath) {
     
     // Homepage with dynamic content
     else if (pagePath === '/' || effectivePath.length === 0) {
-      title = '🌱 Aphylia - Discover & Grow Your Perfect Garden'
-      description = 'Swipe to discover plants, track your garden, get care reminders. Join 10,000+ gardeners growing their dream gardens! 🌿🏡'
+      title = `🌱 ${tr.homeTitle}`
+      description = tr.homeDesc
       
       // Try to get some stats
-      let plantCount = '5,000+'
+      let plantCountStat = '5,000+'
       let userCount = '10,000+'
       try {
         if (supabaseServer) {
           const { count: pCount } = await supabaseServer
             .from('plants')
             .select('id', { count: 'exact', head: true })
-          if (pCount) plantCount = pCount.toLocaleString() + '+'
+          if (pCount) plantCountStat = pCount.toLocaleString() + '+'
         }
       } catch {}
       
       pageContent = `
         <article>
-          <h1>🌱 Welcome to Aphylia</h1>
-          <p>Your personal plant companion for discovering, managing, and growing beautiful gardens.</p>
+          <h1>🌱 ${tr.homeWelcome}</h1>
+          <p>${tr.homePersonal}</p>
           
-          <h2>Why Gardeners Love Us</h2>
+          <h2>${tr.homeWhy}</h2>
           <ul>
-            <li>🎴 <strong>Swipe to Discover</strong> - Find your perfect plants, Tinder-style!</li>
-            <li>🏡 <strong>Garden Tracker</strong> - Manage all your plants in one place</li>
-            <li>⏰ <strong>Smart Reminders</strong> - Never forget to water again</li>
-            <li>📚 <strong>Care Guides</strong> - Expert advice for ${plantCount} plants</li>
-            <li>👥 <strong>Community</strong> - Join ${userCount} plant lovers</li>
+            <li>🎴 ${tr.homeSwipe}</li>
+            <li>🏡 ${tr.homeTracker}</li>
+            <li>⏰ ${tr.homeReminders}</li>
+            <li>📚 ${tr.homeCareGuides} ${plantCountStat} ${tr.homePlants}</li>
+            <li>👥 ${tr.homeCommunityJoin} ${userCount} ${tr.homePlantLovers}</li>
           </ul>
           
-          <h2>Start Growing Today</h2>
-          <p>Free to use. No credit card required. Just plants! 🌿</p>
+          <h2>${tr.homeStart}</h2>
+          <p>${tr.homeFree} 🌿</p>
         </article>
       `
     }
@@ -16088,7 +16738,7 @@ async function generateCrawlerHtml(req, pagePath) {
   // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
   // This ensures web archives can display content without errors
   const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="${detectedLang}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
