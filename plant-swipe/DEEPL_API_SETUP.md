@@ -39,8 +39,8 @@ app.post('/api/translate', async (req, res) => {
       return res.status(500).json({ error: 'DeepL API key not configured' })
     }
     
-    // Use DeepL API (free tier: https://api-free.deepl.com)
-    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    // Use DeepL API (Pro: https://api.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
     
     const response = await fetch(deeplUrl, {
       method: 'POST',
@@ -76,7 +76,7 @@ app.post('/api/translate', async (req, res) => {
  * Environment Variables Required:
  * 
  * DEEPL_API_KEY=your-deepl-api-key-here
- * DEEPL_API_URL=https://api-free.deepl.com/v2/translate (optional, defaults to free tier)
+ * DEEPL_API_URL=https://api.deepl.com/v2/translate (optional, defaults to Pro API)
  * 
  * To get a DeepL API key:
  * 1. Sign up at https://www.deepl.com/pro-api

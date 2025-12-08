@@ -182,7 +182,7 @@ SUPABASE_DB_PASSWORD=your-db-password
 
 # Optional: DeepL Translation API
 DEEPL_API_KEY=your-deepl-api-key
-DEEPL_API_URL=https://api-free.deepl.com/v2/translate
+DEEPL_API_URL=https://api.deepl.com/v2/translate
 ```
 
 </details>
