@@ -16195,7 +16195,7 @@ async function generateCrawlerHtml(req, pagePath) {
     }
     
     // Blog post page: /blog/:slug
-    else if (effectivePath[0] === 'blog' && effectivePath[1] && supabaseServer) {
+    else if (isBlogRoute && supabaseServer) {
       const slugOrId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up blog post: ${slugOrId}`)
       req._ssrDebug.matchedRoute = 'blog_post'
@@ -16290,7 +16290,7 @@ async function generateCrawlerHtml(req, pagePath) {
     }
     
     // User profile page: /u/:username
-    else if (effectivePath[0] === 'u' && effectivePath[1] && supabaseServer) {
+    else if (isProfileRoute && supabaseServer) {
       const username = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'profile'
       ssrDebug('profile_route_matched', { username, supabaseAvailable: !!supabaseServer })
@@ -16405,7 +16405,7 @@ async function generateCrawlerHtml(req, pagePath) {
     }
     
     // Garden page: /garden/:id or /gardens/:id or /garden/:id/overview etc.
-    else if ((effectivePath[0] === 'garden' || effectivePath[0] === 'gardens') && effectivePath[1] && supabaseServer) {
+    else if (isGardenRoute && supabaseServer) {
       const gardenId = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'garden'
       ssrDebug('garden_route_matched', { gardenId, supabaseAvailable: !!supabaseServer })
@@ -16764,7 +16764,8 @@ async function generateCrawlerHtml(req, pagePath) {
     }
     
     // Bookmarks page
-    else if (effectivePath[0] === 'bookmarks' && effectivePath[1] && supabaseServer) {
+    // Bookmark list page: /bookmarks/:id
+    else if (isBookmarkRoute && supabaseServer) {
       const listId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
       
@@ -17191,7 +17192,9 @@ app.get('/api/force-ssr', async (req, res) => {
         ssrInternalDebug: fakeReq._ssrDebug,
         debug: {
           pathParts: testPath.split('/').filter(Boolean),
-          isPlantRoute: testPath.split('/').filter(Boolean)[0] === 'plants' || testPath.split('/').filter(Boolean)[1] === 'plants'
+          isPlantRoute: testPath.split('/').filter(Boolean)[0] === 'plants' || testPath.split('/').filter(Boolean)[1] === 'plants',
+          isProfileRoute: testPath.split('/').filter(Boolean)[0] === 'u' && !!testPath.split('/').filter(Boolean)[1],
+          isGardenRoute: ['garden', 'gardens'].includes(testPath.split('/').filter(Boolean)[0]) && !!testPath.split('/').filter(Boolean)[1]
         }
       })
     } else {
