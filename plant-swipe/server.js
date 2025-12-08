@@ -15189,14 +15189,377 @@ app.use(
       },
   }),
 )
-app.get('*', (req, res) => {
-  // Record initial page load visit for SPA routes
+// --- Crawler Detection and Server-Side Rendering for Web Archives ---
+// Detects crawlers (Wayback Machine, Googlebot, etc.) and serves pre-rendered HTML
+// This allows web archives to capture actual content instead of just a loading spinner
+
+const CRAWLER_USER_AGENTS = [
+  'googlebot',
+  'bingbot',
+  'slurp',
+  'duckduckbot',
+  'baiduspider',
+  'yandexbot',
+  'facebookexternalhit',
+  'twitterbot',
+  'linkedinbot',
+  'whatsapp',
+  'telegrambot',
+  'ia_archiver',        // Internet Archive / Wayback Machine
+  'archive.org_bot',    // Internet Archive
+  'wget',
+  'curl',
+  'python-requests',
+  'go-http-client',
+  'axios',
+  'node-fetch',
+  'undici',
+  'ccbot',
+  'seznambot',
+  'ahrefsbot',
+  'semrushbot',
+  'mj12bot',
+  'dotbot',
+  'rogerbot',
+  'screaming frog',
+  'applebot',
+  'petalbot',
+  'bytespider',
+]
+
+function isCrawler(userAgent) {
+  if (!userAgent) return false
+  const ua = userAgent.toLowerCase()
+  return CRAWLER_USER_AGENTS.some(crawler => ua.includes(crawler))
+}
+
+// Generate pre-rendered HTML for crawlers
+// Note: Uses existing escapeHtml function defined earlier in this file
+async function generateCrawlerHtml(req, pagePath) {
+  const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
+  const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
+  
+  // Default meta tags
+  let title = 'Aphylia - Discover, Swipe and Manage Plants for Your Garden'
+  let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
+  let image = `${siteUrl}/icons/icon-512x512.png`
+  let pageContent = ''
+  
+  try {
+    // Parse the path to determine content type
+    const pathParts = pagePath.split('/').filter(Boolean)
+    // Remove language prefix if present (e.g., /fr/plants/123 -> /plants/123)
+    const langPrefixes = ['en', 'fr', 'es', 'de', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh']
+    let effectivePath = pathParts
+    let detectedLang = 'en'
+    if (pathParts.length > 0 && langPrefixes.includes(pathParts[0])) {
+      detectedLang = pathParts[0]
+      effectivePath = pathParts.slice(1)
+    }
+    
+    // Plant detail page: /plants/:id
+    if (effectivePath[0] === 'plants' && effectivePath[1] && supabaseServer) {
+      const plantId = decodeURIComponent(effectivePath[1])
+      const { data: plant } = await supabaseServer
+        .from('plants')
+        .select('id, name, scientific_name, family, overview, plant_type, utility, tags')
+        .eq('id', plantId)
+        .maybeSingle()
+      
+      if (plant) {
+        title = `${plant.name} - Aphylia Plant Guide`
+        description = plant.overview 
+          ? plant.overview.slice(0, 160) + (plant.overview.length > 160 ? '...' : '')
+          : `Learn about ${plant.name}${plant.scientific_name ? ` (${plant.scientific_name})` : ''}. Care tips, growing information, and more.`
+        
+        // Fetch primary image
+        const { data: images } = await supabaseServer
+          .from('plant_images')
+          .select('link')
+          .eq('plant_id', plantId)
+          .eq('use', 'primary')
+          .limit(1)
+        if (images?.[0]?.link) {
+          image = images[0].link
+        }
+        
+        // Build structured content for the page
+        pageContent = `
+          <article itemscope itemtype="https://schema.org/Product">
+            <h1 itemprop="name">${escapeHtml(plant.name)}</h1>
+            ${plant.scientific_name ? `<p><em>Scientific name:</em> <span itemprop="alternateName">${escapeHtml(plant.scientific_name)}</span></p>` : ''}
+            ${plant.family ? `<p><em>Family:</em> ${escapeHtml(plant.family)}</p>` : ''}
+            ${plant.plant_type ? `<p><em>Type:</em> ${escapeHtml(plant.plant_type)}</p>` : ''}
+            ${plant.overview ? `<div itemprop="description"><h2>Overview</h2><p>${escapeHtml(plant.overview)}</p></div>` : ''}
+            ${plant.utility?.length ? `<p><em>Uses:</em> ${plant.utility.map(u => escapeHtml(u)).join(', ')}</p>` : ''}
+            ${plant.tags?.length ? `<p><em>Tags:</em> ${plant.tags.map(t => escapeHtml(t)).join(', ')}</p>` : ''}
+          </article>
+        `
+      }
+    }
+    
+    // Blog post page: /blog/:slug
+    else if (effectivePath[0] === 'blog' && effectivePath[1] && supabaseServer) {
+      const slug = decodeURIComponent(effectivePath[1])
+      const { data: post } = await supabaseServer
+        .from('blog_posts')
+        .select('id, title, excerpt, content, cover_image_url, author_name, published_at')
+        .eq('slug', slug)
+        .eq('is_published', true)
+        .maybeSingle()
+      
+      if (post) {
+        title = `${post.title} - Aphylia Blog`
+        description = post.excerpt || (post.content ? post.content.replace(/<[^>]*>/g, '').slice(0, 160) + '...' : '')
+        if (post.cover_image_url) image = post.cover_image_url
+        
+        pageContent = `
+          <article itemscope itemtype="https://schema.org/BlogPosting">
+            <h1 itemprop="headline">${escapeHtml(post.title)}</h1>
+            ${post.author_name ? `<p><em>By</em> <span itemprop="author">${escapeHtml(post.author_name)}</span></p>` : ''}
+            ${post.published_at ? `<p><em>Published:</em> <time itemprop="datePublished" datetime="${post.published_at}">${new Date(post.published_at).toLocaleDateString()}</time></p>` : ''}
+            ${post.excerpt ? `<p itemprop="description">${escapeHtml(post.excerpt)}</p>` : ''}
+            <div itemprop="articleBody">${post.content || ''}</div>
+          </article>
+        `
+      }
+    }
+    
+    // User profile page: /u/:username
+    else if (effectivePath[0] === 'u' && effectivePath[1] && supabaseServer) {
+      const username = decodeURIComponent(effectivePath[1])
+      const { data: profile } = await supabaseServer
+        .from('profiles')
+        .select('display_name, bio, avatar_url, is_private')
+        .eq('display_name', username)
+        .eq('is_private', false)
+        .maybeSingle()
+      
+      if (profile) {
+        title = `${profile.display_name} - Aphylia Gardener Profile`
+        description = profile.bio || `Check out ${profile.display_name}'s garden and plant collection on Aphylia.`
+        if (profile.avatar_url) image = profile.avatar_url
+        
+        pageContent = `
+          <article itemscope itemtype="https://schema.org/Person">
+            <h1 itemprop="name">${escapeHtml(profile.display_name)}</h1>
+            ${profile.bio ? `<p itemprop="description">${escapeHtml(profile.bio)}</p>` : ''}
+          </article>
+        `
+      }
+    }
+    
+    // Garden page: /garden/:id
+    else if (effectivePath[0] === 'garden' && effectivePath[1] && supabaseServer) {
+      const gardenId = decodeURIComponent(effectivePath[1])
+      const { data: garden } = await supabaseServer
+        .from('gardens')
+        .select('id, name, description')
+        .eq('id', gardenId)
+        .maybeSingle()
+      
+      if (garden) {
+        title = `${garden.name || 'Garden'} - Aphylia`
+        description = garden.description || `Explore this garden on Aphylia.`
+        
+        pageContent = `
+          <article>
+            <h1>${escapeHtml(garden.name || 'Garden')}</h1>
+            ${garden.description ? `<p>${escapeHtml(garden.description)}</p>` : ''}
+          </article>
+        `
+      }
+    }
+    
+    // Static pages
+    else if (effectivePath[0] === 'about' || pagePath === '/about') {
+      title = 'About Aphylia - Plant Discovery & Garden Management'
+      description = 'Learn about Aphylia, the plant discovery and garden management app. Our mission is to help you grow your plant knowledge and create beautiful gardens.'
+      pageContent = `
+        <article>
+          <h1>About Aphylia</h1>
+          <p>Aphylia is your personal plant companion, helping you discover, identify, and care for plants.</p>
+          <h2>Our Mission</h2>
+          <p>We believe everyone deserves access to plant knowledge. Whether you're a beginner or an expert gardener, Aphylia helps you grow.</p>
+        </article>
+      `
+    }
+    
+    else if (effectivePath[0] === 'search' || pagePath === '/search') {
+      title = 'Search Plants - Aphylia'
+      description = 'Search our database of thousands of plants. Find the perfect plants for your garden based on light, water, and care requirements.'
+      pageContent = `
+        <article>
+          <h1>Search Plants</h1>
+          <p>Find the perfect plants for your garden. Search by name, characteristics, or growing conditions.</p>
+        </article>
+      `
+    }
+    
+    else if (effectivePath[0] === 'blog' || pagePath === '/blog') {
+      title = 'Aphylia Blog - Gardening Tips & Plant Care'
+      description = 'Read our latest articles on gardening, plant care, seasonal tips, and more. Expert advice for gardeners of all levels.'
+      
+      // Fetch recent blog posts for the listing
+      if (supabaseServer) {
+        const { data: posts } = await supabaseServer
+          .from('blog_posts')
+          .select('title, slug, excerpt, published_at')
+          .eq('is_published', true)
+          .order('published_at', { ascending: false })
+          .limit(10)
+        
+        if (posts?.length) {
+          pageContent = `
+            <article>
+              <h1>Aphylia Blog</h1>
+              <p>Gardening tips, plant care guides, and expert advice.</p>
+              <ul>
+                ${posts.map(p => `
+                  <li>
+                    <a href="/blog/${escapeHtml(p.slug)}">${escapeHtml(p.title)}</a>
+                    ${p.excerpt ? `<p>${escapeHtml(p.excerpt.slice(0, 100))}...</p>` : ''}
+                  </li>
+                `).join('')}
+              </ul>
+            </article>
+          `
+        }
+      }
+    }
+    
+    // Homepage
+    else if (pagePath === '/' || effectivePath.length === 0) {
+      title = 'Aphylia - Discover, Swipe and Manage Plants for Your Garden'
+      description = 'Discover new plants by swiping, track your garden progress, get personalized care reminders, and build your dream garden with Aphylia.'
+      pageContent = `
+        <article>
+          <h1>Welcome to Aphylia</h1>
+          <p>Your personal plant companion for discovering, managing, and growing beautiful gardens.</p>
+          <h2>Features</h2>
+          <ul>
+            <li><strong>Discover Plants</strong> - Swipe through our extensive plant database to find your perfect matches</li>
+            <li><strong>Track Your Garden</strong> - Keep track of all your plants in one place</li>
+            <li><strong>Care Reminders</strong> - Get notifications for watering, fertilizing, and more</li>
+            <li><strong>Plant Identification</strong> - Learn about any plant with detailed care guides</li>
+          </ul>
+          <h2>Start Your Garden Journey</h2>
+          <p>Join thousands of gardeners who use Aphylia to grow their plant knowledge.</p>
+        </article>
+      `
+    }
+    
+  } catch (err) {
+    console.warn('[ssr] Error generating crawler content:', err?.message || err)
+  }
+  
+  // Build the full HTML page
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+  <meta name="description" content="${escapeHtml(description)}">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
+  <meta property="og:title" content="${escapeHtml(title)}">
+  <meta property="og:description" content="${escapeHtml(description)}">
+  <meta property="og:image" content="${escapeHtml(image)}">
+  <meta property="og:site_name" content="Aphylia">
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="${escapeHtml(canonicalUrl)}">
+  <meta name="twitter:title" content="${escapeHtml(title)}">
+  <meta name="twitter:description" content="${escapeHtml(description)}">
+  <meta name="twitter:image" content="${escapeHtml(image)}">
+  
+  <!-- Theme -->
+  <meta name="theme-color" content="#052e16">
+  <meta name="application-name" content="Aphylia">
+  
+  <!-- Icons -->
+  <link rel="icon" type="image/svg+xml" href="/icons/plant-swipe-icon-outline.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+  
+  <style>
+    body { 
+      font-family: system-ui, -apple-system, sans-serif; 
+      max-width: 800px; 
+      margin: 0 auto; 
+      padding: 20px;
+      line-height: 1.6;
+      color: #1a1a1a;
+    }
+    h1 { color: #052e16; }
+    a { color: #059669; }
+    img { max-width: 100%; height: auto; }
+    article { margin: 20px 0; }
+    nav { margin-bottom: 20px; padding: 10px 0; border-bottom: 1px solid #e5e5e5; }
+    nav a { margin-right: 15px; text-decoration: none; }
+    footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5; font-size: 0.9em; color: #666; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/search">Search Plants</a>
+    <a href="/blog">Blog</a>
+    <a href="/about">About</a>
+  </nav>
+  
+  <main>
+    ${pageContent || `
+      <article>
+        <h1>${escapeHtml(title)}</h1>
+        <p>${escapeHtml(description)}</p>
+      </article>
+    `}
+  </main>
+  
+  <footer>
+    <p>&copy; ${new Date().getFullYear()} Aphylia. Helping you grow your plant knowledge 🌱</p>
+    <p><a href="/terms">Terms of Service</a> | <a href="/contact">Contact</a></p>
+  </footer>
+  
+  <!-- Note: This is a pre-rendered version for web crawlers and archives. -->
+  <!-- For the full interactive experience, please enable JavaScript or visit with a modern browser. -->
+</body>
+</html>`
+
+  return html
+}
+
+app.get('*', async (req, res) => {
+  const userAgent = req.get('user-agent') || ''
+  const pagePath = req.originalUrl || req.path || '/'
+  
+  // Check if this is a crawler requesting a page (not an asset)
+  const isAssetRequest = /\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|map|json)$/i.test(pagePath)
+  
+  if (!isAssetRequest && isCrawler(userAgent)) {
+    try {
+      const html = await generateCrawlerHtml(req, pagePath)
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+      res.setHeader('X-Robots-Tag', 'index, follow')
+      return res.send(html)
+    } catch (err) {
+      console.warn('[ssr] Crawler render failed, falling back to SPA:', err?.message || err)
+      // Fall through to normal SPA serving
+    }
+  }
+  
+  // Record initial page load visit for SPA routes (non-crawlers)
   try {
     const sessionId = getOrSetSessionId(req, res)
-    const pagePath = req.originalUrl || req.path || '/'
     const referrer = req.get('referer') || req.get('referrer') || ''
     const ipAddress = getClientIp(req)
-    const userAgent = req.get('user-agent') || ''
     const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
     // Resolve geo asynchronously and do not block response rendering
     resolveGeo(req, ipAddress)
