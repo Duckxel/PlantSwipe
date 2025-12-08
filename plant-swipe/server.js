@@ -15226,6 +15226,28 @@ const CRAWLER_USER_AGENTS = [
   'line-poker',         // LINE messenger
   'kakaotalk-scrap',    // KakaoTalk
   
+  // OG Preview/Debug tools
+  'opengraph',          // opengraph.xyz and similar
+  'iframely',           // iframely.com
+  'unfurl',             // Various unfurl services
+  'preview',            // Generic preview bots
+  'crawler',            // Generic crawlers
+  'spider',             // Generic spiders
+  'bot',                // Generic bots (catches most bots)
+  'fetch',              // Generic fetch clients
+  'http',               // Generic HTTP clients
+  'link',               // Link preview services
+  'card',               // Card validators
+  'meta',               // Meta tag validators
+  'og',                 // OG validators
+  'scraper',            // Web scrapers
+  'headless',           // Headless browsers
+  'phantom',            // PhantomJS
+  'puppeteer',          // Puppeteer
+  'playwright',         // Playwright
+  'selenium',           // Selenium
+  'chrome-lighthouse',  // Lighthouse
+  
   // Web archives
   'ia_archiver',        // Internet Archive / Wayback Machine
   'archive.org_bot',    // Internet Archive
@@ -15245,6 +15267,8 @@ const CRAWLER_USER_AGENTS = [
   'wget',
   'curl',
   'python-requests',
+  'python-urllib',
+  'python/',
   'go-http-client',
   'axios',
   'node-fetch',
@@ -15252,6 +15276,11 @@ const CRAWLER_USER_AGENTS = [
   'httpie',
   'insomnia',
   'postman',
+  'java/',
+  'okhttp',
+  'apache-httpclient',
+  'guzzle',
+  'restsharp',
 ]
 
 function isCrawler(userAgent) {
@@ -15827,24 +15856,31 @@ app.get('*', async (req, res) => {
   const userAgent = req.get('user-agent') || ''
   const pagePath = req.originalUrl || req.path || '/'
   
+  // Strip query params from path for asset detection
+  const pathWithoutQuery = pagePath.split('?')[0]
+  
+  // Check for force SSR query param (useful for testing)
+  const forceSSR = req.query._ssr === '1' || req.query._ssr === 'true'
+  
   // Always log incoming requests (first 100 chars of UA)
   const uaShort = userAgent.slice(0, 80)
-  console.log(`[request] ${req.method} ${pagePath} | UA: ${uaShort}...`)
+  console.log(`[request] ${req.method} ${pagePath} | UA: ${uaShort}`)
   
   // Check if this is a crawler
-  const detectedAsCrawler = isCrawler(userAgent)
+  const detectedAsCrawler = isCrawler(userAgent) || forceSSR
   
   // Check if this is a crawler requesting a page (not an asset)
-  const isAssetRequest = /\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|map|json|xml|txt|webmanifest)$/i.test(pagePath)
+  const isAssetRequest = /\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|map|json|xml|txt|webmanifest)$/i.test(pathWithoutQuery)
   
   // Log crawler detection result
   if (detectedAsCrawler) {
-    console.log(`[ssr] ✓ Crawler DETECTED: ${uaShort} -> ${pagePath} (isAsset: ${isAssetRequest})`)
+    console.log(`[ssr] ✓ Crawler DETECTED: ${uaShort} -> ${pagePath} (isAsset: ${isAssetRequest}, forced: ${forceSSR})`)
   }
   
-  if (!isAssetRequest && isCrawler(userAgent)) {
+  if (!isAssetRequest && detectedAsCrawler) {
     try {
-      const html = await generateCrawlerHtml(req, pagePath)
+      // Use path without query params for SSR
+      const html = await generateCrawlerHtml(req, pathWithoutQuery)
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
       res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
       res.setHeader('X-Robots-Tag', 'index, follow')
