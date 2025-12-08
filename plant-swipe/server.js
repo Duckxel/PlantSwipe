@@ -15408,32 +15408,162 @@ function scheduleNotificationWorker() {
   notificationWorkerTimer = setTimeout(tick, 2000)
 }
 
-// Serve sitemap.xml with correct Content-Type
+// Dynamic sitemap.xml generator
+// Static pages: NO lastmod (tells Google these are evergreen, don't show dates)
+// Dynamic pages: WITH lastmod (blog posts, plants get proper date indexing)
 const publicDir = path.resolve(__dirname, 'public')
 app.get('/sitemap.xml', async (req, res) => {
-  // Try dist first (production), then public (development)
-  const distDir = path.resolve(__dirname, 'dist')
-  const distPath = path.join(distDir, 'sitemap.xml')
-  const publicPath = path.join(publicDir, 'sitemap.xml')
+  const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
   
-  let sitemapPath = null
-  try {
-    await fs.access(distPath)
-    sitemapPath = distPath
-  } catch {
+  // Static pages - NO lastmod to prevent Google from showing dates
+  // These are "evergreen" pages that shouldn't display modification dates in search
+  const staticPages = [
+    { loc: '/', priority: '1.0', changefreq: 'weekly' },
+    { loc: '/about', priority: '0.8', changefreq: 'monthly' },
+    { loc: '/download', priority: '0.8', changefreq: 'monthly' },
+    { loc: '/pricing', priority: '0.8', changefreq: 'monthly' },
+    { loc: '/contact', priority: '0.6', changefreq: 'monthly' },
+    { loc: '/blog', priority: '0.9', changefreq: 'daily' },
+    { loc: '/discovery', priority: '0.9', changefreq: 'daily' },
+    { loc: '/search', priority: '0.7', changefreq: 'weekly' },
+    { loc: '/gardens', priority: '0.8', changefreq: 'daily' },
+    { loc: '/terms', priority: '0.3', changefreq: 'yearly' },
+  ]
+  
+  // Build sitemap XML
+  let urls = staticPages.map(page => `  <url>
+    <loc>${siteUrl}${page.loc}</loc>
+    <changefreq>${page.changefreq}</changefreq>
+    <priority>${page.priority}</priority>
+  </url>`).join('\n')
+  
+  // Add dynamic content WITH lastmod (blog posts, plants)
+  if (supabaseServer) {
     try {
-      await fs.access(publicPath)
-      sitemapPath = publicPath
-    } catch {
-      // If sitemap doesn't exist, return 404
-      res.status(404).send('Sitemap not found')
-      return
+      // Recent blog posts (with lastmod)
+      const { data: posts } = await supabaseServer
+        .from('blog_posts')
+        .select('slug, updated_at, published_at')
+        .eq('is_published', true)
+        .order('published_at', { ascending: false })
+        .limit(100)
+      
+      if (posts?.length) {
+        urls += '\n' + posts.map(post => {
+          const lastmod = post.updated_at || post.published_at
+          return `  <url>
+    <loc>${siteUrl}/blog/${post.slug}</loc>
+    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>`
+        }).join('\n')
+      }
+      
+      // Popular plants (with lastmod based on when they were updated)
+      const { data: plants } = await supabaseServer
+        .from('plants')
+        .select('id, updated_at, created_at')
+        .order('created_at', { ascending: false })
+        .limit(500)
+      
+      if (plants?.length) {
+        urls += '\n' + plants.map(plant => {
+          const lastmod = plant.updated_at || plant.created_at
+          const lastmodStr = lastmod ? `\n    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>` : ''
+          return `  <url>
+    <loc>${siteUrl}/plants/${plant.id}</loc>${lastmodStr}
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>`
+        }).join('\n')
+      }
+      
+      // Public user profiles (with lastmod based on last activity)
+      // Join with gardens to get last activity date
+      const { data: profiles } = await supabaseServer
+        .from('profiles')
+        .select(`
+          id, 
+          display_name, 
+          username,
+          updated_at,
+          gardens!gardens_created_by_fkey(updated_at)
+        `)
+        .eq('is_private', false)
+        .not('display_name', 'is', null)
+        .order('updated_at', { ascending: false })
+        .limit(200)
+      
+      if (profiles?.length) {
+        urls += '\n' + profiles.map(profile => {
+          // Use the most recent date: profile update or latest garden update
+          const profileDate = profile.updated_at ? new Date(profile.updated_at) : null
+          const gardenDates = (profile.gardens || [])
+            .map(g => g.updated_at ? new Date(g.updated_at) : null)
+            .filter(Boolean)
+          const allDates = [profileDate, ...gardenDates].filter(Boolean)
+          const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
+          const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
+          
+          // Use username if available, otherwise display_name
+          const urlPath = profile.username || profile.display_name
+          return `  <url>
+    <loc>${siteUrl}/u/${encodeURIComponent(urlPath)}</loc>${lastmodStr}
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>`
+        }).join('\n')
+      }
+      
+      // Public gardens (with lastmod based on last activity)
+      // Join with garden_plants to get last plant activity
+      const { data: gardens } = await supabaseServer
+        .from('gardens')
+        .select(`
+          id,
+          updated_at,
+          created_at,
+          privacy,
+          garden_plants(created_at, updated_at)
+        `)
+        .or('privacy.eq.public,privacy.is.null')
+        .order('updated_at', { ascending: false })
+        .limit(300)
+      
+      if (gardens?.length) {
+        urls += '\n' + gardens.map(garden => {
+          // Use the most recent date: garden update or latest plant activity
+          const gardenDate = garden.updated_at || garden.created_at
+          const gardenDateTime = gardenDate ? new Date(gardenDate) : null
+          const plantDates = (garden.garden_plants || [])
+            .flatMap(p => [p.updated_at, p.created_at])
+            .filter(Boolean)
+            .map(d => new Date(d))
+          const allDates = [gardenDateTime, ...plantDates].filter(Boolean)
+          const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
+          const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
+          
+          return `  <url>
+    <loc>${siteUrl}/garden/${garden.id}</loc>${lastmodStr}
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>`
+        }).join('\n')
+      }
+    } catch (err) {
+      console.error('[sitemap] Error fetching dynamic content:', err?.message)
     }
   }
   
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`
+  
   res.setHeader('Content-Type', 'application/xml; charset=utf-8')
   res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
-  res.sendFile(sitemapPath)
+  res.send(sitemap)
 })
 
 // Static assets
@@ -15704,6 +15834,9 @@ async function generateCrawlerHtml(req, pagePath) {
         profilePlants: 'plant(s)',
         profileMemberSince: 'Member since',
         profileExploreGardens: 'Explore gardens',
+        profileOnAphylia: 'on Aphylia',
+        profilePrivateAccount: 'This profile is private.',
+        profileViewOn: 'View on',
         profilePlantEnthusiast: 'A passionate plant enthusiast growing their collection on Aphylia',
         // Garden
         gardenExplore: 'Explore Gardens',
@@ -15713,6 +15846,10 @@ async function generateCrawlerHtml(req, pagePath) {
         gardenBy: 'By',
         gardenOld: 'old',
         gardenNew: 'New garden!',
+        gardenOnAphylia: 'on Aphylia',
+        gardenPrivate: 'This garden is private.',
+        gardenViewOn: 'View on',
+        gardenWord: 'Garden',
         gardenMonths: 'month(s)',
         gardenYears: 'year(s)',
         gardenExploreThis: 'Explore this garden on Aphylia',
@@ -15883,6 +16020,9 @@ async function generateCrawlerHtml(req, pagePath) {
         profilePlants: 'plante(s)',
         profileMemberSince: 'Membre depuis',
         profileExploreGardens: 'Explorer les jardins',
+        profileOnAphylia: 'sur Aphylia',
+        profilePrivateAccount: 'Ce profil est privé.',
+        profileViewOn: 'Voir sur',
         profilePlantEnthusiast: 'Un passionné de plantes qui agrandit sa collection sur Aphylia',
         gardenExplore: 'Explorer les Jardins',
         gardenBeautiful: 'Un Beau Jardin',
@@ -15891,6 +16031,10 @@ async function generateCrawlerHtml(req, pagePath) {
         gardenBy: 'Par',
         gardenOld: 'd\'ancienneté',
         gardenNew: 'Nouveau jardin !',
+        gardenOnAphylia: 'sur Aphylia',
+        gardenPrivate: 'Ce jardin est privé.',
+        gardenViewOn: 'Voir sur',
+        gardenWord: 'Jardin',
         gardenMonths: 'mois',
         gardenYears: 'an(s)',
         gardenExploreThis: 'Explorer ce jardin sur Aphylia',
@@ -16195,7 +16339,7 @@ async function generateCrawlerHtml(req, pagePath) {
     }
     
     // Blog post page: /blog/:slug
-    else if (effectivePath[0] === 'blog' && effectivePath[1] && supabaseServer) {
+    else if (isBlogRoute && supabaseServer) {
       const slugOrId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up blog post: ${slugOrId}`)
       req._ssrDebug.matchedRoute = 'blog_post'
@@ -16290,129 +16434,165 @@ async function generateCrawlerHtml(req, pagePath) {
     }
     
     // User profile page: /u/:username
-    else if (effectivePath[0] === 'u' && effectivePath[1] && supabaseServer) {
+    else if (isProfileRoute && supabaseServer) {
       const username = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'profile'
       ssrDebug('profile_route_matched', { username, supabaseAvailable: !!supabaseServer })
       console.log(`[ssr] Looking up user profile: ${username}`)
       
-      // Note: Also try matching by username field (some profiles use username instead of display_name)
+      // Use the same RPC function as the frontend for consistent results
+      // This handles all the display_name/username matching logic in the database
       let profile = null
       let profileError = null
       
-      // Try case-insensitive search by display_name first, then username
-      const { data: profileByDisplayName, error: err1 } = await ssrQuery(
-        supabaseServer
-          .from('profiles')
-          .select('id, display_name, bio, avatar_url, is_private, country, favorite_plant')
-          .ilike('display_name', username)
-          .eq('is_private', false)
-          .maybeSingle(),
-        'profile_lookup_by_display_name'
+      // Try RPC function first (same as frontend)
+      const { data: rpcResult, error: rpcErr } = await ssrQuery(
+        supabaseServer.rpc('get_profile_public_by_display_name', { _name: username }),
+        'profile_lookup_rpc'
       )
       
-      if (profileByDisplayName) {
-        profile = profileByDisplayName
-      } else {
-        // Try by username field (case-insensitive) if display_name didn't match
-        const { data: profileByUsername, error: err2 } = await ssrQuery(
-          supabaseServer
-            .from('profiles')
-            .select('id, display_name, bio, avatar_url, is_private, country, favorite_plant')
-            .ilike('username', username)
-            .eq('is_private', false)
-            .maybeSingle(),
-          'profile_lookup_by_username'
-        )
-        profile = profileByUsername
-        profileError = err2
+      if (rpcResult) {
+        // RPC returns array or single object
+        profile = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
       }
       
-      ssrDebug('profile_query_result', { found: !!profile, displayName: profile?.display_name, error: profileError?.message })
+      // Fallback: direct query if RPC fails or doesn't exist
+      // Search WITHOUT is_private filter first - we'll handle privacy after
+      if (!profile && !rpcErr) {
+        const { data: profileByDisplayName, error: err1 } = await ssrQuery(
+          supabaseServer
+            .from('profiles')
+            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant')
+            .ilike('display_name', username)
+            .maybeSingle(),
+          'profile_lookup_by_display_name'
+        )
+        
+        if (profileByDisplayName) {
+          profile = profileByDisplayName
+        } else {
+          // Try by username field (case-insensitive) if display_name didn't match
+          const { data: profileByUsername, error: err2 } = await ssrQuery(
+            supabaseServer
+              .from('profiles')
+              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant')
+              .ilike('username', username)
+              .maybeSingle(),
+            'profile_lookup_by_username'
+          )
+          profile = profileByUsername
+          profileError = err2
+        }
+      } else if (rpcErr) {
+        profileError = rpcErr
+      }
+      
+      ssrDebug('profile_query_result', { found: !!profile, displayName: profile?.display_name, isPrivate: profile?.is_private, error: profileError?.message })
       
       if (profileError) {
         console.log(`[ssr] Profile query error: ${profileError.message}`)
       } else if (profile) {
-        console.log(`[ssr] ✓ Found profile: ${profile.display_name}`)
+        const isPrivate = Boolean(profile.is_private)
+        const displayName = profile.display_name || profile.username || username
+        console.log(`[ssr] ✓ Found profile: ${displayName} (private: ${isPrivate})`)
         
-        // Get garden and plant counts (with timeouts to avoid blocking)
-        let gardenCount = 0
-        let plantCount = 0
-        try {
-          const { count: gCount } = await ssrQuery(
-            supabaseServer
-              .from('gardens')
-              .select('id', { count: 'exact', head: true })
-              .eq('created_by', profile.id),
-            'profile_garden_count'
-          )
-          gardenCount = gCount || 0
+        // Always set the title with the user's name
+        title = `🌱 ${displayName} | ${tr.profileGardenProfile} | Aphylia`
+        
+        // For private profiles, show limited info
+        if (isPrivate) {
+          description = `${displayName} ${tr.profileOnAphylia || 'on Aphylia'} 🌱 ${tr.profilePrivateAccount || 'This is a private profile.'}`
+          if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
           
-          // Get total plants across all gardens
-          const { data: gardens } = await ssrQuery(
-            supabaseServer
-              .from('gardens')
-              .select('id')
-              .eq('created_by', profile.id),
-            'profile_gardens'
-          )
-          if (gardens?.length) {
-            const gardenIds = gardens.map(g => g.id)
-            const { count: pCount } = await ssrQuery(
-              supabaseServer
-                .from('garden_plants')
-                .select('id', { count: 'exact', head: true })
-                .in('garden_id', gardenIds),
-              'profile_plant_count'
-            )
-            plantCount = pCount || 0
-          }
-        } catch {}
-        
-        // Create engaging title
-        title = `🌱 ${profile.display_name} | ${tr.profileGardenProfile} | Aphylia`
-        
-        // Create rich description
-        const descParts = []
-        if (profile.bio) {
-          descParts.push(profile.bio.slice(0, 100))
+          pageContent = `
+            <article itemscope itemtype="https://schema.org/Person">
+              <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
+              <p>🔒 ${tr.profilePrivateAccount || 'This profile is private.'}</p>
+              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileViewOn || 'View on'} Aphylia →</a></p>
+            </article>
+          `
+          console.log(`[ssr] Private profile - showing limited preview`)
         } else {
-          descParts.push(`${tr.profileCheckOut} ${profile.display_name}'s ${tr.profileGrowingJourney}`)
+          // Public profile - show full details
+          // Get garden and plant counts (with timeouts to avoid blocking)
+          let gardenCount = 0
+          let plantCount = 0
+          try {
+            const { count: gCount } = await ssrQuery(
+              supabaseServer
+                .from('gardens')
+                .select('id', { count: 'exact', head: true })
+                .eq('created_by', profile.id),
+              'profile_garden_count'
+            )
+            gardenCount = gCount || 0
+            
+            // Get total plants across all gardens
+            const { data: gardens } = await ssrQuery(
+              supabaseServer
+                .from('gardens')
+                .select('id')
+                .eq('created_by', profile.id),
+              'profile_gardens'
+            )
+            if (gardens?.length) {
+              const gardenIds = gardens.map(g => g.id)
+              const { count: pCount } = await ssrQuery(
+                supabaseServer
+                  .from('garden_plants')
+                  .select('id', { count: 'exact', head: true })
+                  .in('garden_id', gardenIds),
+                'profile_plant_count'
+              )
+              plantCount = pCount || 0
+            }
+          } catch {}
+          
+          // Create rich description
+          const descParts = []
+          if (profile.bio) {
+            descParts.push(profile.bio.slice(0, 100))
+          } else {
+            descParts.push(`${tr.profileCheckOut} ${displayName}'s ${tr.profileGrowingJourney}`)
+          }
+          if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} ${tr.profileGardens}`)
+          if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
+          if (profile.country) descParts.push(`📍 ${profile.country}`)
+          if (profile.favorite_plant) descParts.push(`❤️ ${profile.favorite_plant}`)
+          
+          description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
+          
+          if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
+          
+          pageContent = `
+            <article itemscope itemtype="https://schema.org/Person">
+              <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
+              <div class="plant-meta">
+                ${gardenCount > 0 ? `🏡 ${gardenCount} ${tr.profileGardens}` : ''}
+                ${plantCount > 0 ? ` · 🌿 ${plantCount} ${tr.profilePlants}` : ''}
+                ${profile.country ? ` · 📍 ${escapeHtml(profile.country)}` : ''}
+              </div>
+              ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
+              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileExploreGardens} ${escapeHtml(displayName)} →</a></p>
+            </article>
+          `
+          console.log(`[ssr] Profile image: ${image}`)
         }
-        if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} ${tr.profileGardens}`)
-        if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
-        if (profile.country) descParts.push(`📍 ${profile.country}`)
-        if (profile.favorite_plant) descParts.push(`❤️ ${profile.favorite_plant}`)
-        
-        description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
-        
-        if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
-        
-        pageContent = `
-          <article itemscope itemtype="https://schema.org/Person">
-            <h1 itemprop="name">🌱 ${escapeHtml(profile.display_name)}</h1>
-            <div class="plant-meta">
-              ${gardenCount > 0 ? `🏡 ${gardenCount} ${tr.profileGardens}` : ''}
-              ${plantCount > 0 ? ` · 🌿 ${plantCount} ${tr.profilePlants}` : ''}
-              ${profile.country ? ` · 📍 ${escapeHtml(profile.country)}` : ''}
-            </div>
-            ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileExploreGardens} ${escapeHtml(profile.display_name)} →</a></p>
-          </article>
-        `
-        console.log(`[ssr] Profile image: ${image}`)
       }
     }
     
     // Garden page: /garden/:id or /gardens/:id or /garden/:id/overview etc.
-    else if ((effectivePath[0] === 'garden' || effectivePath[0] === 'gardens') && effectivePath[1] && supabaseServer) {
+    else if (isGardenRoute && supabaseServer) {
       const gardenId = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'garden'
-      ssrDebug('garden_route_matched', { gardenId, supabaseAvailable: !!supabaseServer })
+      ssrDebug('garden_route_matched', { gardenId, supabaseAvailable: !!supabaseServer, serviceClientAvailable: !!supabaseServiceClient })
       console.log(`[ssr] Looking up garden: ${gardenId}`)
       
+      // Use service client to bypass RLS (gardens may have privacy restrictions)
+      const dbClient = supabaseServiceClient || supabaseServer
+      
       const { data: garden, error: gardenError } = await ssrQuery(
-        supabaseServer
+        dbClient
           .from('gardens')
           .select('id, name, created_by, created_at, privacy, location_city, location_country, cover_image_url')
           .eq('id', gardenId)
@@ -16420,116 +16600,152 @@ async function generateCrawlerHtml(req, pagePath) {
         'garden_lookup'
       )
       
+      ssrDebug('garden_query_result', { found: !!garden, name: garden?.name, privacy: garden?.privacy, error: gardenError?.message })
+      
       if (gardenError) {
         console.log(`[ssr] Garden query error: ${gardenError.message}`)
       } else if (garden) {
-        console.log(`[ssr] ✓ Found garden: ${garden.name}`)
+        const isPrivate = garden.privacy === 'private'
+        const gardenName = garden.name || tr.gardenBeautiful
+        console.log(`[ssr] ✓ Found garden: ${gardenName} (privacy: ${garden.privacy || 'public'})`)
         
-        // Get owner name and plant count
+        // Get owner name (needed for both public and private gardens)
         let ownerName = null
-        let plantCount = 0
-        let gardenImage = null
-        
-        try {
-          // Use garden cover image if available
-          if (garden.cover_image_url) {
-            gardenImage = ensureAbsoluteUrl(garden.cover_image_url)
+        if (garden.created_by) {
+          const { data: owner } = await ssrQuery(
+            dbClient
+              .from('profiles')
+              .select('display_name, avatar_url')
+              .eq('id', garden.created_by)
+              .maybeSingle(),
+            'garden_owner'
+          )
+          if (owner) {
+            ownerName = owner.display_name
           }
+        }
+        
+        // For private gardens, show limited info
+        if (isPrivate) {
+          const gardenEmoji = '🏡'
+          title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
+          description = `${gardenName} ${tr.gardenOnAphylia || 'on Aphylia'} 🌱 ${tr.gardenPrivate || 'This is a private garden.'}`
+          if (garden.cover_image_url) image = ensureAbsoluteUrl(garden.cover_image_url)
           
-          // Get owner (with timeout)
-          if (garden.created_by) {
-            const { data: owner } = await ssrQuery(
-              supabaseServer
-                .from('profiles')
-                .select('display_name, avatar_url')
-                .eq('id', garden.created_by)
-                .maybeSingle(),
-              'garden_owner'
-            )
-            if (owner) {
-              ownerName = owner.display_name
-              if (!gardenImage && owner.avatar_url) gardenImage = ensureAbsoluteUrl(owner.avatar_url)
+          pageContent = `
+            <article itemscope itemtype="https://schema.org/Place">
+              <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
+              ${ownerName ? `<p>👤 ${tr.gardenBy} ${escapeHtml(ownerName)}</p>` : ''}
+              <p>🔒 ${tr.gardenPrivate || 'This garden is private.'}</p>
+              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenViewOn || 'View on'} Aphylia →</a></p>
+            </article>
+          `
+          console.log(`[ssr] Private garden - showing limited preview`)
+        } else {
+          // Public garden - show full details
+          let plantCount = 0
+          let gardenImage = null
+          
+          try {
+            // Use garden cover image if available
+            if (garden.cover_image_url) {
+              gardenImage = ensureAbsoluteUrl(garden.cover_image_url)
             }
-          }
-          
-          // Get plant count (with timeout)
-          const { count } = await ssrQuery(
-            supabaseServer
-              .from('garden_plants')
-              .select('id', { count: 'exact', head: true })
-              .eq('garden_id', gardenId),
-            'garden_plant_count'
-          )
-          plantCount = count || 0
-          
-          // Try to get a plant image from the garden (with timeout)
-          const { data: gardenPlants } = await ssrQuery(
-            supabaseServer
-              .from('garden_plants')
-              .select('plant_id')
-              .eq('garden_id', gardenId)
-              .limit(1),
-            'garden_plants_for_img'
-          )
-          if (gardenPlants?.[0]?.plant_id) {
-            const { data: plantImg } = await ssrQuery(
-              supabaseServer
-                .from('plant_images')
-                .select('link')
-                .eq('plant_id', gardenPlants[0].plant_id)
-                .eq('use', 'primary')
-                .maybeSingle(),
-              'garden_plant_img'
+            
+            // Get owner avatar if no garden cover
+            if (!gardenImage && garden.created_by) {
+              const { data: ownerForAvatar } = await ssrQuery(
+                dbClient
+                  .from('profiles')
+                  .select('avatar_url')
+                  .eq('id', garden.created_by)
+                  .maybeSingle(),
+                'garden_owner_avatar'
+              )
+              if (ownerForAvatar?.avatar_url) gardenImage = ensureAbsoluteUrl(ownerForAvatar.avatar_url)
+            }
+            
+            // Get plant count (with timeout)
+            const { count } = await ssrQuery(
+              dbClient
+                .from('garden_plants')
+                .select('id', { count: 'exact', head: true })
+                .eq('garden_id', gardenId),
+              'garden_plant_count'
             )
-            if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
-          }
-        } catch {}
-        
-        // Get garden age - with translations
-        const createdDate = garden.created_at ? new Date(garden.created_at) : null
-        const gardenAge = createdDate ? (() => {
-          const months = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 30))
-          if (months < 1) return tr.gardenNew
-          if (months < 12) return `${months} ${tr.gardenMonths} ${tr.gardenOld}`
-          const years = Math.floor(months / 12)
-          return `${years} ${tr.gardenYears} ${tr.gardenOld}`
-        })() : null
-        
-        // Create engaging title
-        const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
-        title = `${gardenEmoji} ${garden.name || tr.gardenBeautiful} | Aphylia`
-        
-        // Create rich description
-        const descParts = []
-        // Build location string from city/country
-        const locationParts = [garden.location_city, garden.location_country].filter(Boolean)
-        const gardenLocation = locationParts.length > 0 ? locationParts.join(', ') : null
-        
-        if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.gardenPlantsGrowing}`)
-        if (ownerName) descParts.push(`👤 ${tr.gardenBy} ${ownerName}`)
-        if (gardenLocation) descParts.push(`📍 ${gardenLocation}`)
-        if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
-        
-        description = descParts.length > 0 
-          ? descParts.join(' • ')
-          : `${tr.gardenExploreThis}. ${tr.gardenDiscover}`
-        
-        if (gardenImage) image = gardenImage
-        
-        pageContent = `
-          <article itemscope itemtype="https://schema.org/Place">
-            <h1 itemprop="name">${gardenEmoji} ${escapeHtml(garden.name || tr.gardenBeautiful)}</h1>
-            <div class="plant-meta">
-              ${plantCount > 0 ? `🌿 ${plantCount} ${tr.gardenPlantsGrowing}` : `🌱 ${tr.gardenStartingFresh}`}
-              ${ownerName ? ` · 👤 ${tr.gardenBy} ${escapeHtml(ownerName)}` : ''}
-              ${gardenLocation ? ` · 📍 ${escapeHtml(gardenLocation)}` : ''}
-              ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
-            </div>
-            <p>${tr.gardenFilled} 🌸</p>
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenExploreThis} →</a></p>
-          </article>
-        `
-        console.log(`[ssr] Garden image: ${image}`)
+            plantCount = count || 0
+            
+            // Try to get a plant image from the garden (with timeout)
+            if (!gardenImage) {
+              const { data: gardenPlants } = await ssrQuery(
+                dbClient
+                  .from('garden_plants')
+                  .select('plant_id')
+                  .eq('garden_id', gardenId)
+                  .limit(1),
+                'garden_plants_for_img'
+              )
+              if (gardenPlants?.[0]?.plant_id) {
+                const { data: plantImg } = await ssrQuery(
+                  dbClient
+                    .from('plant_images')
+                    .select('link')
+                    .eq('plant_id', gardenPlants[0].plant_id)
+                    .eq('use', 'primary')
+                    .maybeSingle(),
+                  'garden_plant_img'
+                )
+                if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
+              }
+            }
+          } catch {}
+          
+          // Get garden age - with translations
+          const createdDate = garden.created_at ? new Date(garden.created_at) : null
+          const gardenAge = createdDate ? (() => {
+            const months = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 30))
+            if (months < 1) return tr.gardenNew
+            if (months < 12) return `${months} ${tr.gardenMonths} ${tr.gardenOld}`
+            const years = Math.floor(months / 12)
+            return `${years} ${tr.gardenYears} ${tr.gardenOld}`
+          })() : null
+          
+          // Create engaging title
+          const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
+          title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
+          
+          // Create rich description
+          const descParts = []
+          // Build location string from city/country
+          const locationParts = [garden.location_city, garden.location_country].filter(Boolean)
+          const gardenLocation = locationParts.length > 0 ? locationParts.join(', ') : null
+          
+          if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.gardenPlantsGrowing}`)
+          if (ownerName) descParts.push(`👤 ${tr.gardenBy} ${ownerName}`)
+          if (gardenLocation) descParts.push(`📍 ${gardenLocation}`)
+          if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
+          
+          description = descParts.length > 0 
+            ? descParts.join(' • ')
+            : `${tr.gardenExploreThis}. ${tr.gardenDiscover}`
+          
+          if (gardenImage) image = gardenImage
+          
+          pageContent = `
+            <article itemscope itemtype="https://schema.org/Place">
+              <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
+              <div class="plant-meta">
+                ${plantCount > 0 ? `🌿 ${plantCount} ${tr.gardenPlantsGrowing}` : `🌱 ${tr.gardenStartingFresh}`}
+                ${ownerName ? ` · 👤 ${tr.gardenBy} ${escapeHtml(ownerName)}` : ''}
+                ${gardenLocation ? ` · 📍 ${escapeHtml(gardenLocation)}` : ''}
+                ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
+              </div>
+              <p>${tr.gardenFilled} 🌸</p>
+              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenExploreThis} →</a></p>
+            </article>
+          `
+          console.log(`[ssr] Garden image: ${image}`)
+        }
       }
     }
     
@@ -16764,7 +16980,8 @@ async function generateCrawlerHtml(req, pagePath) {
     }
     
     // Bookmarks page
-    else if (effectivePath[0] === 'bookmarks' && effectivePath[1] && supabaseServer) {
+    // Bookmark list page: /bookmarks/:id
+    else if (isBookmarkRoute && supabaseServer) {
       const listId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
       
@@ -16938,8 +17155,11 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="theme-color" content="#052e16">
   <meta name="application-name" content="Aphylia">
   
-  <!-- Icons - using data URIs for archive compatibility -->
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌱%3C/text%3E%3C/svg%3E">
+  <!-- Icons - Google requires 48x48+ favicon for search results -->
+  <link rel="icon" type="image/svg+xml" href="${siteUrl}/icons/plant-swipe-icon-outline.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="${siteUrl}/icons/icon-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="${siteUrl}/icons/icon-512x512.png">
+  <link rel="apple-touch-icon" href="${siteUrl}/icons/icon-192x192.png">
   
   <style>
     * { box-sizing: border-box; }
@@ -17191,7 +17411,9 @@ app.get('/api/force-ssr', async (req, res) => {
         ssrInternalDebug: fakeReq._ssrDebug,
         debug: {
           pathParts: testPath.split('/').filter(Boolean),
-          isPlantRoute: testPath.split('/').filter(Boolean)[0] === 'plants' || testPath.split('/').filter(Boolean)[1] === 'plants'
+          isPlantRoute: testPath.split('/').filter(Boolean)[0] === 'plants' || testPath.split('/').filter(Boolean)[1] === 'plants',
+          isProfileRoute: testPath.split('/').filter(Boolean)[0] === 'u' && !!testPath.split('/').filter(Boolean)[1],
+          isGardenRoute: ['garden', 'gardens'].includes(testPath.split('/').filter(Boolean)[0]) && !!testPath.split('/').filter(Boolean)[1]
         }
       })
     } else {
