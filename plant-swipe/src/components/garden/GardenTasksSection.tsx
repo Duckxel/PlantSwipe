@@ -422,34 +422,53 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                 >
                   {/* Plant Header */}
                   <div className={`p-4 border-b ${allDone ? "border-emerald-100 dark:border-emerald-800/30 bg-emerald-50/30 dark:bg-emerald-900/5" : "border-stone-100 dark:border-stone-800/50"}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                          allDone 
-                            ? "bg-emerald-100 dark:bg-emerald-900/30" 
-                            : "bg-stone-100 dark:bg-stone-800"
-                        }`}>
-                          <Flower2 className={`w-5 h-5 md:w-6 md:h-6 ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-stone-500 dark:text-stone-400"}`} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-semibold text-sm md:text-base truncate">
+                    {/* Plant info row */}
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        allDone 
+                          ? "bg-emerald-100 dark:bg-emerald-900/30" 
+                          : "bg-stone-100 dark:bg-stone-800"
+                      }`}>
+                        <Flower2 className={`w-5 h-5 md:w-6 md:h-6 ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-stone-500 dark:text-stone-400"}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-semibold text-sm md:text-base line-clamp-2">
                             {plant.nickname || plant.plant?.name || "Plant"}
                           </div>
-                          {plant.nickname && plant.plant?.name && (
-                            <div className="text-xs text-muted-foreground truncate">
-                              {plant.plant.name}
+                          {allDone && (
+                            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0">
+                              <CheckCircle2 className="w-5 h-5" />
+                              <span className="text-sm font-medium hidden sm:inline">
+                                {t("gardenDashboard.routineSection.completed", "Done")}
+                              </span>
                             </div>
                           )}
                         </div>
+                        {plant.nickname && plant.plant?.name && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {plant.plant.name}
+                          </div>
+                        )}
                       </div>
-                      {allDone ? (
-                        <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0">
-                          <CheckCircle2 className="w-5 h-5" />
-                          <span className="text-sm font-medium hidden sm:inline">
-                            {t("gardenDashboard.routineSection.completed", "Done")}
-                          </span>
+                    </div>
+
+                    {/* Progress bar and Complete All button */}
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="flex-1 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              allDone ? "bg-emerald-500" : "bg-blue-500"
+                            }`}
+                            style={{ width: `${plantProgressPct}%` }}
+                          />
                         </div>
-                      ) : (
+                        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                          {plantTotalDone}/{plantTotalReq}
+                        </span>
+                      </div>
+                      {!allDone && (
                         <Button
                           size="sm"
                           className="rounded-xl text-xs h-8 px-3 flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -463,20 +482,6 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                           )}
                         </Button>
                       )}
-                    </div>
-                    {/* Progress bar */}
-                    <div className="mt-3 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            allDone ? "bg-emerald-500" : "bg-blue-500"
-                          }`}
-                          style={{ width: `${plantProgressPct}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {plantTotalDone}/{plantTotalReq}
-                      </span>
                     </div>
                   </div>
 
@@ -613,7 +618,7 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                       </div>
 
                       {/* Plant name */}
-                      <div className="text-xs text-muted-foreground truncate" title={plantName}>
+                      <div className="text-xs text-muted-foreground line-clamp-2 leading-tight" title={plantName}>
                         {plantName}
                       </div>
                     </div>
