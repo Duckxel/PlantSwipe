@@ -16292,17 +16292,43 @@ async function generateCrawlerHtml(req, pagePath) {
     // User profile page: /u/:username
     else if (effectivePath[0] === 'u' && effectivePath[1] && supabaseServer) {
       const username = decodeURIComponent(effectivePath[1])
+      req._ssrDebug.matchedRoute = 'profile'
+      ssrDebug('profile_route_matched', { username, supabaseAvailable: !!supabaseServer })
       console.log(`[ssr] Looking up user profile: ${username}`)
       
-      const { data: profile, error: profileError } = await ssrQuery(
+      // Note: Also try matching by username field (some profiles use username instead of display_name)
+      let profile = null
+      let profileError = null
+      
+      // Try case-insensitive search by display_name first, then username
+      const { data: profileByDisplayName, error: err1 } = await ssrQuery(
         supabaseServer
           .from('profiles')
           .select('id, display_name, bio, avatar_url, is_private, country, favorite_plant')
-          .eq('display_name', username)
+          .ilike('display_name', username)
           .eq('is_private', false)
           .maybeSingle(),
-        'profile_lookup'
+        'profile_lookup_by_display_name'
       )
+      
+      if (profileByDisplayName) {
+        profile = profileByDisplayName
+      } else {
+        // Try by username field (case-insensitive) if display_name didn't match
+        const { data: profileByUsername, error: err2 } = await ssrQuery(
+          supabaseServer
+            .from('profiles')
+            .select('id, display_name, bio, avatar_url, is_private, country, favorite_plant')
+            .ilike('username', username)
+            .eq('is_private', false)
+            .maybeSingle(),
+          'profile_lookup_by_username'
+        )
+        profile = profileByUsername
+        profileError = err2
+      }
+      
+      ssrDebug('profile_query_result', { found: !!profile, displayName: profile?.display_name, error: profileError?.message })
       
       if (profileError) {
         console.log(`[ssr] Profile query error: ${profileError.message}`)
