@@ -15756,9 +15756,50 @@ async function generateCrawlerHtml(req, pagePath) {
   return html
 }
 
+// Debug endpoint to test crawler detection and SSR
+app.get('/api/debug-ssr', async (req, res) => {
+  const userAgent = req.get('user-agent') || ''
+  const testPath = req.query.path || '/plants/test'
+  const isCrawlerResult = isCrawler(userAgent)
+  
+  res.json({
+    userAgent,
+    isCrawler: isCrawlerResult,
+    testPath,
+    supabaseAvailable: !!supabaseServer,
+    crawlerList: CRAWLER_USER_AGENTS.slice(0, 10),
+    tip: 'Add ?ua=discordbot to test with a fake user agent'
+  })
+})
+
+// Test endpoint to preview what crawlers see
+app.get('/api/preview-ssr', async (req, res) => {
+  const testPath = req.query.path || '/'
+  const fakeReq = { 
+    ...req, 
+    originalUrl: testPath, 
+    path: testPath,
+    get: (header) => header === 'user-agent' ? 'Discordbot/2.0' : req.get(header)
+  }
+  
+  try {
+    const html = await generateCrawlerHtml(fakeReq, testPath)
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.send(html)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.get('*', async (req, res) => {
   const userAgent = req.get('user-agent') || ''
   const pagePath = req.originalUrl || req.path || '/'
+  
+  // Debug logging for crawler detection
+  const detectedAsCrawler = isCrawler(userAgent)
+  if (detectedAsCrawler) {
+    console.log(`[ssr] Crawler detected: ${userAgent.slice(0, 100)} -> ${pagePath}`)
+  }
   
   // Check if this is a crawler requesting a page (not an asset)
   const isAssetRequest = /\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|map|json)$/i.test(pagePath)
