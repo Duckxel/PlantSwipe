@@ -15628,11 +15628,16 @@ async function generateCrawlerHtml(req, pagePath) {
   
   // Parse language from path BEFORE try block so it's always available for HTML template
   const pathParts = pagePath.split('/').filter(Boolean)
-  const langPrefixes = ['en', 'fr']
-  let detectedLang = 'en'
+  // Supported languages with full translations
+  const supportedLangs = ['en', 'fr']
+  // All recognized 2-letter language codes (strip from path, default to 'en' if not fully supported)
+  const allLangPrefixes = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh', 'ar', 'hi', 'tr', 'vi', 'th', 'sv', 'da', 'no', 'fi', 'cs', 'hu', 'ro', 'uk', 'el', 'he', 'id', 'ms', 'tl']
+  let detectedLang = 'en' // Default to English
   let effectivePath = pathParts
-  if (pathParts.length > 0 && langPrefixes.includes(pathParts[0])) {
-    detectedLang = pathParts[0]
+  if (pathParts.length > 0 && allLangPrefixes.includes(pathParts[0].toLowerCase())) {
+    const langPrefix = pathParts[0].toLowerCase()
+    // Use the language if fully supported, otherwise default to English
+    detectedLang = supportedLangs.includes(langPrefix) ? langPrefix : 'en'
     effectivePath = pathParts.slice(1)
   }
   
