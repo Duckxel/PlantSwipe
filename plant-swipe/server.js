@@ -15991,9 +15991,10 @@ async function generateCrawlerHtml(req, pagePath) {
     const tr = t[detectedLang] || t.en
     
     // Plant detail page: /plants/:id
+    console.log(`[ssr] Checking plant route: effectivePath[0]='${effectivePath[0]}', effectivePath[1]='${effectivePath[1] || 'undefined'}'`)
     if (effectivePath[0] === 'plants' && effectivePath[1]) {
       const plantId = decodeURIComponent(effectivePath[1])
-      console.log(`[ssr] Looking up plant: ${plantId}, supabase available: ${!!supabaseServer}`)
+      console.log(`[ssr] ✓ Matched plant route! Looking up plant: ${plantId}, supabase available: ${!!supabaseServer}`)
       
       if (!supabaseServer) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
@@ -16007,10 +16008,11 @@ async function generateCrawlerHtml(req, pagePath) {
           'plant_lookup'
         )
         
+        console.log(`[ssr] Plant query result: data=${plant ? 'found' : 'null'}, error=${plantError ? plantError.message || 'unknown error' : 'none'}`)
         if (plantError) {
-          console.log(`[ssr] Plant query error: ${plantError.message}`)
+          console.log(`[ssr] ✗ Plant query error: ${plantError.message || JSON.stringify(plantError)}`)
         } else if (!plant) {
-          console.log(`[ssr] Plant not found: ${plantId}`)
+          console.log(`[ssr] ✗ Plant not found in database: ${plantId}`)
         }
         
         if (plant) {
@@ -17025,7 +17027,26 @@ app.get('/api/debug-ssr', async (req, res) => {
 app.get('/api/force-ssr', async (req, res) => {
   const testPath = req.query.path || '/'
   const jsonMode = req.query.json === '1' || req.query.json === 'true'
-  console.log(`[force-ssr] Generating SSR for: ${testPath} (json: ${jsonMode})`)
+  const debugMode = req.query.debug === '1' || req.query.debug === 'true'
+  console.log(`[force-ssr] Generating SSR for: ${testPath} (json: ${jsonMode}, debug: ${debugMode})`)
+  console.log(`[force-ssr] Supabase available: ${!!supabaseServer}, URL configured: ${!!supabaseUrlEnv}`)
+  
+  // If debug mode, test Supabase directly first
+  let supabaseTestResult = null
+  if (debugMode && supabaseServer) {
+    try {
+      const pathParts = testPath.split('/').filter(Boolean)
+      const plantId = pathParts.find((_, i) => pathParts[i-1] === 'plants' || pathParts[i-1] === 'fr' && pathParts[i] === 'plants') 
+        ? pathParts[pathParts.indexOf('plants') + 1] 
+        : pathParts[1]
+      if (plantId) {
+        const { data, error } = await supabaseServer.from('plants').select('id, name').eq('id', plantId).maybeSingle()
+        supabaseTestResult = { plantId, found: !!data, name: data?.name, error: error?.message }
+      }
+    } catch (e) {
+      supabaseTestResult = { error: e.message }
+    }
+  }
   
   try {
     const fakeReq = {
@@ -17054,7 +17075,13 @@ app.get('/api/force-ssr', async (req, res) => {
         ogDescription: ogDescMatch?.[1] || null,
         ogImage: ogImageMatch?.[1] || null,
         htmlLength: html.length,
-        supabaseAvailable: !!supabaseServer
+        supabaseAvailable: !!supabaseServer,
+        supabaseUrlConfigured: !!supabaseUrlEnv,
+        supabaseDirectTest: supabaseTestResult,
+        debug: {
+          pathParts: testPath.split('/').filter(Boolean),
+          isPlantRoute: testPath.split('/').filter(Boolean)[0] === 'plants' || testPath.split('/').filter(Boolean)[1] === 'plants'
+        }
       })
     } else {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
