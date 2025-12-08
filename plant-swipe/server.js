@@ -16057,7 +16057,21 @@ async function generateCrawlerHtml(req, pagePath) {
           ssrDebug('plant_found', { name: plant.name, id: plant.id, type: plant.plant_type })
           console.log(`[ssr] ✓ Found plant: ${plant.name} (${plant.id})`)
           
-          // Create an engaging title with plant type emoji
+          // Simple, clean title format: "🌱 Lotus - Complete Care Guide | Aphylia"
+          title = `🌱 ${plant.name} - ${tr.plantCareGuide} | Aphylia`
+          
+          // Use overview cropped to ~100 characters for description
+          // Fallback to a generic description if no overview
+          if (plant.overview) {
+            const overview = plant.overview.trim()
+            description = overview.length > 100 
+              ? overview.slice(0, 100).trim() + '...'
+              : overview
+          } else {
+            description = `${tr.plantLearnGrow} ${plant.name}. ${tr.plantExpertTips} 🌱`
+          }
+          
+          // Keep these for pageContent structured data
           const plantEmoji = {
             'vegetable': '🥬',
             'fruit': '🍎',
@@ -16080,37 +16094,11 @@ async function generateCrawlerHtml(req, pagePath) {
           const typeKey = (plant.plant_type || '').toLowerCase()
           const emoji = plantEmoji[typeKey] || '🌱'
           
-          // Care difficulty indicator - use translations
+          // Care difficulty indicator - use translations (for pageContent)
           const difficulty = tr.difficulty[(plant.maintenance_level || '').toLowerCase()] || ''
           
-          // Light requirement indicator - use translations
+          // Light requirement indicator - use translations (for pageContent)
           const light = tr.light[(plant.level_sun || '').toLowerCase()] || ''
-          
-          title = `${emoji} ${plant.name} | ${tr.plantCareGuide}`
-          
-          // Create a compelling, informative description
-          const descParts = []
-          
-          // Add catchy intro based on plant type - use translations
-          if (plant.plant_type) {
-            const typeKey = plant.plant_type.toLowerCase()
-            const typeIntro = tr.plantType[typeKey]
-            if (typeIntro) {
-              descParts.push(typeIntro)
-            } else {
-              descParts.push(plant.plant_type)
-            }
-          }
-          
-          if (plant.scientific_name) descParts.push(`(${plant.scientific_name})`)
-          if (difficulty) descParts.push(difficulty)
-          if (light) descParts.push(light)
-          if (plant.watering_type?.length) descParts.push(`💧 ${plant.watering_type.join(', ')}`)
-          if (plant.flowering_month?.length) descParts.push(`🌸 ${tr.blooms}: ${plant.flowering_month.slice(0, 3).join(', ')}`)
-          
-          description = descParts.length > 0 
-            ? descParts.join(' • ').slice(0, 200)
-            : `${tr.plantLearnGrow} ${plant.name}. ${tr.plantExpertTips} 🌱`
           
           // Fetch primary image, fallback to discovery image (with timeout)
           const { data: images } = await ssrQuery(
@@ -16187,18 +16175,48 @@ async function generateCrawlerHtml(req, pagePath) {
     
     // Blog post page: /blog/:slug
     else if (effectivePath[0] === 'blog' && effectivePath[1] && supabaseServer) {
-      const slug = decodeURIComponent(effectivePath[1])
-      console.log(`[ssr] Looking up blog post: ${slug}`)
+      const slugOrId = decodeURIComponent(effectivePath[1])
+      console.log(`[ssr] Looking up blog post: ${slugOrId}`)
+      req._ssrDebug.matchedRoute = 'blog_post'
       
-      const { data: post, error: postError } = await ssrQuery(
+      // Check if it looks like a UUID (for ID-based lookup)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)
+      ssrDebug('blog_route_matched', { slugOrId, isUUID })
+      
+      // Try slug lookup first, then ID if it's a UUID
+      let post = null
+      let postError = null
+      
+      // First try by slug
+      const { data: postBySlug, error: slugError } = await ssrQuery(
         supabaseServer
           .from('blog_posts')
           .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
-          .eq('slug', slug)
+          .eq('slug', slugOrId)
           .eq('is_published', true)
           .maybeSingle(),
-        'blog_lookup'
+        'blog_lookup_by_slug'
       )
+      
+      if (postBySlug) {
+        post = postBySlug
+      } else if (isUUID) {
+        // If not found by slug and looks like UUID, try by ID
+        console.log(`[ssr] Blog not found by slug, trying by ID: ${slugOrId}`)
+        const { data: postById, error: idError } = await ssrQuery(
+          supabaseServer
+            .from('blog_posts')
+            .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
+            .eq('id', slugOrId)
+            .eq('is_published', true)
+            .maybeSingle(),
+          'blog_lookup_by_id'
+        )
+        post = postById
+        postError = idError
+      } else {
+        postError = slugError
+      }
       
       if (postError) {
         console.log(`[ssr] Blog query error: ${postError.message}`)
