@@ -682,6 +682,7 @@
     "loadingTasks": "Chargement des tâches...",
     "noTasksToday": "Aucune tâche due aujourd'hui. 🌿",
     "done": "fait",
+    "complete": "Compléter",
     "completeAll": "Tout compléter",
     "completed": "Terminé",
     "doneBy": "Fait par",
@@ -691,6 +692,7 @@
       "completedTask": "a terminé la tâche \"{{taskType}}\" sur \"{{plantName}}\"",
       "progressedTask": "a progressé la tâche \"{{taskType}}\" sur \"{{plantName}}\" ({{completed}}/{{required}})",
       "completedAllTasks": "a terminé toutes les tâches dues sur \"{{plantName}}\"",
+      "completedAllGardenTasks": "a terminé toutes les tâches dues dans \"{{gardenName}}\"",
       "plant": "Plante"
     },
     "member": "membre",
