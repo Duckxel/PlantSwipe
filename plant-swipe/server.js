@@ -16031,7 +16031,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: plant, error: plantError } = await ssrQuery(
           supabaseServer
             .from('plants')
-            .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level, watering, flowering_season, hardiness_zones')
+            .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level, watering_type, flowering_month, season')
             .eq('id', plantId)
             .maybeSingle(),
           'plant_lookup'
@@ -16105,8 +16105,8 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plant.scientific_name) descParts.push(`(${plant.scientific_name})`)
           if (difficulty) descParts.push(difficulty)
           if (light) descParts.push(light)
-          if (plant.watering) descParts.push(`💧 ${plant.watering}`)
-          if (plant.flowering_season) descParts.push(`🌸 ${tr.blooms}: ${plant.flowering_season}`)
+          if (plant.watering_type?.length) descParts.push(`💧 ${plant.watering_type.join(', ')}`)
+          if (plant.flowering_month?.length) descParts.push(`🌸 ${tr.blooms}: ${plant.flowering_month.slice(0, 3).join(', ')}`)
           
           description = descParts.length > 0 
             ? descParts.join(' • ').slice(0, 200)
@@ -16146,9 +16146,9 @@ async function generateCrawlerHtml(req, pagePath) {
           
           const careInfo = []
           if (light) careInfo.push(light)
-          if (plant.watering) careInfo.push(`💧 ${escapeHtml(plant.watering)}`)
+          if (plant.watering_type?.length) careInfo.push(`💧 ${plant.watering_type.map(w => escapeHtml(w)).join(', ')}`)
           if (difficulty) careInfo.push(difficulty)
-          if (plant.hardiness_zones) careInfo.push(`🌡️ ${tr.zones}: ${escapeHtml(plant.hardiness_zones)}`)
+          if (plant.season?.length) careInfo.push(`🌿 ${plant.season.map(s => escapeHtml(s)).join(', ')}`)
           
           pageContent = `
             <article itemscope itemtype="https://schema.org/Product">
