@@ -2592,6 +2592,89 @@ function getVisitsTableIdentifierParts() {
   return ['public', 'web_visits']
 }
 
+// ========================================
+// ERROR LOGGING SYSTEM
+// In-memory circular buffer for API error logs
+// ========================================
+const ERROR_LOG_MAX_SIZE = 1000 // Keep last 1000 errors
+const errorLogs = []
+const errorLogListeners = new Set() // SSE listeners
+
+/**
+ * Log an API error to the in-memory buffer
+ * @param {Object} opts - Error details
+ * @param {string} opts.source - 'api' | 'admin_api' | 'frontend'
+ * @param {string} opts.level - 'error' | 'warn' | 'info'
+ * @param {string} opts.message - Error message
+ * @param {string} [opts.stack] - Stack trace
+ * @param {string} [opts.endpoint] - API endpoint
+ * @param {number} [opts.statusCode] - HTTP status code
+ * @param {string} [opts.userId] - User ID if available
+ * @param {Object} [opts.extra] - Additional context
+ */
+function logApiError(opts) {
+  const entry = {
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    source: opts.source || 'api',
+    level: opts.level || 'error',
+    message: String(opts.message || 'Unknown error').slice(0, 2000),
+    stack: opts.stack ? String(opts.stack).slice(0, 5000) : undefined,
+    endpoint: opts.endpoint ? String(opts.endpoint).slice(0, 500) : undefined,
+    statusCode: opts.statusCode,
+    userId: opts.userId ? String(opts.userId) : undefined,
+    extra: opts.extra || undefined,
+  }
+  
+  // Add to front of array (newest first)
+  errorLogs.unshift(entry)
+  
+  // Trim to max size
+  while (errorLogs.length > ERROR_LOG_MAX_SIZE) {
+    errorLogs.pop()
+  }
+  
+  // Notify SSE listeners
+  for (const listener of errorLogListeners) {
+    try {
+      listener(entry)
+    } catch {}
+  }
+  
+  // Also log to console for debugging
+  console.error(`[${entry.source}] [${entry.level}] ${entry.endpoint || ''} - ${entry.message}`)
+}
+
+/**
+ * Helper to create an error logger middleware for Express routes
+ * Wraps async route handlers and logs errors
+ */
+function withErrorLogging(handler, endpoint) {
+  return async (req, res, ...args) => {
+    try {
+      return await handler(req, res, ...args)
+    } catch (err) {
+      const userId = req.user?.id || null
+      logApiError({
+        source: 'api',
+        level: 'error',
+        message: err?.message || 'Unknown error',
+        stack: err?.stack,
+        endpoint: endpoint || req.originalUrl || req.url,
+        statusCode: 500,
+        userId,
+        extra: {
+          method: req.method,
+          query: req.query,
+        }
+      })
+      if (!res.headersSent) {
+        res.status(500).json({ error: err?.message || 'Internal server error' })
+      }
+    }
+  }
+}
+
 const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch {}
@@ -2804,6 +2887,98 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   }
 })
 
+// Admin: fetch API error logs (in-memory)
+app.get('/api/admin/error-logs', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    
+    const daysParam = Number(req.query.days || 7)
+    const days = (Number.isFinite(daysParam) && daysParam > 0) ? Math.min(30, Math.floor(daysParam)) : 7
+    const sourceFilter = req.query.source || 'all' // 'all' | 'api' | 'admin_api'
+    const levelFilter = req.query.level || 'all' // 'all' | 'error' | 'warn' | 'info'
+    
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    
+    let filtered = errorLogs.filter(log => {
+      const logDate = new Date(log.timestamp)
+      if (logDate < cutoff) return false
+      if (sourceFilter !== 'all' && log.source !== sourceFilter) return false
+      if (levelFilter !== 'all' && log.level !== levelFilter) return false
+      return true
+    })
+    
+    // Limit response size
+    filtered = filtered.slice(0, 500)
+    
+    res.json({ 
+      ok: true, 
+      logs: filtered,
+      total: errorLogs.length,
+      filtered: filtered.length,
+    })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load error logs' })
+  }
+})
+
+// Admin: SSE stream for real-time error logs
+app.get('/api/admin/error-logs/stream', async (req, res) => {
+  try {
+    // Allow admin static token via query param for EventSource
+    const adminToken = req.query?.admin_token ? String(req.query.admin_token) : ''
+    if (adminToken) {
+      try { req.headers['x-admin-token'] = adminToken } catch {}
+    }
+    
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    // Send initial snapshot of recent errors
+    const recentErrors = errorLogs.slice(0, 100)
+    res.write(`event: snapshot\ndata: ${JSON.stringify({ logs: recentErrors })}\n\n`)
+
+    // Subscribe to new errors
+    const listener = (entry) => {
+      try {
+        res.write(`event: append\ndata: ${JSON.stringify(entry)}\n\n`)
+      } catch {}
+    }
+    
+    errorLogListeners.add(listener)
+
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(`:heartbeat\n\n`)
+      } catch {}
+    }, 30000)
+
+    // Cleanup on close
+    req.on('close', () => {
+      clearInterval(heartbeat)
+      errorLogListeners.delete(listener)
+    })
+
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+app.options('/api/admin/error-logs', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
 // Admin: AI plant name verification
 app.post('/api/admin/ai/plant-fill/verify-name', async (req, res) => {
   try {
@@ -2822,7 +2997,14 @@ app.post('/api/admin/ai/plant-fill/verify-name', async (req, res) => {
     const result = await verifyPlantNameCandidate(plantName)
     res.json({ success: true, isPlant: result.isPlant, reason: result.reason })
   } catch (err) {
-    console.error('[server] AI plant name verification failed:', err)
+    logApiError({
+      source: 'api',
+      level: 'error',
+      message: err?.message || 'AI plant name verification failed',
+      stack: err?.stack,
+      endpoint: '/api/admin/ai/plant-fill/verify-name',
+      statusCode: 500,
+    })
     if (!res.headersSent) {
       res.status(500).json({ error: err?.message || 'Failed to verify plant name' })
     }
@@ -2924,7 +3106,14 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
 
     res.json({ success: true, data: plantObject, model: openaiModel })
   } catch (err) {
-    console.error('[server] AI plant fill failed:', err)
+    logApiError({
+      source: 'api',
+      level: 'error',
+      message: err?.message || 'AI plant fill failed',
+      stack: err?.stack,
+      endpoint: '/api/admin/ai/plant-fill',
+      statusCode: 500,
+    })
     if (!res.headersSent) {
       res.status(500).json({ error: err?.message || 'Failed to fill plant data' })
     }
@@ -3001,7 +3190,14 @@ app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
       data: sanitizedValue ?? null,
     })
   } catch (err) {
-    console.error('[server] AI plant field fill failed:', err)
+    logApiError({
+      source: 'api',
+      level: 'error',
+      message: err?.message || 'AI plant field fill failed',
+      stack: err?.stack,
+      endpoint: '/api/admin/ai/plant-fill/field',
+      statusCode: 500,
+    })
     if (!res.headersSent) {
       res.status(500).json({ error: err?.message || 'Failed to fill field' })
     }
@@ -4857,7 +5053,14 @@ app.get('/api/admin/media', async (req, res) => {
 
     res.json({ ok: true, media: combined.slice(0, limit) })
   } catch (err) {
-    console.error('[media] failed to load admin media uploads', err)
+    logApiError({
+      source: 'api',
+      level: 'error',
+      message: err?.message || 'Failed to load admin media uploads',
+      stack: err?.stack,
+      endpoint: '/api/admin/media',
+      statusCode: 500,
+    })
     res.status(500).json({ error: 'Failed to load media uploads' })
   }
 })
@@ -5019,7 +5222,14 @@ app.get('/api/admin/notifications', async (req, res) => {
       .filter(Boolean)
     res.json({ notifications, pushConfigured: pushNotificationsEnabled })
   } catch (err) {
-    console.error('[notifications] failed to load campaigns', err)
+    logApiError({
+      source: 'api',
+      level: 'error',
+      message: err?.message || 'Failed to load notification campaigns',
+      stack: err?.stack,
+      endpoint: '/api/admin/notifications',
+      statusCode: 500,
+    })
     res.status(500).json({ error: err?.message || 'Failed to load notifications' })
   }
 })
@@ -9170,6 +9380,14 @@ app.get('/api/plants', async (_req, res) => {
     }
     res.status(500).json({ error: 'Database not configured' })
   } catch (e) {
+    logApiError({
+      source: 'api',
+      level: 'error',
+      message: e?.message || 'Failed to load plants',
+      stack: e?.stack,
+      endpoint: '/api/plants',
+      statusCode: 500,
+    })
     res.status(500).json({ error: e?.message || 'Query failed' })
   }
 })
@@ -17618,6 +17836,32 @@ app.get('*', async (req, res) => {
     } catch {}
     res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
     res.sendFile(path.join(distDir, 'index.html'))
+})
+
+// ========================================
+// GLOBAL ERROR HANDLER
+// Catches unhandled errors in routes and logs them
+// ========================================
+app.use((err, req, res, _next) => {
+  const endpoint = req.originalUrl || req.url || 'unknown'
+  const statusCode = err.status || err.statusCode || 500
+  
+  logApiError({
+    source: endpoint.includes('/api/admin/') ? 'admin_api' : 'api',
+    level: statusCode >= 500 ? 'error' : 'warn',
+    message: err?.message || 'Unhandled error',
+    stack: err?.stack,
+    endpoint,
+    statusCode,
+    userId: req.user?.id || null,
+    extra: {
+      method: req.method,
+    }
+  })
+  
+  if (!res.headersSent) {
+    res.status(statusCode).json({ error: err?.message || 'Internal server error' })
+  }
 })
 
 const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase() !== 'true'

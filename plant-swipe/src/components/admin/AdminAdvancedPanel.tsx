@@ -457,6 +457,7 @@ const ErrorLogsTab: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null)
   const [sourceFilter, setSourceFilter] = React.useState<"all" | "api" | "admin_api">("all")
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
+  const [isLive, setIsLive] = React.useState(false)
 
   const loadErrorLogs = React.useCallback(async () => {
     setLoading(true)
@@ -491,6 +492,55 @@ const ErrorLogsTab: React.FC = () => {
   React.useEffect(() => {
     loadErrorLogs()
   }, [loadErrorLogs])
+
+  // Live stream of error logs via SSE
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    let updating = false
+    ;(async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        let adminToken: string | null = null
+        try {
+          adminToken =
+            String((globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN || "") ||
+            null
+        } catch {}
+        const q: string[] = []
+        if (token) q.push(`token=${encodeURIComponent(token)}`)
+        if (adminToken) q.push(`admin_token=${encodeURIComponent(adminToken)}`)
+        const url = `/api/admin/error-logs/stream${q.length ? "?" + q.join("&") : ""}`
+        es = new EventSource(url)
+        es.addEventListener("snapshot", (ev: MessageEvent) => {
+          try {
+            const data = JSON.parse(String(ev.data || "{}"))
+            const list = Array.isArray(data?.logs) ? data.logs : []
+            setLogs(list)
+            setIsLive(true)
+          } catch {}
+        })
+        es.addEventListener("append", (ev: MessageEvent) => {
+          try {
+            const row = JSON.parse(String(ev.data || "{}")) as ErrorLogEntry
+            if (updating) return
+            updating = true
+            setLogs((prev) => [row, ...prev].slice(0, 500))
+            setTimeout(() => {
+              updating = false
+            }, 0)
+          } catch {}
+        })
+        es.onopen = () => setIsLive(true)
+        es.onerror = () => setIsLive(false)
+      } catch {}
+    })()
+    return () => {
+      try {
+        es?.close()
+      } catch {}
+    }
+  }, [])
 
   const filteredLogs = React.useMemo(() => {
     if (sourceFilter === "all") return logs
@@ -534,9 +584,22 @@ const ErrorLogsTab: React.FC = () => {
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div>
-              <h3 className="text-sm font-medium">Error Logs</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium">Error Logs</h3>
+                {isLive && (
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    LIVE
+                  </span>
+                )}
+                {logs.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                    {logs.length} {logs.length === 1 ? "error" : "errors"}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-stone-500 dark:text-stone-400">
-                API and Python Admin API errors - last 7 days
+                API errors journal - real-time monitoring
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -569,7 +632,7 @@ const ErrorLogsTab: React.FC = () => {
                 {error}
               </div>
               <p className="text-xs text-amber-500 dark:text-amber-500 mt-1">
-                The error logs API endpoint may not be implemented yet. Add <code>/api/admin/error-logs</code> to start collecting errors.
+                Error logs are stored in memory and will be cleared on server restart.
               </p>
             </div>
           )}
@@ -583,7 +646,7 @@ const ErrorLogsTab: React.FC = () => {
               <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
               <p className="text-sm font-medium text-stone-900 dark:text-white">No errors found</p>
               <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                {error ? "Error logs endpoint not configured" : "Everything is running smoothly!"}
+                {isLive ? "Monitoring for errors in real-time..." : "Everything is running smoothly!"}
               </p>
             </div>
           ) : (
