@@ -1430,7 +1430,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const translatePlant = async () => {
+    console.log('[translatePlant] Starting translation, current language:', language)
     const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language)
+    console.log('[translatePlant] Target languages:', targets)
     if (!targets.length) {
       setError(t('plantAdmin.translationNoTargets', 'No other languages configured for translation.'))
       return
@@ -1439,7 +1441,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       setError(t('plantAdmin.nameRequired', 'Name is required'))
       return
     }
+    console.log('[translatePlant] Saving plant first...')
     await savePlant()
+    console.log('[translatePlant] Plant saved, starting translations...')
     setTranslating(true)
     setError(null)
     try {
@@ -1447,7 +1451,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       const translatedRows = [] as any[]
       const primarySource = (plant.miscellaneous?.sources || [])[0]
         for (const target of targets) {
+        console.log(`[translatePlant] Translating to ${target} from ${sourceLang}...`)
         const translatedName = await translateText(plant.name || '', target, sourceLang)
+        console.log(`[translatePlant] Name translated: "${plant.name}" -> "${translatedName}"`)
         const translatedGivenNames = await translateArray(plant.identity?.givenNames || [], target, sourceLang)
         const translateArraySafe = (arr?: string[]) => translateArray(arr || [], target, sourceLang)
         const translatedSourceName = primarySource?.name
@@ -1523,19 +1529,28 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         })
       }
 
+      console.log('[translatePlant] Translated rows prepared:', translatedRows.length)
       if (translatedRows.length) {
+        console.log('[translatePlant] Upserting to plant_translations...')
         const { error: translateError } = await supabase
           .from('plant_translations')
           .upsert(translatedRows, { onConflict: 'plant_id,language' })
-        if (translateError) throw new Error(translateError.message)
+        if (translateError) {
+          console.error('[translatePlant] Upsert error:', translateError)
+          throw new Error(translateError.message)
+        }
+        console.log('[translatePlant] Upsert successful!')
       }
 
       setPlant((prev) => ({
         ...prev,
         meta: { ...(prev.meta || {}), status: IN_PROGRESS_STATUS },
       }))
+      console.log('[translatePlant] Saving plant with updated status...')
       await savePlant()
+      console.log('[translatePlant] Translation complete!')
       } catch (e: any) {
+        console.error('[translatePlant] Translation failed:', e)
         setError(e?.message || t('plantAdmin.errors.translation', 'Translation failed'))
     } finally {
       setTranslating(false)

@@ -89,6 +89,8 @@ export async function translateText(
   const { text: protectedText, variableMap } = protectTemplateVariables(text)
 
   try {
+    console.log(`[deepl] Translating "${text.slice(0, 30)}..." from ${sourceLang} to ${targetLang}`)
+    
     // Call backend endpoint that has the DeepL API key
     const response = await fetch('/api/translate', {
       method: 'POST',
@@ -104,16 +106,19 @@ export async function translateText(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: response.statusText }))
+      console.error('[deepl] API error:', response.status, errorData)
       throw new Error(errorData.error || `Translation API error: ${response.statusText}`)
     }
 
     const data = await response.json()
     const translatedText = data.translatedText || protectedText
     
+    console.log(`[deepl] Translation success: "${translatedText.slice(0, 30)}..."`)
+    
     // Restore template variables after translation
     return restoreTemplateVariables(translatedText, variableMap)
   } catch (error) {
-    console.error('Translation error:', error)
+    console.error('[deepl] Translation error:', error)
     // Throw error so caller can handle it
     throw error
   }
