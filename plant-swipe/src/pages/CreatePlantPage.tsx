@@ -707,8 +707,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       languageRef.current = language
     }, [language])
 
+    // Track if initial load is complete to avoid reloading on language change for edits
+    const initialLoadCompleteRef = React.useRef(false)
+    
     React.useEffect(() => {
       if (!id) { setLoading(false); return }
+      
+      // For existing plants, only load once on mount
+      // Language changes should NOT reload and overwrite user edits
+      // The user edits in English (base language), translations are handled separately
+      if (initialLoadCompleteRef.current) {
+        return
+      }
+      
       let ignore = false
       const requestedLanguage = language
       setLoading(true)
@@ -720,10 +731,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           if (!ignore && loaded && languageRef.current === requestedLanguage) {
             setPlant(loaded)
             setExistingLoaded(true)
+            initialLoadCompleteRef.current = true
           }
         } catch (e: any) {
           if (!ignore && languageRef.current === requestedLanguage) {
-            setError(e?.message || t('plantAdmin.errors.loadPlant', 'Failed to load plant'))
+            setError(e?.message || 'Failed to load plant')
           }
         } finally {
           if (!ignore && languageRef.current === requestedLanguage) {
@@ -733,8 +745,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
       fetchPlant()
       return () => { ignore = true }
-    }, [id, language, t])
+    }, [id, language])
 
+    // Track if we've already prefilled to avoid re-running on language changes
+    const prefillCompleteRef = React.useRef(false)
+    
     // Handle prefillFrom parameter - load existing plant data into a new plant
     React.useEffect(() => {
       if (!prefillFromId || id) { 
@@ -742,6 +757,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (!id && !prefillFromId) setLoading(false)
         return 
       }
+      
+      // Only prefill once - don't re-run when language/translation changes
+      if (prefillCompleteRef.current) {
+        return
+      }
+      
       let ignore = false
       setLoading(true)
       const prefillFromSource = async () => {
@@ -776,10 +797,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             setPrefillSourceName(sourcePlant.name)
             // Don't mark as existingLoaded - this is a new plant
             setExistingLoaded(false)
+            // Mark prefill as complete so we don't re-run
+            prefillCompleteRef.current = true
           }
         } catch (e: any) {
           if (!ignore) {
-            setError(e?.message || t('plantAdmin.errors.loadPlant', 'Failed to load source plant'))
+            setError(e?.message || 'Failed to load source plant')
           }
         } finally {
           if (!ignore) {
@@ -789,7 +812,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
       prefillFromSource()
       return () => { ignore = true }
-    }, [prefillFromId, id, profile?.display_name, t])
+    }, [prefillFromId, id, profile?.display_name])
 
     const captureColorSuggestions = (data: unknown) => {
     if (!data) return
