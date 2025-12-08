@@ -2,6 +2,8 @@ import React from 'react'
 import {
   SEO_DEFAULT_DESCRIPTION,
   SEO_DEFAULT_TITLE,
+  SEO_DEFAULT_IMAGE,
+  SEO_DEFAULT_URL,
   SEO_MAX_DESCRIPTION_LENGTH,
   SEO_TITLE_SEPARATOR,
 } from '@/constants/seo'
@@ -22,6 +24,16 @@ const TITLE_TARGETS: MetaTarget[] = [
   { attr: 'name', key: 'twitter:title' },
 ]
 
+const IMAGE_TARGETS: MetaTarget[] = [
+  { attr: 'property', key: 'og:image' },
+  { attr: 'name', key: 'twitter:image' },
+]
+
+const URL_TARGETS: MetaTarget[] = [
+  { attr: 'property', key: 'og:url' },
+  { attr: 'name', key: 'twitter:url' },
+]
+
 const collapseWhitespace = (value?: string | null) => {
   if (!value) return ''
   return value.replace(/\s+/g, ' ').trim()
@@ -39,6 +51,23 @@ const normalizeTitle = (value?: string | null) => {
   if (!trimmed) return SEO_DEFAULT_TITLE
   if (trimmed.includes(SEO_DEFAULT_TITLE)) return trimmed
   return `${trimmed}${SEO_TITLE_SEPARATOR}${SEO_DEFAULT_TITLE}`
+}
+
+const normalizeImage = (value?: string | null) => {
+  if (!value) return SEO_DEFAULT_IMAGE
+  // Ensure the image URL is absolute
+  if (value.startsWith('http://') || value.startsWith('https://')) return value
+  if (value.startsWith('//')) return `https:${value}`
+  if (value.startsWith('/')) return `${SEO_DEFAULT_URL}${value}`
+  return `${SEO_DEFAULT_URL}/${value}`
+}
+
+const normalizeUrl = (value?: string | null) => {
+  if (!value) return SEO_DEFAULT_URL
+  // Ensure the URL is absolute
+  if (value.startsWith('http://') || value.startsWith('https://')) return value
+  if (value.startsWith('/')) return `${SEO_DEFAULT_URL}${value}`
+  return `${SEO_DEFAULT_URL}/${value}`
 }
 
 const ensureMetaElement = (target: MetaTarget) => {
@@ -72,14 +101,18 @@ type Snapshot = {
 export type PageMetadata = {
   title?: string | null
   description?: string | null
+  image?: string | null
+  url?: string | null
 }
 
-export function usePageMetadata({ title, description }: PageMetadata) {
+export function usePageMetadata({ title, description, image, url }: PageMetadata) {
   React.useEffect(() => {
     if (typeof document === 'undefined') return
 
     const resolvedTitle = normalizeTitle(title)
     const resolvedDescription = normalizeDescription(description)
+    const resolvedImage = normalizeImage(image)
+    const resolvedUrl = normalizeUrl(url)
     const previousTitle = document.title
     const snapshots = new Map<string, Snapshot>()
 
@@ -103,6 +136,8 @@ export function usePageMetadata({ title, description }: PageMetadata) {
     document.title = resolvedTitle
     TITLE_TARGETS.forEach((target) => applyTarget(target, resolvedTitle))
     DESCRIPTION_TARGETS.forEach((target) => applyTarget(target, resolvedDescription))
+    IMAGE_TARGETS.forEach((target) => applyTarget(target, resolvedImage))
+    URL_TARGETS.forEach((target) => applyTarget(target, resolvedUrl))
 
     return () => {
       document.title = previousTitle
@@ -118,5 +153,5 @@ export function usePageMetadata({ title, description }: PageMetadata) {
         }
       })
     }
-  }, [title, description])
+  }, [title, description, image, url])
 }

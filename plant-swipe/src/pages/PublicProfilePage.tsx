@@ -114,7 +114,12 @@ export default function PublicProfilePage() {
           defaultValue: `See shared gardens, stats, and activity from ${preferredDisplayName}.`,
         })
       : fallbackProfileDescription)
-  usePageMetadata({ title: seoTitle, description: seoDescription })
+  usePageMetadata({ 
+    title: seoTitle, 
+    description: seoDescription,
+    image: pp?.avatar_url ?? undefined,
+    url: preferredDisplayName ? `/u/${encodeURIComponent(preferredDisplayName)}` : undefined,
+  })
 
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
