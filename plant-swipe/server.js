@@ -15408,32 +15408,89 @@ function scheduleNotificationWorker() {
   notificationWorkerTimer = setTimeout(tick, 2000)
 }
 
-// Serve sitemap.xml with correct Content-Type
+// Dynamic sitemap.xml generator
+// Static pages: NO lastmod (tells Google these are evergreen, don't show dates)
+// Dynamic pages: WITH lastmod (blog posts, plants get proper date indexing)
 const publicDir = path.resolve(__dirname, 'public')
 app.get('/sitemap.xml', async (req, res) => {
-  // Try dist first (production), then public (development)
-  const distDir = path.resolve(__dirname, 'dist')
-  const distPath = path.join(distDir, 'sitemap.xml')
-  const publicPath = path.join(publicDir, 'sitemap.xml')
+  const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
   
-  let sitemapPath = null
-  try {
-    await fs.access(distPath)
-    sitemapPath = distPath
-  } catch {
+  // Static pages - NO lastmod to prevent Google from showing dates
+  // These are "evergreen" pages that shouldn't display modification dates in search
+  const staticPages = [
+    { loc: '/', priority: '1.0', changefreq: 'weekly' },
+    { loc: '/about', priority: '0.8', changefreq: 'monthly' },
+    { loc: '/download', priority: '0.8', changefreq: 'monthly' },
+    { loc: '/pricing', priority: '0.8', changefreq: 'monthly' },
+    { loc: '/contact', priority: '0.6', changefreq: 'monthly' },
+    { loc: '/blog', priority: '0.9', changefreq: 'daily' },
+    { loc: '/discovery', priority: '0.9', changefreq: 'daily' },
+    { loc: '/search', priority: '0.7', changefreq: 'weekly' },
+    { loc: '/gardens', priority: '0.8', changefreq: 'daily' },
+    { loc: '/terms', priority: '0.3', changefreq: 'yearly' },
+  ]
+  
+  // Build sitemap XML
+  let urls = staticPages.map(page => `  <url>
+    <loc>${siteUrl}${page.loc}</loc>
+    <changefreq>${page.changefreq}</changefreq>
+    <priority>${page.priority}</priority>
+  </url>`).join('\n')
+  
+  // Add dynamic content WITH lastmod (blog posts, plants)
+  if (supabaseServer) {
     try {
-      await fs.access(publicPath)
-      sitemapPath = publicPath
-    } catch {
-      // If sitemap doesn't exist, return 404
-      res.status(404).send('Sitemap not found')
-      return
+      // Recent blog posts (with lastmod)
+      const { data: posts } = await supabaseServer
+        .from('blog_posts')
+        .select('slug, updated_at, published_at')
+        .eq('is_published', true)
+        .order('published_at', { ascending: false })
+        .limit(100)
+      
+      if (posts?.length) {
+        urls += '\n' + posts.map(post => {
+          const lastmod = post.updated_at || post.published_at
+          return `  <url>
+    <loc>${siteUrl}/blog/${post.slug}</loc>
+    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>`
+        }).join('\n')
+      }
+      
+      // Popular plants (with lastmod based on when they were updated)
+      const { data: plants } = await supabaseServer
+        .from('plants')
+        .select('id, updated_at, created_at')
+        .order('created_at', { ascending: false })
+        .limit(500)
+      
+      if (plants?.length) {
+        urls += '\n' + plants.map(plant => {
+          const lastmod = plant.updated_at || plant.created_at
+          const lastmodStr = lastmod ? `\n    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>` : ''
+          return `  <url>
+    <loc>${siteUrl}/plants/${plant.id}</loc>${lastmodStr}
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>`
+        }).join('\n')
+      }
+    } catch (err) {
+      console.error('[sitemap] Error fetching dynamic content:', err?.message)
     }
   }
   
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`
+  
   res.setHeader('Content-Type', 'application/xml; charset=utf-8')
   res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
-  res.sendFile(sitemapPath)
+  res.send(sitemap)
 })
 
 // Static assets
