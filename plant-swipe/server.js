@@ -15594,6 +15594,19 @@ async function generateCrawlerHtml(req, pagePath) {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
   const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
   
+  // Internal debug tracking (attached to req for debugging)
+  req._ssrDebug = {
+    pagePath,
+    steps: [],
+    errors: [],
+    matchedRoute: null,
+    queryResults: {}
+  }
+  const ssrDebug = (step, data) => {
+    req._ssrDebug.steps.push({ step, data, time: Date.now() })
+    console.log(`[ssr-debug] ${step}:`, JSON.stringify(data))
+  }
+  
   // SSR timeout for database queries (Discord/social bots typically timeout after 5-10 seconds)
   // Increased to 8 seconds to allow for slow database responses
   const SSR_QUERY_TIMEOUT = Number(process.env.SSR_QUERY_TIMEOUT_MS) || 8000
@@ -15646,6 +15659,7 @@ async function generateCrawlerHtml(req, pagePath) {
     effectivePath = pathParts.slice(1)
   }
   
+  ssrDebug('path_parsed', { pathParts, effectivePath, detectedLang, firstPart: effectivePath[0], secondPart: effectivePath[1] })
   console.log(`[ssr] Generating HTML for: ${pagePath}, lang: ${detectedLang}`)
   
   try {
@@ -15996,9 +16010,19 @@ async function generateCrawlerHtml(req, pagePath) {
     const tr = t[detectedLang] || t.en
     
     // Plant detail page: /plants/:id
+    const isPlantRoute = effectivePath[0] === 'plants' && !!effectivePath[1]
+    ssrDebug('plant_route_check', { 
+      effectivePath0: effectivePath[0], 
+      effectivePath1: effectivePath[1],
+      isPlantRoute,
+      check1: effectivePath[0] === 'plants',
+      check2: !!effectivePath[1]
+    })
     console.log(`[ssr] Checking plant route: effectivePath[0]='${effectivePath[0]}', effectivePath[1]='${effectivePath[1] || 'undefined'}'`)
-    if (effectivePath[0] === 'plants' && effectivePath[1]) {
+    if (isPlantRoute) {
+      req._ssrDebug.matchedRoute = 'plant'
       const plantId = decodeURIComponent(effectivePath[1])
+      ssrDebug('plant_route_matched', { plantId, supabaseAvailable: !!supabaseServer })
       console.log(`[ssr] ✓ Matched plant route! Looking up plant: ${plantId}, supabase available: ${!!supabaseServer}`)
       
       if (!supabaseServer) {
@@ -16013,14 +16037,24 @@ async function generateCrawlerHtml(req, pagePath) {
           'plant_lookup'
         )
         
+        ssrDebug('plant_query_result', { 
+          hasData: !!plant, 
+          hasError: !!plantError, 
+          plantName: plant?.name,
+          errorMsg: plantError?.message
+        })
+        req._ssrDebug.queryResults.plant = { found: !!plant, name: plant?.name, error: plantError?.message }
         console.log(`[ssr] Plant query result: data=${plant ? 'found' : 'null'}, error=${plantError ? plantError.message || 'unknown error' : 'none'}`)
         if (plantError) {
+          req._ssrDebug.errors.push({ type: 'plant_query', error: plantError.message || JSON.stringify(plantError) })
           console.log(`[ssr] ✗ Plant query error: ${plantError.message || JSON.stringify(plantError)}`)
         } else if (!plant) {
+          req._ssrDebug.errors.push({ type: 'plant_not_found', plantId })
           console.log(`[ssr] ✗ Plant not found in database: ${plantId}`)
         }
         
         if (plant) {
+          ssrDebug('plant_found', { name: plant.name, id: plant.id, type: plant.plant_type })
           console.log(`[ssr] ✓ Found plant: ${plant.name} (${plant.id})`)
           
           // Create an engaging title with plant type emoji
@@ -17087,6 +17121,7 @@ app.get('/api/force-ssr', async (req, res) => {
         supabaseAvailable: !!supabaseServer,
         supabaseUrlConfigured: !!supabaseUrlEnv,
         supabaseDirectTest: supabaseTestResult,
+        ssrInternalDebug: fakeReq._ssrDebug,
         debug: {
           pathParts: testPath.split('/').filter(Boolean),
           isPlantRoute: testPath.split('/').filter(Boolean)[0] === 'plants' || testPath.split('/').filter(Boolean)[1] === 'plants'
