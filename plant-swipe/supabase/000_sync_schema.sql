@@ -743,9 +743,15 @@ create table if not exists public.plant_images (
   link text not null,
   use text not null default 'other' check (use in ('primary','discovery','other')),
   created_at timestamptz not null default now(),
-  unique (link)
+  -- Allow same image URL to be used by different plants (composite unique)
+  unique (plant_id, link)
 );
-create unique index if not exists plant_images_use_unique on public.plant_images (plant_id, use);
+-- Drop the old global link uniqueness constraint if it exists (migration)
+alter table if exists public.plant_images drop constraint if exists plant_images_link_key;
+-- Ensure composite uniqueness on (plant_id, link)
+create unique index if not exists plant_images_plant_link_unique on public.plant_images (plant_id, link);
+-- Keep uniqueness on (plant_id, use) for primary/discovery images
+create unique index if not exists plant_images_use_unique on public.plant_images (plant_id, use) where use in ('primary', 'discovery');
 alter table public.plant_images enable row level security;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_images' and policyname='plant_images_select') then

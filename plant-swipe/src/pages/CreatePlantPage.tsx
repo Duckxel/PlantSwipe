@@ -132,6 +132,102 @@ function generateUUIDv4(): string {
   })
 }
 
+// Parse Supabase errors and return user-friendly messages
+function parseSupabaseError(error: any, context?: string): string {
+  if (!error) return 'Unknown error occurred'
+  
+  const message = error.message || error.details || String(error)
+  const code = error.code || ''
+  const errorContext = error.context || context
+  
+  // Handle common constraint violations
+  if (message.includes('plants_name_unique') || (message.includes('duplicate key') && message.includes('name'))) {
+    return 'A plant with this name already exists. Please choose a different name.'
+  }
+  
+  if (message.includes('plant_translations_plant_id_fkey') || (message.includes('foreign key') && message.includes('plant_translations'))) {
+    return 'Unable to save translations because the plant does not exist yet. Please try saving again.'
+  }
+  
+  if (message.includes('plant_images_link_key') || (message.includes('duplicate key') && message.includes('link'))) {
+    return 'An image with this URL already exists. Please use a different image or remove duplicates.'
+  }
+  
+  if (message.includes('plant_images_use_unique')) {
+    return 'Only one primary or discovery image is allowed. Please check your image assignments.'
+  }
+  
+  // Handle 409 conflicts
+  if (code === '23505' || message.includes('unique constraint') || message.includes('duplicate key')) {
+    if (errorContext === 'plant') {
+      return 'A plant with these details already exists. Please check the name and other unique fields.'
+    }
+    if (errorContext === 'translation') {
+      return 'Unable to save translation. Please try saving again.'
+    }
+    if (errorContext === 'images') {
+      return 'An image conflict occurred. Please check for duplicate image URLs.'
+    }
+    return `A record with these details already exists. ${context || 'Please modify the conflicting field.'}`
+  }
+  
+  // Handle FK violations
+  if (code === '23503' || message.includes('foreign key')) {
+    if (errorContext === 'translation') {
+      return 'Unable to save translations because the plant does not exist yet. Please try saving again.'
+    }
+    return 'A referenced record does not exist. Please ensure all related data is saved first.'
+  }
+  
+  // Handle network/timeout errors
+  if (message.includes('network') || message.includes('timeout') || message.includes('ERR_CONNECTION')) {
+    return 'Network error. Please check your connection and try again.'
+  }
+  
+  // Return original message if no specific handling
+  return message
+}
+
+// Generate a unique plant name by appending a number suffix if the name already exists
+async function generateUniquePlantName(baseName: string): Promise<string> {
+  // First, check if the base name with "(Copy)" suffix exists
+  const copyName = `${baseName} (Copy)`
+  const { data: existingCopy } = await supabase
+    .from('plants')
+    .select('name')
+    .ilike('name', copyName)
+    .maybeSingle()
+  
+  if (!existingCopy) {
+    return copyName
+  }
+  
+  // If it exists, find all similar names and generate next number
+  const { data: existingNames } = await supabase
+    .from('plants')
+    .select('name')
+    .ilike('name', `${baseName} (Copy%)`)
+  
+  const usedNumbers = new Set<number>([1])
+  const copyRegex = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(Copy(?: (\\d+))?\\)$`, 'i')
+  
+  for (const row of existingNames || []) {
+    const match = row.name?.match(copyRegex)
+    if (match) {
+      const num = match[1] ? parseInt(match[1], 10) : 1
+      if (!Number.isNaN(num)) usedNumbers.add(num)
+    }
+  }
+  
+  // Find next available number
+  let nextNum = 2
+  while (usedNumbers.has(nextNum)) {
+    nextNum++
+  }
+  
+  return `${baseName} (Copy ${nextNum})`
+}
+
 const emptyPlant: Plant = {
   id: generateUUIDv4(),
   name: "",
@@ -274,8 +370,17 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   if (!normalized?.length) return
   
   // Filter out images without links and ensure use is always set
+  // Also deduplicate links within this plant to avoid constraint violations
+  const seenLinks = new Set<string>()
   const inserts = normalized
-    .filter((img) => img.link && img.link.trim())
+    .filter((img) => {
+      const link = img.link?.trim()
+      if (!link) return false
+      // Deduplicate links within the same plant
+      if (seenLinks.has(link.toLowerCase())) return false
+      seenLinks.add(link.toLowerCase())
+      return true
+    })
     .map((img) => ({ 
       plant_id: plantId, 
       link: img.link!.trim(), 
@@ -317,7 +422,9 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   }
   
   const { error } = await supabase.from('plant_images').insert(inserts)
-  if (error) throw new Error(error.message)
+  if (error) {
+    throw { ...error, context: 'images' }
+  }
 }
 
 async function upsertWateringSchedules(plantId: string, schedules: Plant["plantCare"] | undefined) {
@@ -640,10 +747,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           if (!ignore) {
             // Create a new plant with a new ID, but copy all the data from the source
             const newId = generateUUIDv4()
+            // Generate a unique name to avoid duplicate name conflicts
+            const uniqueName = await generateUniquePlantName(sourcePlant.name)
             const prefilled: Plant = {
               ...sourcePlant,
               id: newId,
-              name: `${sourcePlant.name} (Copy)`,
+              name: uniqueName,
+              // Clear images to avoid duplicate link constraint violations
+              // Users can re-add images or the images will be handled during save
+              images: [],
               meta: {
                 ...sourcePlant.meta,
                 status: IN_PROGRESS_STATUS,
@@ -874,7 +986,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             .upsert(payload)
             .select('id')
             .maybeSingle()
-          if (insertError) throw new Error(insertError.message)
+          if (insertError) {
+            throw { ...insertError, context: 'plant' }
+          }
           savedId = data?.id || plantId
           const colorIds = await upsertColors(plantToSave.identity?.colors || [])
           await linkColors(savedId, colorIds)
@@ -927,7 +1041,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             .from('plant_translations')
             .upsert(englishTranslationPayload, { onConflict: 'plant_id,language' })
           if (englishTranslationError) {
-            throw new Error(englishTranslationError.message)
+            throw { ...englishTranslationError, context: 'translation' }
           }
         }
 
@@ -972,7 +1086,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             .from('plant_translations')
             .upsert(translationPayload, { onConflict: 'plant_id,language' })
           if (translationError) {
-            throw new Error(translationError.message)
+            throw { ...translationError, context: 'translation' }
           }
             const metaUpdatePayload = {
               status: normalizedStatus,
@@ -1010,7 +1124,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (isEnglish && !existingLoaded) setExistingLoaded(true)
         onSaved?.(savedId)
         } catch (e: any) {
-          setError(e?.message || t('plantAdmin.errors.savePlant', 'Failed to save plant'))
+          // Use parseSupabaseError for user-friendly messages
+          const userFriendlyError = parseSupabaseError(e, 'Please check the plant details.')
+          setError(userFriendlyError)
+          console.error('[savePlant] Error:', e)
       } finally {
         setSaving(false)
       }
