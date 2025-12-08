@@ -82,8 +82,9 @@ import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
 import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLanguageEditor";
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
+import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 
-type TabKey = "overview" | "plants" | "journal" | "analytics" | "settings";
+type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
 
 const getMaxScheduleSelections = (period: "week" | "month" | "year") =>
   period === "week" ? 7 : period === "month" ? 12 : 52;
@@ -799,9 +800,9 @@ export const GardenDashboardPage: React.FC = () => {
       const todayValue = todayOverride ?? serverTodayRef.current ?? serverToday;
       if (!id || !todayValue) return;
 
-      const needsRoutineData = tab === "overview"; // Tasks widget now on overview
+      const needsTasksData = tab === "tasks" || tab === "overview"; // Tasks widget on overview + tasks tab
       const needsPlantsData = tab === "plants";
-      const shouldRun = opts?.force || needsRoutineData || needsPlantsData;
+      const shouldRun = opts?.force || needsTasksData || needsPlantsData;
       if (!shouldRun) return;
 
       if (heavyLoadingRef.current) return;
@@ -809,7 +810,7 @@ export const GardenDashboardPage: React.FC = () => {
       setHeavyLoading(true);
       try {
         let weekDaysIso: string[] = [];
-        if (needsRoutineData) {
+        if (needsTasksData) {
           const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`);
           const anchorUTC = parseUTC(todayValue);
           const dayUTC = anchorUTC.getUTCDay();
@@ -827,7 +828,7 @@ export const GardenDashboardPage: React.FC = () => {
 
         const [allTasks] = await Promise.all([
           listGardenTasks(id),
-          needsRoutineData && weekDaysIso.length === 7
+          needsTasksData && weekDaysIso.length === 7
             ? (async () => {
                 const weekStartIso = `${
                   weekDaysIso[0] || today
@@ -893,7 +894,7 @@ export const GardenDashboardPage: React.FC = () => {
 
         setTodayTaskOccurrences(occsDetailed as any);
 
-        if (needsPlantsData || needsRoutineData) {
+        if (needsPlantsData || needsTasksData) {
           const taskCountMap: Record<string, number> = {};
           for (const t of allTasks)
             taskCountMap[t.gardenPlantId] =
@@ -934,7 +935,7 @@ export const GardenDashboardPage: React.FC = () => {
           );
         });
 
-        if (needsRoutineData && weekDaysIso.length === 7) {
+        if (needsTasksData && weekDaysIso.length === 7) {
           const cachedWeekStats = await getGardenWeeklyStatsCached(
             id,
             weekDaysIso[0],
@@ -1063,7 +1064,7 @@ export const GardenDashboardPage: React.FC = () => {
           }
         }
 
-        if (needsPlantsData || needsRoutineData) {
+        if (needsPlantsData || needsTasksData) {
           const occsForDueToday =
             cachedOccs && cachedOccs.length > 0
               ? cachedOccs
@@ -1236,7 +1237,7 @@ export const GardenDashboardPage: React.FC = () => {
               return next;
             });
 
-            if (tab === "overview" && today) {
+            if ((tab === "overview" || tab === "tasks") && today) {
               const weekOccs = await listOccurrencesForTasks(
                 allTasks.map((t) => t.id),
                 weekStartIso,
@@ -1540,7 +1541,7 @@ export const GardenDashboardPage: React.FC = () => {
     // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
     React.useEffect(() => {
       if (loading || !id || !serverToday) return;
-      if (tab !== "overview" && tab !== "plants") return;
+      if (tab !== "overview" && tab !== "plants" && tab !== "tasks") return;
       // Use requestIdleCallback to defer heavy loading until browser is idle
       const loadFn = () => {
         loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
@@ -2265,10 +2266,10 @@ export const GardenDashboardPage: React.FC = () => {
         });
       }
       await load({ silent: true, preserveHeavy: true });
-      if (tab === "overview") {
+      if (tab === "overview" || tab === "tasks") {
         await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
       }
-      if (id) navigate(`/garden/${id}/plants`);
+      if (id) navigate(`/garden/${id}/tasks`);
       emitGardenRealtime("tasks");
     } catch (e: any) {
       setError(e?.message || "Failed to save schedule");
@@ -2321,10 +2322,10 @@ export const GardenDashboardPage: React.FC = () => {
         } catch {}
       }
       await load({ silent: true, preserveHeavy: true });
-      if (tab === "overview") {
+      if (tab === "overview" || tab === "tasks") {
         await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
       }
-      if (id) navigate(`/garden/${id}/plants`);
+      if (id) navigate(`/garden/${id}/tasks`);
       emitGardenRealtime("tasks");
     } catch (e: any) {
       setError(e?.message || "Failed to log watering");
@@ -2585,6 +2586,7 @@ export const GardenDashboardPage: React.FC = () => {
                   ? [
                       ["overview", t("gardenDashboard.overview")],
                       ["plants", t("gardenDashboard.plants")],
+                      ["tasks", t("gardenDashboard.tasks", "Tasks")],
                       ["journal", t("gardenDashboard.journal", "Journal")],
                       ["analytics", t("gardenDashboard.analytics", "Analytics")],
                       ["settings", t("gardenDashboard.settings")],
@@ -2632,7 +2634,7 @@ export const GardenDashboardPage: React.FC = () => {
                     progressingOccIds={progressingOccIds}
                     completingPlantIds={completingPlantIds}
                     completeAllTodayForPlant={completeAllTodayForPlant}
-                    onNavigateToPlants={() => navigate(`/garden/${id}/plants`)}
+                    onNavigateToPlants={() => navigate(`/garden/${id}/tasks`)}
                     shareStatus={shareStatus}
                   />
                 }
@@ -2923,10 +2925,34 @@ export const GardenDashboardPage: React.FC = () => {
                   )
                 }
               />
-              {/* Redirect old routine route to overview */}
+              {/* Redirect old routine route to tasks */}
               <Route
                 path="routine"
-                element={<Navigate to={`/garden/${id}/overview`} replace />}
+                element={<Navigate to={`/garden/${id}/tasks`} replace />}
+              />
+              {/* Tasks Section */}
+              <Route
+                path="tasks"
+                element={
+                  canViewFullGarden ? (
+                    <GardenTasksSection
+                      plants={plants}
+                      todayTaskOccurrences={todayTaskOccurrences}
+                      onProgressOccurrence={progressOccurrenceHandler}
+                      progressingOccIds={progressingOccIds}
+                      completingPlantIds={completingPlantIds}
+                      completeAllTodayForPlant={completeAllTodayForPlant}
+                      weekDays={weekDays}
+                      weekCounts={weekCounts}
+                      weekCountsByType={weekCountsByType}
+                      serverToday={serverToday}
+                      dueThisWeekByPlant={dueThisWeekByPlant}
+                      duePlantIds={dueToday}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
+                }
               />
               <Route
                 path="journal"

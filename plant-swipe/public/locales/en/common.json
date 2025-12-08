@@ -1369,6 +1369,7 @@
     "loading": "Loading...",
     "overview": "Overview",
     "plants": "Plants",
+    "tasks": "Tasks",
     "routine": "Routine",
     "journal": "Journal",
     "analytics": "Analytics",
@@ -1625,7 +1626,9 @@
         "fri": "Fri",
         "sat": "Sat",
         "sun": "Sun"
-      }
+      },
+      "noTasks": "No tasks scheduled",
+      "noTasksHint": "Add tasks to your plants to see them here"
     },
     "plantsSection": {
       "plantsInGarden": "Plants in this garden",
@@ -1757,7 +1760,7 @@
       "title": "Today's Tasks",
       "allDone": "All done for today!",
       "enjoyYourDay": "Enjoy your day, your plants are happy.",
-      "viewAll": "View all {{count}} plants with tasks"
+      "viewAll": "View all tasks ({{count}} plants)"
     },
     "taskDialog": {
       "createTask": "Create task",

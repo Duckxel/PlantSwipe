@@ -1369,6 +1369,7 @@
     "loading": "Chargement...",
     "overview": "Aperçu",
     "plants": "Plantes",
+    "tasks": "Tâches",
     "routine": "Routine",
     "journal": "Journal",
     "analytics": "Statistiques",
@@ -1625,7 +1626,9 @@
         "fri": "Ven",
         "sat": "Sam",
         "sun": "Dim"
-      }
+      },
+      "noTasks": "Aucune tâche planifiée",
+      "noTasksHint": "Ajoutez des tâches à vos plantes pour les voir ici"
     },
     "plantsSection": {
       "plantsInGarden": "Plantes dans ce jardin",
@@ -1757,7 +1760,7 @@
       "title": "Tâches du jour",
       "allDone": "Tout est fait pour aujourd'hui !",
       "enjoyYourDay": "Profitez de votre journée, vos plantes sont heureuses.",
-      "viewAll": "Voir les {{count}} plantes avec des tâches"
+      "viewAll": "Voir toutes les tâches ({{count}} plantes)"
     },
     "taskDialog": {
       "createTask": "Créer une tâche",
