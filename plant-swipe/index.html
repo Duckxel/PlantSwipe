@@ -6,6 +6,24 @@
       <meta name="application-name" content="Aphylia" />
       <meta name="description" content="Discover, swipe and manage the perfect plants for every garden." />
       <meta name="theme-color" content="#052e16" />
+      
+      <!-- Open Graph / Facebook -->
+      <meta property="og:type" content="website" />
+      <meta property="og:site_name" content="Aphylia" />
+      <meta property="og:url" content="https://aphylia.app" />
+      <meta property="og:title" content="Aphylia - Discover & Grow Your Perfect Garden" />
+      <meta property="og:description" content="Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden." />
+      <meta property="og:image" content="https://aphylia.app/icons/icon-512x512.png" />
+      <meta property="og:image:width" content="512" />
+      <meta property="og:image:height" content="512" />
+      <meta property="og:image:alt" content="Aphylia - Plant Discovery App" />
+      
+      <!-- Twitter Card -->
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:url" content="https://aphylia.app" />
+      <meta name="twitter:title" content="Aphylia - Discover & Grow Your Perfect Garden" />
+      <meta name="twitter:description" content="Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden." />
+      <meta name="twitter:image" content="https://aphylia.app/icons/icon-512x512.png" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -112,6 +130,99 @@
               </svg>
           </div>
       </div>
+      <!-- Fallback content for web archives and users with JavaScript disabled -->
+      <noscript>
+        <style>
+          .loading-container { display: none !important; }
+          .noscript-content {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+          }
+          .noscript-content h1 { color: #052e16; margin-bottom: 10px; }
+          .noscript-content h2 { color: #065f46; margin-top: 30px; }
+          .noscript-content a { color: #059669; }
+          .noscript-content .logo { font-size: 2em; margin-bottom: 20px; }
+          .noscript-content nav { margin: 20px 0; padding: 15px 0; border-bottom: 1px solid #d1d5db; }
+          .noscript-content nav a { margin-right: 20px; text-decoration: none; font-weight: 500; }
+          .noscript-content .features { display: grid; gap: 15px; margin: 20px 0; }
+          .noscript-content .feature { padding: 15px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; }
+          .noscript-content .archive-notice { 
+            background: #fef3c7; 
+            border: 1px solid #f59e0b; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 20px 0;
+          }
+          .noscript-content footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #d1d5db; color: #6b7280; font-size: 0.9em; }
+        </style>
+        <div class="noscript-content">
+          <div class="logo">🌱</div>
+          <h1>Welcome to Aphylia</h1>
+          <p>Your personal plant companion for discovering, managing, and growing beautiful gardens.</p>
+          
+          <nav>
+            <a href="/">Home</a>
+            <a href="/search">Search Plants</a>
+            <a href="/blog">Blog</a>
+            <a href="/about">About</a>
+            <a href="/contact">Contact</a>
+          </nav>
+
+          <div class="archive-notice">
+            <strong>📚 Viewing an archived or non-JavaScript version</strong><br>
+            This page requires JavaScript for full functionality. If you're viewing this from a web archive, 
+            the content has been preserved but interactive features won't work.
+            <br><br>
+            <a href="https://aphylia.app">Visit the live site →</a>
+          </div>
+
+          <h2>Discover Your Perfect Plants</h2>
+          <p>Aphylia helps you find and care for plants that match your lifestyle, space, and experience level.</p>
+
+          <div class="features">
+            <div class="feature">
+              <strong>🔍 Plant Discovery</strong><br>
+              Browse thousands of plants with detailed care guides, growing tips, and beautiful photos.
+            </div>
+            <div class="feature">
+              <strong>🏡 Garden Management</strong><br>
+              Track all your plants in one place. Get reminders for watering, fertilizing, and seasonal tasks.
+            </div>
+            <div class="feature">
+              <strong>📱 Works Everywhere</strong><br>
+              Use Aphylia on any device - phone, tablet, or computer. Install as an app for quick access.
+            </div>
+            <div class="feature">
+              <strong>🌍 Community</strong><br>
+              Share your gardens, discover what others are growing, and learn from fellow plant enthusiasts.
+            </div>
+          </div>
+
+          <h2>Popular Plant Categories</h2>
+          <ul>
+            <li><a href="/search?type=vegetable">Vegetables</a> - Tomatoes, peppers, lettuce, and more</li>
+            <li><a href="/search?type=herb">Herbs</a> - Basil, mint, rosemary, thyme</li>
+            <li><a href="/search?type=flower">Flowers</a> - Roses, tulips, sunflowers</li>
+            <li><a href="/search?type=succulent">Succulents</a> - Easy-care plants for beginners</li>
+            <li><a href="/search?type=tree">Trees & Shrubs</a> - Fruit trees, ornamentals</li>
+          </ul>
+
+          <h2>Latest from Our Blog</h2>
+          <p>Visit our <a href="/blog">blog</a> for gardening tips, seasonal guides, and plant care advice.</p>
+
+          <footer>
+            <p>&copy; 2024-2025 Aphylia. Helping you grow your plant knowledge 🌱</p>
+            <p>
+              <a href="/terms">Terms of Service</a> · 
+              <a href="/about">About Us</a> · 
+              <a href="/contact">Contact</a>
+            </p>
+          </footer>
+        </div>
+      </noscript>
       <script type="module" src="/src/main.tsx"></script>
     </body>
 </html>
