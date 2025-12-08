@@ -15595,14 +15595,19 @@ async function generateCrawlerHtml(req, pagePath) {
   const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
   
   // SSR timeout for database queries (Discord/social bots typically timeout after 5-10 seconds)
-  const SSR_QUERY_TIMEOUT = Number(process.env.SSR_QUERY_TIMEOUT_MS) || 4000
+  // Increased to 8 seconds to allow for slow database responses
+  const SSR_QUERY_TIMEOUT = Number(process.env.SSR_QUERY_TIMEOUT_MS) || 8000
   
   // Helper to wrap Supabase queries with a timeout to prevent slow responses
   const ssrQuery = async (queryPromise, label = 'query') => {
+    const startTime = Date.now()
     try {
-      return await withTimeout(queryPromise, SSR_QUERY_TIMEOUT, `SSR_${label.toUpperCase()}_TIMEOUT`)
+      const result = await withTimeout(queryPromise, SSR_QUERY_TIMEOUT, `SSR_${label.toUpperCase()}_TIMEOUT`)
+      console.log(`[ssr] ${label} completed in ${Date.now() - startTime}ms`)
+      return result
     } catch (err) {
-      console.warn(`[ssr] ${label} timed out after ${SSR_QUERY_TIMEOUT}ms:`, err?.message || err)
+      const duration = Date.now() - startTime
+      console.error(`[ssr] ✗ ${label} FAILED after ${duration}ms: ${err?.message || err}`)
       return { data: null, error: err }
     }
   }
@@ -17059,7 +17064,9 @@ app.get('/api/force-ssr', async (req, res) => {
       }
     }
     
+    const ssrStartTime = Date.now()
     const html = await generateCrawlerHtml(fakeReq, testPath)
+    const ssrDuration = Date.now() - ssrStartTime
     
     if (jsonMode) {
       // Extract title, og:title, og:description, og:image from HTML
@@ -17075,6 +17082,8 @@ app.get('/api/force-ssr', async (req, res) => {
         ogDescription: ogDescMatch?.[1] || null,
         ogImage: ogImageMatch?.[1] || null,
         htmlLength: html.length,
+        ssrDurationMs: ssrDuration,
+        ssrTimeoutMs: Number(process.env.SSR_QUERY_TIMEOUT_MS) || 8000,
         supabaseAvailable: !!supabaseServer,
         supabaseUrlConfigured: !!supabaseUrlEnv,
         supabaseDirectTest: supabaseTestResult,
