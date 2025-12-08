@@ -16939,8 +16939,11 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="theme-color" content="#052e16">
   <meta name="application-name" content="Aphylia">
   
-  <!-- Icons - using data URIs for archive compatibility -->
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌱%3C/text%3E%3C/svg%3E">
+  <!-- Icons - Google requires 48x48+ favicon for search results -->
+  <link rel="icon" type="image/svg+xml" href="${siteUrl}/icons/plant-swipe-icon-outline.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="${siteUrl}/icons/icon-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="${siteUrl}/icons/icon-512x512.png">
+  <link rel="apple-touch-icon" href="${siteUrl}/icons/icon-192x192.png">
   
   <style>
     * { box-sizing: border-box; }
