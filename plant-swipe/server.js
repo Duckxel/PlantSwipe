@@ -16193,7 +16193,7 @@ async function generateCrawlerHtml(req, pagePath) {
       const { data: post, error: postError } = await ssrQuery(
         supabaseServer
           .from('blog_posts')
-          .select('id, title, excerpt, content, cover_image_url, author_name, published_at, reading_time_minutes')
+          .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
           .eq('slug', slug)
           .eq('is_published', true)
           .maybeSingle(),
@@ -16205,8 +16205,8 @@ async function generateCrawlerHtml(req, pagePath) {
       } else if (post) {
         console.log(`[ssr] ✓ Found blog post: ${post.title}`)
         
-        // Estimate read time if not provided
-        const readTime = post.reading_time_minutes || (post.content ? Math.ceil(post.content.replace(/<[^>]*>/g, '').split(/\s+/).length / 200) : 5)
+        // Estimate read time from body_html content
+        const readTime = post.body_html ? Math.ceil(post.body_html.replace(/<[^>]*>/g, '').split(/\s+/).length / 200) : 5
         
         // Create engaging title
         title = `${post.title} | ${tr.blogTitle} 📖`
@@ -16215,14 +16215,14 @@ async function generateCrawlerHtml(req, pagePath) {
         const descParts = []
         if (post.excerpt) {
           descParts.push(post.excerpt.slice(0, 150))
-        } else if (post.content) {
-          const plainText = post.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+        } else if (post.body_html) {
+          const plainText = post.body_html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
           descParts.push(plainText.slice(0, 150))
         }
-        descParts.push(`📚 ${readTime} ${tr.blogMinRead}`)
+        if (readTime > 0) descParts.push(`📚 ${readTime} ${tr.blogMinRead}`)
         if (post.author_name) descParts.push(`✍️ ${tr.blogBy} ${post.author_name}`)
         
-        description = descParts.join(' • ')
+        description = descParts.length > 0 ? descParts.join(' • ') : tr.blogDesc
         
         if (post.cover_image_url) image = ensureAbsoluteUrl(post.cover_image_url) || image
         
@@ -16240,10 +16240,9 @@ async function generateCrawlerHtml(req, pagePath) {
             <div class="plant-meta">
               ${post.author_name ? `✍️ ${tr.blogBy} <span itemprop="author">${escapeHtml(post.author_name)}</span>` : ''}
               ${publishDate ? ` · 📅 <time itemprop="datePublished" datetime="${post.published_at}">${publishDate}</time>` : ''}
-              · 📚 ${readTime} ${tr.blogMinRead}
+              ${readTime > 0 ? ` · 📚 ${readTime} ${tr.blogMinRead}` : ''}
             </div>
             ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
-            <div itemprop="articleBody">${post.content || ''}</div>
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadFull} →</a></p>
           </article>
         `
@@ -16259,7 +16258,7 @@ async function generateCrawlerHtml(req, pagePath) {
       const { data: profile, error: profileError } = await ssrQuery(
         supabaseServer
           .from('profiles')
-          .select('id, display_name, bio, avatar_url, is_private, created_at')
+          .select('id, display_name, bio, avatar_url, is_private, country, favorite_plant')
           .eq('display_name', username)
           .eq('is_private', false)
           .maybeSingle(),
@@ -16279,7 +16278,7 @@ async function generateCrawlerHtml(req, pagePath) {
             supabaseServer
               .from('gardens')
               .select('id', { count: 'exact', head: true })
-              .eq('user_id', profile.id),
+              .eq('created_by', profile.id),
             'profile_garden_count'
           )
           gardenCount = gCount || 0
@@ -16289,7 +16288,7 @@ async function generateCrawlerHtml(req, pagePath) {
             supabaseServer
               .from('gardens')
               .select('id')
-              .eq('user_id', profile.id),
+              .eq('created_by', profile.id),
             'profile_gardens'
           )
           if (gardens?.length) {
@@ -16305,11 +16304,6 @@ async function generateCrawlerHtml(req, pagePath) {
           }
         } catch {}
         
-        // Calculate membership duration - locale-specific
-        const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
-        const joinDate = profile.created_at ? new Date(profile.created_at) : null
-        const memberSince = joinDate ? joinDate.toLocaleDateString(dateLocales[detectedLang] || 'en-US', { month: 'short', year: 'numeric' }) : null
-        
         // Create engaging title
         title = `🌱 ${profile.display_name} | ${tr.profileGardenProfile} | Aphylia`
         
@@ -16322,9 +16316,10 @@ async function generateCrawlerHtml(req, pagePath) {
         }
         if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} ${tr.profileGardens}`)
         if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
-        if (memberSince) descParts.push(`📅 ${tr.profileMemberSince} ${memberSince}`)
+        if (profile.country) descParts.push(`📍 ${profile.country}`)
+        if (profile.favorite_plant) descParts.push(`❤️ ${profile.favorite_plant}`)
         
-        description = descParts.join(' • ')
+        description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
         
         if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
         
@@ -16334,7 +16329,7 @@ async function generateCrawlerHtml(req, pagePath) {
             <div class="plant-meta">
               ${gardenCount > 0 ? `🏡 ${gardenCount} ${tr.profileGardens}` : ''}
               ${plantCount > 0 ? ` · 🌿 ${plantCount} ${tr.profilePlants}` : ''}
-              ${memberSince ? ` · 📅 ${tr.profileMemberSince} ${memberSince}` : ''}
+              ${profile.country ? ` · 📍 ${escapeHtml(profile.country)}` : ''}
             </div>
             ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileExploreGardens} ${escapeHtml(profile.display_name)} →</a></p>
@@ -16352,7 +16347,7 @@ async function generateCrawlerHtml(req, pagePath) {
       const { data: garden, error: gardenError } = await ssrQuery(
         supabaseServer
           .from('gardens')
-          .select('id, name, description, user_id, created_at, location, climate_zone')
+          .select('id, name, created_by, created_at, privacy, location_city, location_country, cover_image_url')
           .eq('id', gardenId)
           .maybeSingle(),
         'garden_lookup'
@@ -16369,19 +16364,24 @@ async function generateCrawlerHtml(req, pagePath) {
         let gardenImage = null
         
         try {
+          // Use garden cover image if available
+          if (garden.cover_image_url) {
+            gardenImage = ensureAbsoluteUrl(garden.cover_image_url)
+          }
+          
           // Get owner (with timeout)
-          if (garden.user_id) {
+          if (garden.created_by) {
             const { data: owner } = await ssrQuery(
               supabaseServer
                 .from('profiles')
                 .select('display_name, avatar_url')
-                .eq('id', garden.user_id)
+                .eq('id', garden.created_by)
                 .maybeSingle(),
               'garden_owner'
             )
             if (owner) {
               ownerName = owner.display_name
-              if (owner.avatar_url) gardenImage = ensureAbsoluteUrl(owner.avatar_url)
+              if (!gardenImage && owner.avatar_url) gardenImage = ensureAbsoluteUrl(owner.avatar_url)
             }
           }
           
@@ -16434,12 +16434,13 @@ async function generateCrawlerHtml(req, pagePath) {
         
         // Create rich description
         const descParts = []
-        if (garden.description) {
-          descParts.push(garden.description.slice(0, 100))
-        }
+        // Build location string from city/country
+        const locationParts = [garden.location_city, garden.location_country].filter(Boolean)
+        const gardenLocation = locationParts.length > 0 ? locationParts.join(', ') : null
+        
         if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.gardenPlantsGrowing}`)
         if (ownerName) descParts.push(`👤 ${tr.gardenBy} ${ownerName}`)
-        if (garden.location) descParts.push(`📍 ${garden.location}`)
+        if (gardenLocation) descParts.push(`📍 ${gardenLocation}`)
         if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
         
         description = descParts.length > 0 
@@ -16454,10 +16455,10 @@ async function generateCrawlerHtml(req, pagePath) {
             <div class="plant-meta">
               ${plantCount > 0 ? `🌿 ${plantCount} ${tr.gardenPlantsGrowing}` : `🌱 ${tr.gardenStartingFresh}`}
               ${ownerName ? ` · 👤 ${tr.gardenBy} ${escapeHtml(ownerName)}` : ''}
-              ${garden.location ? ` · 📍 ${escapeHtml(garden.location)}` : ''}
+              ${gardenLocation ? ` · 📍 ${escapeHtml(gardenLocation)}` : ''}
               ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
             </div>
-            ${garden.description ? `<p itemprop="description">${escapeHtml(garden.description)}</p>` : `<p>${tr.gardenFilled} 🌸</p>`}
+            <p>${tr.gardenFilled} 🌸</p>
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenExploreThis} →</a></p>
           </article>
         `
@@ -16700,13 +16701,13 @@ async function generateCrawlerHtml(req, pagePath) {
       const listId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
       
-      // Try to get the bookmark list info
+      // Try to get the bookmark list info (using correct table name 'bookmarks')
       const { data: bookmarkList } = await ssrQuery(
         supabaseServer
-          .from('plant_lists')
-          .select('id, name, description, user_id, is_public')
+          .from('bookmarks')
+          .select('id, name, user_id, visibility, created_at')
           .eq('id', listId)
-          .eq('is_public', true)
+          .eq('visibility', 'public')
           .maybeSingle(),
         'bookmark_lookup'
       )
@@ -16732,12 +16733,12 @@ async function generateCrawlerHtml(req, pagePath) {
             if (owner) ownerName = owner.display_name
           }
           
-          // Get plant count (with timeout)
+          // Get plant count (with timeout) - using correct table 'bookmark_items'
           const { count } = await ssrQuery(
             supabaseServer
-              .from('plant_list_items')
+              .from('bookmark_items')
               .select('id', { count: 'exact', head: true })
-              .eq('list_id', listId),
+              .eq('bookmark_id', listId),
             'bookmark_plant_count'
           )
           plantCount = count || 0
@@ -16745,9 +16746,9 @@ async function generateCrawlerHtml(req, pagePath) {
           // Get first plant image (with timeout)
           const { data: listPlants } = await ssrQuery(
             supabaseServer
-              .from('plant_list_items')
+              .from('bookmark_items')
               .select('plant_id')
-              .eq('list_id', listId)
+              .eq('bookmark_id', listId)
               .limit(1),
             'bookmark_plants_for_img'
           )
@@ -16769,9 +16770,6 @@ async function generateCrawlerHtml(req, pagePath) {
         title = `${listEmoji} ${bookmarkList.name || tr.bookmarksCollection} | Aphylia`
         
         const descParts = []
-        if (bookmarkList.description) {
-          descParts.push(bookmarkList.description.slice(0, 100))
-        }
         if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
         if (ownerName) descParts.push(`👤 ${tr.bookmarksCurated} ${ownerName}`)
         
@@ -16788,7 +16786,7 @@ async function generateCrawlerHtml(req, pagePath) {
               ${plantCount > 0 ? `🌿 ${plantCount} ${tr.profilePlants}` : ''}
               ${ownerName ? ` · 👤 ${tr.bookmarksCurated} ${escapeHtml(ownerName)}` : ''}
             </div>
-            ${bookmarkList.description ? `<p>${escapeHtml(bookmarkList.description)}</p>` : `<p>${tr.bookmarksCarefully} 🌱</p>`}
+            <p>${tr.bookmarksCarefully} 🌱</p>
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
           </article>
         `
