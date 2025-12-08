@@ -9633,6 +9633,7 @@ app.options('/api/admin/branches', (_req, res) => {
 })
 
 // Public: Track a page visit (client-initiated for SPA navigations)
+// This endpoint is designed to be tolerant and never block user flows
 app.post('/api/track-visit', async (req, res) => {
   try {
     const sessionId = getOrSetSessionId(req, res)
@@ -9645,18 +9646,27 @@ app.post('/api/track-visit', async (req, res) => {
     const userAgent = req.get('user-agent') || ''
     const tokenUserId = await getUserIdFromRequest(req)
     const effectiveUserId = tokenUserId || (typeof userId === 'string' ? userId : null)
+    
+    // Be tolerant: if pagePath is missing, log and still respond with 204
+    // Tracking should never block or break user flows
     if (typeof pagePath !== 'string' || pagePath.length === 0) {
-      res.status(400).json({ error: 'Missing pagePath' })
+      console.warn('[track-visit] Missing pagePath, skipping visit recording')
+      res.status(204).end()
       return
     }
+    
     const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
     const lang = language || acceptLanguage
     const referrer = (typeof bodyReferrer === 'string' && bodyReferrer.length > 0) ? bodyReferrer : (req.get('referer') || req.get('referrer') || '')
     // Do not block the response on DB write; best-effort in background
-    insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req).catch(() => {})
+    insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req).catch((err) => {
+      console.warn('[track-visit] Failed to insert visit:', err?.message || 'unknown error')
+    })
     res.status(204).end()
   } catch (e) {
-    res.status(500).json({ error: 'Failed to record visit' })
+    // Even on errors, respond with 204 to avoid blocking user flows
+    console.error('[track-visit] Unexpected error:', e?.message || e)
+    res.status(204).end()
   }
 })
 

@@ -132,6 +132,113 @@ function generateUUIDv4(): string {
   })
 }
 
+// Parse Supabase errors and return user-friendly messages
+function parseSupabaseError(error: any, context?: string): string {
+  if (!error) return 'Unknown error occurred'
+  
+  const message = error.message || error.details || String(error)
+  const code = error.code || ''
+  const errorContext = error.context || context
+  
+  // Handle common constraint violations
+  if (message.includes('plants_name_unique') || (message.includes('duplicate key') && message.includes('name') && !message.includes('scientific'))) {
+    return 'A plant with this name already exists. Please choose a different name.'
+  }
+  
+  if (message.includes('plants_scientific_name_unique') || (message.includes('duplicate key') && message.includes('scientific_name'))) {
+    return 'A plant with this scientific name already exists. Please enter a different scientific name or leave it empty.'
+  }
+  
+  if (message.includes('plant_translations_plant_id_fkey') || (message.includes('foreign key') && message.includes('plant_translations'))) {
+    return 'Unable to save translations because the plant does not exist yet. Please try saving again.'
+  }
+  
+  if (message.includes('plant_images_link_key') || (message.includes('duplicate key') && message.includes('link'))) {
+    return 'An image with this URL already exists. Please use a different image or remove duplicates.'
+  }
+  
+  if (message.includes('plant_images_use_unique')) {
+    return 'Only one primary or discovery image is allowed. Please check your image assignments.'
+  }
+  
+  // Handle 409 conflicts
+  if (code === '23505' || message.includes('unique constraint') || message.includes('duplicate key')) {
+    if (errorContext === 'plant') {
+      return 'A plant with these details already exists. Please check the name and other unique fields.'
+    }
+    if (errorContext === 'translation') {
+      return 'Unable to save translation. Please try saving again.'
+    }
+    if (errorContext === 'images') {
+      return 'An image conflict occurred. Please check for duplicate image URLs.'
+    }
+    return `A record with these details already exists. ${context || 'Please modify the conflicting field.'}`
+  }
+  
+  // Handle FK violations
+  if (code === '23503' || message.includes('foreign key')) {
+    if (errorContext === 'translation') {
+      return 'Unable to save translations because the plant does not exist yet. Please try saving again.'
+    }
+    return 'A referenced record does not exist. Please ensure all related data is saved first.'
+  }
+  
+  // Handle network/timeout errors
+  if (message.includes('network') || message.includes('timeout') || message.includes('ERR_CONNECTION')) {
+    return 'Network error. Please check your connection and try again.'
+  }
+  
+  // Return original message if no specific handling
+  return message
+}
+
+// Generate a unique plant name by appending a number suffix if the name already exists
+async function generateUniquePlantName(baseName: string): Promise<string> {
+  // First, check if the base name with "(Copy)" suffix exists
+  const copyName = `${baseName} (Copy)`
+  
+  // Get all plants that might conflict (case-insensitive)
+  const { data: existingPlants } = await supabase
+    .from('plants')
+    .select('name')
+    .or(`name.ilike.${copyName},name.ilike.${baseName} (Copy %)`)
+  
+  console.log('[generateUniquePlantName] Checking for:', { baseName, copyName, existingPlants })
+  
+  // Check if exact copy name exists (case-insensitive)
+  const copyNameLower = copyName.toLowerCase()
+  const copyExists = (existingPlants || []).some(
+    (p) => p.name.toLowerCase() === copyNameLower
+  )
+  
+  if (!copyExists) {
+    console.log('[generateUniquePlantName] Returning:', copyName)
+    return copyName
+  }
+  
+  // Find all used numbers
+  const usedNumbers = new Set<number>([1])
+  const copyRegex = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(Copy(?: (\\d+))?\\)$`, 'i')
+  
+  for (const row of existingPlants || []) {
+    const match = row.name?.match(copyRegex)
+    if (match) {
+      const num = match[1] ? parseInt(match[1], 10) : 1
+      if (!Number.isNaN(num)) usedNumbers.add(num)
+    }
+  }
+  
+  // Find next available number
+  let nextNum = 2
+  while (usedNumbers.has(nextNum)) {
+    nextNum++
+  }
+  
+  const result = `${baseName} (Copy ${nextNum})`
+  console.log('[generateUniquePlantName] Returning:', result)
+  return result
+}
+
 const emptyPlant: Plant = {
   id: generateUUIDv4(),
   name: "",
@@ -274,8 +381,17 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   if (!normalized?.length) return
   
   // Filter out images without links and ensure use is always set
+  // Also deduplicate links within this plant to avoid constraint violations
+  const seenLinks = new Set<string>()
   const inserts = normalized
-    .filter((img) => img.link && img.link.trim())
+    .filter((img) => {
+      const link = img.link?.trim()
+      if (!link) return false
+      // Deduplicate links within the same plant
+      if (seenLinks.has(link.toLowerCase())) return false
+      seenLinks.add(link.toLowerCase())
+      return true
+    })
     .map((img) => ({ 
       plant_id: plantId, 
       link: img.link!.trim(), 
@@ -317,7 +433,9 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   }
   
   const { error } = await supabase.from('plant_images').insert(inserts)
-  if (error) throw new Error(error.message)
+  if (error) {
+    throw { ...error, context: 'images' }
+  }
 }
 
 async function upsertWateringSchedules(plantId: string, schedules: Plant["plantCare"] | undefined) {
@@ -389,9 +507,11 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   if (!data) return null
   
   // Load translation if language is provided
-  // For English, also check if there's a translation entry to ensure consistency
+  // For English, the plants.name is the authoritative source (has unique constraint)
+  // For other languages, use plant_translations
+  const isEnglish = !language || language === 'en'
   let translation: any = null
-  if (language) {
+  if (language && !isEnglish) {
     const { data: translationData } = await supabase
       .from('plant_translations')
       .select('*')
@@ -415,9 +535,14 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       url: translation?.source_url || data.source_url || undefined,
     })
   }
-    const plant: Plant = {
+  
+  // For English: ALWAYS use data.name from plants table (authoritative, has unique constraint)
+  // For other languages: use translation name, fallback to plants.name
+  const plantName = isEnglish ? data.name : (translation?.name || data.name)
+  
+  const plant: Plant = {
       id: data.id,
-      name: translation?.name || data.name,
+      name: plantName,
       plantType: (plantTypeEnum.toUi(data.plant_type) as Plant["plantType"]) || undefined,
       utility: utilityEnum.toUiArray(data.utility) as Plant["utility"],
       comestiblePart: comestiblePartEnum.toUiArray(data.comestible_part) as Plant["comestiblePart"],
@@ -593,8 +718,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       languageRef.current = language
     }, [language])
 
+    // Track if initial load is complete to avoid reloading on language change for edits
+    const initialLoadCompleteRef = React.useRef(false)
+    
     React.useEffect(() => {
       if (!id) { setLoading(false); return }
+      
+      // For existing plants, only load once on mount
+      // Language changes should NOT reload and overwrite user edits
+      // The user edits in English (base language), translations are handled separately
+      if (initialLoadCompleteRef.current) {
+        return
+      }
+      
       let ignore = false
       const requestedLanguage = language
       setLoading(true)
@@ -606,10 +742,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           if (!ignore && loaded && languageRef.current === requestedLanguage) {
             setPlant(loaded)
             setExistingLoaded(true)
+            initialLoadCompleteRef.current = true
           }
         } catch (e: any) {
           if (!ignore && languageRef.current === requestedLanguage) {
-            setError(e?.message || t('plantAdmin.errors.loadPlant', 'Failed to load plant'))
+            setError(e?.message || 'Failed to load plant')
           }
         } finally {
           if (!ignore && languageRef.current === requestedLanguage) {
@@ -619,8 +756,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
       fetchPlant()
       return () => { ignore = true }
-    }, [id, language, t])
+    }, [id, language])
 
+    // Track if we've already prefilled to avoid re-running on language changes
+    const prefillCompleteRef = React.useRef(false)
+    
     // Handle prefillFrom parameter - load existing plant data into a new plant
     React.useEffect(() => {
       if (!prefillFromId || id) { 
@@ -628,6 +768,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (!id && !prefillFromId) setLoading(false)
         return 
       }
+      
+      // Only prefill once - don't re-run when language/translation changes
+      if (prefillCompleteRef.current) {
+        return
+      }
+      
       let ignore = false
       setLoading(true)
       const prefillFromSource = async () => {
@@ -640,10 +786,22 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           if (!ignore) {
             // Create a new plant with a new ID, but copy all the data from the source
             const newId = generateUUIDv4()
+            // Generate a unique name to avoid duplicate name conflicts
+            const uniqueName = await generateUniquePlantName(sourcePlant.name)
             const prefilled: Plant = {
               ...sourcePlant,
               id: newId,
-              name: `${sourcePlant.name} (Copy)`,
+              name: uniqueName,
+              // Clear images to avoid duplicate link constraint violations
+              // Users can re-add images or the images will be handled during save
+              images: [],
+              // Clear/modify identity fields that have unique constraints
+              identity: {
+                ...sourcePlant.identity,
+                // Clear scientific name to avoid unique constraint violation
+                // The user should enter a new scientific name for the cloned plant
+                scientificName: undefined,
+              },
               meta: {
                 ...sourcePlant.meta,
                 status: IN_PROGRESS_STATUS,
@@ -657,10 +815,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             setPrefillSourceName(sourcePlant.name)
             // Don't mark as existingLoaded - this is a new plant
             setExistingLoaded(false)
+            // Mark prefill as complete so we don't re-run
+            prefillCompleteRef.current = true
           }
         } catch (e: any) {
           if (!ignore) {
-            setError(e?.message || t('plantAdmin.errors.loadPlant', 'Failed to load source plant'))
+            setError(e?.message || 'Failed to load source plant')
           }
         } finally {
           if (!ignore) {
@@ -670,7 +830,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
       prefillFromSource()
       return () => { ignore = true }
-    }, [prefillFromId, id, profile?.display_name, t])
+    }, [prefillFromId, id, profile?.display_name])
 
     const captureColorSuggestions = (data: unknown) => {
     if (!data) return
@@ -741,14 +901,63 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (!trimmedName) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
       const isEnglish = saveLanguage === 'en'
       const existingPlantId = plantToSave.id || id
-      if (!isEnglish && !existingPlantId) {
-        setError(t('plantAdmin.translationRequiresBase', 'Save the English version before editing translations.'))
+      
+      // For non-English saves, the plant MUST exist in the database first
+      // Use existingLoaded (not just existingPlantId) because "Add From" generates a new ID
+      // in memory that doesn't exist in the database yet
+      if (!isEnglish && !existingLoaded) {
+        setError(t('plantAdmin.translationRequiresBase', 'Please save the English version first before adding translations.'))
         return
       }
       setSaving(true)
       setError(null)
       try {
         const plantId = existingPlantId || generateUUIDv4()
+        
+        // Debug logging
+        console.log('[savePlant] Starting save:', {
+          plantId,
+          trimmedName,
+          isEnglish,
+          existingLoaded,
+          existingPlantId,
+        })
+        
+        // For English saves, check if a plant with this name already exists (for a DIFFERENT plant)
+        // This prevents the confusing 409 error from Supabase
+        // The DB has a unique index on lower(name), so we need to check case-insensitively
+        if (isEnglish) {
+          // Use filter with lower() to match exactly how the DB unique index works
+          const { data: existingPlants, error: checkError } = await supabase
+            .from('plants')
+            .select('id, name')
+            .filter('name', 'ilike', trimmedName)
+          
+          // Find any plant with matching name (case-insensitive) that isn't the current plant
+          const conflictingPlant = (existingPlants || []).find(
+            (p) => p.name.toLowerCase() === trimmedName.toLowerCase() && p.id !== plantId
+          )
+          
+          console.log('[savePlant] Name check result:', {
+            trimmedName,
+            trimmedNameLower: trimmedName.toLowerCase(),
+            existingPlants,
+            conflictingPlant,
+            checkError,
+            plantId,
+          })
+          
+          if (checkError) {
+            console.error('[savePlant] Error checking for existing plant:', checkError)
+          }
+          
+          // If a plant with this name exists AND it's not the same plant we're editing
+          if (conflictingPlant) {
+            setError(`A plant with the name "${conflictingPlant.name}" already exists. Please choose a different name.`)
+            setSaving(false)
+            return
+          }
+        }
         // For new plants: set creator to current user's display name, preserve existing if already set
         // For existing plants: preserve the original creator
         const createdByValue = existingLoaded 
@@ -874,7 +1083,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             .upsert(payload)
             .select('id')
             .maybeSingle()
-          if (insertError) throw new Error(insertError.message)
+          if (insertError) {
+            throw { ...insertError, context: 'plant' }
+          }
           savedId = data?.id || plantId
           const colorIds = await upsertColors(plantToSave.identity?.colors || [])
           await linkColors(savedId, colorIds)
@@ -927,7 +1138,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             .from('plant_translations')
             .upsert(englishTranslationPayload, { onConflict: 'plant_id,language' })
           if (englishTranslationError) {
-            throw new Error(englishTranslationError.message)
+            throw { ...englishTranslationError, context: 'translation' }
           }
         }
 
@@ -972,7 +1183,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             .from('plant_translations')
             .upsert(translationPayload, { onConflict: 'plant_id,language' })
           if (translationError) {
-            throw new Error(translationError.message)
+            throw { ...translationError, context: 'translation' }
           }
             const metaUpdatePayload = {
               status: normalizedStatus,
@@ -1010,7 +1221,18 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (isEnglish && !existingLoaded) setExistingLoaded(true)
         onSaved?.(savedId)
         } catch (e: any) {
-          setError(e?.message || t('plantAdmin.errors.savePlant', 'Failed to save plant'))
+          // Use parseSupabaseError for user-friendly messages
+          const userFriendlyError = parseSupabaseError(e, 'Please check the plant details.')
+          setError(userFriendlyError)
+          // Enhanced error logging
+          console.error('[savePlant] Error details:', {
+            message: e?.message,
+            code: e?.code,
+            details: e?.details,
+            hint: e?.hint,
+            context: e?.context,
+            fullError: e,
+          })
       } finally {
         setSaving(false)
       }
