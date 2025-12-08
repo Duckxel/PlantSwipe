@@ -97,6 +97,8 @@ do $$ declare
     'admin_email_template_versions',
     'admin_email_campaigns',
     'admin_campaign_sends',
+    'admin_email_triggers',
+    'admin_automatic_email_sends',
     -- Gardens
     'gardens',
     'garden_members',
@@ -5771,29 +5773,23 @@ do $$ begin
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
--- Seed default automation triggers (always ensure these exist)
+-- Seed default automation triggers (only insert if they don't exist - never overwrite user settings)
 do $$
 begin
   -- Weekly Inactive User Reminder
   insert into public.notification_automations (trigger_type, display_name, description, send_hour)
   values ('weekly_inactive_reminder', 'Weekly Inactive User Reminder', 'Sends a reminder to users who have been inactive for 7+ days', 10)
-  on conflict (trigger_type) do update set
-    display_name = excluded.display_name,
-    description = excluded.description;
+  on conflict (trigger_type) do nothing;
   
   -- Daily Remaining Task Reminder
   insert into public.notification_automations (trigger_type, display_name, description, send_hour)
   values ('daily_task_reminder', 'Daily Remaining Task Reminder', 'Sends a reminder about incomplete tasks for today', 18)
-  on conflict (trigger_type) do update set
-    display_name = excluded.display_name,
-    description = excluded.description;
+  on conflict (trigger_type) do nothing;
   
   -- Journal Continue Reminder
   insert into public.notification_automations (trigger_type, display_name, description, send_hour)
   values ('journal_continue_reminder', 'Journal Continue Reminder', 'Encourages users who wrote in their journal yesterday to continue', 9)
-  on conflict (trigger_type) do update set
-    display_name = excluded.display_name,
-    description = excluded.description;
+  on conflict (trigger_type) do nothing;
 end $$;
 
 create table if not exists public.user_notifications (
