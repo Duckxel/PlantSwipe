@@ -15447,6 +15447,9 @@ const hashedAssetPattern =
   /assets\/.+[-.]([a-z0-9_\-]{8,})\.(?:js|mjs|cjs|css|json|png|jpe?g|webp|avif|svg|ttf|woff2?)$/i
 app.use(
   express.static(distDir, {
+      // CRITICAL: Disable index.html auto-serving so crawler detection in catch-all route works
+      // Without this, express.static serves index.html for "/" before our SSR logic runs
+      index: false,
       setHeaders: (res, filePath) => {
         const relativePath = path.relative(distDir, filePath).replace(/\\+/g, '/')
         if (relativePath === 'index.html') {
