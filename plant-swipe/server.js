@@ -15328,7 +15328,7 @@ async function generateCrawlerHtml(req, pagePath) {
       } else {
         const { data: plant, error: plantError } = await supabaseServer
           .from('plants')
-          .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level')
+          .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level, watering, flowering_season, hardiness_zones')
           .eq('id', plantId)
           .maybeSingle()
         
@@ -15340,84 +15340,147 @@ async function generateCrawlerHtml(req, pagePath) {
         
         if (plant) {
           console.log(`[ssr] ✓ Found plant: ${plant.name} (${plant.id})`)
-        // Create an engaging title with plant type emoji
-        const plantEmoji = {
-          'vegetable': '🥬',
-          'fruit': '🍎',
-          'herb': '🌿',
-          'flower': '🌸',
-          'tree': '🌳',
-          'shrub': '🌲',
-          'succulent': '🌵',
-          'cactus': '🌵',
-          'vine': '🍇',
-          'grass': '🌾',
-          'fern': '🌿',
-          'aquatic': '🪷',
-        }
-        const typeKey = (plant.plant_type || '').toLowerCase()
-        const emoji = plantEmoji[typeKey] || '🌱'
-        
-        title = `${emoji} ${plant.name} - Complete Care Guide | Aphylia`
-        
-        // Create a compelling description
-        const descParts = []
-        if (plant.overview) {
-          // Take first sentence or first 120 chars
-          const firstSentence = plant.overview.split(/[.!?]/)[0]
-          descParts.push(firstSentence.slice(0, 120))
-        }
-        if (plant.plant_type) descParts.push(`Type: ${plant.plant_type}`)
-        if (plant.scientific_name) descParts.push(`(${plant.scientific_name})`)
-        if (plant.utility?.length) descParts.push(`Uses: ${plant.utility.slice(0, 3).join(', ')}`)
-        
-        description = descParts.length > 0 
-          ? descParts.join(' • ').slice(0, 200)
-          : `Discover ${plant.name} on Aphylia. Get complete care instructions, growing tips, and expert advice.`
-        
-        // Fetch primary image, fallback to discovery image
-        const { data: images } = await supabaseServer
-          .from('plant_images')
-          .select('link, use')
-          .eq('plant_id', plantId)
-          .in('use', ['primary', 'discovery', 'other'])
-          .order('use', { ascending: true })  // primary comes first alphabetically before 'other'
-          .limit(3)
-        
-        // Prefer primary, then discovery, then any other
-        const primaryImg = images?.find(img => img.use === 'primary')
-        const discoveryImg = images?.find(img => img.use === 'discovery')
-        const anyImg = images?.[0]
-        
-        if (primaryImg?.link) {
-          image = primaryImg.link
-        } else if (discoveryImg?.link) {
-          image = discoveryImg.link
-        } else if (anyImg?.link) {
-          image = anyImg.link
-        }
-        
-        // Build structured content for the page
-        const infoItems = []
-        if (plant.scientific_name) infoItems.push(`<strong>Scientific name:</strong> <em>${escapeHtml(plant.scientific_name)}</em>`)
-        if (plant.family) infoItems.push(`<strong>Family:</strong> ${escapeHtml(plant.family)}`)
-        if (plant.plant_type) infoItems.push(`<strong>Type:</strong> ${escapeHtml(plant.plant_type)}`)
-        if (plant.origin?.length) infoItems.push(`<strong>Origin:</strong> ${plant.origin.map(o => escapeHtml(o)).join(', ')}`)
-        if (plant.level_sun) infoItems.push(`<strong>Light:</strong> ${escapeHtml(plant.level_sun)}`)
-        if (plant.maintenance_level) infoItems.push(`<strong>Difficulty:</strong> ${escapeHtml(plant.maintenance_level)}`)
-        
-        pageContent = `
-          <article itemscope itemtype="https://schema.org/Product">
-            <h1 itemprop="name">${emoji} ${escapeHtml(plant.name)}</h1>
-            ${infoItems.length ? `<div class="plant-meta">${infoItems.join(' · ')}</div>` : ''}
-            ${plant.overview ? `<div itemprop="description"><h2>About ${escapeHtml(plant.name)}</h2><p>${escapeHtml(plant.overview)}</p></div>` : ''}
-            ${plant.utility?.length ? `<p><strong>Common uses:</strong> ${plant.utility.map(u => escapeHtml(u)).join(', ')}</p>` : ''}
-            ${plant.tags?.length ? `<p><strong>Tags:</strong> ${plant.tags.map(t => escapeHtml(t)).join(', ')}</p>` : ''}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">View full plant profile on Aphylia →</a></p>
-          </article>
-        `
-        
-          // Log the image being used
+          
+          // Create an engaging title with plant type emoji
+          const plantEmoji = {
+            'vegetable': '🥬',
+            'fruit': '🍎',
+            'herb': '🌿',
+            'flower': '🌸',
+            'tree': '🌳',
+            'shrub': '🌲',
+            'succulent': '🌵',
+            'cactus': '🌵',
+            'vine': '🍇',
+            'grass': '🌾',
+            'fern': '🌿',
+            'aquatic': '🪷',
+            'bulb': '🌷',
+            'palm': '🌴',
+            'climber': '🧗',
+            'perennial': '🌺',
+            'annual': '🌻',
+          }
+          const typeKey = (plant.plant_type || '').toLowerCase()
+          const emoji = plantEmoji[typeKey] || '🌱'
+          
+          // Care difficulty indicator
+          const difficultyEmoji = {
+            'easy': '✅ Easy',
+            'beginner': '✅ Beginner-friendly',
+            'moderate': '⚡ Moderate',
+            'medium': '⚡ Moderate',
+            'hard': '🔥 Advanced',
+            'difficult': '🔥 Advanced',
+            'expert': '💎 Expert',
+          }
+          const difficulty = difficultyEmoji[(plant.maintenance_level || '').toLowerCase()] || ''
+          
+          // Light requirement indicator
+          const lightEmoji = {
+            'full sun': '☀️ Full Sun',
+            'partial sun': '🌤️ Partial Sun',
+            'partial shade': '⛅ Partial Shade',
+            'full shade': '🌑 Shade',
+            'low light': '🌑 Low Light',
+            'bright indirect': '💡 Bright Indirect',
+          }
+          const light = lightEmoji[(plant.level_sun || '').toLowerCase()] || ''
+          
+          title = `${emoji} ${plant.name} | Care Guide & Growing Tips`
+          
+          // Create a compelling, informative description
+          const descParts = []
+          
+          // Add catchy intro based on plant type
+          if (plant.plant_type) {
+            const typeIntros = {
+              'flower': `Beautiful flowering plant`,
+              'vegetable': `Grow your own ${plant.name.toLowerCase()}`,
+              'herb': `Fresh herbs at your fingertips`,
+              'fruit': `Homegrown ${plant.name.toLowerCase()} delight`,
+              'succulent': `Low-maintenance beauty`,
+              'cactus': `Desert survivor`,
+              'tree': `Majestic addition to any garden`,
+            }
+            descParts.push(typeIntros[plant.plant_type.toLowerCase()] || `${plant.plant_type}`)
+          }
+          
+          if (plant.scientific_name) descParts.push(`(${plant.scientific_name})`)
+          if (difficulty) descParts.push(difficulty)
+          if (light) descParts.push(light)
+          if (plant.watering) descParts.push(`💧 ${plant.watering}`)
+          if (plant.flowering_season) descParts.push(`🌸 Blooms: ${plant.flowering_season}`)
+          
+          description = descParts.length > 0 
+            ? descParts.join(' • ').slice(0, 200)
+            : `Learn how to grow and care for ${plant.name}. Expert tips, watering guide, and everything you need! 🌱`
+          
+          // Fetch primary image, fallback to discovery image
+          const { data: images } = await supabaseServer
+            .from('plant_images')
+            .select('link, use')
+            .eq('plant_id', plantId)
+            .in('use', ['primary', 'discovery', 'other'])
+            .order('use', { ascending: true })
+            .limit(3)
+          
+          // Prefer primary, then discovery, then any other
+          const primaryImg = images?.find(img => img.use === 'primary')
+          const discoveryImg = images?.find(img => img.use === 'discovery')
+          const anyImg = images?.[0]
+          
+          if (primaryImg?.link) {
+            image = primaryImg.link
+          } else if (discoveryImg?.link) {
+            image = discoveryImg.link
+          } else if (anyImg?.link) {
+            image = anyImg.link
+          }
+          
+          // Build structured content for the page
+          const quickFacts = []
+          if (plant.scientific_name) quickFacts.push(`🔬 <em>${escapeHtml(plant.scientific_name)}</em>`)
+          if (plant.family) quickFacts.push(`👨‍👩‍👧 Family: ${escapeHtml(plant.family)}`)
+          if (plant.plant_type) quickFacts.push(`${emoji} ${escapeHtml(plant.plant_type)}`)
+          if (plant.origin?.length) quickFacts.push(`🌍 Origin: ${plant.origin.slice(0, 2).map(o => escapeHtml(o)).join(', ')}`)
+          
+          const careInfo = []
+          if (light) careInfo.push(light)
+          if (plant.watering) careInfo.push(`💧 ${escapeHtml(plant.watering)}`)
+          if (difficulty) careInfo.push(difficulty)
+          if (plant.hardiness_zones) careInfo.push(`🌡️ Zones: ${escapeHtml(plant.hardiness_zones)}`)
+          
+          pageContent = `
+            <article itemscope itemtype="https://schema.org/Product">
+              <h1 itemprop="name">${emoji} ${escapeHtml(plant.name)}</h1>
+              ${quickFacts.length ? `<div class="plant-meta">${quickFacts.join(' · ')}</div>` : ''}
+              
+              ${plant.overview ? `
+                <div itemprop="description">
+                  <h2>About ${escapeHtml(plant.name)}</h2>
+                  <p>${escapeHtml(plant.overview)}</p>
+                </div>
+              ` : ''}
+              
+              ${careInfo.length ? `
+                <h2>🌱 Quick Care Guide</h2>
+                <div class="plant-meta">${careInfo.join(' · ')}</div>
+              ` : ''}
+              
+              ${plant.utility?.length ? `
+                <h2>✨ What It's Great For</h2>
+                <ul>${plant.utility.slice(0, 5).map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
+              ` : ''}
+              
+              ${plant.tags?.length ? `<p><strong>Tags:</strong> ${plant.tags.slice(0, 8).map(t => `#${escapeHtml(t)}`).join(' ')}</p>` : ''}
+              
+              <p style="margin-top: 20px;">
+                <a href="${escapeHtml(canonicalUrl)}">📖 View complete care guide on Aphylia →</a>
+              </p>
+            </article>
+          `
+          
           console.log(`[ssr] Plant image: ${image}`)
         }
       }
@@ -15426,26 +15489,38 @@ async function generateCrawlerHtml(req, pagePath) {
     // Blog post page: /blog/:slug
     else if (effectivePath[0] === 'blog' && effectivePath[1] && supabaseServer) {
       const slug = decodeURIComponent(effectivePath[1])
-      const { data: post } = await supabaseServer
+      console.log(`[ssr] Looking up blog post: ${slug}`)
+      
+      const { data: post, error: postError } = await supabaseServer
         .from('blog_posts')
-        .select('id, title, excerpt, content, cover_image_url, author_name, published_at')
+        .select('id, title, excerpt, content, cover_image_url, author_name, published_at, reading_time_minutes')
         .eq('slug', slug)
         .eq('is_published', true)
         .maybeSingle()
       
-      if (post) {
-        title = `📖 ${post.title} | Aphylia Blog`
+      if (postError) {
+        console.log(`[ssr] Blog query error: ${postError.message}`)
+      } else if (post) {
+        console.log(`[ssr] ✓ Found blog post: ${post.title}`)
         
-        // Create compelling description
+        // Estimate read time if not provided
+        const readTime = post.reading_time_minutes || (post.content ? Math.ceil(post.content.replace(/<[^>]*>/g, '').split(/\s+/).length / 200) : 5)
+        
+        // Create engaging title
+        title = `${post.title} | Aphylia Blog 📖`
+        
+        // Create compelling description with read time
+        const descParts = []
         if (post.excerpt) {
-          description = post.excerpt.slice(0, 200)
+          descParts.push(post.excerpt.slice(0, 150))
         } else if (post.content) {
-          // Strip HTML and get first 200 chars
           const plainText = post.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-          description = plainText.slice(0, 200) + (plainText.length > 200 ? '...' : '')
-        } else {
-          description = `Read "${post.title}" on Aphylia Blog. Expert gardening tips, plant care guides, and more.`
+          descParts.push(plainText.slice(0, 150))
         }
+        descParts.push(`📚 ${readTime} min read`)
+        if (post.author_name) descParts.push(`✍️ By ${post.author_name}`)
+        
+        description = descParts.join(' • ')
         
         if (post.cover_image_url) image = post.cover_image_url
         
@@ -15459,158 +15534,549 @@ async function generateCrawlerHtml(req, pagePath) {
           <article itemscope itemtype="https://schema.org/BlogPosting">
             <h1 itemprop="headline">📖 ${escapeHtml(post.title)}</h1>
             <div class="plant-meta">
-              ${post.author_name ? `By <span itemprop="author">${escapeHtml(post.author_name)}</span>` : ''}
-              ${publishDate ? ` · <time itemprop="datePublished" datetime="${post.published_at}">${publishDate}</time>` : ''}
+              ${post.author_name ? `✍️ By <span itemprop="author">${escapeHtml(post.author_name)}</span>` : ''}
+              ${publishDate ? ` · 📅 <time itemprop="datePublished" datetime="${post.published_at}">${publishDate}</time>` : ''}
+              · 📚 ${readTime} min read
             </div>
-            ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444;">${escapeHtml(post.excerpt)}</p>` : ''}
+            ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
             <div itemprop="articleBody">${post.content || ''}</div>
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">Read full article on Aphylia →</a></p>
           </article>
         `
+        console.log(`[ssr] Blog image: ${image}`)
       }
     }
     
     // User profile page: /u/:username
     else if (effectivePath[0] === 'u' && effectivePath[1] && supabaseServer) {
       const username = decodeURIComponent(effectivePath[1])
-      const { data: profile } = await supabaseServer
+      console.log(`[ssr] Looking up user profile: ${username}`)
+      
+      const { data: profile, error: profileError } = await supabaseServer
         .from('profiles')
-        .select('display_name, bio, avatar_url, is_private')
+        .select('id, display_name, bio, avatar_url, is_private, created_at')
         .eq('display_name', username)
         .eq('is_private', false)
         .maybeSingle()
       
-      if (profile) {
-        title = `👤 ${profile.display_name} | Aphylia Gardener`
-        description = profile.bio 
-          ? profile.bio.slice(0, 200) 
-          : `Explore ${profile.display_name}'s garden and plant collection on Aphylia. Discover their favorite plants and growing journey!`
-        if (profile.avatar_url) image = profile.avatar_url
+      if (profileError) {
+        console.log(`[ssr] Profile query error: ${profileError.message}`)
+      } else if (profile) {
+        console.log(`[ssr] ✓ Found profile: ${profile.display_name}`)
         
-        // Try to get garden count for this user
+        // Get garden and plant counts
         let gardenCount = 0
+        let plantCount = 0
         try {
-          const { data: userData } = await supabaseServer
-            .from('profiles')
+          const { count: gCount } = await supabaseServer
+            .from('gardens')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', profile.id)
+          gardenCount = gCount || 0
+          
+          // Get total plants across all gardens
+          const { data: gardens } = await supabaseServer
+            .from('gardens')
             .select('id')
-            .eq('display_name', username)
-            .maybeSingle()
-          if (userData?.id) {
-            const { count } = await supabaseServer
-              .from('gardens')
+            .eq('user_id', profile.id)
+          if (gardens?.length) {
+            const gardenIds = gardens.map(g => g.id)
+            const { count: pCount } = await supabaseServer
+              .from('garden_plants')
               .select('id', { count: 'exact', head: true })
-              .eq('user_id', userData.id)
-            gardenCount = count || 0
+              .in('garden_id', gardenIds)
+            plantCount = pCount || 0
           }
         } catch {}
         
+        // Calculate membership duration
+        const joinDate = profile.created_at ? new Date(profile.created_at) : null
+        const memberSince = joinDate ? joinDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null
+        
+        // Create engaging title
+        title = `🌱 ${profile.display_name}'s Garden Profile | Aphylia`
+        
+        // Create rich description
+        const descParts = []
+        if (profile.bio) {
+          descParts.push(profile.bio.slice(0, 100))
+        } else {
+          descParts.push(`Check out ${profile.display_name}'s growing journey`)
+        }
+        if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} garden${gardenCount > 1 ? 's' : ''}`)
+        if (plantCount > 0) descParts.push(`🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}`)
+        if (memberSince) descParts.push(`📅 Member since ${memberSince}`)
+        
+        description = descParts.join(' • ')
+        
+        if (profile.avatar_url) image = profile.avatar_url
+        
         pageContent = `
           <article itemscope itemtype="https://schema.org/Person">
-            <h1 itemprop="name">👤 ${escapeHtml(profile.display_name)}</h1>
-            ${gardenCount > 0 ? `<p class="plant-meta">🏡 ${gardenCount} garden${gardenCount > 1 ? 's' : ''} on Aphylia</p>` : ''}
-            ${profile.bio ? `<p itemprop="description">${escapeHtml(profile.bio)}</p>` : '<p>A plant enthusiast on Aphylia</p>'}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">View full profile on Aphylia →</a></p>
+            <h1 itemprop="name">🌱 ${escapeHtml(profile.display_name)}</h1>
+            <div class="plant-meta">
+              ${gardenCount > 0 ? `🏡 ${gardenCount} garden${gardenCount > 1 ? 's' : ''}` : ''}
+              ${plantCount > 0 ? ` · 🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}` : ''}
+              ${memberSince ? ` · 📅 Member since ${memberSince}` : ''}
+            </div>
+            ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : '<p>A passionate plant enthusiast growing their collection on Aphylia 🌱</p>'}
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">Explore ${escapeHtml(profile.display_name)}'s gardens →</a></p>
           </article>
         `
+        console.log(`[ssr] Profile image: ${image}`)
       }
     }
     
-    // Garden page: /garden/:id
-    else if (effectivePath[0] === 'garden' && effectivePath[1] && supabaseServer) {
+    // Garden page: /garden/:id or /gardens/:id
+    else if ((effectivePath[0] === 'garden' || effectivePath[0] === 'gardens') && effectivePath[1] && supabaseServer) {
       const gardenId = decodeURIComponent(effectivePath[1])
-      const { data: garden } = await supabaseServer
+      console.log(`[ssr] Looking up garden: ${gardenId}`)
+      
+      const { data: garden, error: gardenError } = await supabaseServer
         .from('gardens')
-        .select('id, name, description')
+        .select('id, name, description, user_id, created_at, location, climate_zone')
         .eq('id', gardenId)
         .maybeSingle()
       
-      if (garden) {
-        title = `${garden.name || 'Garden'} - Aphylia`
-        description = garden.description || `Explore this garden on Aphylia.`
+      if (gardenError) {
+        console.log(`[ssr] Garden query error: ${gardenError.message}`)
+      } else if (garden) {
+        console.log(`[ssr] ✓ Found garden: ${garden.name}`)
+        
+        // Get owner name and plant count
+        let ownerName = null
+        let plantCount = 0
+        let gardenImage = null
+        
+        try {
+          // Get owner
+          if (garden.user_id) {
+            const { data: owner } = await supabaseServer
+              .from('profiles')
+              .select('display_name, avatar_url')
+              .eq('id', garden.user_id)
+              .maybeSingle()
+            if (owner) {
+              ownerName = owner.display_name
+              if (owner.avatar_url) gardenImage = owner.avatar_url
+            }
+          }
+          
+          // Get plant count
+          const { count } = await supabaseServer
+            .from('garden_plants')
+            .select('id', { count: 'exact', head: true })
+            .eq('garden_id', gardenId)
+          plantCount = count || 0
+          
+          // Try to get a plant image from the garden
+          const { data: gardenPlants } = await supabaseServer
+            .from('garden_plants')
+            .select('plant_id')
+            .eq('garden_id', gardenId)
+            .limit(1)
+          if (gardenPlants?.[0]?.plant_id) {
+            const { data: plantImg } = await supabaseServer
+              .from('plant_images')
+              .select('link')
+              .eq('plant_id', gardenPlants[0].plant_id)
+              .eq('use', 'primary')
+              .maybeSingle()
+            if (plantImg?.link) gardenImage = plantImg.link
+          }
+        } catch {}
+        
+        // Get garden age
+        const createdDate = garden.created_at ? new Date(garden.created_at) : null
+        const gardenAge = createdDate ? (() => {
+          const months = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 30))
+          if (months < 1) return 'New garden!'
+          if (months < 12) return `${months} month${months > 1 ? 's' : ''} old`
+          const years = Math.floor(months / 12)
+          return `${years} year${years > 1 ? 's' : ''} old`
+        })() : null
+        
+        // Create engaging title
+        const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
+        title = `${gardenEmoji} ${garden.name || 'A Beautiful Garden'} | Aphylia`
+        
+        // Create rich description
+        const descParts = []
+        if (garden.description) {
+          descParts.push(garden.description.slice(0, 100))
+        }
+        if (plantCount > 0) descParts.push(`🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''} growing`)
+        if (ownerName) descParts.push(`👤 By ${ownerName}`)
+        if (garden.location) descParts.push(`📍 ${garden.location}`)
+        if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
+        
+        description = descParts.length > 0 
+          ? descParts.join(' • ')
+          : `Explore this beautiful garden on Aphylia. Discover the plants growing here!`
+        
+        if (gardenImage) image = gardenImage
         
         pageContent = `
-          <article>
-            <h1>${escapeHtml(garden.name || 'Garden')}</h1>
-            ${garden.description ? `<p>${escapeHtml(garden.description)}</p>` : ''}
+          <article itemscope itemtype="https://schema.org/Place">
+            <h1 itemprop="name">${gardenEmoji} ${escapeHtml(garden.name || 'Garden')}</h1>
+            <div class="plant-meta">
+              ${plantCount > 0 ? `🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}` : '🌱 Starting fresh'}
+              ${ownerName ? ` · 👤 By ${escapeHtml(ownerName)}` : ''}
+              ${garden.location ? ` · 📍 ${escapeHtml(garden.location)}` : ''}
+              ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
+            </div>
+            ${garden.description ? `<p itemprop="description">${escapeHtml(garden.description)}</p>` : '<p>A growing garden filled with beautiful plants 🌸</p>'}
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">Explore this garden on Aphylia →</a></p>
           </article>
         `
+        console.log(`[ssr] Garden image: ${image}`)
       }
     }
     
-    // Static pages
+    // Static pages with enhanced previews
     else if (effectivePath[0] === 'about' || pagePath === '/about') {
-      title = 'About Aphylia - Plant Discovery & Garden Management'
-      description = 'Learn about Aphylia, the plant discovery and garden management app. Our mission is to help you grow your plant knowledge and create beautiful gardens.'
+      title = '🌱 About Aphylia - Your Plant Companion'
+      description = 'Meet Aphylia: the app that helps you discover, grow, and nurture plants. Join 10,000+ gardeners on their growing journey! 🌿'
       pageContent = `
         <article>
-          <h1>About Aphylia</h1>
-          <p>Aphylia is your personal plant companion, helping you discover, identify, and care for plants.</p>
+          <h1>🌱 About Aphylia</h1>
+          <p>Your personal plant companion, helping you discover, identify, and care for the perfect plants.</p>
           <h2>Our Mission</h2>
-          <p>We believe everyone deserves access to plant knowledge. Whether you're a beginner or an expert gardener, Aphylia helps you grow.</p>
+          <p>We believe everyone deserves access to plant knowledge. Whether you're a beginner with your first succulent or an expert with a botanical garden, Aphylia helps you grow.</p>
+          <h2>What We Offer</h2>
+          <ul>
+            <li>🔍 Extensive plant database with care guides</li>
+            <li>🏡 Garden management and tracking</li>
+            <li>⏰ Smart care reminders</li>
+            <li>👥 Community of plant lovers</li>
+          </ul>
         </article>
       `
     }
     
     else if (effectivePath[0] === 'search' || pagePath === '/search') {
-      title = 'Search Plants - Aphylia'
-      description = 'Search our database of thousands of plants. Find the perfect plants for your garden based on light, water, and care requirements.'
+      title = '🔍 Find Your Perfect Plants | Aphylia'
+      description = 'Search 5,000+ plants by name, care level, light needs, or growing conditions. Find the perfect plants for YOUR space! 🌿'
       pageContent = `
         <article>
-          <h1>Search Plants</h1>
-          <p>Find the perfect plants for your garden. Search by name, characteristics, or growing conditions.</p>
+          <h1>🔍 Plant Search</h1>
+          <p>Find your perfect plant match from our database of thousands of species.</p>
+          <h2>Search By</h2>
+          <ul>
+            <li>🏷️ Plant name or scientific name</li>
+            <li>☀️ Light requirements</li>
+            <li>💧 Watering needs</li>
+            <li>🏠 Indoor or outdoor</li>
+            <li>🌡️ Climate zone</li>
+            <li>🎯 Difficulty level</li>
+          </ul>
         </article>
       `
     }
     
-    else if (effectivePath[0] === 'blog' || pagePath === '/blog') {
-      title = 'Aphylia Blog - Gardening Tips & Plant Care'
-      description = 'Read our latest articles on gardening, plant care, seasonal tips, and more. Expert advice for gardeners of all levels.'
+    else if (effectivePath[0] === 'blog' && !effectivePath[1]) {
+      title = '📚 Aphylia Blog - Gardening Tips & Guides'
+      description = 'Expert gardening advice, seasonal tips, plant care guides, and growing inspiration. Learn something new today! 🌱'
       
       // Fetch recent blog posts for the listing
       if (supabaseServer) {
         const { data: posts } = await supabaseServer
           .from('blog_posts')
-          .select('title, slug, excerpt, published_at')
+          .select('title, slug, excerpt, published_at, cover_image_url')
           .eq('is_published', true)
           .order('published_at', { ascending: false })
           .limit(10)
         
         if (posts?.length) {
+          // Use the most recent post's cover image
+          const latestWithImage = posts.find(p => p.cover_image_url)
+          if (latestWithImage) image = latestWithImage.cover_image_url
+          
           pageContent = `
             <article>
-              <h1>Aphylia Blog</h1>
-              <p>Gardening tips, plant care guides, and expert advice.</p>
+              <h1>📚 Aphylia Blog</h1>
+              <p>Your source for gardening wisdom, plant care tips, and growing inspiration.</p>
+              <h2>Latest Articles</h2>
               <ul>
-                ${posts.map(p => `
+                ${posts.slice(0, 5).map(p => `
                   <li>
-                    <a href="/blog/${escapeHtml(p.slug)}">${escapeHtml(p.title)}</a>
-                    ${p.excerpt ? `<p>${escapeHtml(p.excerpt.slice(0, 100))}...</p>` : ''}
+                    <a href="/blog/${escapeHtml(p.slug)}"><strong>${escapeHtml(p.title)}</strong></a>
+                    ${p.excerpt ? `<br><em>${escapeHtml(p.excerpt.slice(0, 80))}...</em>` : ''}
                   </li>
                 `).join('')}
               </ul>
+              <p><a href="${escapeHtml(canonicalUrl)}">Read all articles →</a></p>
             </article>
           `
         }
       }
     }
     
-    // Homepage
-    else if (pagePath === '/' || effectivePath.length === 0) {
-      title = 'Aphylia - Discover, Swipe and Manage Plants for Your Garden'
-      description = 'Discover new plants by swiping, track your garden progress, get personalized care reminders, and build your dream garden with Aphylia.'
+    // Gardens listing page
+    else if (effectivePath[0] === 'gardens' && !effectivePath[1]) {
+      title = '🏡 Explore Gardens | Aphylia'
+      description = 'Discover beautiful gardens from our community. Get inspired by what others are growing and share your own! 🌿'
       pageContent = `
         <article>
-          <h1>Welcome to Aphylia</h1>
-          <p>Your personal plant companion for discovering, managing, and growing beautiful gardens.</p>
-          <h2>Features</h2>
+          <h1>🏡 Community Gardens</h1>
+          <p>Explore gardens from plant enthusiasts around the world.</p>
+          <h2>Get Inspired</h2>
           <ul>
-            <li><strong>Discover Plants</strong> - Swipe through our extensive plant database to find your perfect matches</li>
-            <li><strong>Track Your Garden</strong> - Keep track of all your plants in one place</li>
-            <li><strong>Care Reminders</strong> - Get notifications for watering, fertilizing, and more</li>
-            <li><strong>Plant Identification</strong> - Learn about any plant with detailed care guides</li>
+            <li>🌸 See what plants thrive together</li>
+            <li>📍 Discover gardens in your climate zone</li>
+            <li>💡 Get layout and design ideas</li>
+            <li>🤝 Connect with other gardeners</li>
           </ul>
-          <h2>Start Your Garden Journey</h2>
-          <p>Join thousands of gardeners who use Aphylia to grow their plant knowledge.</p>
+        </article>
+      `
+    }
+    
+    // Discovery/Swipe page
+    else if (effectivePath[0] === 'discovery') {
+      title = '🎴 Discover Plants | Swipe Your Way to a Dream Garden'
+      description = 'Like Tinder, but for plants! Swipe right on plants you love, left on ones you don\'t. Build your perfect garden wishlist! 🌱💚'
+      pageContent = `
+        <article>
+          <h1>🎴 Plant Discovery</h1>
+          <p>Find your perfect plant matches by swiping!</p>
+          <h2>How It Works</h2>
+          <ul>
+            <li>👉 <strong>Swipe Right</strong> - Love it! Add to your wishlist</li>
+            <li>👈 <strong>Swipe Left</strong> - Not for you? Skip it</li>
+            <li>⬆️ <strong>Swipe Up</strong> - Super like! Add to favorites</li>
+            <li>🔄 <strong>Keep Swiping</strong> - Discover your perfect matches</li>
+          </ul>
+          <p>Start swiping and build your dream garden collection! 🌿</p>
+        </article>
+      `
+    }
+    
+    // Pricing page
+    else if (effectivePath[0] === 'pricing') {
+      title = '💎 Aphylia Pricing - Free Forever & Premium Plans'
+      description = 'Aphylia is free to use! Discover 5,000+ plants, track your garden, get care reminders. Premium features available for power gardeners 🌱'
+      pageContent = `
+        <article>
+          <h1>💎 Pricing Plans</h1>
+          <h2>🆓 Free Forever</h2>
+          <p>Everything you need to start your gardening journey:</p>
+          <ul>
+            <li>✅ Unlimited plant discovery</li>
+            <li>✅ Garden tracking</li>
+            <li>✅ Care reminders</li>
+            <li>✅ Plant identification</li>
+            <li>✅ Community access</li>
+          </ul>
+          <h2>✨ Premium (Coming Soon)</h2>
+          <p>For serious plant enthusiasts:</p>
+          <ul>
+            <li>🌟 Advanced analytics</li>
+            <li>🌟 Priority support</li>
+            <li>🌟 Exclusive features</li>
+          </ul>
+        </article>
+      `
+    }
+    
+    // Download page
+    else if (effectivePath[0] === 'download') {
+      title = '📲 Download Aphylia - Your Plant Companion App'
+      description = 'Get Aphylia on your device! Available as a web app, PWA, and soon on iOS & Android. Start your plant journey today! 🌱📱'
+      pageContent = `
+        <article>
+          <h1>📲 Download Aphylia</h1>
+          <h2>🌐 Web App</h2>
+          <p>Use Aphylia directly in your browser - no download required!</p>
+          <h2>📱 Install as PWA</h2>
+          <p>Add to your home screen for an app-like experience:</p>
+          <ul>
+            <li><strong>iOS:</strong> Safari → Share → Add to Home Screen</li>
+            <li><strong>Android:</strong> Chrome → Menu → Install App</li>
+          </ul>
+          <h2>🚀 Native Apps (Coming Soon)</h2>
+          <p>iOS and Android apps are in development!</p>
+        </article>
+      `
+    }
+    
+    // Terms page
+    else if (effectivePath[0] === 'terms') {
+      title = '📜 Terms of Service | Aphylia'
+      description = 'Read Aphylia\'s Terms of Service. We keep it simple: be respectful, don\'t spam, and enjoy growing plants! 🌱'
+      pageContent = `
+        <article>
+          <h1>📜 Terms of Service</h1>
+          <p>Last updated: ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+          <p>Welcome to Aphylia! By using our service, you agree to these terms.</p>
+          <h2>The Simple Version</h2>
+          <ul>
+            <li>✅ Be respectful to others</li>
+            <li>✅ Don't spam or abuse the service</li>
+            <li>✅ Keep your account secure</li>
+            <li>✅ Enjoy growing plants!</li>
+          </ul>
+          <p><a href="${escapeHtml(canonicalUrl)}">Read full terms →</a></p>
+        </article>
+      `
+    }
+    
+    // Contact page
+    else if (effectivePath[0] === 'contact' && effectivePath[1] === 'business') {
+      title = '🤝 Business Partnerships | Aphylia'
+      description = 'Partner with Aphylia! We work with nurseries, garden centers, and plant brands. Let\'s grow together! 🌱🤝'
+      pageContent = `
+        <article>
+          <h1>🤝 Business Partnerships</h1>
+          <p>Interested in partnering with Aphylia? We love working with:</p>
+          <ul>
+            <li>🌿 Nurseries & Garden Centers</li>
+            <li>🏪 Plant Shops</li>
+            <li>🎯 Garden Product Brands</li>
+            <li>📚 Gardening Content Creators</li>
+          </ul>
+          <p>Get in touch to explore collaboration opportunities!</p>
+        </article>
+      `
+    }
+    
+    else if (effectivePath[0] === 'contact') {
+      title = '💬 Contact Aphylia - We\'d Love to Hear From You!'
+      description = 'Have questions, feedback, or just want to say hi? Reach out to the Aphylia team. We typically respond within 24 hours! 🌱💬'
+      pageContent = `
+        <article>
+          <h1>💬 Get in Touch</h1>
+          <p>We'd love to hear from you!</p>
+          <h2>Reach Out For</h2>
+          <ul>
+            <li>❓ Questions about Aphylia</li>
+            <li>💡 Feature suggestions</li>
+            <li>🐛 Bug reports</li>
+            <li>🤝 Partnership inquiries</li>
+            <li>👋 Just saying hello!</li>
+          </ul>
+          <p>We typically respond within 24 hours. 🌱</p>
+        </article>
+      `
+    }
+    
+    // Bookmarks page
+    else if (effectivePath[0] === 'bookmarks' && effectivePath[1] && supabaseServer) {
+      const listId = decodeURIComponent(effectivePath[1])
+      console.log(`[ssr] Looking up bookmark list: ${listId}`)
+      
+      // Try to get the bookmark list info
+      const { data: bookmarkList } = await supabaseServer
+        .from('plant_lists')
+        .select('id, name, description, user_id, is_public')
+        .eq('id', listId)
+        .eq('is_public', true)
+        .maybeSingle()
+      
+      if (bookmarkList) {
+        console.log(`[ssr] ✓ Found bookmark list: ${bookmarkList.name}`)
+        
+        // Get owner and plant count
+        let ownerName = null
+        let plantCount = 0
+        let listImage = null
+        
+        try {
+          if (bookmarkList.user_id) {
+            const { data: owner } = await supabaseServer
+              .from('profiles')
+              .select('display_name')
+              .eq('id', bookmarkList.user_id)
+              .maybeSingle()
+            if (owner) ownerName = owner.display_name
+          }
+          
+          // Get plant count
+          const { count } = await supabaseServer
+            .from('plant_list_items')
+            .select('id', { count: 'exact', head: true })
+            .eq('list_id', listId)
+          plantCount = count || 0
+          
+          // Get first plant image
+          const { data: listPlants } = await supabaseServer
+            .from('plant_list_items')
+            .select('plant_id')
+            .eq('list_id', listId)
+            .limit(1)
+          if (listPlants?.[0]?.plant_id) {
+            const { data: plantImg } = await supabaseServer
+              .from('plant_images')
+              .select('link')
+              .eq('plant_id', listPlants[0].plant_id)
+              .eq('use', 'primary')
+              .maybeSingle()
+            if (plantImg?.link) listImage = plantImg.link
+          }
+        } catch {}
+        
+        const listEmoji = plantCount > 20 ? '📚' : plantCount > 10 ? '📖' : '📑'
+        title = `${listEmoji} ${bookmarkList.name || 'Plant Collection'} | Aphylia`
+        
+        const descParts = []
+        if (bookmarkList.description) {
+          descParts.push(bookmarkList.description.slice(0, 100))
+        }
+        if (plantCount > 0) descParts.push(`🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}`)
+        if (ownerName) descParts.push(`👤 Curated by ${ownerName}`)
+        
+        description = descParts.length > 0 
+          ? descParts.join(' • ')
+          : `A curated collection of plants on Aphylia`
+        
+        if (listImage) image = listImage
+        
+        pageContent = `
+          <article>
+            <h1>${listEmoji} ${escapeHtml(bookmarkList.name || 'Plant Collection')}</h1>
+            <div class="plant-meta">
+              ${plantCount > 0 ? `🌿 ${plantCount} plant${plantCount > 1 ? 's' : ''}` : ''}
+              ${ownerName ? ` · 👤 Curated by ${escapeHtml(ownerName)}` : ''}
+            </div>
+            ${bookmarkList.description ? `<p>${escapeHtml(bookmarkList.description)}</p>` : '<p>A carefully curated plant collection 🌱</p>'}
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">View this collection on Aphylia →</a></p>
+          </article>
+        `
+      }
+    }
+    
+    // Homepage with dynamic content
+    else if (pagePath === '/' || effectivePath.length === 0) {
+      title = '🌱 Aphylia - Discover & Grow Your Perfect Garden'
+      description = 'Swipe to discover plants, track your garden, get care reminders. Join 10,000+ gardeners growing their dream gardens! 🌿🏡'
+      
+      // Try to get some stats
+      let plantCount = '5,000+'
+      let userCount = '10,000+'
+      try {
+        if (supabaseServer) {
+          const { count: pCount } = await supabaseServer
+            .from('plants')
+            .select('id', { count: 'exact', head: true })
+          if (pCount) plantCount = pCount.toLocaleString() + '+'
+        }
+      } catch {}
+      
+      pageContent = `
+        <article>
+          <h1>🌱 Welcome to Aphylia</h1>
+          <p>Your personal plant companion for discovering, managing, and growing beautiful gardens.</p>
+          
+          <h2>Why Gardeners Love Us</h2>
+          <ul>
+            <li>🎴 <strong>Swipe to Discover</strong> - Find your perfect plants, Tinder-style!</li>
+            <li>🏡 <strong>Garden Tracker</strong> - Manage all your plants in one place</li>
+            <li>⏰ <strong>Smart Reminders</strong> - Never forget to water again</li>
+            <li>📚 <strong>Care Guides</strong> - Expert advice for ${plantCount} plants</li>
+            <li>👥 <strong>Community</strong> - Join ${userCount} plant lovers</li>
+          </ul>
+          
+          <h2>Start Growing Today</h2>
+          <p>Free to use. No credit card required. Just plants! 🌿</p>
         </article>
       `
     }
