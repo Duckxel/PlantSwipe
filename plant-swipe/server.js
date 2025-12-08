@@ -16023,14 +16023,23 @@ async function generateCrawlerHtml(req, pagePath) {
     
     // Plant detail page: /plants/:id
     const isPlantRoute = effectivePath[0] === 'plants' && !!effectivePath[1]
-    ssrDebug('plant_route_check', { 
+    const isGardenRoute = (effectivePath[0] === 'garden' || effectivePath[0] === 'gardens') && !!effectivePath[1]
+    const isBlogRoute = effectivePath[0] === 'blog' && !!effectivePath[1]
+    const isProfileRoute = effectivePath[0] === 'u' && !!effectivePath[1]
+    const isBookmarkRoute = effectivePath[0] === 'bookmarks' && !!effectivePath[1]
+    
+    ssrDebug('route_detection', { 
       effectivePath0: effectivePath[0], 
       effectivePath1: effectivePath[1],
+      effectivePath2: effectivePath[2],
       isPlantRoute,
-      check1: effectivePath[0] === 'plants',
-      check2: !!effectivePath[1]
+      isGardenRoute,
+      isBlogRoute,
+      isProfileRoute,
+      isBookmarkRoute,
+      supabaseAvailable: !!supabaseServer
     })
-    console.log(`[ssr] Checking plant route: effectivePath[0]='${effectivePath[0]}', effectivePath[1]='${effectivePath[1] || 'undefined'}'`)
+    console.log(`[ssr] Route detection: plant=${isPlantRoute}, garden=${isGardenRoute}, blog=${isBlogRoute}, profile=${isProfileRoute}, bookmark=${isBookmarkRoute}`)
     if (isPlantRoute) {
       req._ssrDebug.matchedRoute = 'plant'
       const plantId = decodeURIComponent(effectivePath[1])
@@ -16369,9 +16378,11 @@ async function generateCrawlerHtml(req, pagePath) {
       }
     }
     
-    // Garden page: /garden/:id or /gardens/:id
+    // Garden page: /garden/:id or /gardens/:id or /garden/:id/overview etc.
     else if ((effectivePath[0] === 'garden' || effectivePath[0] === 'gardens') && effectivePath[1] && supabaseServer) {
       const gardenId = decodeURIComponent(effectivePath[1])
+      req._ssrDebug.matchedRoute = 'garden'
+      ssrDebug('garden_route_matched', { gardenId, supabaseAvailable: !!supabaseServer })
       console.log(`[ssr] Looking up garden: ${gardenId}`)
       
       const { data: garden, error: gardenError } = await ssrQuery(
