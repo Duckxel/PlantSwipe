@@ -15849,6 +15849,7 @@ async function generateCrawlerHtml(req, pagePath) {
         gardenOnAphylia: 'on Aphylia',
         gardenPrivate: 'This garden is private.',
         gardenViewOn: 'View on',
+        gardenWord: 'Garden',
         gardenMonths: 'month(s)',
         gardenYears: 'year(s)',
         gardenExploreThis: 'Explore this garden on Aphylia',
@@ -16033,6 +16034,7 @@ async function generateCrawlerHtml(req, pagePath) {
         gardenOnAphylia: 'sur Aphylia',
         gardenPrivate: 'Ce jardin est privé.',
         gardenViewOn: 'Voir sur',
+        gardenWord: 'Jardin',
         gardenMonths: 'mois',
         gardenYears: 'an(s)',
         gardenExploreThis: 'Explorer ce jardin sur Aphylia',
@@ -16626,7 +16628,7 @@ async function generateCrawlerHtml(req, pagePath) {
         // For private gardens, show limited info
         if (isPrivate) {
           const gardenEmoji = '🏡'
-          title = `${gardenEmoji} ${gardenName} | Aphylia`
+          title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
           description = `${gardenName} ${tr.gardenOnAphylia || 'on Aphylia'} 🌱 ${tr.gardenPrivate || 'This is a private garden.'}`
           if (garden.cover_image_url) image = ensureAbsoluteUrl(garden.cover_image_url)
           
@@ -16710,7 +16712,7 @@ async function generateCrawlerHtml(req, pagePath) {
           
           // Create engaging title
           const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
-          title = `${gardenEmoji} ${gardenName} | Aphylia`
+          title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
           
           // Create rich description
           const descParts = []
