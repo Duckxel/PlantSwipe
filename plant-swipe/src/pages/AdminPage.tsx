@@ -10,6 +10,7 @@ import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
 import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel";
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
+import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -2817,7 +2818,7 @@ export const AdminPage: React.FC = () => {
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
-    { key: "admin_logs", label: "Admin Logs", Icon: ScrollText, path: "/admin/logs" },
+    { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced" },
   ];
 
   const activeTab: AdminTab = React.useMemo(() => {
@@ -2826,7 +2827,7 @@ export const AdminPage: React.FC = () => {
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
     if (currentPath.includes("/admin/emails")) return "emails";
-    if (currentPath.includes("/admin/logs")) return "admin_logs";
+    if (currentPath.includes("/admin/advanced")) return "admin_logs";
     return "overview";
   }, [currentPath]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
@@ -6173,8 +6174,8 @@ export const AdminPage: React.FC = () => {
                     {/* Emails Tab */}
                     {activeTab === "emails" && <AdminEmailsPanel />}
 
-                  {/* Admin Logs Tab */}
-                  {activeTab === "admin_logs" && <AdminLogs />}
+                  {/* Advanced Tab */}
+                  {activeTab === "admin_logs" && <AdminAdvancedPanel />}
 
                 {/* Members Tab */}
                 {activeTab === "members" && (
@@ -8245,215 +8246,3 @@ function NoteRow({
   );
 }
 
-const AdminLogs: React.FC = () => {
-  const [logs, setLogs] = React.useState<
-    Array<{
-      occurred_at: string;
-      admin_id?: string | null;
-      admin_name: string | null;
-      action: string;
-      target: string | null;
-      detail: any;
-    }>
-  >([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = React.useState<number>(20);
-
-  const copyTextToClipboard = React.useCallback(
-    async (text: string): Promise<boolean> => {
-      try {
-        if (
-          navigator &&
-          navigator.clipboard &&
-          typeof navigator.clipboard.writeText === "function"
-        ) {
-          await navigator.clipboard.writeText(text);
-          return true;
-        }
-      } catch {}
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-        return ok;
-      } catch {
-        return false;
-      }
-    },
-    [],
-  );
-
-  const formatLogLine = React.useCallback(
-    (l: {
-      occurred_at: string;
-      admin_id?: string | null;
-      admin_name: string | null;
-      action: string;
-      target: string | null;
-      detail: any;
-    }): string => {
-      const ts = l.occurred_at ? new Date(l.occurred_at).toLocaleString() : "";
-      const who = (l.admin_name && String(l.admin_name).trim()) || "Admin";
-      const act = l.action || "";
-      const tgt = l.target ? ` ? ${l.target}` : "";
-      const det = l.detail ? ` ? ${JSON.stringify(l.detail)}` : "";
-      return `${ts} :: ? ${who} // ? ${act}${tgt}${det}`;
-    },
-    [],
-  );
-
-  const copyVisibleLogs = React.useCallback(async () => {
-    const subset = logs.slice(0, visibleCount);
-    const text = subset.map(formatLogLine).join("\n");
-    await copyTextToClipboard(text);
-  }, [logs, visibleCount, copyTextToClipboard, formatLogLine]);
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const session = (await supabase.auth.getSession()).data.session;
-      const token = session?.access_token;
-      const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      try {
-        const adminToken = (globalThis as any)?.__ENV__
-          ?.VITE_ADMIN_STATIC_TOKEN;
-        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
-      } catch {}
-      const r = await fetch("/api/admin/admin-logs?days=30", {
-        headers,
-        credentials: "same-origin",
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data?.error || `HTTP ? ${r.status}`);
-      const list = Array.isArray(data?.logs) ? data.logs : [];
-      setLogs(list);
-      setVisibleCount(Math.min(20, list.length || 20));
-    } catch (e: any) {
-      setError(e?.message || "Failed to load logs");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
-  // Live stream of admin logs via SSE
-  React.useEffect(() => {
-    let es: EventSource | null = null;
-    let updating = false;
-    (async () => {
-      try {
-        const session = (await supabase.auth.getSession()).data.session;
-        const token = session?.access_token;
-        // Static admin token if configured
-        let adminToken: string | null = null;
-        try {
-          adminToken =
-            String(
-              (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN || "",
-            ) || null;
-        } catch {}
-        const q: string[] = [];
-        if (token) q.push(`token=${encodeURIComponent(token)}`);
-        if (adminToken) q.push(`admin_token=${encodeURIComponent(adminToken)}`);
-        const url = `/api/admin/admin-logs/stream${q.length ? "?" + q.join("&") : ""}`;
-        es = new EventSource(url);
-        es.addEventListener("snapshot", (ev: MessageEvent) => {
-          try {
-            const data = JSON.parse(String(ev.data || "{}"));
-            const list = Array.isArray(data?.logs) ? data.logs : [];
-            setLogs(list);
-            setVisibleCount(Math.min(20, list.length || 20));
-          } catch {}
-        });
-        es.addEventListener("append", (ev: MessageEvent) => {
-          try {
-            const row = JSON.parse(String(ev.data || "{}"));
-            if (updating) return;
-            updating = true;
-            setLogs((prev) => [row, ...prev].slice(0, 2000));
-            setTimeout(() => {
-              updating = false;
-            }, 0);
-          } catch {}
-        });
-        es.onerror = () => {};
-      } catch {}
-    })();
-    return () => {
-      try {
-        es?.close();
-      } catch {}
-    };
-  }, []);
-  return (
-    <Card className="rounded-2xl">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-sm font-medium">Admin logs - last 30 days</div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              className="rounded-2xl h-8 px-3"
-              onClick={copyVisibleLogs}
-              disabled={loading}
-              aria-label="Copy logs"
-            >
-              Copy
-            </Button>
-            <Button
-              size="icon"
-              variant="outline"
-              className="rounded-2xl"
-              onClick={load}
-              disabled={loading}
-              aria-label="Refresh logs"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ? ${loading ? "animate-spin" : ""}`}
-              />
-            </Button>
-          </div>
-        </div>
-        {error && <div className="text-sm text-rose-600">{error}</div>}
-        {loading ? (
-          <div className="text-sm opacity-60">Loading...</div>
-        ) : logs.length === 0 ? (
-          <div className="text-sm opacity-60">No admin activity logged.</div>
-        ) : (
-          <>
-            <div className="bg-black text-green-300 rounded-2xl p-3 text-[11px] font-mono overflow-y-auto overflow-x-hidden max-h-[480px] space-y-2">
-              {logs.slice(0, visibleCount).map((l, idx) => (
-                <div key={idx} className="whitespace-pre-wrap break-words">
-                  {formatLogLine(l)}
-                </div>
-              ))}
-            </div>
-            {logs.length > visibleCount && (
-              <div className="flex justify-end mt-2">
-                <Button
-                  variant="outline"
-                  className="rounded-2xl h-8 px-3"
-                  onClick={() =>
-                    setVisibleCount((c) => Math.min(c + 50, logs.length))
-                  }
-                >
-                  Show more
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
