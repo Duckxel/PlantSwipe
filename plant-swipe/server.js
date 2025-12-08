@@ -15626,23 +15626,20 @@ async function generateCrawlerHtml(req, pagePath) {
   let image = `${siteUrl}/icons/icon-512x512.png`
   let pageContent = ''
   
-  console.log(`[ssr] Generating HTML for: ${pagePath}`)
+  // Parse language from path BEFORE try block so it's always available for HTML template
+  const pathParts = pagePath.split('/').filter(Boolean)
+  const langPrefixes = ['en', 'fr']
+  let detectedLang = 'en'
+  let effectivePath = pathParts
+  if (pathParts.length > 0 && langPrefixes.includes(pathParts[0])) {
+    detectedLang = pathParts[0]
+    effectivePath = pathParts.slice(1)
+  }
+  
+  console.log(`[ssr] Generating HTML for: ${pagePath}, lang: ${detectedLang}`)
   
   try {
-    // Parse the path to determine content type
-    const pathParts = pagePath.split('/').filter(Boolean)
-    console.log(`[ssr] Path parts: ${JSON.stringify(pathParts)}`)
-    
-    // Remove language prefix if present (e.g., /fr/plants/123 -> /plants/123)
-    // Note: Only EN and FR are fully supported with translations
-    const langPrefixes = ['en', 'fr']
-    let effectivePath = pathParts
-    let detectedLang = 'en'
-    if (pathParts.length > 0 && langPrefixes.includes(pathParts[0])) {
-      detectedLang = pathParts[0]
-      effectivePath = pathParts.slice(1)
-    }
-    console.log(`[ssr] Effective path: ${JSON.stringify(effectivePath)}, lang: ${detectedLang}`)
+    console.log(`[ssr] Path parts: ${JSON.stringify(pathParts)}, effective: ${JSON.stringify(effectivePath)}`)
     
     // Translations for SSR previews
     const t = {
