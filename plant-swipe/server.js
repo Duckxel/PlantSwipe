@@ -15453,7 +15453,8 @@ async function generateCrawlerHtml(req, pagePath) {
     console.warn('[ssr] Error generating crawler content:', err?.message || err)
   }
   
-  // Build the full HTML page
+  // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
+  // This ensures web archives can display content without errors
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15483,52 +15484,156 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="theme-color" content="#052e16">
   <meta name="application-name" content="Aphylia">
   
-  <!-- Icons -->
-  <link rel="icon" type="image/svg+xml" href="/icons/plant-swipe-icon-outline.svg">
-  <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+  <!-- Icons - using data URIs for archive compatibility -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌱%3C/text%3E%3C/svg%3E">
   
   <style>
+    * { box-sizing: border-box; }
     body { 
-      font-family: system-ui, -apple-system, sans-serif; 
-      max-width: 800px; 
-      margin: 0 auto; 
-      padding: 20px;
-      line-height: 1.6;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #f8faf7 0%, #eef2ed 45%, #e3e5df 100%);
       color: #1a1a1a;
+      line-height: 1.6;
     }
-    h1 { color: #052e16; }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .logo {
+      font-size: 2em;
+    }
+    .brand {
+      font-size: 1.5em;
+      font-weight: 600;
+      color: #052e16;
+      text-decoration: none;
+    }
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      padding: 15px 0;
+      margin-bottom: 20px;
+    }
+    nav a {
+      color: #065f46;
+      text-decoration: none;
+      font-weight: 500;
+      padding: 5px 0;
+    }
+    nav a:hover { color: #059669; text-decoration: underline; }
+    h1 { color: #052e16; margin: 0 0 15px 0; font-size: 2em; }
+    h2 { color: #065f46; margin: 30px 0 15px 0; }
     a { color: #059669; }
-    img { max-width: 100%; height: auto; }
     article { margin: 20px 0; }
-    nav { margin-bottom: 20px; padding: 10px 0; border-bottom: 1px solid #e5e5e5; }
-    nav a { margin-right: 15px; text-decoration: none; }
-    footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5; font-size: 0.9em; color: #666; }
+    .archive-notice {
+      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+      border: 1px solid #6ee7b7;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .archive-notice strong { color: #065f46; }
+    .archive-notice a {
+      display: inline-block;
+      margin-top: 10px;
+      background: #059669;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .archive-notice a:hover { background: #047857; }
+    .plant-card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      margin: 20px 0;
+    }
+    .plant-card h1 { margin-top: 0; }
+    .plant-meta { color: #666; font-size: 0.95em; margin: 10px 0; }
+    .plant-meta em { color: #065f46; }
+    ul { padding-left: 20px; }
+    li { margin: 8px 0; }
+    footer {
+      margin-top: 60px;
+      padding: 30px 0;
+      border-top: 1px solid rgba(0,0,0,0.1);
+      text-align: center;
+      color: #666;
+      font-size: 0.9em;
+    }
+    footer a { color: #059669; margin: 0 10px; }
+    @media (max-width: 600px) {
+      .container { padding: 15px; }
+      h1 { font-size: 1.5em; }
+      nav { gap: 5px 15px; }
+    }
   </style>
 </head>
 <body>
-  <nav>
-    <a href="/">Home</a>
-    <a href="/search">Search Plants</a>
-    <a href="/blog">Blog</a>
-    <a href="/about">About</a>
-  </nav>
+  <div class="container">
+    <header>
+      <span class="logo">🌱</span>
+      <a href="/" class="brand">Aphylia</a>
+    </header>
+    
+    <nav>
+      <a href="/">Home</a>
+      <a href="/search">Search Plants</a>
+      <a href="/blog">Blog</a>
+      <a href="/gardens">Gardens</a>
+      <a href="/about">About</a>
+      <a href="/contact">Contact</a>
+    </nav>
+    
+    <div class="archive-notice">
+      <strong>📚 Static Content Version</strong><br>
+      You're viewing a simplified version of this page optimized for web archives and search engines.
+      For the full interactive experience with search, gardens, and personalized features:
+      <br>
+      <a href="https://aphylia.app${escapeHtml(pagePath)}">Visit Aphylia Live →</a>
+    </div>
+    
+    <main>
+      <div class="plant-card">
+        ${pageContent || `
+          <h1>${escapeHtml(title)}</h1>
+          <p>${escapeHtml(description)}</p>
+        `}
+      </div>
+    </main>
+    
+    <footer>
+      <p>&copy; ${new Date().getFullYear()} Aphylia. Helping you grow your plant knowledge 🌱</p>
+      <p>
+        <a href="/terms">Terms</a>
+        <a href="/about">About</a>
+        <a href="/contact">Contact</a>
+        <a href="/blog">Blog</a>
+      </p>
+      <p style="font-size: 0.85em; margin-top: 15px;">
+        This is a pre-rendered version for web crawlers, archives, and accessibility.<br>
+        Content archived on ${new Date().toISOString().split('T')[0]}
+      </p>
+    </footer>
+  </div>
   
-  <main>
-    ${pageContent || `
-      <article>
-        <h1>${escapeHtml(title)}</h1>
-        <p>${escapeHtml(description)}</p>
-      </article>
-    `}
-  </main>
-  
-  <footer>
-    <p>&copy; ${new Date().getFullYear()} Aphylia. Helping you grow your plant knowledge 🌱</p>
-    <p><a href="/terms">Terms of Service</a> | <a href="/contact">Contact</a></p>
-  </footer>
-  
-  <!-- Note: This is a pre-rendered version for web crawlers and archives. -->
-  <!-- For the full interactive experience, please enable JavaScript or visit with a modern browser. -->
+  <!-- No JavaScript dependencies - this page is fully static and self-contained -->
 </body>
 </html>`
 
