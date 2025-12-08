@@ -6,19 +6,10 @@ import { supabase } from "@/lib/supabaseClient";
 import { Globe, Loader2, Check } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
-// Supported languages for gardening advice (matching DeepL supported languages)
+// Supported languages for gardening advice (matches website languages)
 const ADVICE_LANGUAGES = [
   { code: "en", name: "English", flag: "🇬🇧" },
   { code: "fr", name: "Français", flag: "🇫🇷" },
-  { code: "de", name: "Deutsch", flag: "🇩🇪" },
-  { code: "es", name: "Español", flag: "🇪🇸" },
-  { code: "it", name: "Italiano", flag: "🇮🇹" },
-  { code: "nl", name: "Nederlands", flag: "🇳🇱" },
-  { code: "pt", name: "Português", flag: "🇵🇹" },
-  { code: "pl", name: "Polski", flag: "🇵🇱" },
-  { code: "ru", name: "Русский", flag: "🇷🇺" },
-  { code: "ja", name: "日本語", flag: "🇯🇵" },
-  { code: "zh", name: "中文", flag: "🇨🇳" },
 ];
 
 interface GardenAdviceLanguageEditorProps {
@@ -99,7 +90,7 @@ export const GardenAdviceLanguageEditor: React.FC<GardenAdviceLanguageEditorProp
       <p className="text-sm text-muted-foreground">
         {t(
           "gardenDashboard.settingsSection.adviceLanguageDescription",
-          "Choose the language for your personalized gardening advice. AI-generated tips will be translated to your selected language."
+          "Choose the language for your personalized gardening advice."
         )}
       </p>
       
@@ -161,13 +152,6 @@ export const GardenAdviceLanguageEditor: React.FC<GardenAdviceLanguageEditorProp
         </div>
       )}
       
-      {/* Info about translation */}
-      <p className="text-xs text-muted-foreground">
-        {t(
-          "gardenDashboard.settingsSection.adviceTranslationNote",
-          "Advice is generated in English and automatically translated using DeepL for best quality."
-        )}
-      </p>
     </div>
   );
 };

@@ -12982,11 +12982,11 @@ app.put('/api/garden/:id/language', async (req, res) => {
       }
     }
 
-    // Validate language code (basic check)
-    const validLanguages = ['en', 'fr', 'de', 'es', 'it', 'nl', 'pt', 'pl', 'ru', 'ja', 'zh']
+    // Validate language code (only website languages supported)
+    const validLanguages = ['en', 'fr']
     const lang = String(preferredLanguage || 'en').toLowerCase()
     if (!validLanguages.includes(lang)) {
-      res.status(400).json({ ok: false, error: 'Invalid language code' })
+      res.status(400).json({ ok: false, error: 'Invalid language code. Only English and French are supported.' })
       return
     }
 

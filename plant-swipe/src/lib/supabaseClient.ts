@@ -32,8 +32,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     heartbeatIntervalMs: 30000,
   },
   global: {
-    // Add timeout to prevent hanging requests
-    fetch: (url, options = {}) => {
+    // Add timeout to prevent hanging requests, but respect existing signals
+    fetch: (url, options: RequestInit = {}) => {
+      // If caller already provided a signal, don't add our own timeout
+      // This prevents "signal is aborted without a reason" errors
+      if (options.signal) {
+        return fetch(url, options)
+      }
+      
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
       
