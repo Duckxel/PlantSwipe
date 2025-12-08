@@ -163,6 +163,20 @@ export const GardenDashboardPage: React.FC = () => {
   const [dueThisWeekByPlant, setDueThisWeekByPlant] = React.useState<
     Record<string, number[]>
   >({});
+  const [weekTaskOccurrences, setWeekTaskOccurrences] = React.useState<
+    Array<{
+      id: string;
+      taskId: string;
+      gardenPlantId: string;
+      dueAt: string;
+      requiredCount: number;
+      completedCount: number;
+      completedAt: string | null;
+      taskType: "water" | "fertilize" | "harvest" | "cut" | "custom";
+      taskEmoji?: string | null;
+      dayIndex: number;
+    }>
+  >([]);
   const [instanceCounts, setInstanceCounts] = React.useState<
     Record<string, number>
   >({});
@@ -667,15 +681,32 @@ export const GardenDashboardPage: React.FC = () => {
             setWeekCounts(totals);
 
             const dueMapSets: Record<string, Set<number>> = {};
+            const taskEmojiById: Record<string, string | null> = {};
+            for (const t of allTasks) taskEmojiById[t.id] = (t as any).emoji || null;
+            const enrichedWeekOccs: typeof weekTaskOccurrences = [];
             for (const o of weekOccs) {
               const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
               const remaining = Math.max(
                 0,
                 Number(o.requiredCount || 1) - Number(o.completedCount || 0),
               );
+              const idx = weekDaysIso.indexOf(dayIso);
+              if (idx >= 0) {
+                enrichedWeekOccs.push({
+                  id: o.id,
+                  taskId: o.taskId,
+                  gardenPlantId: o.gardenPlantId,
+                  dueAt: o.dueAt,
+                  requiredCount: o.requiredCount,
+                  completedCount: o.completedCount,
+                  completedAt: o.completedAt || null,
+                  taskType: tById[o.taskId] || "custom",
+                  taskEmoji: taskEmojiById[o.taskId],
+                  dayIndex: idx,
+                });
+              }
               if (remaining <= 0) continue;
               if (dayIso <= today) continue;
-              const idx = weekDaysIso.indexOf(dayIso);
               if (idx >= 0) {
                 const pid = String(o.gardenPlantId);
                 if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>();
@@ -688,6 +719,7 @@ export const GardenDashboardPage: React.FC = () => {
                 (a, b) => a - b,
               );
             setDueThisWeekByPlant(dueMapNext);
+            setWeekTaskOccurrences(enrichedWeekOccs);
           }
 
           const dueTodaySet = new Set<string>();
@@ -960,15 +992,36 @@ export const GardenDashboardPage: React.FC = () => {
               weekEndIso,
             );
             const dueMapSets: Record<string, Set<number>> = {};
+            const tByIdCached: Record<string, "water" | "fertilize" | "harvest" | "cut" | "custom"> = {};
+            const taskEmojiByCached: Record<string, string | null> = {};
+            for (const t of allTasks) {
+              tByIdCached[t.id] = t.type as any;
+              taskEmojiByCached[t.id] = (t as any).emoji || null;
+            }
+            const enrichedWeekOccsCached: typeof weekTaskOccurrences = [];
             for (const o of weekOccs) {
               const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
               const remaining = Math.max(
                 0,
                 Number(o.requiredCount || 1) - Number(o.completedCount || 0),
               );
+              const idx = weekDaysIso.indexOf(dayIso);
+              if (idx >= 0) {
+                enrichedWeekOccsCached.push({
+                  id: o.id,
+                  taskId: o.taskId,
+                  gardenPlantId: o.gardenPlantId,
+                  dueAt: o.dueAt,
+                  requiredCount: o.requiredCount,
+                  completedCount: o.completedCount,
+                  completedAt: o.completedAt || null,
+                  taskType: tByIdCached[o.taskId] || "custom",
+                  taskEmoji: taskEmojiByCached[o.taskId],
+                  dayIndex: idx,
+                });
+              }
               if (remaining <= 0) continue;
               if (dayIso <= today) continue;
-              const idx = weekDaysIso.indexOf(dayIso);
               if (idx >= 0) {
                 const pid = String(o.gardenPlantId);
                 if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>();
@@ -981,6 +1034,7 @@ export const GardenDashboardPage: React.FC = () => {
                 (a, b) => a - b,
               );
             setDueThisWeekByPlant(dueMapNext);
+            setWeekTaskOccurrences(enrichedWeekOccsCached);
           } else {
             const loadWeekData = async () => {
               const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
@@ -1008,7 +1062,12 @@ export const GardenDashboardPage: React.FC = () => {
                 string,
                 "water" | "fertilize" | "harvest" | "cut" | "custom"
               > = {};
-              for (const t of allTasks) tById[t.id] = t.type as any;
+              const taskEmojiByIdLoad: Record<string, string | null> = {};
+              for (const t of allTasks) {
+                tById[t.id] = t.type as any;
+                taskEmojiByIdLoad[t.id] = (t as any).emoji || null;
+              }
+              const enrichedWeekOccsLoad: typeof weekTaskOccurrences = [];
               for (const o of weekOccs) {
                 const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
                 const idx = weekDaysIso.indexOf(dayIso);
@@ -1016,6 +1075,18 @@ export const GardenDashboardPage: React.FC = () => {
                   const typ = tById[o.taskId] || "custom";
                   const inc = Math.max(1, Number(o.requiredCount || 1));
                   (typeCounts as any)[typ][idx] += inc;
+                  enrichedWeekOccsLoad.push({
+                    id: o.id,
+                    taskId: o.taskId,
+                    gardenPlantId: o.gardenPlantId,
+                    dueAt: o.dueAt,
+                    requiredCount: o.requiredCount,
+                    completedCount: o.completedCount,
+                    completedAt: o.completedAt || null,
+                    taskType: typ,
+                    taskEmoji: taskEmojiByIdLoad[o.taskId],
+                    dayIndex: idx,
+                  });
                 }
               }
               const totals = weekDaysIso.map(
@@ -1050,6 +1121,7 @@ export const GardenDashboardPage: React.FC = () => {
                   (a, b) => a - b,
                 );
               setDueThisWeekByPlant(dueMapNext);
+              setWeekTaskOccurrences(enrichedWeekOccsLoad);
 
               refreshGardenTaskCache(id, today).catch(() => {});
             };
@@ -1260,7 +1332,12 @@ export const GardenDashboardPage: React.FC = () => {
                 string,
                 "water" | "fertilize" | "harvest" | "cut" | "custom"
               > = {};
-              for (const t of allTasks) tById[t.id] = t.type as any;
+              const taskEmojiByIdRefresh: Record<string, string | null> = {};
+              for (const t of allTasks) {
+                tById[t.id] = t.type as any;
+                taskEmojiByIdRefresh[t.id] = (t as any).emoji || null;
+              }
+              const enrichedWeekOccsRefresh: typeof weekTaskOccurrences = [];
               for (const o of weekOccs) {
                 const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
                 const idx = weekDays.indexOf(dayIso);
@@ -1268,6 +1345,18 @@ export const GardenDashboardPage: React.FC = () => {
                   const typ = tById[o.taskId] || "custom";
                   const inc = Math.max(1, Number(o.requiredCount || 1));
                   (typeCounts as any)[typ][idx] += inc;
+                  enrichedWeekOccsRefresh.push({
+                    id: o.id,
+                    taskId: o.taskId,
+                    gardenPlantId: o.gardenPlantId,
+                    dueAt: o.dueAt,
+                    requiredCount: o.requiredCount,
+                    completedCount: o.completedCount,
+                    completedAt: o.completedAt || null,
+                    taskType: typ,
+                    taskEmoji: taskEmojiByIdRefresh[o.taskId],
+                    dayIndex: idx,
+                  });
                 }
               }
               const totals = weekDays.map(
@@ -1303,6 +1392,7 @@ export const GardenDashboardPage: React.FC = () => {
                   (a, b) => a - b,
                 );
               setDueThisWeekByPlant(dueMapNext);
+              setWeekTaskOccurrences(enrichedWeekOccsRefresh);
             }
 
             // Update daily stats for today only
@@ -2948,6 +3038,7 @@ export const GardenDashboardPage: React.FC = () => {
                       serverToday={serverToday}
                       dueThisWeekByPlant={dueThisWeekByPlant}
                       duePlantIds={dueToday}
+                      weekTaskOccurrences={weekTaskOccurrences}
                     />
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
