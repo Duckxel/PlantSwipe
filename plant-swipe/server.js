@@ -15194,19 +15194,54 @@ app.use(
 // This allows web archives to capture actual content instead of just a loading spinner
 
 const CRAWLER_USER_AGENTS = [
+  // Search engines
   'googlebot',
   'bingbot',
-  'slurp',
+  'slurp',              // Yahoo
   'duckduckbot',
   'baiduspider',
   'yandexbot',
-  'facebookexternalhit',
-  'twitterbot',
-  'linkedinbot',
-  'whatsapp',
-  'telegrambot',
+  'applebot',
+  'seznambot',
+  
+  // Social media preview bots (IMPORTANT for link previews!)
+  'discordbot',         // Discord link previews
+  'facebookexternalhit', // Facebook/Meta
+  'facebot',            // Facebook crawler
+  'twitterbot',         // Twitter/X
+  'linkedinbot',        // LinkedIn
+  'slackbot',           // Slack
+  'slack-imgproxy',     // Slack image proxy
+  'whatsapp',           // WhatsApp
+  'telegrambot',        // Telegram
+  'vkshare',            // VK (Russian social network)
+  'pinterestbot',       // Pinterest
+  'redditbot',          // Reddit
+  'skypeuripreview',    // Skype
+  'embedly',            // Embedly (used by many platforms)
+  'quora link preview', // Quora
+  'outbrain',           // Outbrain
+  'w3c_validator',      // W3C validator
+  'viber',              // Viber
+  'line-poker',         // LINE messenger
+  'kakaotalk-scrap',    // KakaoTalk
+  
+  // Web archives
   'ia_archiver',        // Internet Archive / Wayback Machine
   'archive.org_bot',    // Internet Archive
+  
+  // SEO tools
+  'ahrefsbot',
+  'semrushbot',
+  'mj12bot',
+  'dotbot',
+  'rogerbot',
+  'screaming frog',
+  'petalbot',
+  'bytespider',
+  'ccbot',
+  
+  // Generic HTTP clients (often used for unfurling)
   'wget',
   'curl',
   'python-requests',
@@ -15214,17 +15249,9 @@ const CRAWLER_USER_AGENTS = [
   'axios',
   'node-fetch',
   'undici',
-  'ccbot',
-  'seznambot',
-  'ahrefsbot',
-  'semrushbot',
-  'mj12bot',
-  'dotbot',
-  'rogerbot',
-  'screaming frog',
-  'applebot',
-  'petalbot',
-  'bytespider',
+  'httpie',
+  'insomnia',
+  'postman',
 ]
 
 function isCrawler(userAgent) {
@@ -15262,37 +15289,85 @@ async function generateCrawlerHtml(req, pagePath) {
       const plantId = decodeURIComponent(effectivePath[1])
       const { data: plant } = await supabaseServer
         .from('plants')
-        .select('id, name, scientific_name, family, overview, plant_type, utility, tags')
+        .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level')
         .eq('id', plantId)
         .maybeSingle()
       
       if (plant) {
-        title = `${plant.name} - Aphylia Plant Guide`
-        description = plant.overview 
-          ? plant.overview.slice(0, 160) + (plant.overview.length > 160 ? '...' : '')
-          : `Learn about ${plant.name}${plant.scientific_name ? ` (${plant.scientific_name})` : ''}. Care tips, growing information, and more.`
+        // Create an engaging title with plant type emoji
+        const plantEmoji = {
+          'vegetable': '🥬',
+          'fruit': '🍎',
+          'herb': '🌿',
+          'flower': '🌸',
+          'tree': '🌳',
+          'shrub': '🌲',
+          'succulent': '🌵',
+          'cactus': '🌵',
+          'vine': '🍇',
+          'grass': '🌾',
+          'fern': '🌿',
+          'aquatic': '🪷',
+        }
+        const typeKey = (plant.plant_type || '').toLowerCase()
+        const emoji = plantEmoji[typeKey] || '🌱'
         
-        // Fetch primary image
+        title = `${emoji} ${plant.name} - Complete Care Guide | Aphylia`
+        
+        // Create a compelling description
+        const descParts = []
+        if (plant.overview) {
+          // Take first sentence or first 120 chars
+          const firstSentence = plant.overview.split(/[.!?]/)[0]
+          descParts.push(firstSentence.slice(0, 120))
+        }
+        if (plant.plant_type) descParts.push(`Type: ${plant.plant_type}`)
+        if (plant.scientific_name) descParts.push(`(${plant.scientific_name})`)
+        if (plant.utility?.length) descParts.push(`Uses: ${plant.utility.slice(0, 3).join(', ')}`)
+        
+        description = descParts.length > 0 
+          ? descParts.join(' • ').slice(0, 200)
+          : `Discover ${plant.name} on Aphylia. Get complete care instructions, growing tips, and expert advice.`
+        
+        // Fetch primary image, fallback to discovery image
         const { data: images } = await supabaseServer
           .from('plant_images')
-          .select('link')
+          .select('link, use')
           .eq('plant_id', plantId)
-          .eq('use', 'primary')
-          .limit(1)
-        if (images?.[0]?.link) {
-          image = images[0].link
+          .in('use', ['primary', 'discovery', 'other'])
+          .order('use', { ascending: true })  // primary comes first alphabetically before 'other'
+          .limit(3)
+        
+        // Prefer primary, then discovery, then any other
+        const primaryImg = images?.find(img => img.use === 'primary')
+        const discoveryImg = images?.find(img => img.use === 'discovery')
+        const anyImg = images?.[0]
+        
+        if (primaryImg?.link) {
+          image = primaryImg.link
+        } else if (discoveryImg?.link) {
+          image = discoveryImg.link
+        } else if (anyImg?.link) {
+          image = anyImg.link
         }
         
         // Build structured content for the page
+        const infoItems = []
+        if (plant.scientific_name) infoItems.push(`<strong>Scientific name:</strong> <em>${escapeHtml(plant.scientific_name)}</em>`)
+        if (plant.family) infoItems.push(`<strong>Family:</strong> ${escapeHtml(plant.family)}`)
+        if (plant.plant_type) infoItems.push(`<strong>Type:</strong> ${escapeHtml(plant.plant_type)}`)
+        if (plant.origin?.length) infoItems.push(`<strong>Origin:</strong> ${plant.origin.map(o => escapeHtml(o)).join(', ')}`)
+        if (plant.level_sun) infoItems.push(`<strong>Light:</strong> ${escapeHtml(plant.level_sun)}`)
+        if (plant.maintenance_level) infoItems.push(`<strong>Difficulty:</strong> ${escapeHtml(plant.maintenance_level)}`)
+        
         pageContent = `
           <article itemscope itemtype="https://schema.org/Product">
-            <h1 itemprop="name">${escapeHtml(plant.name)}</h1>
-            ${plant.scientific_name ? `<p><em>Scientific name:</em> <span itemprop="alternateName">${escapeHtml(plant.scientific_name)}</span></p>` : ''}
-            ${plant.family ? `<p><em>Family:</em> ${escapeHtml(plant.family)}</p>` : ''}
-            ${plant.plant_type ? `<p><em>Type:</em> ${escapeHtml(plant.plant_type)}</p>` : ''}
-            ${plant.overview ? `<div itemprop="description"><h2>Overview</h2><p>${escapeHtml(plant.overview)}</p></div>` : ''}
-            ${plant.utility?.length ? `<p><em>Uses:</em> ${plant.utility.map(u => escapeHtml(u)).join(', ')}</p>` : ''}
-            ${plant.tags?.length ? `<p><em>Tags:</em> ${plant.tags.map(t => escapeHtml(t)).join(', ')}</p>` : ''}
+            <h1 itemprop="name">${emoji} ${escapeHtml(plant.name)}</h1>
+            ${infoItems.length ? `<div class="plant-meta">${infoItems.join(' · ')}</div>` : ''}
+            ${plant.overview ? `<div itemprop="description"><h2>About ${escapeHtml(plant.name)}</h2><p>${escapeHtml(plant.overview)}</p></div>` : ''}
+            ${plant.utility?.length ? `<p><strong>Common uses:</strong> ${plant.utility.map(u => escapeHtml(u)).join(', ')}</p>` : ''}
+            ${plant.tags?.length ? `<p><strong>Tags:</strong> ${plant.tags.map(t => escapeHtml(t)).join(', ')}</p>` : ''}
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">View full plant profile on Aphylia →</a></p>
           </article>
         `
       }
@@ -15309,17 +15384,37 @@ async function generateCrawlerHtml(req, pagePath) {
         .maybeSingle()
       
       if (post) {
-        title = `${post.title} - Aphylia Blog`
-        description = post.excerpt || (post.content ? post.content.replace(/<[^>]*>/g, '').slice(0, 160) + '...' : '')
+        title = `📖 ${post.title} | Aphylia Blog`
+        
+        // Create compelling description
+        if (post.excerpt) {
+          description = post.excerpt.slice(0, 200)
+        } else if (post.content) {
+          // Strip HTML and get first 200 chars
+          const plainText = post.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+          description = plainText.slice(0, 200) + (plainText.length > 200 ? '...' : '')
+        } else {
+          description = `Read "${post.title}" on Aphylia Blog. Expert gardening tips, plant care guides, and more.`
+        }
+        
         if (post.cover_image_url) image = post.cover_image_url
+        
+        const publishDate = post.published_at ? new Date(post.published_at).toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        }) : null
         
         pageContent = `
           <article itemscope itemtype="https://schema.org/BlogPosting">
-            <h1 itemprop="headline">${escapeHtml(post.title)}</h1>
-            ${post.author_name ? `<p><em>By</em> <span itemprop="author">${escapeHtml(post.author_name)}</span></p>` : ''}
-            ${post.published_at ? `<p><em>Published:</em> <time itemprop="datePublished" datetime="${post.published_at}">${new Date(post.published_at).toLocaleDateString()}</time></p>` : ''}
-            ${post.excerpt ? `<p itemprop="description">${escapeHtml(post.excerpt)}</p>` : ''}
+            <h1 itemprop="headline">📖 ${escapeHtml(post.title)}</h1>
+            <div class="plant-meta">
+              ${post.author_name ? `By <span itemprop="author">${escapeHtml(post.author_name)}</span>` : ''}
+              ${publishDate ? ` · <time itemprop="datePublished" datetime="${post.published_at}">${publishDate}</time>` : ''}
+            </div>
+            ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444;">${escapeHtml(post.excerpt)}</p>` : ''}
             <div itemprop="articleBody">${post.content || ''}</div>
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">Read full article on Aphylia →</a></p>
           </article>
         `
       }
@@ -15336,14 +15431,35 @@ async function generateCrawlerHtml(req, pagePath) {
         .maybeSingle()
       
       if (profile) {
-        title = `${profile.display_name} - Aphylia Gardener Profile`
-        description = profile.bio || `Check out ${profile.display_name}'s garden and plant collection on Aphylia.`
+        title = `👤 ${profile.display_name} | Aphylia Gardener`
+        description = profile.bio 
+          ? profile.bio.slice(0, 200) 
+          : `Explore ${profile.display_name}'s garden and plant collection on Aphylia. Discover their favorite plants and growing journey!`
         if (profile.avatar_url) image = profile.avatar_url
+        
+        // Try to get garden count for this user
+        let gardenCount = 0
+        try {
+          const { data: userData } = await supabaseServer
+            .from('profiles')
+            .select('id')
+            .eq('display_name', username)
+            .maybeSingle()
+          if (userData?.id) {
+            const { count } = await supabaseServer
+              .from('gardens')
+              .select('id', { count: 'exact', head: true })
+              .eq('user_id', userData.id)
+            gardenCount = count || 0
+          }
+        } catch {}
         
         pageContent = `
           <article itemscope itemtype="https://schema.org/Person">
-            <h1 itemprop="name">${escapeHtml(profile.display_name)}</h1>
-            ${profile.bio ? `<p itemprop="description">${escapeHtml(profile.bio)}</p>` : ''}
+            <h1 itemprop="name">👤 ${escapeHtml(profile.display_name)}</h1>
+            ${gardenCount > 0 ? `<p class="plant-meta">🏡 ${gardenCount} garden${gardenCount > 1 ? 's' : ''} on Aphylia</p>` : ''}
+            ${profile.bio ? `<p itemprop="description">${escapeHtml(profile.bio)}</p>` : '<p>A plant enthusiast on Aphylia</p>'}
+            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">View full profile on Aphylia →</a></p>
           </article>
         `
       }
