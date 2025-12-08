@@ -1430,7 +1430,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const translatePlant = async () => {
-    console.log('[translatePlant] Starting translation, current language:', language)
+    // DEBUG: Alert the current language to make it very clear
+    console.log('[translatePlant] Starting translation, current language:', language, '| languageRef:', languageRef.current)
+    alert(`Translating FROM: ${language.toUpperCase()}\nTO: ${SUPPORTED_LANGUAGES.filter(l => l !== language).join(', ').toUpperCase()}`)
     const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language)
     console.log('[translatePlant] Target languages:', targets)
     if (!targets.length) {
@@ -1630,7 +1632,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   id="create-language"
                   className="border rounded px-2 py-1 text-sm bg-background"
                   value={language}
-                  onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
+                  onChange={(e) => {
+                    const newLang = e.target.value as SupportedLanguage
+                    console.log('[CreatePlant] Language changed from', language, 'to', newLang)
+                    setLanguage(newLang)
+                  }}
                 >
                   {SUPPORTED_LANGUAGES.map((lang) => (
                     <option key={lang} value={lang}>{lang.toUpperCase()}</option>
