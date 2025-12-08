@@ -1733,7 +1733,31 @@
       "failedToQuitGarden": "Failed to quit garden",
       "addMemberTitle": "Add member",
       "enterDisplayNameOrEmail": "Enter display name or email",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "general": "General",
+      "generalDescription": "Name, cover image, language",
+      "locationDescriptionShort": "Weather & forecasts",
+      "privacyDescriptionShort": "Who can see your garden",
+      "membersDescriptionShort": "{{count}} members",
+      "dangerZone": "Danger Zone",
+      "dangerZoneDescription": "Delete or leave garden",
+      "dangerZoneWarning": "These actions cannot be undone. Please proceed with caution.",
+      "subtitle": "Manage your garden",
+      "members": "Members",
+      "membersDescription": "Manage who can access and edit this garden",
+      "noMembers": "No members yet",
+      "gardenDetailsDescription": "Update your garden's name and cover image",
+      "privacyDescription": "Control who can see and access your garden",
+      "deleteGardenTitle": "Delete this garden",
+      "deleteGardenWarning": "This will permanently delete the garden, all its plants, tasks, and journal entries. This action cannot be undone.",
+      "leaveGardenTitle": "Leave this garden",
+      "leaveGardenWarning": "You will no longer have access to this garden. You can be re-invited by an owner."
+    },
+    "todaysTasks": {
+      "title": "Today's Tasks",
+      "allDone": "All done for today!",
+      "enjoyYourDay": "Enjoy your day, your plants are happy.",
+      "viewAll": "View all {{count}} plants with tasks"
     },
     "taskDialog": {
       "createTask": "Create task",

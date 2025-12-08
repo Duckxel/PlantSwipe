@@ -1733,7 +1733,31 @@
       "failedToQuitGarden": "Échec de la sortie du jardin",
       "addMemberTitle": "Ajouter un membre",
       "enterDisplayNameOrEmail": "Entrez le nom d'affichage ou l'e-mail",
-      "unknown": "Inconnu"
+      "unknown": "Inconnu",
+      "general": "Général",
+      "generalDescription": "Nom, image de couverture, langue",
+      "locationDescriptionShort": "Météo et prévisions",
+      "privacyDescriptionShort": "Qui peut voir votre jardin",
+      "membersDescriptionShort": "{{count}} membres",
+      "dangerZone": "Zone de danger",
+      "dangerZoneDescription": "Supprimer ou quitter le jardin",
+      "dangerZoneWarning": "Ces actions ne peuvent pas être annulées. Procédez avec précaution.",
+      "subtitle": "Gérer votre jardin",
+      "members": "Membres",
+      "membersDescription": "Gérer qui peut accéder et modifier ce jardin",
+      "noMembers": "Pas encore de membres",
+      "gardenDetailsDescription": "Modifier le nom et l'image de couverture de votre jardin",
+      "privacyDescription": "Contrôler qui peut voir et accéder à votre jardin",
+      "deleteGardenTitle": "Supprimer ce jardin",
+      "deleteGardenWarning": "Cela supprimera définitivement le jardin, toutes ses plantes, tâches et entrées de journal. Cette action ne peut pas être annulée.",
+      "leaveGardenTitle": "Quitter ce jardin",
+      "leaveGardenWarning": "Vous n'aurez plus accès à ce jardin. Un propriétaire peut vous réinviter."
+    },
+    "todaysTasks": {
+      "title": "Tâches du jour",
+      "allDone": "Tout est fait pour aujourd'hui !",
+      "enjoyYourDay": "Profitez de votre journée, vos plantes sont heureuses.",
+      "viewAll": "Voir les {{count}} plantes avec des tâches"
     },
     "taskDialog": {
       "createTask": "Créer une tâche",
