@@ -15774,8 +15774,9 @@ app.get('/api/debug-ssr', async (req, res) => {
 })
 
 // Force SSR endpoint - always returns SSR HTML for any path (for testing)
-app.get('/api/force-ssr/*', async (req, res) => {
-  const testPath = req.params[0] ? `/${req.params[0]}` : '/'
+// Usage: /api/force-ssr?path=/plants/abc-123
+app.get('/api/force-ssr', async (req, res) => {
+  const testPath = req.query.path || '/'
   console.log(`[force-ssr] Generating SSR for: ${testPath}`)
   
   try {
