@@ -412,7 +412,7 @@ async function loadProfileRoutes() {
     // Fetch ALL profiles (public and private) - public profiles listed first
     const { data, error } = await client
       .from('profiles')
-      .select('display_name, is_private, updated_at')
+      .select('display_name, is_private')
       .not('display_name', 'is', null)
       .order('is_private', { ascending: true }) // public (false) first, then private (true)
       .order('display_name', { ascending: true })
@@ -436,7 +436,6 @@ async function loadProfileRoutes() {
         path: `/u/${normalizedName}`,
         changefreq: 'weekly',
         priority: isPrivate ? 0.3 : 0.5,
-        lastmod: toIsoString(row.updated_at),
       }
       results.push(route)
       if (results.length >= maxProfiles) break
@@ -468,7 +467,7 @@ async function loadGardenRoutes() {
     // Fetch ALL gardens (public and private) with privacy info
     const { data, error } = await client
       .from('gardens')
-      .select('id, created_at, updated_at, privacy')
+      .select('id, created_at, privacy')
       .order('created_at', { ascending: false })
       .range(offset, to)
 
@@ -490,7 +489,7 @@ async function loadGardenRoutes() {
         path: `/garden/${normalizedId}`,
         changefreq: 'weekly',
         priority: isPrivate ? 0.4 : 0.6,
-        lastmod: toIsoString(row.updated_at || row.created_at),
+        lastmod: toIsoString(row.created_at),
       }
       results.push(route)
       if (results.length >= maxGardens) break

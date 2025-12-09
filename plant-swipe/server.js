@@ -15623,34 +15623,23 @@ ${alternateLinks(path)}
           id, 
           display_name, 
           username,
-          is_private,
-          updated_at,
-          gardens!gardens_created_by_fkey(updated_at)
+          is_private
         `)
         .not('display_name', 'is', null)
         .order('is_private', { ascending: true }) // public first
-        .order('updated_at', { ascending: false })
+        .order('display_name', { ascending: true })
         .limit(500)
       
       if (profiles?.length) {
         for (const lang of languages) {
           urls += profiles.map(profile => {
-            // Use the most recent date: profile update or latest garden update
-            const profileDate = profile.updated_at ? new Date(profile.updated_at) : null
-            const gardenDates = (profile.gardens || [])
-              .map(g => g.updated_at ? new Date(g.updated_at) : null)
-              .filter(Boolean)
-            const allDates = [profileDate, ...gardenDates].filter(Boolean)
-            const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
-            const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
-            
             // Use username if available, otherwise display_name
             const urlPath = profile.username || profile.display_name
             const path = `/u/${encodeURIComponent(urlPath)}`
             // Public profiles get higher priority (0.5), private profiles get lower priority (0.3)
             const priority = profile.is_private ? '0.3' : '0.5'
             return `  <url>
-    <loc>${langUrl(path, lang)}</loc>${lastmodStr}
+    <loc>${langUrl(path, lang)}</loc>
     <changefreq>weekly</changefreq>
     <priority>${priority}</priority>
 ${alternateLinks(path)}
@@ -15665,27 +15654,17 @@ ${alternateLinks(path)}
         .from('gardens')
         .select(`
           id,
-          updated_at,
           created_at,
-          privacy,
-          garden_plants(created_at, updated_at)
+          privacy
         `)
-        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(500)
       
       if (gardens?.length) {
         for (const lang of languages) {
           urls += gardens.map(garden => {
-            // Use the most recent date: garden update or latest plant activity
-            const gardenDate = garden.updated_at || garden.created_at
-            const gardenDateTime = gardenDate ? new Date(gardenDate) : null
-            const plantDates = (garden.garden_plants || [])
-              .flatMap(p => [p.updated_at, p.created_at])
-              .filter(Boolean)
-              .map(d => new Date(d))
-            const allDates = [gardenDateTime, ...plantDates].filter(Boolean)
-            const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
-            const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
+            // Use created_at for lastmod
+            const lastmodStr = garden.created_at ? `\n    <lastmod>${new Date(garden.created_at).toISOString().split('T')[0]}</lastmod>` : ''
             
             const path = `/garden/${garden.id}`
             // Public gardens (privacy = 'public' or null) get higher priority (0.6)

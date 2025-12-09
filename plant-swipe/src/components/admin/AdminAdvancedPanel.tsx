@@ -277,14 +277,6 @@ const getPriorityColor = (priority: string | undefined) => {
   return "bg-stone-400 text-white"
 }
 
-const getPriorityLabel = (priority: string | undefined) => {
-  const p = parseFloat(priority || "0.5")
-  if (p >= 0.9) return "Critical"
-  if (p >= 0.7) return "High"
-  if (p >= 0.5) return "Medium"
-  if (p >= 0.3) return "Low"
-  return "Minimal"
-}
 
 // Get type icon based on URL path
 const getTypeIcon = (pathname: string) => {
