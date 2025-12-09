@@ -1280,7 +1280,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             schema: plantSchema,
             fieldKey,
             existingField,
-            language,
+            // AI always uses English regardless of current editing language
+            language: 'en',
           })
           setPlant((prev) => {
             const applied = applyAiFieldToPlant(prev, fieldKey, fieldData)
@@ -1327,7 +1328,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             schema: plantSchema,
             existingData: plant,
             fields: aiFieldOrder,
-            language,
+            // AI always uses English regardless of current editing language
+            language: 'en',
             onFieldComplete: ({ field, data }) => {
               if (field === 'complete') return
               if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
