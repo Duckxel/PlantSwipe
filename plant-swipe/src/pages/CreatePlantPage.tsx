@@ -552,28 +552,27 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       givenNames: translation?.given_names || [],
       // Non-translatable fields from plants table
       scientificName: data.scientific_name || undefined,
-      // Translatable field
-      family: translation?.family || undefined,
+      family: data.family || undefined,
+      // Translatable field from plant_translations
       overview: translation?.overview || undefined,
-      // Non-translatable field from plants table
+      // Non-translatable fields from plants table (enums)
       promotionMonth: monthSlugToNumber(data.promotion_month) ?? undefined,
-      lifeCycle: (lifeCycleEnum.toUi(translation?.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
-      season: seasonEnum.toUiArray(translation?.season) as NonNullable<Plant["identity"]>["season"],
-      foliagePersistance: expandFoliagePersistanceFromDb(translation?.foliage_persistance),
-      // Non-translatable fields from plants table
+      lifeCycle: (lifeCycleEnum.toUi(data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
+      season: seasonEnum.toUiArray(data.season) as NonNullable<Plant["identity"]>["season"],
+      foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
       spiked: data.spiked || false,
+      toxicityHuman: (toxicityEnum.toUi(data.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
+      toxicityPets: (toxicityEnum.toUi(data.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
       // Translatable fields from plant_translations only
-      toxicityHuman: (toxicityEnum.toUi(translation?.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
-      toxicityPets: (toxicityEnum.toUi(translation?.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
       allergens: translation?.allergens || [],
       // Non-translatable fields from plants table
       scent: data.scent || false,
       // Translatable fields from plant_translations only
       symbolism: translation?.symbolism || [],
-      livingSpace: (livingSpaceEnum.toUi(translation?.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
-      composition: expandCompositionFromDb(translation?.composition) as IdentityComposition,
-      maintenanceLevel: (maintenanceLevelEnum.toUi(translation?.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
-      // Non-translatable fields from plants table
+      // Non-translatable fields from plants table (enums)
+      livingSpace: (livingSpaceEnum.toUi(data.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
+      composition: expandCompositionFromDb(data.composition) as IdentityComposition,
+      maintenanceLevel: (maintenanceLevelEnum.toUi(data.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
       multicolor: data.multicolor || false,
       bicolor: data.bicolor || false,
       colors,
@@ -1068,8 +1067,18 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             utility: normalizedUtility,
             comestible_part: normalizedComestible,
             fruit_type: normalizedFruit,
+            // Non-translatable enum fields from identity section
+            family: plantToSave.identity?.family || null,
+            life_cycle: normalizedLifeCycle || null,
+            season: normalizedIdentitySeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
             spiked: coerceBoolean(plantToSave.identity?.spiked, false),
+            toxicity_human: normalizedToxicityHuman || null,
+            toxicity_pets: normalizedToxicityPets || null,
             scent: coerceBoolean(plantToSave.identity?.scent, false),
+            living_space: normalizedLivingSpace || null,
+            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+            maintenance_level: normalizedMaintenance || null,
             multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
             bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
             temperature_max: plantToSave.plantCare?.temperatureMax || null,
@@ -1151,26 +1160,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         }
 
         // STEP 2: Save translatable fields to plant_translations (for ALL languages including English)
-        // Note: scientific_name and promotion_month are NOT translated - they stay in plants table only
+        // Note: enum fields (family, life_cycle, season, foliage_persistance, toxicity_*, living_space,
+        // composition, maintenance_level) are NOT translated - they stay in plants table only
+        // Same for scientific_name, promotion_month, habitat, level_sun
         const translationPayload = {
           plant_id: savedId,
           language: saveLanguage,
           name: trimmedName,
+          // Translatable text fields only
           given_names: plantToSave.identity?.givenNames || [],
-          family: plantToSave.identity?.family || null,
           overview: plantToSave.identity?.overview || null,
-          life_cycle: normalizedLifeCycle || null,
-          season: normalizedIdentitySeasons,
-          foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
-          toxicity_human: normalizedToxicityHuman || null,
-          toxicity_pets: normalizedToxicityPets || null,
           allergens: plantToSave.identity?.allergens || [],
           symbolism: plantToSave.identity?.symbolism || [],
-          living_space: normalizedLivingSpace || null,
-          composition: normalizeCompositionForDb(plantToSave.identity?.composition),
-          maintenance_level: normalizedMaintenance || null,
           origin: plantToSave.plantCare?.origin || [],
-          // habitat and level_sun are NOT translated - they are in plants table only
           advice_soil: plantToSave.plantCare?.adviceSoil || null,
           advice_mulching: plantToSave.plantCare?.adviceMulching || null,
           advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
@@ -1457,36 +1459,21 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (translatedSourceName) translatedSource.name = translatedSourceName
         if (primarySource?.url) translatedSource.url = primarySource.url
 
-          const dbLifeCycle = lifeCycleEnum.toDb(plant.identity?.lifeCycle)
-          const dbSeasons = seasonEnum.toDbArray(plant.identity?.season)
-          const dbLivingSpace = livingSpaceEnum.toDb(plant.identity?.livingSpace)
-          const dbMaintenance = maintenanceLevelEnum.toDb(plant.identity?.maintenanceLevel)
-          const dbToxicityHuman = toxicityEnum.toDb(plant.identity?.toxicityHuman)
-          const dbToxicityPets = toxicityEnum.toDb(plant.identity?.toxicityPets)
-          // dbHabitat removed - habitat is NOT translated, stays in plants table only
-
-          // Note: scientific_name, promotion_month, habitat, level_sun are NOT translated - they stay in plants table only
+          // Note: All enum fields (family, life_cycle, season, foliage_persistance, toxicity_*,
+          // living_space, composition, maintenance_level) are NOT translated - they stay in plants table only
+          // Same for scientific_name, promotion_month, habitat, level_sun
+          // Only text fields that need actual translation go in plant_translations
           translatedRows.push({
           plant_id: plant.id,
           language: target,
           name: translatedName,
           given_names: translatedGivenNames,
-          family: plant.identity?.family || null,
           overview: plant.identity?.overview
             ? await translateText(plant.identity.overview, target, sourceLang)
             : plant.identity?.overview || null,
-            life_cycle: dbLifeCycle || null,
-            season: dbSeasons,
-            foliage_persistance: normalizeFoliagePersistanceForDb(plant.identity?.foliagePersistance),
-            toxicity_human: dbToxicityHuman || null,
-            toxicity_pets: dbToxicityPets || null,
             allergens: await translateArraySafe(plant.identity?.allergens),
             symbolism: await translateArraySafe(plant.identity?.symbolism),
-            living_space: dbLivingSpace || null,
-            composition: normalizeCompositionForDb(plant.identity?.composition),
-            maintenance_level: dbMaintenance || null,
           origin: await translateArraySafe(plant.plantCare?.origin),
-          // habitat is NOT translated - it is in plants table only
           advice_soil: plant.plantCare?.adviceSoil
             ? await translateText(plant.plantCare.adviceSoil, target, sourceLang)
             : plant.plantCare?.adviceSoil || null,

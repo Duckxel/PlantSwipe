@@ -930,25 +930,28 @@ alter table if exists public.plant_translations drop column if exists care;
 alter table if exists public.plant_translations drop column if exists planting;
 alter table if exists public.plant_translations drop column if exists problems;
 
+-- Translatable text fields only in plant_translations
 alter table if exists public.plant_translations add column if not exists overview text;
-alter table if exists public.plant_translations add column if not exists family text;
 alter table if exists public.plant_translations add column if not exists given_names text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists allergens text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists symbolism text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists origin text[] not null default '{}';
+
 -- The following are NOT translated - they stay only in plants table (enums/Latin names)
+-- Drop them from plant_translations if they exist
 alter table if exists public.plant_translations drop column if exists scientific_name;
 alter table if exists public.plant_translations drop column if exists promotion_month;
 alter table if exists public.plant_translations drop column if exists level_sun;
 alter table if exists public.plant_translations drop column if exists habitat;
-alter table if exists public.plant_translations add column if not exists life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic'));
-alter table if exists public.plant_translations add column if not exists season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']);
-alter table if exists public.plant_translations add column if not exists foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent'));
-alter table if exists public.plant_translations add column if not exists toxicity_human text check (toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
-alter table if exists public.plant_translations add column if not exists toxicity_pets text check (toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
-alter table if exists public.plant_translations add column if not exists allergens text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists symbolism text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists living_space text check (living_space in ('indoor','outdoor','both'));
-alter table if exists public.plant_translations add column if not exists composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']);
-alter table if exists public.plant_translations add column if not exists maintenance_level text check (maintenance_level in ('none','low','moderate','heavy'));
-alter table if exists public.plant_translations add column if not exists origin text[] not null default '{}';
+alter table if exists public.plant_translations drop column if exists family;
+alter table if exists public.plant_translations drop column if exists life_cycle;
+alter table if exists public.plant_translations drop column if exists season;
+alter table if exists public.plant_translations drop column if exists foliage_persistance;
+alter table if exists public.plant_translations drop column if exists toxicity_human;
+alter table if exists public.plant_translations drop column if exists toxicity_pets;
+alter table if exists public.plant_translations drop column if exists living_space;
+alter table if exists public.plant_translations drop column if exists composition;
+alter table if exists public.plant_translations drop column if exists maintenance_level;
 -- habitat is NOT translated - it stays only in plants table (dropped above)
 alter table if exists public.plant_translations add column if not exists advice_soil text;
 alter table if exists public.plant_translations add column if not exists advice_mulching text;

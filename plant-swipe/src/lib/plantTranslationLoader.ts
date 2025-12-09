@@ -395,7 +395,8 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         name: pc?.colors?.name,
         hexCode: pc?.colors?.hex_code,
       })).filter((c) => c.name)
-        const seasonsRaw = translation.season ?? basePlant.season ?? []
+        // season is a non-translatable enum field, always from plants table
+        const seasonsRaw = basePlant.season ?? []
         const seasons: PlantSeason[] = seasonEnum.toUiArray(seasonsRaw) as PlantSeason[]
         const images: PlantImage[] = ((basePlant.plant_images as any[]) || []).map((img) => ({
           link: img?.link,
@@ -452,29 +453,28 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
               givenNames: translation.given_names || [],
               // Non-translatable fields from plants table
               scientificName: basePlant.scientific_name || undefined,
-              // Translatable fields from plant_translations only
-              family: translation.family || undefined,
+              family: basePlant.family || undefined,
+              // Translatable field from plant_translations
               overview: translation.overview || undefined,
-              // Non-translatable field from plants table
+              // Non-translatable fields from plants table (enums)
               promotionMonth: monthSlugToNumber(basePlant.promotion_month) ?? undefined,
-              lifeCycle: (lifeCycleEnum.toUi(translation.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
+              lifeCycle: (lifeCycleEnum.toUi(basePlant.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
               season: seasons,
-              foliagePersistance: expandFoliagePersistanceFromDb(translation.foliage_persistance),
-              // Non-translatable fields from plants table
+              foliagePersistance: expandFoliagePersistanceFromDb(basePlant.foliage_persistance),
               spiked: basePlant.spiked ?? false,
+              toxicityHuman: (toxicityEnum.toUi(basePlant.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
+              toxicityPets: (toxicityEnum.toUi(basePlant.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
               // Translatable fields from plant_translations only
-              toxicityHuman: (toxicityEnum.toUi(translation.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
-              toxicityPets: (toxicityEnum.toUi(translation.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
               allergens: translation.allergens || [],
               // Non-translatable fields from plants table
               scent: basePlant.scent ?? false,
               // Translatable fields from plant_translations only
               symbolism: translation.symbolism || [],
-              livingSpace: (livingSpaceEnum.toUi(translation.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
-              composition: expandCompositionFromDb(translation.composition || []) as IdentityComposition,
-              maintenanceLevel: (maintenanceLevelEnum.toUi(translation.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
+              // Non-translatable fields from plants table (enums)
+              livingSpace: (livingSpaceEnum.toUi(basePlant.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
+              composition: expandCompositionFromDb(basePlant.composition || []) as IdentityComposition,
+              maintenanceLevel: (maintenanceLevelEnum.toUi(basePlant.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
               colors: colorObjects,
-              // Non-translatable fields from plants table
               multicolor: basePlant.multicolor ?? false,
               bicolor: basePlant.bicolor ?? false,
             },
@@ -628,12 +628,17 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     const TOP_LIKED_LIMIT = 5
     
     // Note: advice_medicinal and origin are now in plant_translations only
+    // All enum fields and non-translatable fields come from plants table
     const plantColumns = [
       'id', 'name', 'scientific_name', 'plant_type', 
       'utility', 'comestible_part', 'fruit_type',
       'season', 'habitat', 'level_sun', 'promotion_month',
+      'family', 'life_cycle', 'foliage_persistance',
+      'toxicity_human', 'toxicity_pets', 'living_space',
+      'composition', 'maintenance_level',
+      'multicolor', 'bicolor', 'spiked', 'scent',
       'created_time', 'updated_time',
-      'scent', 'aromatherapy', 'composition',
+      'aromatherapy',
       'plant_images (link,use)',
       'plant_colors (colors (id,name,hex_code))',
       'plant_watering_schedules (season,quantity,time_period)',
