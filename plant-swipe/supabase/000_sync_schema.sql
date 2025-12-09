@@ -311,16 +311,45 @@ do $$ begin
   end;
 end $$;
 
-  -- ========== Plants (catalog) ==========
+-- ========== Plants base table ==========
+-- ARCHITECTURE NOTE: As of 2024, translatable content is stored in plant_translations
+-- for ALL languages INCLUDING English. This table contains non-translatable base data.
+-- The translatable columns below are kept for backward compatibility and as fallbacks,
+-- but the authoritative source for translated content is plant_translations.
+--
+-- NON-TRANSLATABLE (primary source is this table):
+--   id, name (for unique constraint), plant_type, utility, comestible_part, fruit_type
+--   spiked, scent, multicolor, bicolor
+--   temperature_max, temperature_min, temperature_ideal, hygrometry
+--   watering_type, division, soil, mulching, nutrition_need, fertilizer
+--   sowing_month, flowering_month, fruiting_month
+--   height_cm, wingspan_cm, tutoring, sow_type, separation_cm, transplanting
+--   infusion, aromatherapy, spice_mixes
+--   melliferous, polenizer, be_fertilizer, conservation_status
+--   pests, diseases, companions
+--   status, admin_commentary, created_by, created_time, updated_by, updated_time
+--
+-- TRANSLATABLE (primary source is plant_translations, these are fallbacks):
+--   given_names, scientific_name, family, overview
+--   promotion_month, life_cycle, season, foliage_persistance
+--   toxicity_human, toxicity_pets, allergens, symbolism
+--   living_space, composition, maintenance_level
+--   origin, habitat, level_sun
+--   advice_soil, advice_mulching, advice_fertilizer
+--   advice_tutoring, advice_sowing, cut
+--   advice_medicinal, advice_infusion, nutritional_intake, recipes_ideas
+--   ground_effect, source_name, source_url, tags
+
 create table if not exists public.plants (
   id text primary key,
-  -- Plant primary name (unique)
+  -- Plant primary name (unique constraint, also used as fallback if no translation)
   name text not null,
+  -- Non-translatable classification fields
   plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')),
   utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']),
   comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']),
   fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']),
-  -- Identity
+  -- Identity (translatable fields - kept for fallback, primary source is plant_translations)
   given_names text[] not null default '{}',
   scientific_name text,
   family text,
@@ -340,7 +369,7 @@ create table if not exists public.plants (
   maintenance_level text check (maintenance_level in ('none','low','moderate','heavy')),
   multicolor boolean default false,
   bicolor boolean default false,
-  -- Plant care
+  -- Plant care (mix of translatable and non-translatable)
   origin text[] not null default '{}',
   habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']),
   temperature_max integer,
@@ -357,7 +386,7 @@ create table if not exists public.plants (
   nutrition_need text[] not null default '{}'::text[] check (nutrition_need <@ array['nitrogen','phosphorus','potassium','calcium','magnesium','sulfur','iron','boron','manganese','molybene','chlorine','copper','zinc','nitrate','phosphate']),
   fertilizer text[] not null default '{}'::text[] check (fertilizer <@ array['granular fertilizer','liquid fertilizer','meat flour','fish flour','crushed bones','crushed horns','slurry','manure','animal excrement','sea fertilizer','yurals','wine','guano','coffee grounds','banana peel','eggshell','vegetable cooking water','urine','grass clippings','vegetable waste','natural mulch']),
   advice_fertilizer text,
-  -- Growth
+  -- Growth (mix of translatable and non-translatable)
   sowing_month text[] not null default '{}'::text[] check (sowing_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
   flowering_month text[] not null default '{}'::text[] check (flowering_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
   fruiting_month text[] not null default '{}'::text[] check (fruiting_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
@@ -370,7 +399,7 @@ create table if not exists public.plants (
   transplanting boolean,
   advice_sowing text,
   cut text,
-  -- Usage
+  -- Usage (mix of translatable and non-translatable)
   advice_medicinal text,
   nutritional_intake text[] not null default '{}',
   infusion boolean default false,
@@ -378,21 +407,21 @@ create table if not exists public.plants (
   recipes_ideas text[] not null default '{}',
   aromatherapy boolean default false,
   spice_mixes text[] not null default '{}',
-  -- Ecology
+  -- Ecology (mix of translatable and non-translatable)
   melliferous boolean default false,
   polenizer text[] not null default '{}'::text[] check (polenizer <@ array['bee','wasp','ant','butterfly','bird','mosquito','fly','beetle','ladybug','stagbeetle','cockchafer','dungbeetle','weevil']),
   be_fertilizer boolean default false,
   ground_effect text,
   conservation_status text check (conservation_status in ('safe','at risk','vulnerable','endangered','critically endangered','extinct')),
-  -- Danger
+  -- Danger (non-translatable)
   pests text[] not null default '{}',
   diseases text[] not null default '{}',
-  -- Miscellaneous
+  -- Miscellaneous (mix of translatable and non-translatable)
   companions text[] not null default '{}',
   tags text[] not null default '{}',
   source_name text,
   source_url text,
-  -- Meta
+  -- Meta (non-translatable)
   status text check (status in ('in progres','rework','review','approved')),
   admin_commentary text,
   created_by text,
@@ -830,15 +859,45 @@ do $$ begin
 end $$;
 
 -- ========== Plant translations (multi-language support) ==========
+-- ARCHITECTURE NOTE: As of 2024, ALL translatable content is stored in plant_translations
+-- for ALL languages INCLUDING English. The plants table contains only non-translatable
+-- base data (IDs, booleans, numbers, timestamps). English is treated as a translation
+-- just like French or any other language.
+--
+-- Translatable fields (in plant_translations for ALL languages):
+--   name, given_names, scientific_name, family, overview
+--   promotion_month, life_cycle, season, foliage_persistance
+--   toxicity_human, toxicity_pets, allergens, symbolism
+--   living_space, composition, maintenance_level
+--   origin, habitat, level_sun
+--   advice_soil, advice_mulching, advice_fertilizer
+--   advice_tutoring, advice_sowing, advice_medicinal, advice_infusion
+--   ground_effect, cut, nutritional_intake, recipes_ideas
+--   source_name, source_url, tags
+--
+-- Non-translatable fields (in plants table only):
+--   id, plant_type, utility, comestible_part, fruit_type
+--   spiked, scent, multicolor, bicolor
+--   temperature_max, temperature_min, temperature_ideal, hygrometry
+--   watering_type, division, soil, mulching, nutrition_need, fertilizer
+--   sowing_month, flowering_month, fruiting_month
+--   height_cm, wingspan_cm, tutoring, sow_type, separation_cm, transplanting
+--   infusion, aromatherapy, spice_mixes
+--   melliferous, polenizer, be_fertilizer, conservation_status
+--   pests, diseases, companions
+--   status, admin_commentary, created_by, created_time, updated_by, updated_time
+
 create table if not exists public.plant_translations (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
   language text not null references public.translation_languages(code),
+  -- Core translatable fields
   name text not null,
-  overview text,
-  family text,
   given_names text[] not null default '{}',
   scientific_name text,
+  family text,
+  overview text,
+  -- Identity translatable fields
   promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december')),
   life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic')),
   season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']),
@@ -850,18 +909,29 @@ create table if not exists public.plant_translations (
   living_space text check (living_space in ('indoor','outdoor','both')),
   composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']),
   maintenance_level text check (maintenance_level in ('none','low','moderate','heavy')),
+  -- Care translatable fields
   origin text[] not null default '{}',
   habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']),
+  level_sun text check (level_sun in ('low light','shade','partial sun','full sun')),
   advice_soil text,
   advice_mulching text,
   advice_fertilizer text,
+  -- Growth translatable fields
   advice_tutoring text,
   advice_sowing text,
+  cut text,
+  -- Usage translatable fields
   advice_medicinal text,
   advice_infusion text,
+  nutritional_intake text[] not null default '{}',
+  recipes_ideas text[] not null default '{}',
+  -- Ecology translatable fields
   ground_effect text,
+  -- Miscellaneous translatable fields
   source_name text,
   source_url text,
+  tags text[] not null default '{}',
+  -- Timestamps
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (plant_id, language)
@@ -946,6 +1016,104 @@ alter table if exists public.plant_translations add column if not exists tags te
 alter table if exists public.plant_translations add column if not exists nutritional_intake text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists recipes_ideas text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists cut text;
+alter table if exists public.plant_translations add column if not exists level_sun text check (level_sun in ('low light','shade','partial sun','full sun'));
+
+-- ========== Migrate English data from plants to plant_translations ==========
+-- This migration ensures all plants have English translations in the new architecture
+-- where ALL translatable fields (including English) are stored in plant_translations.
+-- This is idempotent - it only creates translations for plants that don't have one yet.
+do $$
+declare
+  migrated_count integer := 0;
+begin
+  -- Insert English translations for plants that don't have one yet
+  with inserted as (
+    insert into public.plant_translations (
+      plant_id,
+      language,
+      name,
+      given_names,
+      scientific_name,
+      family,
+      overview,
+      promotion_month,
+      life_cycle,
+      season,
+      foliage_persistance,
+      toxicity_human,
+      toxicity_pets,
+      allergens,
+      symbolism,
+      living_space,
+      composition,
+      maintenance_level,
+      origin,
+      habitat,
+      level_sun,
+      advice_soil,
+      advice_mulching,
+      advice_fertilizer,
+      advice_tutoring,
+      advice_sowing,
+      cut,
+      advice_medicinal,
+      advice_infusion,
+      nutritional_intake,
+      recipes_ideas,
+      ground_effect,
+      source_name,
+      source_url,
+      tags
+    )
+    select
+      p.id,
+      'en',
+      p.name,
+      coalesce(p.given_names, '{}'),
+      p.scientific_name,
+      p.family,
+      p.overview,
+      p.promotion_month,
+      p.life_cycle,
+      coalesce(p.season, '{}'),
+      p.foliage_persistance,
+      p.toxicity_human,
+      p.toxicity_pets,
+      coalesce(p.allergens, '{}'),
+      coalesce(p.symbolism, '{}'),
+      p.living_space,
+      coalesce(p.composition, '{}'),
+      p.maintenance_level,
+      coalesce(p.origin, '{}'),
+      coalesce(p.habitat, '{}'),
+      p.level_sun,
+      p.advice_soil,
+      p.advice_mulching,
+      p.advice_fertilizer,
+      p.advice_tutoring,
+      p.advice_sowing,
+      p.cut,
+      p.advice_medicinal,
+      p.advice_infusion,
+      coalesce(p.nutritional_intake, '{}'),
+      coalesce(p.recipes_ideas, '{}'),
+      p.ground_effect,
+      p.source_name,
+      p.source_url,
+      coalesce(p.tags, '{}')
+    from public.plants p
+    where not exists (
+      select 1 from public.plant_translations pt 
+      where pt.plant_id = p.id and pt.language = 'en'
+    )
+    returning 1
+  )
+  select count(*) into migrated_count from inserted;
+  
+  if migrated_count > 0 then
+    raise notice '[plant_translations] Migrated % plants to English translations', migrated_count;
+  end if;
+end $$;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;
@@ -976,98 +1144,6 @@ do $$ begin
     drop policy plant_translations_delete on public.plant_translations;
   end if;
   create policy plant_translations_delete on public.plant_translations for delete to authenticated using (true);
-end $$;
-
--- Add level_sun column to plant_translations (needed for new architecture)
-alter table if exists public.plant_translations add column if not exists level_sun text check (level_sun in ('low light','shade','partial sun','full sun'));
-
--- ========== Migrate English data from plants to plant_translations ==========
--- This ensures all plants have English translations in the new architecture
--- where ALL translatable fields (including English) are in plant_translations
-do $$
-begin
-  -- Insert English translations for plants that don't have one yet
-  insert into public.plant_translations (
-    plant_id,
-    language,
-    name,
-    given_names,
-    scientific_name,
-    family,
-    overview,
-    promotion_month,
-    life_cycle,
-    season,
-    foliage_persistance,
-    toxicity_human,
-    toxicity_pets,
-    allergens,
-    symbolism,
-    living_space,
-    composition,
-    maintenance_level,
-    origin,
-    habitat,
-    level_sun,
-    advice_soil,
-    advice_mulching,
-    advice_fertilizer,
-    advice_tutoring,
-    advice_sowing,
-    advice_medicinal,
-    advice_infusion,
-    ground_effect,
-    source_name,
-    source_url,
-    tags,
-    nutritional_intake,
-    recipes_ideas,
-    cut
-  )
-  select
-    p.id,
-    'en',
-    p.name,
-    p.given_names,
-    p.scientific_name,
-    p.family,
-    p.overview,
-    p.promotion_month,
-    p.life_cycle,
-    p.season,
-    p.foliage_persistance,
-    p.toxicity_human,
-    p.toxicity_pets,
-    p.allergens,
-    p.symbolism,
-    p.living_space,
-    p.composition,
-    p.maintenance_level,
-    p.origin,
-    p.habitat,
-    p.level_sun,
-    p.advice_soil,
-    p.advice_mulching,
-    p.advice_fertilizer,
-    p.advice_tutoring,
-    p.advice_sowing,
-    p.advice_medicinal,
-    p.advice_infusion,
-    p.ground_effect,
-    p.source_name,
-    p.source_url,
-    p.tags,
-    p.nutritional_intake,
-    p.recipes_ideas,
-    p.cut
-  from public.plants p
-  where not exists (
-    select 1 from public.plant_translations pt 
-    where pt.plant_id = p.id and pt.language = 'en'
-  );
-  
-  -- Log how many translations were created
-  raise notice 'English translations migration completed';
 end $$;
 
 -- ========== Requested plants (user requests for new plants) ==========
