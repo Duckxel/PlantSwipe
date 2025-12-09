@@ -949,7 +949,7 @@ alter table if exists public.plant_translations add column if not exists living_
 alter table if exists public.plant_translations add column if not exists composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']);
 alter table if exists public.plant_translations add column if not exists maintenance_level text check (maintenance_level in ('none','low','moderate','heavy'));
 alter table if exists public.plant_translations add column if not exists origin text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']);
+-- habitat is NOT translated - it stays only in plants table (dropped above)
 alter table if exists public.plant_translations add column if not exists advice_soil text;
 alter table if exists public.plant_translations add column if not exists advice_mulching text;
 alter table if exists public.plant_translations add column if not exists advice_fertilizer text;
@@ -997,12 +997,14 @@ alter table if exists public.plant_translations add column if not exists tags te
 alter table if exists public.plant_translations add column if not exists nutritional_intake text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists recipes_ideas text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists cut text;
-alter table if exists public.plant_translations add column if not exists level_sun text check (level_sun in ('low light','shade','partial sun','full sun'));
+-- level_sun is NOT translated - it stays only in plants table (dropped above)
 
 -- ========== Migrate English data from plants to plant_translations ==========
 -- This migration ensures all plants have English translations in the new architecture
 -- where ALL translatable fields (including English) are stored in plant_translations.
 -- This is idempotent - it only creates translations for plants that don't have one yet.
+-- NOTE: scientific_name, promotion_month, habitat, and level_sun are NOT migrated here
+-- because they stay in the plants table only (not translated).
 do $$
 declare
   migrated_count integer := 0;
@@ -1014,10 +1016,8 @@ begin
       language,
       name,
       given_names,
-      scientific_name,
       family,
       overview,
-      promotion_month,
       life_cycle,
       season,
       foliage_persistance,
@@ -1029,8 +1029,6 @@ begin
       composition,
       maintenance_level,
       origin,
-      habitat,
-      level_sun,
       advice_soil,
       advice_mulching,
       advice_fertilizer,
@@ -1051,10 +1049,8 @@ begin
       'en',
       p.name,
       coalesce(p.given_names, '{}'),
-      p.scientific_name,
       p.family,
       p.overview,
-      p.promotion_month,
       p.life_cycle,
       coalesce(p.season, '{}'),
       p.foliage_persistance,
@@ -1066,8 +1062,6 @@ begin
       coalesce(p.composition, '{}'),
       p.maintenance_level,
       coalesce(p.origin, '{}'),
-      coalesce(p.habitat, '{}'),
-      p.level_sun,
       p.advice_soil,
       p.advice_mulching,
       p.advice_fertilizer,
