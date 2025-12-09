@@ -9091,8 +9091,8 @@ app.post('/api/translate', async (req, res) => {
       return res.status(500).json({ error: 'Translation service not configured' })
     }
     
-    // Use DeepL API (free tier: https://api-free.deepl.com)
-    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    // Use DeepL API (Pro: https://api.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
     
     const response = await fetch(deeplUrl, {
       method: 'POST',
@@ -12634,7 +12634,7 @@ async function translateWithDeepL(text, targetLang, sourceLang = 'EN') {
   }
   
   try {
-    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
     const response = await fetch(deeplUrl, {
       method: 'POST',
       headers: {
@@ -14607,7 +14607,7 @@ async function translateNotificationText(text, targetLang, sourceLang = 'EN') {
   }
   
   try {
-    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
     const response = await fetch(deeplUrl, {
       method: 'POST',
       headers: {
@@ -16300,14 +16300,56 @@ async function generateCrawlerHtml(req, pagePath) {
       if (!supabaseServer) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
       } else {
-        const { data: plant, error: plantError } = await ssrQuery(
+        // Query base plant data (non-translatable fields)
+        const { data: basePlant, error: plantError } = await ssrQuery(
           supabaseServer
             .from('plants')
-            .select('id, name, scientific_name, family, overview, plant_type, utility, tags, origin, level_sun, maintenance_level, watering_type, flowering_month, season')
+            .select('id, name, plant_type, utility, watering_type, flowering_month')
             .eq('id', plantId)
             .maybeSingle(),
           'plant_lookup'
         )
+        
+        // Query translated fields from plant_translations for the detected language
+        const ssrLang = detectedLang || 'en'
+        const { data: translation } = await ssrQuery(
+          supabaseServer
+            .from('plant_translations')
+            .select('name, scientific_name, family, overview, tags, origin, level_sun, maintenance_level, season')
+            .eq('plant_id', plantId)
+            .eq('language', ssrLang)
+            .maybeSingle(),
+          'plant_translation_lookup'
+        )
+        
+        // Fallback to English if no translation found for requested language
+        let finalTranslation = translation
+        if (!translation && ssrLang !== 'en') {
+          const { data: enTranslation } = await ssrQuery(
+            supabaseServer
+              .from('plant_translations')
+              .select('name, scientific_name, family, overview, tags, origin, level_sun, maintenance_level, season')
+              .eq('plant_id', plantId)
+              .eq('language', 'en')
+              .maybeSingle(),
+            'plant_translation_en_fallback'
+          )
+          finalTranslation = enTranslation
+        }
+        
+        // Merge base plant with translations
+        const plant = basePlant ? {
+          ...basePlant,
+          name: finalTranslation?.name || basePlant.name,
+          scientific_name: finalTranslation?.scientific_name,
+          family: finalTranslation?.family,
+          overview: finalTranslation?.overview,
+          tags: finalTranslation?.tags,
+          origin: finalTranslation?.origin,
+          level_sun: finalTranslation?.level_sun,
+          maintenance_level: finalTranslation?.maintenance_level,
+          season: finalTranslation?.season,
+        } : null
         
         ssrDebug('plant_query_result', { 
           hasData: !!plant, 

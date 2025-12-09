@@ -238,7 +238,7 @@ export async function removePlantFromBookmark(bookmarkId: string, plantId: strin
   if (error) throw new Error(error.message)
 }
 
-export async function getBookmarkDetails(bookmarkId: string): Promise<Bookmark> {
+export async function getBookmarkDetails(bookmarkId: string, language: string = 'en'): Promise<Bookmark> {
   const { data, error } = await supabase
     .from('bookmarks')
     .select(`
@@ -259,22 +259,37 @@ export async function getBookmarkDetails(bookmarkId: string): Promise<Bookmark> 
   let plantsMap: Record<string, Plant> = {}
   
   if (plantIds.length > 0) {
+    // Load plants base data
     const { data: plantRows, error: pErr } = await supabase
       .from('plants')
       .select('*, plant_images(link, use)')
       .in('id', plantIds)
     
+    // Load translations for the requested language
+    const { data: translations } = await supabase
+      .from('plant_translations')
+      .select('*')
+      .eq('language', language)
+      .in('plant_id', plantIds)
+    
+    const translationMap = new Map<string, any>()
+    if (translations) {
+      translations.forEach((t: any) => translationMap.set(t.plant_id, t))
+    }
+    
     if (!pErr && plantRows) {
       plantRows.forEach((p: any) => {
+          const translation = translationMap.get(p.id) || {}
           const images = Array.isArray(p.plant_images) ? p.plant_images : []
           const photos = images.map((img: any) => ({
             url: img.link || '',
             isPrimary: img.use === 'primary',
             isVertical: false
           }))
-          // Basic mapping, assuming standard Plant type fields
+          // Merge translation with base plant data
           plantsMap[p.id] = {
               ...p,
+              name: translation.name || p.name,
               photos,
               image: getPrimaryPhotoUrl(photos) || p.image_url || images[0]?.link
           } as Plant

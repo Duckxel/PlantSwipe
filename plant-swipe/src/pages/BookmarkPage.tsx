@@ -13,13 +13,14 @@ import { AddPlantToBookmarkDialog } from '@/components/profile/AddPlantToBookmar
 import { rarityTone } from '@/constants/badges'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import { Link } from '@/components/i18n/Link'
-import { useLanguageNavigate } from '@/lib/i18nRouting'
+import { useLanguageNavigate, useLanguage } from '@/lib/i18nRouting'
 
 export const BookmarkPage = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useLanguageNavigate()
   const { t } = useTranslation('common')
   const { user } = useAuth()
+  const currentLang = useLanguage()
   
   const [bookmark, setBookmark] = React.useState<Bookmark | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -35,7 +36,7 @@ export const BookmarkPage = () => {
     if (!id) return
     setLoading(true)
     try {
-      const data = await getBookmarkDetails(id)
+      const data = await getBookmarkDetails(id, currentLang)
       setBookmark(data)
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('common.error')
@@ -43,7 +44,7 @@ export const BookmarkPage = () => {
     } finally {
       setLoading(false)
     }
-  }, [id, t])
+  }, [id, t, currentLang])
 
   React.useEffect(() => {
     fetchBookmark()
