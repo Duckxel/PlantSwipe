@@ -629,7 +629,6 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       'utility', 'comestible_part', 'fruit_type',
       'season', 
       'level_sun', 
-      'promotion_month',
       'created_time', 'updated_time',
       'scent', 'aromatherapy', 'advice_medicinal', 'origin', 'composition',
       'plant_images (link,use)',
