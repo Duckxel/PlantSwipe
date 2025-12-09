@@ -76,48 +76,58 @@ interface GardenTasksSectionProps {
 const taskTypeConfig = {
   water: {
     icon: Droplets,
-    color: "text-blue-500",
-    bg: "bg-blue-50 dark:bg-blue-900/20",
-    border: "border-blue-200 dark:border-blue-800/50",
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-gradient-to-r from-blue-100 to-blue-50 dark:from-blue-900/40 dark:to-blue-900/20",
+    border: "border-blue-300 dark:border-blue-700/60",
     barColor: "bg-blue-500",
     emoji: "💧",
     gradient: "from-blue-500/10 to-blue-500/5",
+    buttonBg: "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500",
+    buttonOutline: "border-blue-400 dark:border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30",
   },
   fertilize: {
     icon: Leaf,
-    color: "text-green-500",
-    bg: "bg-green-50 dark:bg-green-900/20",
-    border: "border-green-200 dark:border-green-800/50",
+    color: "text-green-600 dark:text-green-400",
+    bg: "bg-gradient-to-r from-green-100 to-green-50 dark:from-green-900/40 dark:to-green-900/20",
+    border: "border-green-300 dark:border-green-700/60",
     barColor: "bg-green-500",
     emoji: "🌱",
     gradient: "from-green-500/10 to-green-500/5",
+    buttonBg: "bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-500",
+    buttonOutline: "border-green-400 dark:border-green-500 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30",
   },
   harvest: {
     icon: Package,
-    color: "text-amber-500",
-    bg: "bg-amber-50 dark:bg-amber-900/20",
-    border: "border-amber-200 dark:border-amber-800/50",
+    color: "text-amber-600 dark:text-amber-400",
+    bg: "bg-gradient-to-r from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-amber-900/20",
+    border: "border-amber-300 dark:border-amber-700/60",
     barColor: "bg-amber-500",
     emoji: "🌾",
     gradient: "from-amber-500/10 to-amber-500/5",
+    buttonBg: "bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500",
+    buttonOutline: "border-amber-400 dark:border-amber-500 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30",
   },
   cut: {
     icon: Scissors,
-    color: "text-orange-500",
-    bg: "bg-orange-50 dark:bg-orange-900/20",
-    border: "border-orange-200 dark:border-orange-800/50",
+    color: "text-orange-600 dark:text-orange-400",
+    bg: "bg-gradient-to-r from-orange-100 to-orange-50 dark:from-orange-900/40 dark:to-orange-900/20",
+    border: "border-orange-300 dark:border-orange-700/60",
     barColor: "bg-orange-500",
     emoji: "✂️",
     gradient: "from-orange-500/10 to-orange-500/5",
+    buttonBg: "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-500",
+    buttonOutline: "border-orange-400 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30",
   },
   custom: {
     icon: Sparkles,
-    color: "text-purple-500",
-    bg: "bg-purple-50 dark:bg-purple-900/20",
-    border: "border-purple-200 dark:border-purple-800/50",
+    color: "text-purple-600 dark:text-purple-400",
+    bg: "bg-gradient-to-r from-purple-100 to-purple-50 dark:from-purple-900/40 dark:to-purple-900/20",
+    border: "border-purple-300 dark:border-purple-700/60",
     barColor: "bg-purple-500",
     emoji: "🪴",
     gradient: "from-purple-500/10 to-purple-500/5",
+    buttonBg: "bg-purple-500 hover:bg-purple-600 dark:bg-purple-600 dark:hover:bg-purple-500",
+    buttonOutline: "border-purple-400 dark:border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30",
   },
 };
 
@@ -471,14 +481,18 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                       {!allDone && (
                         <Button
                           size="sm"
-                          className="rounded-xl text-xs h-8 px-3 flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          variant="outline"
+                          className="rounded-xl text-xs h-8 px-3 flex-shrink-0 border-2 border-emerald-400 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 font-semibold transition-all"
                           onClick={() => completeAllTodayForPlant(plant.id)}
                           disabled={isCompleting}
                         >
                           {isCompleting ? (
                             <span className="animate-pulse">⏳</span>
                           ) : (
-                            t("garden.completeAll", "Complete All")
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                              {t("garden.completeAll", "Complete All")}
+                            </>
                           )}
                         </Button>
                       )}
@@ -503,24 +517,24 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                       return (
                         <div
                           key={occ.id}
-                          className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+                          className={`flex items-center gap-3 p-3 rounded-xl transition-all shadow-sm ${
                             isDone
                               ? "bg-stone-50/50 dark:bg-stone-800/20 opacity-70"
-                              : `${config.bg} ${config.border} border`
+                              : `${config.bg} ${config.border} border-2`
                           }`}
                         >
                           {/* Task Icon */}
-                          <div className={`w-9 h-9 md:w-10 md:h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            isDone ? "bg-stone-200/50 dark:bg-stone-700/30" : "bg-white/80 dark:bg-stone-900/50"
+                          <div className={`w-10 h-10 md:w-11 md:h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+                            isDone ? "bg-stone-200/50 dark:bg-stone-700/30" : "bg-white dark:bg-stone-900/80 border border-white/50"
                           }`}>
-                            <span className="text-lg md:text-xl">
+                            <span className="text-xl md:text-2xl">
                               {getTaskIcon(taskType, occ.taskEmoji)}
                             </span>
                           </div>
                           
                           {/* Task Info */}
                           <div className="flex-1 min-w-0">
-                            <div className={`text-sm md:text-base font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
+                            <div className={`text-sm md:text-base font-semibold ${isDone ? "line-through text-muted-foreground" : config.color}`}>
                               {t(`garden.taskTypes.${taskType}`, taskType)}
                             </div>
                             {occ.requiredCount > 1 && !isDone && (
@@ -537,19 +551,22 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                             )}
                           </div>
                           
-                          {/* Complete Button */}
+                          {/* Complete Button - Secondary/Outline style with task color */}
                           {!isDone ? (
                             <Button
                               size="sm"
-                              variant="secondary"
-                              className={`rounded-lg h-8 px-3 text-xs flex-shrink-0 ${config.color} bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800 border ${config.border}`}
+                              variant="outline"
+                              className={`rounded-xl h-9 px-4 text-xs font-semibold flex-shrink-0 border-2 transition-all ${config.buttonOutline}`}
                               onClick={() => onProgressOccurrence(occ.id, remaining)}
                               disabled={isProgressing}
                             >
                               {isProgressing ? (
                                 <span className="animate-spin">⏳</span>
                               ) : (
-                                <CheckCircle2 className="w-4 h-4" />
+                                <>
+                                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                                  {t("garden.complete", "Complete")}
+                                </>
                               )}
                             </Button>
                           ) : (

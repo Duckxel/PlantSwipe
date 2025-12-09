@@ -5,11 +5,41 @@ import { useTranslation } from 'react-i18next'
 import { CheckCircle2 } from 'lucide-react'
 
 const taskTypeConfig = {
-  water: { emoji: '💧', color: 'bg-blue-600 dark:bg-blue-500' },
-  fertilize: { emoji: '🌱', color: 'bg-green-600 dark:bg-green-500' },
-  harvest: { emoji: '🌾', color: 'bg-yellow-500 dark:bg-yellow-400' },
-  cut: { emoji: '✂️', color: 'bg-orange-600 dark:bg-orange-500' },
-  custom: { emoji: '🪴', color: 'bg-purple-600 dark:bg-purple-500' },
+  water: { 
+    emoji: '💧', 
+    color: 'text-blue-600 dark:text-blue-400',
+    bg: 'bg-gradient-to-r from-blue-100 to-blue-50 dark:from-blue-900/40 dark:to-blue-900/20',
+    border: 'border-blue-300 dark:border-blue-700/60',
+    buttonOutline: 'border-blue-400 dark:border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+  },
+  fertilize: { 
+    emoji: '🌱', 
+    color: 'text-green-600 dark:text-green-400',
+    bg: 'bg-gradient-to-r from-green-100 to-green-50 dark:from-green-900/40 dark:to-green-900/20',
+    border: 'border-green-300 dark:border-green-700/60',
+    buttonOutline: 'border-green-400 dark:border-green-500 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30'
+  },
+  harvest: { 
+    emoji: '🌾', 
+    color: 'text-amber-600 dark:text-amber-400',
+    bg: 'bg-gradient-to-r from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-amber-900/20',
+    border: 'border-amber-300 dark:border-amber-700/60',
+    buttonOutline: 'border-amber-400 dark:border-amber-500 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30'
+  },
+  cut: { 
+    emoji: '✂️', 
+    color: 'text-orange-600 dark:text-orange-400',
+    bg: 'bg-gradient-to-r from-orange-100 to-orange-50 dark:from-orange-900/40 dark:to-orange-900/20',
+    border: 'border-orange-300 dark:border-orange-700/60',
+    buttonOutline: 'border-orange-400 dark:border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30'
+  },
+  custom: { 
+    emoji: '🪴', 
+    color: 'text-purple-600 dark:text-purple-400',
+    bg: 'bg-gradient-to-r from-purple-100 to-purple-50 dark:from-purple-900/40 dark:to-purple-900/20',
+    border: 'border-purple-300 dark:border-purple-700/60',
+    buttonOutline: 'border-purple-400 dark:border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30'
+  },
 }
 
 interface GardenPlant {
@@ -125,15 +155,19 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                   </div>
                   {!allDone && (
                     <Button 
-                      size="sm" 
-                      className="rounded-lg h-6 md:h-7 px-2 text-[10px] md:text-xs flex-shrink-0" 
+                      size="sm"
+                      variant="outline"
+                      className="rounded-lg h-6 md:h-7 px-2 text-[10px] md:text-xs flex-shrink-0 border-2 border-emerald-400 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 font-semibold transition-all" 
                       onClick={() => handleCompleteAll(gp.id)}
                       disabled={isCompleting}
                     >
                       {isCompleting ? (
                         <span className="animate-spin">⏳</span>
                       ) : (
-                        t('garden.completeAll', 'Complete All')
+                        <>
+                          <CheckCircle2 className="w-3 h-3 mr-0.5" />
+                          {t('garden.completeAll', 'Complete All')}
+                        </>
                       )}
                     </Button>
                   )}
@@ -143,6 +177,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                 <div className="space-y-1.5">
                   {occs.map((o) => {
                     const tt = o.taskType || 'custom'
+                    const config = taskTypeConfig[tt as keyof typeof taskTypeConfig] || taskTypeConfig.custom
                     const isDone = Number(o.completedCount || 0) >= Number(o.requiredCount || 1)
                     const isProgressing = progressingIds.has(o.id)
                     const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
@@ -150,20 +185,24 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                     return (
                       <div 
                         key={o.id} 
-                        className={`flex items-center gap-2 p-1.5 md:p-2 rounded-lg ${
+                        className={`flex items-center gap-2 p-2 md:p-2.5 rounded-xl transition-all ${
                           isDone 
                             ? 'bg-stone-50/80 dark:bg-stone-800/30 opacity-60' 
-                            : 'bg-white/80 dark:bg-stone-800/50'
+                            : `${config.bg} ${config.border} border shadow-sm`
                         }`}
                       >
                         {/* Task Icon */}
-                        <span className="text-sm md:text-base flex-shrink-0">
-                          {getTaskIcon(tt, o.taskEmoji)}
-                        </span>
+                        <div className={`w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          isDone ? 'bg-stone-100 dark:bg-stone-700/30' : 'bg-white dark:bg-stone-900/80 shadow-sm'
+                        }`}>
+                          <span className="text-base md:text-lg">
+                            {getTaskIcon(tt, o.taskEmoji)}
+                          </span>
+                        </div>
                         
                         {/* Task Info */}
                         <div className="flex-1 min-w-0">
-                          <span className={`text-[10px] md:text-xs ${isDone ? 'line-through text-muted-foreground' : ''}`}>
+                          <span className={`text-xs md:text-sm font-medium ${isDone ? 'line-through text-muted-foreground' : config.color}`}>
                             {t(`garden.taskTypes.${tt}`, tt)}
                           </span>
                           {o.requiredCount > 1 && !isDone && (
@@ -173,23 +212,26 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                           )}
                         </div>
                         
-                        {/* Complete Button */}
+                        {/* Complete Button - Secondary/Outline style */}
                         {!isDone ? (
                           <Button 
-                            className="rounded-md h-5 md:h-6 px-1.5 md:px-2 text-[9px] md:text-[10px] flex-shrink-0" 
+                            className={`rounded-lg h-6 md:h-7 px-2 md:px-2.5 text-[10px] md:text-xs font-semibold flex-shrink-0 border-2 transition-all ${config.buttonOutline}`}
                             size="sm"
-                            variant="secondary"
+                            variant="outline"
                             onClick={() => handleProgress(o.id, remaining)} 
                             disabled={isProgressing}
                           >
                             {isProgressing ? (
                               <span className="animate-spin text-xs">⏳</span>
                             ) : (
-                              t('garden.complete', 'Complete')
+                              <>
+                                <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 mr-0.5" />
+                                {t('garden.complete', 'Complete')}
+                              </>
                             )}
                           </Button>
                         ) : (
-                          <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4 text-emerald-500 flex-shrink-0" />
+                          <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-500 flex-shrink-0" />
                         )}
                       </div>
                     )
