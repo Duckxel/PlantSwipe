@@ -1430,9 +1430,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const translatePlant = async () => {
-    // DEBUG: Alert the current language to make it very clear
-    console.log('[translatePlant] Starting translation, current language:', language, '| languageRef:', languageRef.current)
-    alert(`Translating FROM: ${language.toUpperCase()}\nTO: ${SUPPORTED_LANGUAGES.filter(l => l !== language).join(', ').toUpperCase()}`)
+    console.log('[translatePlant] Starting translation, current language:', language)
     const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language)
     console.log('[translatePlant] Target languages:', targets)
     if (!targets.length) {
@@ -1532,16 +1530,70 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
 
       console.log('[translatePlant] Translated rows prepared:', translatedRows.length)
-      if (translatedRows.length) {
-        console.log('[translatePlant] Upserting to plant_translations...')
+      
+      // Separate English translations from other languages
+      // English goes to the main 'plants' table, other languages go to 'plant_translations'
+      const englishRow = translatedRows.find(row => row.language === 'en')
+      const otherRows = translatedRows.filter(row => row.language !== 'en')
+      
+      // Handle English translation - update the main plants table
+      if (englishRow) {
+        console.log('[translatePlant] Updating main plants table with English translation...')
+        const { error: englishError } = await supabase
+          .from('plants')
+          .update({
+            name: englishRow.name,
+            given_names: englishRow.given_names,
+            scientific_name: englishRow.scientific_name,
+            family: englishRow.family,
+            overview: englishRow.overview,
+            promotion_month: englishRow.promotion_month,
+            life_cycle: englishRow.life_cycle,
+            season: englishRow.season,
+            foliage_persistance: englishRow.foliage_persistance,
+            toxicity_human: englishRow.toxicity_human,
+            toxicity_pets: englishRow.toxicity_pets,
+            allergens: englishRow.allergens,
+            symbolism: englishRow.symbolism,
+            living_space: englishRow.living_space,
+            composition: englishRow.composition,
+            maintenance_level: englishRow.maintenance_level,
+            origin: englishRow.origin,
+            habitat: englishRow.habitat,
+            advice_soil: englishRow.advice_soil,
+            advice_mulching: englishRow.advice_mulching,
+            advice_fertilizer: englishRow.advice_fertilizer,
+            advice_tutoring: englishRow.advice_tutoring,
+            advice_sowing: englishRow.advice_sowing,
+            cut: englishRow.cut,
+            advice_medicinal: englishRow.advice_medicinal,
+            nutritional_intake: englishRow.nutritional_intake,
+            recipes_ideas: englishRow.recipes_ideas,
+            advice_infusion: englishRow.advice_infusion,
+            ground_effect: englishRow.ground_effect,
+            source_name: englishRow.source_name,
+            source_url: englishRow.source_url,
+            tags: englishRow.tags,
+          })
+          .eq('id', englishRow.plant_id)
+        if (englishError) {
+          console.error('[translatePlant] English update error:', englishError)
+          throw new Error(englishError.message)
+        }
+        console.log('[translatePlant] English translation saved to plants table!')
+      }
+      
+      // Handle other language translations - upsert to plant_translations
+      if (otherRows.length) {
+        console.log('[translatePlant] Upserting', otherRows.length, 'translations to plant_translations...')
         const { error: translateError } = await supabase
           .from('plant_translations')
-          .upsert(translatedRows, { onConflict: 'plant_id,language' })
+          .upsert(otherRows, { onConflict: 'plant_id,language' })
         if (translateError) {
           console.error('[translatePlant] Upsert error:', translateError)
           throw new Error(translateError.message)
         }
-        console.log('[translatePlant] Upsert successful!')
+        console.log('[translatePlant] Translations upsert successful!')
       }
 
       setPlant((prev) => ({
@@ -1632,11 +1684,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   id="create-language"
                   className="border rounded px-2 py-1 text-sm bg-background"
                   value={language}
-                  onChange={(e) => {
-                    const newLang = e.target.value as SupportedLanguage
-                    console.log('[CreatePlant] Language changed from', language, 'to', newLang)
-                    setLanguage(newLang)
-                  }}
+                  onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
                 >
                   {SUPPORTED_LANGUAGES.map((lang) => (
                     <option key={lang} value={lang}>{lang.toUpperCase()}</option>
