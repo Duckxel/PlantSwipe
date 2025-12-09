@@ -506,21 +506,21 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   if (error) throw new Error(error.message)
   if (!data) return null
   
-  // Load translation for the requested language (including English)
-  // The plants table contains the base English data, but plant_translations
-  // may have updated/different content for each language including English
+  // English data is stored in the main plants table (authoritative source)
+  // Other languages are stored in plant_translations table
   const isEnglish = !language || language === 'en'
-  const targetLanguage = language || 'en'
   let translation: any = null
   
-  // Always load translation for the requested language
-  const { data: translationData } = await supabase
-    .from('plant_translations')
-    .select('*')
-    .eq('plant_id', id)
-    .eq('language', targetLanguage)
-    .maybeSingle()
-  translation = translationData || null
+  // Only load translation for non-English languages
+  if (!isEnglish) {
+    const { data: translationData } = await supabase
+      .from('plant_translations')
+      .select('*')
+      .eq('plant_id', id)
+      .eq('language', language)
+      .maybeSingle()
+    translation = translationData || null
+  }
   
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
@@ -1138,49 +1138,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           await upsertSources(savedId, sources)
           await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
           
-          // Also update the English translation entry to keep it in sync with the base name
-          const englishTranslationPayload = {
-            plant_id: savedId,
-            language: 'en',
-            name: trimmedName,
-            given_names: plantToSave.identity?.givenNames || [],
-            scientific_name: plantToSave.identity?.scientificName || null,
-            family: plantToSave.identity?.family || null,
-            overview: plantToSave.identity?.overview || null,
-            promotion_month: normalizedPromotionMonth,
-            life_cycle: normalizedLifeCycle || null,
-            season: normalizedIdentitySeasons,
-            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
-            toxicity_human: normalizedToxicityHuman || null,
-            toxicity_pets: normalizedToxicityPets || null,
-            allergens: plantToSave.identity?.allergens || [],
-            symbolism: plantToSave.identity?.symbolism || [],
-            living_space: normalizedLivingSpace || null,
-            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
-            maintenance_level: normalizedMaintenance || null,
-            origin: plantToSave.plantCare?.origin || [],
-            habitat: normalizedHabitat,
-            advice_soil: plantToSave.plantCare?.adviceSoil || null,
-            advice_mulching: plantToSave.plantCare?.adviceMulching || null,
-            advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
-            advice_tutoring: plantToSave.growth?.adviceTutoring || null,
-            advice_sowing: plantToSave.growth?.adviceSowing || null,
-            cut: plantToSave.growth?.cut || null,
-            advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
-            nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
-            recipes_ideas: plantToSave.usage?.recipesIdeas || [],
-            advice_infusion: plantToSave.usage?.adviceInfusion || null,
-            ground_effect: plantToSave.ecology?.groundEffect || null,
-            source_name: primarySource?.name || null,
-            source_url: primarySource?.url || null,
-            tags: plantToSave.miscellaneous?.tags || [],
-          }
-          const { error: englishTranslationError } = await supabase
-            .from('plant_translations')
-            .upsert(englishTranslationPayload, { onConflict: 'plant_id,language' })
-          if (englishTranslationError) {
-            throw { ...englishTranslationError, context: 'translation' }
-          }
+          // English data is stored in the plants table only - no translation entry needed
         }
 
         if (!isEnglish) {
@@ -1478,7 +1436,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const translatePlant = async () => {
-    const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language)
+    // Only translate to non-English languages (English is stored in main plants table, not translations)
+    const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language && lang !== 'en')
     if (!targets.length) {
       setError(t('plantAdmin.translationNoTargets', 'No other languages configured for translation.'))
       return
