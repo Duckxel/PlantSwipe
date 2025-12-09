@@ -220,7 +220,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
       // Translatable fields from plant_translations only
       adviceSoil: translation?.advice_soil || undefined,
       // Non-translatable fields from plants table
-      mulching: mulchingEnum.toUiArray(data.mulching) as PlantCareData["mulching"],
+      mulching: mulchingEnum.toUiArray(data.mulching) as unknown as PlantCareData["mulching"],
       // Translatable fields from plant_translations only
       adviceMulching: translation?.advice_mulching || undefined,
       // Non-translatable fields from plants table

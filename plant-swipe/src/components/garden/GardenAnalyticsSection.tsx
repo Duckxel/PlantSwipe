@@ -173,6 +173,9 @@ const getWeatherBgClass = (condition: string): string => {
 interface GardenPlant {
   id: string;
   name?: string;
+  plantId?: string;
+  plant?: { id?: string };
+  plantsOnHand?: number;
   [key: string]: unknown;
 }
 

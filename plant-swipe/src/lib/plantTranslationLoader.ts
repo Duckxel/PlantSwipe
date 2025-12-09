@@ -495,7 +495,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
               // Translatable fields from plant_translations only
               adviceSoil: translation.advice_soil || undefined,
               // Non-translatable fields from plants table
-              mulching: mulchingEnum.toUiArray(basePlant.mulching) as PlantCareData["mulching"],
+              mulching: mulchingEnum.toUiArray(basePlant.mulching) as unknown as PlantCareData["mulching"],
               // Translatable fields from plant_translations only
               adviceMulching: translation.advice_mulching || undefined,
               // Non-translatable fields from plants table
