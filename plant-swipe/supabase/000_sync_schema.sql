@@ -317,8 +317,12 @@ end $$;
 -- The translatable columns below are kept for backward compatibility and as fallbacks,
 -- but the authoritative source for translated content is plant_translations.
 --
+-- IMPORTANT: The plant ID is the stable identifier. Names can change.
+-- The companions array stores plant IDs (not names) for stable references.
+-- There is NO unique constraint on name - use ID for all references.
+--
 -- NON-TRANSLATABLE (primary source is this table):
---   id, name (for unique constraint), plant_type, utility, comestible_part, fruit_type
+--   id, plant_type, utility, comestible_part, fruit_type
 --   spiked, scent, multicolor, bicolor
 --   temperature_max, temperature_min, temperature_ideal, hygrometry
 --   watering_type, division, soil, mulching, nutrition_need, fertilizer
@@ -330,7 +334,7 @@ end $$;
 --   status, admin_commentary, created_by, created_time, updated_by, updated_time
 --
 -- TRANSLATABLE (primary source is plant_translations, these are fallbacks):
---   given_names, scientific_name, family, overview
+--   name, given_names, scientific_name, family, overview
 --   promotion_month, life_cycle, season, foliage_persistance
 --   toxicity_human, toxicity_pets, allergens, symbolism
 --   living_space, composition, maintenance_level
@@ -342,7 +346,8 @@ end $$;
 
 create table if not exists public.plants (
   id text primary key,
-  -- Plant primary name (unique constraint, also used as fallback if no translation)
+  -- Plant name kept for backward compatibility/fallback only (NOT unique - names can change)
+  -- The authoritative name is in plant_translations for each language
   name text not null,
   -- Non-translatable classification fields
   plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')),
@@ -417,6 +422,7 @@ create table if not exists public.plants (
   pests text[] not null default '{}',
   diseases text[] not null default '{}',
   -- Miscellaneous (mix of translatable and non-translatable)
+  -- companions stores plant IDs (not names) for stable references
   companions text[] not null default '{}',
   tags text[] not null default '{}',
   source_name text,
@@ -429,7 +435,10 @@ create table if not exists public.plants (
   updated_by text,
   updated_time timestamptz not null default now()
 );
-create unique index if not exists plants_name_unique on public.plants (lower(name));
+
+-- Drop the name unique constraint - names can change and are stored in plant_translations
+-- The plant ID is the stable identifier for references (e.g., companions)
+drop index if exists plants_name_unique;
 
 -- Drop the scientific_name unique constraint if it exists
 -- Multiple plants can have the same scientific name (different cultivars, varieties, etc.)
