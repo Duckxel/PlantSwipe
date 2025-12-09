@@ -176,27 +176,29 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     identity: {
       // Translatable fields from plant_translations only
       givenNames: translation?.given_names || [],
-      scientificName: translation?.scientific_name || undefined,
-      family: translation?.family || undefined,
-      overview: translation?.overview || undefined,
-      promotionMonth: monthSlugToNumber(translation?.promotion_month) ?? undefined,
-      lifeCycle: (lifeCycleEnum.toUi(translation?.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
-      season: seasonEnum.toUiArray(translation?.season) as NonNullable<Plant["identity"]>["season"],
-      foliagePersistance: expandFoliagePersistanceFromDb(translation?.foliage_persistance),
       // Non-translatable fields from plants table
+      scientificName: data.scientific_name || undefined,
+      family: data.family || undefined,
+      // Translatable field from plant_translations
+      overview: translation?.overview || undefined,
+      // Non-translatable fields from plants table (enums)
+      promotionMonth: monthSlugToNumber(data.promotion_month) ?? undefined,
+      lifeCycle: (lifeCycleEnum.toUi(data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
+      season: seasonEnum.toUiArray(data.season) as NonNullable<Plant["identity"]>["season"],
+      foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
       spiked: data.spiked || false,
+      toxicityHuman: (toxicityEnum.toUi(data.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
+      toxicityPets: (toxicityEnum.toUi(data.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
       // Translatable fields from plant_translations only
-      toxicityHuman: (toxicityEnum.toUi(translation?.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
-      toxicityPets: (toxicityEnum.toUi(translation?.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
       allergens: translation?.allergens || [],
       // Non-translatable fields from plants table
       scent: data.scent || false,
       // Translatable fields from plant_translations only
       symbolism: translation?.symbolism || [],
-      livingSpace: (livingSpaceEnum.toUi(translation?.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
-      composition: expandCompositionFromDb(translation?.composition) as IdentityComposition,
-      maintenanceLevel: (maintenanceLevelEnum.toUi(translation?.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
-      // Non-translatable fields from plants table
+      // Non-translatable fields from plants table (enums)
+      livingSpace: (livingSpaceEnum.toUi(data.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
+      composition: expandCompositionFromDb(data.composition) as IdentityComposition,
+      maintenanceLevel: (maintenanceLevelEnum.toUi(data.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
       multicolor: data.multicolor || false,
       bicolor: data.bicolor || false,
       colors,
@@ -204,14 +206,13 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     plantCare: {
       // Translatable fields from plant_translations only
       origin: translation?.origin || [],
-      habitat: habitatEnum.toUiArray(translation?.habitat) as PlantCareData["habitat"],
       // Non-translatable fields from plants table
+      habitat: habitatEnum.toUiArray(data.habitat) as PlantCareData["habitat"],
       temperatureMax: data.temperature_max || undefined,
       temperatureMin: data.temperature_min || undefined,
       temperatureIdeal: data.temperature_ideal || undefined,
-      // Translatable fields from plant_translations only
-      levelSun: (levelSunEnum.toUi(translation?.level_sun) as PlantCareData["levelSun"]) || undefined,
-      // Non-translatable fields from plants table
+      // Non-translatable field from plants table
+      levelSun: (levelSunEnum.toUi(data.level_sun) as PlantCareData["levelSun"]) || undefined,
       hygrometry: data.hygrometry || undefined,
       wateringType: wateringTypeEnum.toUiArray(data.watering_type) as PlantCareData["wateringType"],
       division: divisionEnum.toUiArray(data.division) as PlantCareData["division"],
@@ -291,8 +292,8 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     // Non-translatable fields from plants table
     multicolor: data.multicolor || false,
     bicolor: data.bicolor || false,
-    // Translatable fields from plant_translations only
-    seasons: seasonEnum.toUiArray(translation?.season) as Plant['seasons'],
+    // Non-translatable field from plants table
+    seasons: seasonEnum.toUiArray(data.season) as Plant['seasons'],
     description: translation?.overview || undefined,
     images: (images as PlantImage[]) || [],
   }

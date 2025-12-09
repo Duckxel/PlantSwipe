@@ -11,6 +11,7 @@ import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel"
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
+import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -42,7 +43,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
-  FileText,
   ScrollText,
   Mail,
   CloudUpload,
@@ -101,6 +101,7 @@ type AdminTab =
   | "overview"
   | "members"
   | "requests"
+  | "stocks"
   | "upload"
   | "notifications"
   | "emails"
@@ -127,8 +128,8 @@ type NormalizedPlantStatus =
   | "approved"
   | "other";
 const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
-  { key: "requests", label: "Request" },
-  { key: "plants", label: "PLANTS" },
+  { key: "requests", label: "Requests" },
+  { key: "plants", label: "Plants" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -2930,7 +2931,8 @@ export const AdminPage: React.FC = () => {
   }> = [
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin" },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members" },
-    { key: "requests", label: "Requests", Icon: FileText, path: "/admin/requests" },
+    { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
+    { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks" },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
@@ -2940,6 +2942,7 @@ export const AdminPage: React.FC = () => {
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
     if (currentPath.includes("/admin/requests")) return "requests";
+    if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
     if (currentPath.includes("/admin/emails")) return "emails";
@@ -5537,6 +5540,11 @@ export const AdminPage: React.FC = () => {
                   </>
                 )}
 
+                {/* Stocks Tab */}
+                {activeTab === "stocks" && (
+                  <AdminStocksPanel />
+                )}
+
                 {/* Requests Tab */}
                   {activeTab === "requests" && (
                     <div className="space-y-4">
@@ -5620,19 +5628,15 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-purple-300 dark:hover:border-purple-800 hover:shadow-lg hover:shadow-purple-500/5">
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
                                 <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                                    <Target className="h-5 w-5 sm:h-5 sm:w-5 text-purple-600 dark:text-purple-400" />
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
                                   </div>
                                   <div>
-                                    <div className="text-xs text-stone-500 dark:text-stone-400">Coverage</div>
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
                                     <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
-                                      {requestsVsApproved.ratio !== null
-                                        ? `${requestsVsApproved.percent.toFixed(0)}%`
-                                        : requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0
-                                          ? "∞"
-                                          : "0%"}
+                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
                                     </div>
                                   </div>
                                 </div>
@@ -5652,7 +5656,7 @@ export const AdminPage: React.FC = () => {
                                   <div className="text-left">
                                     <div className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base">Analytics & Charts</div>
                                     <div className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-                                      Status distribution, coverage gauge, and promotion calendar
+                                      Status distribution, progress gauge, and promotion calendar
                                     </div>
                                   </div>
                                 </div>
@@ -5888,7 +5892,17 @@ export const AdminPage: React.FC = () => {
                                                 cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}
                                                 formatter={(value: number) => [`${value} plants`, "Promotions"]}
                                               />
-                                              <Bar dataKey="value" fill={accentColor} radius={6} />
+                                              <Bar 
+                                                dataKey="value" 
+                                                fill={accentColor} 
+                                                radius={6}
+                                                cursor="pointer"
+                                                onClick={(data: { slug?: string }) => {
+                                                  if (data?.slug) {
+                                                    setSelectedPromotionMonth(data.slug as PromotionMonthSlug);
+                                                  }
+                                                }}
+                                              />
                                             </BarChart>
                                           </ResponsiveContainer>
                                         </ChartSuspense>

@@ -930,23 +930,176 @@ alter table if exists public.plant_translations drop column if exists care;
 alter table if exists public.plant_translations drop column if exists planting;
 alter table if exists public.plant_translations drop column if exists problems;
 
+-- Translatable text fields only in plant_translations
 alter table if exists public.plant_translations add column if not exists overview text;
-alter table if exists public.plant_translations add column if not exists family text;
 alter table if exists public.plant_translations add column if not exists given_names text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists scientific_name text;
-alter table if exists public.plant_translations add column if not exists promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december'));
-alter table if exists public.plant_translations add column if not exists life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic'));
-alter table if exists public.plant_translations add column if not exists season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']);
-alter table if exists public.plant_translations add column if not exists foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent'));
-alter table if exists public.plant_translations add column if not exists toxicity_human text check (toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
-alter table if exists public.plant_translations add column if not exists toxicity_pets text check (toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
 alter table if exists public.plant_translations add column if not exists allergens text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists symbolism text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists living_space text check (living_space in ('indoor','outdoor','both'));
-alter table if exists public.plant_translations add column if not exists composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']);
-alter table if exists public.plant_translations add column if not exists maintenance_level text check (maintenance_level in ('none','low','moderate','heavy'));
 alter table if exists public.plant_translations add column if not exists origin text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']);
+
+-- The following are NOT translated - they stay only in plants table (enums/Latin names)
+-- Migrate data from plant_translations to plants before dropping columns
+do $$
+begin
+  -- Migrate scientific_name from plant_translations to plants (prefer English, then any)
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'scientific_name') then
+    update public.plants p set scientific_name = pt.scientific_name
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.scientific_name is not null and (p.scientific_name is null or trim(p.scientific_name) = '');
+    
+    update public.plants p set scientific_name = pt.scientific_name
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.scientific_name is not null and (p.scientific_name is null or trim(p.scientific_name) = '');
+  end if;
+  
+  -- Migrate promotion_month from plant_translations to plants (prefer English, then any)
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'promotion_month') then
+    update public.plants p set promotion_month = pt.promotion_month
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.promotion_month is not null and p.promotion_month is null;
+    
+    update public.plants p set promotion_month = pt.promotion_month
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.promotion_month is not null and p.promotion_month is null;
+  end if;
+  
+  -- Migrate level_sun from plant_translations to plants (prefer English, then any)
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'level_sun') then
+    update public.plants p set level_sun = pt.level_sun
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.level_sun is not null and p.level_sun is null;
+    
+    update public.plants p set level_sun = pt.level_sun
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.level_sun is not null and p.level_sun is null;
+  end if;
+  
+  -- Migrate habitat from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'habitat') then
+    update public.plants p set habitat = pt.habitat
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.habitat is not null and array_length(pt.habitat, 1) > 0 and (p.habitat is null or array_length(p.habitat, 1) = 0);
+    
+    update public.plants p set habitat = pt.habitat
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.habitat is not null and array_length(pt.habitat, 1) > 0 and (p.habitat is null or array_length(p.habitat, 1) = 0);
+  end if;
+  
+  -- Migrate family from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'family') then
+    update public.plants p set family = pt.family
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.family is not null and (p.family is null or trim(p.family) = '');
+    
+    update public.plants p set family = pt.family
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.family is not null and (p.family is null or trim(p.family) = '');
+  end if;
+  
+  -- Migrate life_cycle from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'life_cycle') then
+    update public.plants p set life_cycle = pt.life_cycle
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.life_cycle is not null and p.life_cycle is null;
+    
+    update public.plants p set life_cycle = pt.life_cycle
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.life_cycle is not null and p.life_cycle is null;
+  end if;
+  
+  -- Migrate season from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'season') then
+    update public.plants p set season = pt.season
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.season is not null and array_length(pt.season, 1) > 0 and (p.season is null or array_length(p.season, 1) = 0);
+    
+    update public.plants p set season = pt.season
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.season is not null and array_length(pt.season, 1) > 0 and (p.season is null or array_length(p.season, 1) = 0);
+  end if;
+  
+  -- Migrate foliage_persistance from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'foliage_persistance') then
+    update public.plants p set foliage_persistance = pt.foliage_persistance
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.foliage_persistance is not null and p.foliage_persistance is null;
+    
+    update public.plants p set foliage_persistance = pt.foliage_persistance
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.foliage_persistance is not null and p.foliage_persistance is null;
+  end if;
+  
+  -- Migrate toxicity_human from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'toxicity_human') then
+    update public.plants p set toxicity_human = pt.toxicity_human
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.toxicity_human is not null and p.toxicity_human is null;
+    
+    update public.plants p set toxicity_human = pt.toxicity_human
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.toxicity_human is not null and p.toxicity_human is null;
+  end if;
+  
+  -- Migrate toxicity_pets from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'toxicity_pets') then
+    update public.plants p set toxicity_pets = pt.toxicity_pets
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.toxicity_pets is not null and p.toxicity_pets is null;
+    
+    update public.plants p set toxicity_pets = pt.toxicity_pets
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.toxicity_pets is not null and p.toxicity_pets is null;
+  end if;
+  
+  -- Migrate living_space from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'living_space') then
+    update public.plants p set living_space = pt.living_space
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.living_space is not null and p.living_space is null;
+    
+    update public.plants p set living_space = pt.living_space
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.living_space is not null and p.living_space is null;
+  end if;
+  
+  -- Migrate composition from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'composition') then
+    update public.plants p set composition = pt.composition
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.composition is not null and array_length(pt.composition, 1) > 0 and (p.composition is null or array_length(p.composition, 1) = 0);
+    
+    update public.plants p set composition = pt.composition
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.composition is not null and array_length(pt.composition, 1) > 0 and (p.composition is null or array_length(p.composition, 1) = 0);
+  end if;
+  
+  -- Migrate maintenance_level from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'maintenance_level') then
+    update public.plants p set maintenance_level = pt.maintenance_level
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.maintenance_level is not null and p.maintenance_level is null;
+    
+    update public.plants p set maintenance_level = pt.maintenance_level
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.maintenance_level is not null and p.maintenance_level is null;
+  end if;
+end $$;
+
+-- Now drop the non-translatable columns from plant_translations
+alter table if exists public.plant_translations drop column if exists scientific_name;
+alter table if exists public.plant_translations drop column if exists promotion_month;
+alter table if exists public.plant_translations drop column if exists level_sun;
+alter table if exists public.plant_translations drop column if exists habitat;
+alter table if exists public.plant_translations drop column if exists family;
+alter table if exists public.plant_translations drop column if exists life_cycle;
+alter table if exists public.plant_translations drop column if exists season;
+alter table if exists public.plant_translations drop column if exists foliage_persistance;
+alter table if exists public.plant_translations drop column if exists toxicity_human;
+alter table if exists public.plant_translations drop column if exists toxicity_pets;
+alter table if exists public.plant_translations drop column if exists living_space;
+alter table if exists public.plant_translations drop column if exists composition;
+alter table if exists public.plant_translations drop column if exists maintenance_level;
+-- habitat is NOT translated - it stays only in plants table (dropped above)
 alter table if exists public.plant_translations add column if not exists advice_soil text;
 alter table if exists public.plant_translations add column if not exists advice_mulching text;
 alter table if exists public.plant_translations add column if not exists advice_fertilizer text;
@@ -994,12 +1147,14 @@ alter table if exists public.plant_translations add column if not exists tags te
 alter table if exists public.plant_translations add column if not exists nutritional_intake text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists recipes_ideas text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists cut text;
-alter table if exists public.plant_translations add column if not exists level_sun text check (level_sun in ('low light','shade','partial sun','full sun'));
+-- level_sun is NOT translated - it stays only in plants table (dropped above)
 
 -- ========== Migrate English data from plants to plant_translations ==========
 -- This migration ensures all plants have English translations in the new architecture
 -- where ALL translatable fields (including English) are stored in plant_translations.
 -- This is idempotent - it only creates translations for plants that don't have one yet.
+-- NOTE: scientific_name, promotion_month, habitat, and level_sun are NOT migrated here
+-- because they stay in the plants table only (not translated).
 do $$
 declare
   migrated_count integer := 0;
@@ -1011,10 +1166,8 @@ begin
       language,
       name,
       given_names,
-      scientific_name,
       family,
       overview,
-      promotion_month,
       life_cycle,
       season,
       foliage_persistance,
@@ -1026,8 +1179,6 @@ begin
       composition,
       maintenance_level,
       origin,
-      habitat,
-      level_sun,
       advice_soil,
       advice_mulching,
       advice_fertilizer,
@@ -1048,10 +1199,8 @@ begin
       'en',
       p.name,
       coalesce(p.given_names, '{}'),
-      p.scientific_name,
       p.family,
       p.overview,
-      p.promotion_month,
       p.life_cycle,
       coalesce(p.season, '{}'),
       p.foliage_persistance,
@@ -1063,8 +1212,6 @@ begin
       coalesce(p.composition, '{}'),
       p.maintenance_level,
       coalesce(p.origin, '{}'),
-      coalesce(p.habitat, '{}'),
-      p.level_sun,
       p.advice_soil,
       p.advice_mulching,
       p.advice_fertilizer,
@@ -1096,24 +1243,19 @@ end $$;
 -- ========== Remove translatable columns from plants table ==========
 -- These columns have been migrated to plant_translations and are no longer needed
 -- in the plants table. Only 'name' is kept as the canonical English name.
+-- 
+-- The following columns stay in plants table (NOT translated - they are enums, Latin names, or non-text):
+--   promotion_month, scientific_name, family, life_cycle, season, foliage_persistance,
+--   toxicity_human, toxicity_pets, living_space, composition, maintenance_level,
+--   habitat, level_sun
+--
+-- The following columns ARE translated and only exist in plant_translations:
 alter table if exists public.plants drop column if exists given_names;
-alter table if exists public.plants drop column if exists scientific_name;
-alter table if exists public.plants drop column if exists family;
 alter table if exists public.plants drop column if exists overview;
-alter table if exists public.plants drop column if exists promotion_month;
-alter table if exists public.plants drop column if exists life_cycle;
-alter table if exists public.plants drop column if exists season;
-alter table if exists public.plants drop column if exists foliage_persistance;
-alter table if exists public.plants drop column if exists toxicity_human;
-alter table if exists public.plants drop column if exists toxicity_pets;
 alter table if exists public.plants drop column if exists allergens;
 alter table if exists public.plants drop column if exists symbolism;
-alter table if exists public.plants drop column if exists living_space;
-alter table if exists public.plants drop column if exists composition;
-alter table if exists public.plants drop column if exists maintenance_level;
 alter table if exists public.plants drop column if exists origin;
-alter table if exists public.plants drop column if exists habitat;
-alter table if exists public.plants drop column if exists level_sun;
+-- habitat and level_sun are enums - NOT translated, stay in plants table
 alter table if exists public.plants drop column if exists advice_soil;
 alter table if exists public.plants drop column if exists advice_mulching;
 alter table if exists public.plants drop column if exists advice_fertilizer;
@@ -6898,3 +7040,55 @@ alter table if exists public.garden_ai_advice add column if not exists translati
 
 -- Add language preference to gardens for advice translation
 alter table if exists public.gardens add column if not exists preferred_language text default 'en';
+
+-- ========== Plant Stocks Management ==========
+-- Table to manage plant seed/plant availability, quantity, and pricing for the shop
+create table if not exists public.plant_stocks (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  quantity integer not null default 0 check (quantity >= 0),
+  price numeric(10,2) not null default 0.00 check (price >= 0),
+  is_available boolean not null default false,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique(plant_id)
+);
+
+create index if not exists plant_stocks_plant_id_idx on public.plant_stocks(plant_id);
+create index if not exists plant_stocks_available_idx on public.plant_stocks(is_available) where is_available = true;
+
+alter table public.plant_stocks enable row level security;
+
+-- Anyone can read plant stocks (for shop display)
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_select_all') then
+    drop policy plant_stocks_select_all on public.plant_stocks;
+  end if;
+  create policy plant_stocks_select_all on public.plant_stocks for select to authenticated using (true);
+end $$;
+
+-- Only admins can insert/update/delete plant stocks
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_insert_admin') then
+    drop policy plant_stocks_insert_admin on public.plant_stocks;
+  end if;
+  create policy plant_stocks_insert_admin on public.plant_stocks for insert to authenticated
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_update_admin') then
+    drop policy plant_stocks_update_admin on public.plant_stocks;
+  end if;
+  create policy plant_stocks_update_admin on public.plant_stocks for update to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_delete_admin') then
+    drop policy plant_stocks_delete_admin on public.plant_stocks;
+  end if;
+  create policy plant_stocks_delete_admin on public.plant_stocks for delete to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
