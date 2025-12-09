@@ -45,10 +45,10 @@ const STATIC_ROUTES = [
   { path: '/blog', changefreq: 'daily', priority: 0.9 },
   { path: '/search', changefreq: 'daily', priority: 0.9 },
   { path: '/gardens', changefreq: 'weekly', priority: 0.8 },
+  { path: '/contact', changefreq: 'monthly', priority: 0.8 },
   { path: '/download', changefreq: 'monthly', priority: 0.7 },
   { path: '/about', changefreq: 'monthly', priority: 0.6 },
-  { path: '/contact', changefreq: 'monthly', priority: 0.6 },
-  { path: '/contact/business', changefreq: 'monthly', priority: 0.5 },
+  { path: '/contact/business', changefreq: 'monthly', priority: 0.6 },
   { path: '/terms', changefreq: 'yearly', priority: 0.4 },
 ]
 
@@ -67,7 +67,7 @@ async function main() {
     return []
   })
 
-  const profileRoutes = await loadPublicProfileRoutes().catch((error) => {
+  const profileRoutes = await loadProfileRoutes().catch((error) => {
     console.warn(`[sitemap] Failed to load dynamic profile routes: ${error.message || error}`)
     return []
   })
@@ -393,7 +393,7 @@ async function loadBlogRoutes() {
   }).filter(Boolean)
 }
 
-async function loadPublicProfileRoutes() {
+async function loadProfileRoutes() {
   const client = getSupabaseClient()
   if (!client) {
     console.warn('[sitemap] Supabase credentials missing — skipping profile routes.')
@@ -409,11 +409,12 @@ async function loadPublicProfileRoutes() {
   while (results.length < maxProfiles) {
     const limit = Math.min(batchSize, maxProfiles - results.length)
     const to = offset + limit - 1
+    // Fetch ALL profiles (public and private) - public profiles listed first
     const { data, error } = await client
       .from('profiles')
-      .select('display_name, is_private')
-      .eq('is_private', false)
+      .select('display_name, is_private, updated_at')
       .not('display_name', 'is', null)
+      .order('is_private', { ascending: true }) // public (false) first, then private (true)
       .order('display_name', { ascending: true })
       .range(offset, to)
 
@@ -429,10 +430,13 @@ async function loadPublicProfileRoutes() {
       if (!row?.display_name) continue
       const normalizedName = encodeURIComponent(String(row.display_name).trim())
       if (!normalizedName) continue
+      // Public profiles get higher priority (0.5), private profiles get lower priority (0.3)
+      const isPrivate = row.is_private === true
       const route = {
         path: `/u/${normalizedName}`,
         changefreq: 'weekly',
-        priority: 0.5,
+        priority: isPrivate ? 0.3 : 0.5,
+        lastmod: toIsoString(row.updated_at),
       }
       results.push(route)
       if (results.length >= maxProfiles) break
@@ -461,9 +465,10 @@ async function loadGardenRoutes() {
   while (results.length < maxGardens) {
     const limit = Math.min(batchSize, maxGardens - results.length)
     const to = offset + limit - 1
+    // Fetch ALL gardens (public and private) with privacy info
     const { data, error } = await client
       .from('gardens')
-      .select('id, created_at')
+      .select('id, created_at, updated_at, privacy')
       .order('created_at', { ascending: false })
       .range(offset, to)
 
@@ -478,11 +483,14 @@ async function loadGardenRoutes() {
     for (const row of data) {
       if (!row?.id) continue
       const normalizedId = encodeURIComponent(String(row.id))
+      // Public gardens (privacy = 'public' or null) get higher priority (0.6)
+      // Private gardens get lower priority (0.4)
+      const isPrivate = row.privacy === 'private'
       const route = {
         path: `/garden/${normalizedId}`,
         changefreq: 'weekly',
-        priority: 0.6,
-        lastmod: toIsoString(row.created_at),
+        priority: isPrivate ? 0.4 : 0.6,
+        lastmod: toIsoString(row.updated_at || row.created_at),
       }
       results.push(route)
       if (results.length >= maxGardens) break

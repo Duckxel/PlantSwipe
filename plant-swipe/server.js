@@ -15518,33 +15518,54 @@ function scheduleNotificationWorker() {
 // Dynamic sitemap.xml generator
 // Static pages: NO lastmod (tells Google these are evergreen, don't show dates)
 // Dynamic pages: WITH lastmod (blog posts, plants get proper date indexing)
+// Both EN (default) and FR locales get the same links with same priorities
 const publicDir = path.resolve(__dirname, 'public')
 app.get('/sitemap.xml', async (req, res) => {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
+  
+  // Supported languages (en = default with no prefix, fr = with /fr prefix)
+  const languages = ['en', 'fr']
+  const defaultLang = 'en'
+  
+  // Helper to generate URL with language prefix
+  const langUrl = (path, lang) => {
+    if (lang === defaultLang) return `${siteUrl}${path}`
+    return `${siteUrl}/${lang}${path}`
+  }
+  
+  // Helper to generate alternate links for hreflang
+  const alternateLinks = (path) => languages.map(lang => 
+    `    <xhtml:link rel="alternate" hreflang="${lang}" href="${langUrl(path, lang)}" />`
+  ).join('\n') + `\n    <xhtml:link rel="alternate" hreflang="x-default" href="${siteUrl}${path}" />`
   
   // Static pages - NO lastmod to prevent Google from showing dates
   // These are "evergreen" pages that shouldn't display modification dates in search
   const staticPages = [
     { loc: '/', priority: '1.0', changefreq: 'weekly' },
+    { loc: '/blog', priority: '0.9', changefreq: 'daily' },
+    { loc: '/discovery', priority: '0.9', changefreq: 'daily' },
+    { loc: '/gardens', priority: '0.8', changefreq: 'daily' },
+    { loc: '/contact', priority: '0.8', changefreq: 'monthly' },
     { loc: '/about', priority: '0.8', changefreq: 'monthly' },
     { loc: '/download', priority: '0.8', changefreq: 'monthly' },
     { loc: '/pricing', priority: '0.8', changefreq: 'monthly' },
-    { loc: '/contact', priority: '0.6', changefreq: 'monthly' },
-    { loc: '/blog', priority: '0.9', changefreq: 'daily' },
-    { loc: '/discovery', priority: '0.9', changefreq: 'daily' },
     { loc: '/search', priority: '0.7', changefreq: 'weekly' },
-    { loc: '/gardens', priority: '0.8', changefreq: 'daily' },
+    { loc: '/contact/business', priority: '0.6', changefreq: 'monthly' },
     { loc: '/terms', priority: '0.3', changefreq: 'yearly' },
   ]
   
-  // Build sitemap XML
-  let urls = staticPages.map(page => `  <url>
-    <loc>${siteUrl}${page.loc}</loc>
+  // Build sitemap XML - generate URLs for each language
+  let urls = ''
+  for (const lang of languages) {
+    urls += staticPages.map(page => `  <url>
+    <loc>${langUrl(page.loc, lang)}</loc>
     <changefreq>${page.changefreq}</changefreq>
     <priority>${page.priority}</priority>
-  </url>`).join('\n')
+${alternateLinks(page.loc)}
+  </url>`).join('\n') + '\n'
+  }
   
-  // Add dynamic content WITH lastmod (blog posts, plants)
+  // Add dynamic content WITH lastmod (blog posts, plants, profiles, gardens)
   if (supabaseServer) {
     try {
       // Recent blog posts (with lastmod)
@@ -15556,15 +15577,19 @@ app.get('/sitemap.xml', async (req, res) => {
         .limit(100)
       
       if (posts?.length) {
-        urls += '\n' + posts.map(post => {
-          const lastmod = post.updated_at || post.published_at
-          return `  <url>
-    <loc>${siteUrl}/blog/${post.slug}</loc>
+        for (const lang of languages) {
+          urls += posts.map(post => {
+            const lastmod = post.updated_at || post.published_at
+            const path = `/blog/${post.slug}`
+            return `  <url>
+    <loc>${langUrl(path, lang)}</loc>
     <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+${alternateLinks(path)}
   </url>`
-        }).join('\n')
+          }).join('\n') + '\n'
+        }
       }
       
       // Popular plants (with lastmod based on when they were updated)
@@ -15575,56 +15600,67 @@ app.get('/sitemap.xml', async (req, res) => {
         .limit(500)
       
       if (plants?.length) {
-        urls += '\n' + plants.map(plant => {
-          const lastmod = plant.updated_at || plant.created_at
-          const lastmodStr = lastmod ? `\n    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>` : ''
-          return `  <url>
-    <loc>${siteUrl}/plants/${plant.id}</loc>${lastmodStr}
+        for (const lang of languages) {
+          urls += plants.map(plant => {
+            const lastmod = plant.updated_at || plant.created_at
+            const lastmodStr = lastmod ? `\n    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>` : ''
+            const path = `/plants/${plant.id}`
+            return `  <url>
+    <loc>${langUrl(path, lang)}</loc>${lastmodStr}
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
+${alternateLinks(path)}
   </url>`
-        }).join('\n')
+          }).join('\n') + '\n'
+        }
       }
       
-      // Public user profiles (with lastmod based on last activity)
-      // Join with gardens to get last activity date
+      // ALL user profiles (public and private) with different priorities
+      // Public profiles: priority 0.5, Private profiles: priority 0.3
       const { data: profiles } = await supabaseServer
         .from('profiles')
         .select(`
           id, 
           display_name, 
           username,
+          is_private,
           updated_at,
           gardens!gardens_created_by_fkey(updated_at)
         `)
-        .eq('is_private', false)
         .not('display_name', 'is', null)
+        .order('is_private', { ascending: true }) // public first
         .order('updated_at', { ascending: false })
-        .limit(200)
+        .limit(500)
       
       if (profiles?.length) {
-        urls += '\n' + profiles.map(profile => {
-          // Use the most recent date: profile update or latest garden update
-          const profileDate = profile.updated_at ? new Date(profile.updated_at) : null
-          const gardenDates = (profile.gardens || [])
-            .map(g => g.updated_at ? new Date(g.updated_at) : null)
-            .filter(Boolean)
-          const allDates = [profileDate, ...gardenDates].filter(Boolean)
-          const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
-          const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
-          
-          // Use username if available, otherwise display_name
-          const urlPath = profile.username || profile.display_name
-          return `  <url>
-    <loc>${siteUrl}/u/${encodeURIComponent(urlPath)}</loc>${lastmodStr}
+        for (const lang of languages) {
+          urls += profiles.map(profile => {
+            // Use the most recent date: profile update or latest garden update
+            const profileDate = profile.updated_at ? new Date(profile.updated_at) : null
+            const gardenDates = (profile.gardens || [])
+              .map(g => g.updated_at ? new Date(g.updated_at) : null)
+              .filter(Boolean)
+            const allDates = [profileDate, ...gardenDates].filter(Boolean)
+            const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
+            const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
+            
+            // Use username if available, otherwise display_name
+            const urlPath = profile.username || profile.display_name
+            const path = `/u/${encodeURIComponent(urlPath)}`
+            // Public profiles get higher priority (0.5), private profiles get lower priority (0.3)
+            const priority = profile.is_private ? '0.3' : '0.5'
+            return `  <url>
+    <loc>${langUrl(path, lang)}</loc>${lastmodStr}
     <changefreq>weekly</changefreq>
-    <priority>0.5</priority>
+    <priority>${priority}</priority>
+${alternateLinks(path)}
   </url>`
-        }).join('\n')
+          }).join('\n') + '\n'
+        }
       }
       
-      // Public gardens (with lastmod based on last activity)
-      // Join with garden_plants to get last plant activity
+      // ALL gardens (public and private) with different priorities
+      // Public gardens: priority 0.6, Private gardens: priority 0.4
       const { data: gardens } = await supabaseServer
         .from('gardens')
         .select(`
@@ -15634,29 +15670,36 @@ app.get('/sitemap.xml', async (req, res) => {
           privacy,
           garden_plants(created_at, updated_at)
         `)
-        .or('privacy.eq.public,privacy.is.null')
         .order('updated_at', { ascending: false })
-        .limit(300)
+        .limit(500)
       
       if (gardens?.length) {
-        urls += '\n' + gardens.map(garden => {
-          // Use the most recent date: garden update or latest plant activity
-          const gardenDate = garden.updated_at || garden.created_at
-          const gardenDateTime = gardenDate ? new Date(gardenDate) : null
-          const plantDates = (garden.garden_plants || [])
-            .flatMap(p => [p.updated_at, p.created_at])
-            .filter(Boolean)
-            .map(d => new Date(d))
-          const allDates = [gardenDateTime, ...plantDates].filter(Boolean)
-          const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
-          const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
-          
-          return `  <url>
-    <loc>${siteUrl}/garden/${garden.id}</loc>${lastmodStr}
+        for (const lang of languages) {
+          urls += gardens.map(garden => {
+            // Use the most recent date: garden update or latest plant activity
+            const gardenDate = garden.updated_at || garden.created_at
+            const gardenDateTime = gardenDate ? new Date(gardenDate) : null
+            const plantDates = (garden.garden_plants || [])
+              .flatMap(p => [p.updated_at, p.created_at])
+              .filter(Boolean)
+              .map(d => new Date(d))
+            const allDates = [gardenDateTime, ...plantDates].filter(Boolean)
+            const lastActivity = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : null
+            const lastmodStr = lastActivity ? `\n    <lastmod>${lastActivity.toISOString().split('T')[0]}</lastmod>` : ''
+            
+            const path = `/garden/${garden.id}`
+            // Public gardens (privacy = 'public' or null) get higher priority (0.6)
+            // Private gardens get lower priority (0.4)
+            const isPrivate = garden.privacy === 'private'
+            const priority = isPrivate ? '0.4' : '0.6'
+            return `  <url>
+    <loc>${langUrl(path, lang)}</loc>${lastmodStr}
     <changefreq>weekly</changefreq>
-    <priority>0.5</priority>
+    <priority>${priority}</priority>
+${alternateLinks(path)}
   </url>`
-        }).join('\n')
+          }).join('\n') + '\n'
+        }
       }
     } catch (err) {
       console.error('[sitemap] Error fetching dynamic content:', err?.message)
@@ -15664,7 +15707,7 @@ app.get('/sitemap.xml', async (req, res) => {
   }
   
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urls}
 </urlset>`
   
