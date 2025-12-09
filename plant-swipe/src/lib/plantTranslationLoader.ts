@@ -712,7 +712,8 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         hexCode: pc?.colors?.hex_code,
       })).filter((c) => c.name)
 
-      const seasonsRaw = translation.season ?? basePlant.season ?? []
+      // season is a non-translatable enum field, always from plants table
+      const seasonsRaw = basePlant.season ?? []
       const seasons: PlantSeason[] = seasonEnum.toUiArray(seasonsRaw) as PlantSeason[]
 
       const images: PlantImage[] = ((basePlant.plant_images as any[]) || []).map((img) => ({
@@ -724,13 +725,25 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         || images[0]?.link
 
       // Merge flat columns into structured objects to match Plant interface
+      // Non-translatable fields come from basePlant (plants table) only
       const mergedIdentity = {
         ...transIdentity,
-        scientificName: translation.scientific_name || basePlant.scientific_name || transIdentity.scientificName,
-        promotionMonth: monthSlugToNumber(translation.promotion_month || basePlant.promotion_month) ?? undefined,
+        scientificName: basePlant.scientific_name || transIdentity.scientificName,
+        promotionMonth: monthSlugToNumber(basePlant.promotion_month) ?? undefined,
+        family: basePlant.family || transIdentity.family,
+        lifeCycle: (lifeCycleEnum.toUi(basePlant.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || transIdentity.lifeCycle,
+        foliagePersistance: expandFoliagePersistanceFromDb(basePlant.foliage_persistance) || transIdentity.foliagePersistance,
+        toxicityHuman: (toxicityEnum.toUi(basePlant.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || transIdentity.toxicityHuman,
+        toxicityPets: (toxicityEnum.toUi(basePlant.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || transIdentity.toxicityPets,
+        livingSpace: (livingSpaceEnum.toUi(basePlant.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || transIdentity.livingSpace,
+        composition: expandCompositionFromDb(basePlant.composition || []) || transIdentity.composition,
+        maintenanceLevel: (maintenanceLevelEnum.toUi(basePlant.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || transIdentity.maintenanceLevel,
         colors: colorObjects,
         season: seasons,
         scent: basePlant.scent ?? transIdentity.scent ?? false,
+        spiked: basePlant.spiked ?? transIdentity.spiked ?? false,
+        multicolor: basePlant.multicolor ?? transIdentity.multicolor ?? false,
+        bicolor: basePlant.bicolor ?? transIdentity.bicolor ?? false,
         // Map other flat fields if needed for preview
       }
 
@@ -772,6 +785,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         
         plantCare: {
           levelSun: (levelSunEnum.toUi(basePlant.level_sun) as PlantCareData["levelSun"]) || undefined,
+          habitat: habitatEnum.toUiArray(basePlant.habitat) as PlantCareData["habitat"],
           watering: {
             schedules: ((basePlant.plant_watering_schedules as any[]) || []).map((row) => ({
                season: row?.season ? toTitleCase(row.season) : undefined,
