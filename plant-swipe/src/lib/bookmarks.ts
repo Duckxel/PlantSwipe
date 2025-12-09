@@ -256,7 +256,7 @@ export async function getBookmarkDetails(bookmarkId: string, language: string = 
 
   // Fetch full plant details for items
   const plantIds = (data.items || []).map((i: any) => i.plant_id)
-  let plantsMap: Record<string, Plant> = {}
+  const plantsMap: Record<string, Plant> = {}
   
   if (plantIds.length > 0) {
     // Load plants base data

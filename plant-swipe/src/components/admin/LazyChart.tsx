@@ -1,17 +1,36 @@
+ 
 import React, { Suspense, createContext, useContext, useState, useEffect } from 'react'
+import type {
+  ResponsiveContainerProps,
+  ComposedChartProps,
+  LineProps,
+  AreaProps,
+  CartesianGridProps,
+  XAxisProps,
+  YAxisProps,
+  TooltipProps,
+  ReferenceLineProps,
+  PieProps,
+  CellProps,
+  BarProps,
+  RadialBarProps,
+  PolarAngleAxisProps,
+} from 'recharts'
 
 // Lazy load the entire recharts module at once
 const loadRecharts = () => import('recharts')
 
+type RechartsModule = typeof import('recharts')
+
 // Context to share loaded recharts module across all chart components
-const RechartsContext = createContext<typeof import('recharts') | null>(null)
+const RechartsContext = createContext<RechartsModule | null>(null)
 
 // Provider component that loads recharts once
 const RechartsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [charts, setCharts] = useState<typeof import('recharts') | null>(null)
+  const [charts, setCharts] = useState<RechartsModule | null>(null)
   
   useEffect(() => {
-    loadRecharts().then(mod => setCharts(mod as any))
+    loadRecharts().then(mod => setCharts(mod))
   }, [])
   
   return (
@@ -36,103 +55,102 @@ const ChartSkeleton: React.FC<{ height?: number | string }> = ({ height = 200 })
 )
 
 // Chart components that use the shared context
-const ResponsiveContainerImpl: React.FC<any> = (props) => {
+const ResponsiveContainerImpl: React.FC<ResponsiveContainerProps> = (props) => {
   const charts = useCharts()
   return <charts.ResponsiveContainer {...props} />
 }
 ResponsiveContainerImpl.displayName = 'ResponsiveContainer'
 
-const ComposedChartImpl: React.FC<any> = (props) => {
+const ComposedChartImpl: React.FC<ComposedChartProps> = (props) => {
   const charts = useCharts()
   return <charts.ComposedChart {...props} />
 }
 ComposedChartImpl.displayName = 'ComposedChart'
 
-const LineImpl: React.FC<any> = (props) => {
+const LineImpl: React.FC<LineProps> = (props) => {
   const charts = useCharts()
   return <charts.Line {...props} />
 }
 LineImpl.displayName = 'Line'
 
-const AreaImpl: React.FC<any> = (props) => {
+const AreaImpl: React.FC<AreaProps> = (props) => {
   const charts = useCharts()
   return <charts.Area {...props} />
 }
 AreaImpl.displayName = 'Area'
 
-const CartesianGridImpl: React.FC<any> = (props) => {
+const CartesianGridImpl: React.FC<CartesianGridProps> = (props) => {
   const charts = useCharts()
   return <charts.CartesianGrid {...props} />
 }
 CartesianGridImpl.displayName = 'CartesianGrid'
 
-const XAxisImpl: React.FC<any> = (props) => {
+const XAxisImpl: React.FC<XAxisProps> = (props) => {
   const charts = useCharts()
   return <charts.XAxis {...props} />
 }
 XAxisImpl.displayName = 'XAxis'
 
-const YAxisImpl: React.FC<any> = (props) => {
+const YAxisImpl: React.FC<YAxisProps> = (props) => {
   const charts = useCharts()
   return <charts.YAxis {...props} />
 }
 YAxisImpl.displayName = 'YAxis'
 
-const TooltipImpl: React.FC<any> = (props) => {
+const TooltipImpl = <TValue extends number | string | Array<number | string>, TName extends string>(props: TooltipProps<TValue, TName>) => {
   const charts = useCharts()
   return <charts.Tooltip {...props} />
 }
-TooltipImpl.displayName = 'Tooltip'
 
-const ReferenceLineImpl: React.FC<any> = (props) => {
+const ReferenceLineImpl: React.FC<ReferenceLineProps> = (props) => {
   const charts = useCharts()
   return <charts.ReferenceLine {...props} />
 }
 ReferenceLineImpl.displayName = 'ReferenceLine'
 
-const PieChartImpl: React.FC<any> = (props) => {
+const PieChartImpl: React.FC<{ children?: React.ReactNode; width?: number; height?: number }> = (props) => {
   const charts = useCharts()
   return <charts.PieChart {...props} />
 }
 PieChartImpl.displayName = 'PieChart'
 
-const PieImpl: React.FC<any> = (props) => {
+const PieImpl: React.FC<PieProps> = (props) => {
   const charts = useCharts()
   return <charts.Pie {...props} />
 }
 PieImpl.displayName = 'Pie'
 
-const CellImpl: React.FC<any> = (props) => {
+const CellImpl: React.FC<CellProps> = (props) => {
   const charts = useCharts()
   return <charts.Cell {...props} />
 }
 CellImpl.displayName = 'Cell'
 
-const BarChartImpl: React.FC<any> = (props) => {
+const BarChartImpl: React.FC<{ children?: React.ReactNode; data?: unknown[]; width?: number; height?: number }> = (props) => {
   const charts = useCharts()
   return <charts.BarChart {...props} />
 }
 BarChartImpl.displayName = 'BarChart'
 
-const BarImpl: React.FC<any> = (props) => {
+const BarImpl: React.FC<BarProps> = (props) => {
   const charts = useCharts()
   return <charts.Bar {...props} />
 }
 BarImpl.displayName = 'Bar'
 
-const RadialBarChartImpl: React.FC<any> = (props) => {
+const RadialBarChartImpl: React.FC<{ children?: React.ReactNode; data?: unknown[]; width?: number; height?: number; innerRadius?: string | number; outerRadius?: string | number; startAngle?: number; endAngle?: number }> = (props) => {
   const charts = useCharts()
   return <charts.RadialBarChart {...props} />
 }
 RadialBarChartImpl.displayName = 'RadialBarChart'
 
-const RadialBarImpl: React.FC<any> = (props) => {
+const RadialBarImpl: React.FC<RadialBarProps> = (props) => {
   const charts = useCharts()
   return <charts.RadialBar {...props} />
 }
 RadialBarImpl.displayName = 'RadialBar'
 
-const PolarAngleAxisImpl: React.FC<any> = (props) => {
+const PolarAngleAxisImpl: React.FC<PolarAngleAxisProps> = (props) => {
   const charts = useCharts()
   return <charts.PolarAngleAxis {...props} />
 }
@@ -140,7 +158,7 @@ PolarAngleAxisImpl.displayName = 'PolarAngleAxis'
 
 // Export chart components wrapped in provider
 export const LazyCharts = {
-  ResponsiveContainer: (props: any) => (
+  ResponsiveContainer: (props: ResponsiveContainerProps) => (
     <Suspense fallback={<ChartSkeleton height={props.height} />}>
       <RechartsProvider>
         <ResponsiveContainerImpl {...props} />

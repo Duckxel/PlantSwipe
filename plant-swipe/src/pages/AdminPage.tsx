@@ -652,7 +652,7 @@ export const AdminPage: React.FC = () => {
       const text = await resp.text().catch(() => "");
       if (
         contentType.includes("application/json") ||
-        /^[\s\n]*[\[{]/.test(text)
+        /^[\s\n]*[[{]/.test(text)
       ) {
         try {
           return JSON.parse(text);
@@ -2497,7 +2497,7 @@ export const AdminPage: React.FC = () => {
             (b: string) => b && b !== "origin" && b !== "HEAD",
           );
         }
-        let ok = respNode?.ok && Array.isArray(data?.branches);
+        const ok = respNode?.ok && Array.isArray(data?.branches);
         if (!ok) {
           const adminHeaders: Record<string, string> = {
             Accept: "application/json",

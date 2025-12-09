@@ -353,7 +353,7 @@ export const FriendsPage: React.FC = () => {
               }
             }
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore email search errors
         }
       }

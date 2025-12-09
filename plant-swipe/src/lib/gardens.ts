@@ -605,6 +605,18 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
     translations.forEach(t => {
       translationMap.set(t.plant_id, { name: t.name })
     })
+  const translationMap = new Map()
+  if (language) {
+    const { data: translations } = await supabase
+      .from('plant_translations')
+      .select('plant_id, name')
+      .eq('language', language)
+      .in('plant_id', plantIds)
+    if (translations) {
+      translations.forEach(t => {
+        translationMap.set(t.plant_id, { name: t.name })
+      })
+    }
   }
   
   const idToPlant: Record<string, Plant> = {}
@@ -818,7 +830,7 @@ export async function addMemberByEmail(params: { gardenId: string; email: string
   try {
     await addGardenMember({ gardenId, userId, role })
     return { ok: true }
-  } catch (e) {
+  } catch (_e) {
     return { ok: false, reason: 'insert_failed' }
   }
 }
@@ -839,7 +851,7 @@ export async function addMemberByNameOrEmail(params: { gardenId: string; input: 
     if (!userId) return { ok: false, reason: 'no_account' }
     await addGardenMember({ gardenId, userId, role })
     return { ok: true }
-  } catch (e) {
+  } catch (_e) {
     return { ok: false, reason: 'insert_failed' }
   }
 }
@@ -1384,7 +1396,7 @@ export async function getGardenPlantSchedule(gardenPlantId: string): Promise<{ p
   // Try selecting with monthly_nth_weekdays; fallback if column missing
   const selectWithNth = 'period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays'
   const base = supabase.from('garden_plant_schedule')
-  let q = base.select(selectWithNth).eq('garden_plant_id', gardenPlantId).maybeSingle()
+  const q = base.select(selectWithNth).eq('garden_plant_id', gardenPlantId).maybeSingle()
   let { data, error } = await q
   if (error && /column .*monthly_nth_weekdays.* does not exist/i.test(error.message)) {
     const res2 = await base.select('period, amount, weekly_days, monthly_days, yearly_days').eq('garden_plant_id', gardenPlantId).maybeSingle()

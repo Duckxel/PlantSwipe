@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,8 +124,17 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
       if (resp.ok) {
         const data = await resp.json();
         if (data.results && Array.isArray(data.results)) {
+          interface GeoResult {
+            id: number;
+            name: string;
+            country?: string;
+            admin1?: string;
+            latitude: number;
+            longitude: number;
+            timezone?: string;
+          }
           setSuggestions(
-            data.results.map((r: any) => ({
+            data.results.map((r: GeoResult) => ({
               id: r.id,
               name: r.name,
               country: r.country || "",
@@ -245,11 +253,7 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
         try {
           const { latitude, longitude } = position.coords;
           
-          // Use Open-Meteo reverse geocoding
-          const resp = await fetch(
-            `https://geocoding-api.open-meteo.com/v1/search?name=${latitude.toFixed(2)},${longitude.toFixed(2)}&count=1`
-          );
-          
+          // Use Open-Meteo reverse geocoding (not used, kept for future reference)
           // Fallback to Nominatim for reverse geocoding
           const nomResp = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
@@ -293,8 +297,8 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
     ? selectedLocation.name !== gardenCity || selectedLocation.country !== gardenCountry
     : false;
 
-  // Format location display
-  const formatLocation = (loc: LocationSuggestion) => {
+  // Format location display (reserved for future use)
+  const _formatLocation = (loc: LocationSuggestion) => {
     const parts = [loc.name];
     if (loc.admin1) parts.push(loc.admin1);
     if (loc.country) parts.push(loc.country);

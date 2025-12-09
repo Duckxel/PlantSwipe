@@ -1,9 +1,8 @@
-// @ts-nocheck
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
-import { Globe, Loader2, Check } from "lucide-react";
+import { Loader2, Check } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
 // Supported languages for gardening advice (matches website languages)

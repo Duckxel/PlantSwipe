@@ -965,7 +965,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
     const savePlant = async (plantOverride?: Plant) => {
       const saveLanguage = language
-      let plantToSave = plantOverride || plant
+      const plantToSave = plantOverride || plant
       const trimmedName = plantToSave.name.trim()
       if (!trimmedName) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
       const isEnglish = saveLanguage === 'en'

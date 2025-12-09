@@ -1,9 +1,7 @@
-// @ts-nocheck
 import React from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from 'react-i18next'
-import { CheckCircle2 } from 'lucide-react'
 
 const taskTypeConfig = {
   water: { emoji: '💧', color: 'bg-blue-600 dark:bg-blue-500' },
@@ -13,11 +11,29 @@ const taskTypeConfig = {
   custom: { emoji: '🪴', color: 'bg-purple-600 dark:bg-purple-500' },
 }
 
+interface GardenPlant {
+  id: string
+  nickname?: string | null
+  plant?: { name?: string }
+}
+
+type TaskOccurrence = { 
+  id: string
+  taskId: string
+  gardenPlantId: string
+  dueAt: string
+  requiredCount: number
+  completedCount: number
+  completedAt: string | null
+  taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'
+  taskEmoji?: string | null 
+}
+
 export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccurrences, onProgressOccurrence, onCompleteAllForPlant }: {
   className?: string
   gardenName: string
-  plants: Array<any>
-  todayTaskOccurrences: Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'; taskEmoji?: string | null }>
+  plants: GardenPlant[]
+  todayTaskOccurrences: TaskOccurrence[]
   onProgressOccurrence: (occId: string, inc: number) => Promise<void>
   onCompleteAllForPlant: (gardenPlantId: string) => Promise<void>
 }) {
@@ -25,17 +41,17 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
   const [progressingIds, setProgressingIds] = React.useState<Set<string>>(new Set())
   const [completingPlantIds, setCompletingPlantIds] = React.useState<Set<string>>(new Set())
 
-  const occsByPlant: Record<string, typeof todayTaskOccurrences> = React.useMemo(() => {
-    const map: Record<string, typeof todayTaskOccurrences> = {}
+  const occsByPlant: Record<string, TaskOccurrence[]> = React.useMemo(() => {
+    const map: Record<string, TaskOccurrence[]> = {}
     for (const o of (todayTaskOccurrences || [])) {
-      if (!map[o.gardenPlantId]) map[o.gardenPlantId] = [] as any
+      if (!map[o.gardenPlantId]) map[o.gardenPlantId] = []
       map[o.gardenPlantId].push(o)
     }
     return map
   }, [todayTaskOccurrences])
 
   const plantsWithTasks = React.useMemo(() => {
-    return plants.filter((gp: any) => (occsByPlant[gp.id] || []).length > 0)
+    return plants.filter((gp: GardenPlant) => (occsByPlant[gp.id] || []).length > 0)
   }, [plants, occsByPlant])
 
   const totalTasks = React.useMemo(() => todayTaskOccurrences.reduce((a, o) => a + Math.max(1, Number(o.requiredCount || 1)), 0), [todayTaskOccurrences])
@@ -91,7 +107,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
               {t('garden.noTasksToday', 'No tasks due today.')} 🌿
             </Card>
           )}
-          {plantsWithTasks.map((gp: any) => {
+          {plantsWithTasks.map((gp: GardenPlant) => {
             const occs = occsByPlant[gp.id] || []
             const req = occs.reduce((a, o) => a + Math.max(1, Number(o.requiredCount || 1)), 0)
             const done = occs.reduce((a, o) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
@@ -125,7 +141,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                 {/* Task List */}
                 <div className="space-y-1.5">
                   {occs.map((o) => {
-                    const tt = (o as any).taskType || 'custom'
+                    const tt = o.taskType || 'custom'
                     const isDone = Number(o.completedCount || 0) >= Number(o.requiredCount || 1)
                     const isProgressing = progressingIds.has(o.id)
                     const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))

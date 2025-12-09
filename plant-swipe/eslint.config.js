@@ -19,5 +19,23 @@ export default tseslint.config([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Allow unused variables that start with underscore
+      '@typescript-eslint/no-unused-vars': ['error', { 
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_'
+      }],
+      // Downgrade explicit any to warning (valid TS but not best practice)
+      '@typescript-eslint/no-explicit-any': 'warn',
+      // Allow empty catch blocks (often intentional for optional error handling)
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      // Downgrade ts-comment rules to warn
+      '@typescript-eslint/ban-ts-comment': 'warn',
+      // Disable react-refresh for barrel files and files with mixed exports
+      'react-refresh/only-export-components': 'off',
+      // Allow empty interfaces (often used for extension points)
+      '@typescript-eslint/no-empty-object-type': 'off',
+    },
   },
 ])

@@ -15,12 +15,16 @@ import {
   getUserGardens,
   createGarden,
   fetchServerNowISO,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getGardenTodayProgressUltraFast,
   getGardensTodayProgressBatchCached,
   getGardenPlantsMinimal,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   listGardenTasksMinimal,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   listOccurrencesForTasks,
   listOccurrencesForMultipleGardens,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   resyncTaskOccurrencesForGarden,
   resyncMultipleGardensTasks,
   listTasksForMultipleGardensMinimal,
@@ -28,6 +32,7 @@ import {
   progressTaskOccurrence,
   listCompletionsForOccurrences,
   logGardenActivity,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getGardenTodayOccurrencesCached,
   getUserGardensTasksTodayCached,
   refreshGardenTaskCache,
@@ -84,12 +89,14 @@ export const GardenListPage: React.FC = () => {
       taskEmoji?: string | null;
     }>
   >([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [completionsByOcc, setCompletionsByOcc] = React.useState<
     Record<string, any[]>
   >({});
   const [progressingOccIds, setProgressingOccIds] = React.useState<Set<string>>(
     new Set(),
   );
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [completingPlantIds, setCompletingPlantIds] = React.useState<
     Set<string>
   >(new Set());
@@ -112,6 +119,7 @@ export const GardenListPage: React.FC = () => {
     timestamp: number;
     today: string;
   } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const CACHE_TTL = 30 * 1000; // 30 seconds cache for resync
   const TASK_DATA_CACHE_TTL = 10 * 1000; // 10 seconds cache for task data
   const LOCALSTORAGE_TASK_CACHE_TTL = 60 * 1000; // 1 minute cache in localStorage
@@ -199,7 +207,7 @@ export const GardenListPage: React.FC = () => {
       const cachedGardens = getLocalStorageCache(cacheKey);
 
       let data: Garden[];
-      let nowIso: string;
+      let nowIso: string = "";
 
       if (cachedGardens && cachedGardens.gardens) {
         // Use cached gardens immediately for instant display
@@ -367,12 +375,10 @@ export const GardenListPage: React.FC = () => {
       }
 
       // No cache - fetch fresh data
-      const [freshData, freshNowIso] = await Promise.all([
+      [data, nowIso] = await Promise.all([
         getUserGardens(user.id),
         fetchServerNowISO(),
       ]);
-      data = freshData;
-      nowIso = freshNowIso;
 
       setGardens(data);
       gardensRef.current = data;
@@ -652,6 +658,7 @@ export const GardenListPage: React.FC = () => {
           endIso,
         );
         const occsAugmented: Array<any> = [];
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for (const [gardenId, arr] of Object.entries(occsByGarden)) {
           for (const o of arr || []) {
             occsAugmented.push({
@@ -778,6 +785,7 @@ export const GardenListPage: React.FC = () => {
     gardenIdsRef.current = new Set(gardens.map((g) => g.id));
   }, [gardens]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const notifyTasksChanged = React.useCallback(() => {
     try {
       window.dispatchEvent(new CustomEvent("garden:tasks_changed"));
@@ -1070,7 +1078,7 @@ export const GardenListPage: React.FC = () => {
     // Only load tasks after gardens are loaded
     if (!loading && gardens.length > 0) {
       let cancelled = false;
-      let backgroundTimer: ReturnType<typeof setTimeout> | null = null;
+      const backgroundTimer: ReturnType<typeof setTimeout> | null = null;
 
       // Use requestIdleCallback if available, otherwise use setTimeout
       const scheduleTask = (callback: () => void, delay: number = 0) => {
@@ -1345,6 +1353,7 @@ export const GardenListPage: React.FC = () => {
     ],
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const onCompleteAllForPlant = React.useCallback(
     async (gardenPlantId: string) => {
       // Set loading state
