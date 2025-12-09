@@ -335,13 +335,11 @@ export function mergePlantWithTranslation(
 
 /**
  * Load plants with translations for a specific language
- * For English: Uses plants table directly (English is the base language)
- * For other languages: Loads from plant_translations with fallback to plants table
+ * All translatable fields are stored in plant_translations for ALL languages (including English)
  */
 export async function loadPlantsWithTranslations(language: SupportedLanguage): Promise<Plant[]> {
     try {
       const TOP_LIKED_LIMIT = 5
-      const isEnglish = language === 'en'
       
       const [plantsResponse, topLikedResponse] = await Promise.all([
         supabase
@@ -372,20 +370,17 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
       })
     }
 
-    // For English, don't load translations - use plants table directly
-    // For other languages, load translations
-    const translationMap = new Map<string, any>()
-    if (!isEnglish) {
-      const plantIds = plants.map((p) => p.id)
-      const { data: translations } = await supabase
-        .from('plant_translations')
-        .select('*')
-        .eq('language', language)
-        .in('plant_id', plantIds)
+    // Load translations for ALL languages (including English)
+    const plantIds = plants.map((p) => p.id)
+    const { data: translations } = await supabase
+      .from('plant_translations')
+      .select('*')
+      .eq('language', language)
+      .in('plant_id', plantIds)
 
-      if (translations) {
-        translations.forEach((t) => translationMap.set(t.plant_id, t))
-      }
+    const translationMap = new Map<string, any>()
+    if (translations) {
+      translations.forEach((t) => translationMap.set(t.plant_id, t))
     }
 
     const toTitleCase = (val: string | null | undefined): string | undefined => {
@@ -611,13 +606,11 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
 /**
  * Optimized loader for plant previews (discovery/swipe/search)
  * Fetches only the fields necessary for listing, filtering, and swipe cards.
- * For English: Uses plants table directly (English is the base language)
- * For other languages: Loads from plant_translations with fallback to plants table
+ * All translatable fields are stored in plant_translations for ALL languages (including English)
  */
 export async function loadPlantPreviews(language: SupportedLanguage): Promise<Plant[]> {
   try {
     const TOP_LIKED_LIMIT = 5
-    const isEnglish = language === 'en'
     
     const plantColumns = [
       'id', 'name', 'scientific_name', 'plant_type', 
@@ -664,21 +657,18 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       })
     }
 
-    // For English, don't load translations - use plants table directly
-    // For other languages, load translations
-    const translationMap = new Map<string, any>()
-    if (!isEnglish) {
-      const plantIds = plants.map((p) => p.id)
-      const { data: translationsData } = await supabase
-        .from('plant_translations')
-        .select('*') // Select all columns to support flat schema
-        .eq('language', language)
-        .in('plant_id', plantIds)
+    // Load translations for ALL languages (including English)
+    const plantIds = plants.map((p) => p.id)
+    const { data: translationsData } = await supabase
+      .from('plant_translations')
+      .select('*')
+      .eq('language', language)
+      .in('plant_id', plantIds)
 
-      const translations = translationsData as any[]
-      if (translations) {
-        translations.forEach((t) => translationMap.set(t.plant_id, t))
-      }
+    const translationMap = new Map<string, any>()
+    const translations = translationsData as any[]
+    if (translations) {
+      translations.forEach((t) => translationMap.set(t.plant_id, t))
     }
 
     const toTitleCase = (val: string | null | undefined): string | undefined => {
@@ -687,8 +677,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     }
 
     return plants.map((basePlant: any) => {
-      // For English, translation will be empty object (use plants table data)
-      // For other languages, translation contains translated data
+      // Translation contains translated data, fallback to plants table if not found
       const translation = translationMap.get(basePlant.id) || {}
       
       const parseIfNeeded = (val: any) => (typeof val === 'string' ? JSON.parse(val) : val)

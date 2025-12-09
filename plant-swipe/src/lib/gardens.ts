@@ -592,22 +592,19 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
       .select('*, plant_images (id,link,use)')
       .in('id', plantIds)
   
-  // For English, use plants table directly (no translation needed)
-  // For other languages, load translations
+  // Load translations for ALL languages (including English)
   // Only fetch name field to minimize egress (~90% reduction)
   let translationMap = new Map()
-  const isEnglish = !language || language === 'en'
-  if (!isEnglish) {
-    const { data: translations } = await supabase
-      .from('plant_translations')
-      .select('plant_id, name')
-      .eq('language', language)
-      .in('plant_id', plantIds)
-    if (translations) {
-      translations.forEach(t => {
-        translationMap.set(t.plant_id, { name: t.name })
-      })
-    }
+  const targetLanguage = language || 'en'
+  const { data: translations } = await supabase
+    .from('plant_translations')
+    .select('plant_id, name')
+    .eq('language', targetLanguage)
+    .in('plant_id', plantIds)
+  if (translations) {
+    translations.forEach(t => {
+      translationMap.set(t.plant_id, { name: t.name })
+    })
   }
   
   const idToPlant: Record<string, Plant> = {}

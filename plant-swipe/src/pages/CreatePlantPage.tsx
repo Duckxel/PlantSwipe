@@ -506,21 +506,19 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   if (error) throw new Error(error.message)
   if (!data) return null
   
-  // English data is stored in the main plants table (authoritative source)
-  // Other languages are stored in plant_translations table
-  const isEnglish = !language || language === 'en'
+  // All translatable fields are stored in plant_translations for ALL languages (including English)
+  // The plants table contains only non-translatable base data
+  const targetLanguage = language || 'en'
   let translation: any = null
   
-  // Only load translation for non-English languages
-  if (!isEnglish) {
-    const { data: translationData } = await supabase
-      .from('plant_translations')
-      .select('*')
-      .eq('plant_id', id)
-      .eq('language', language)
-      .maybeSingle()
-    translation = translationData || null
-  }
+  // Always load translation for the requested language
+  const { data: translationData } = await supabase
+    .from('plant_translations')
+    .select('*')
+    .eq('plant_id', id)
+    .eq('language', targetLanguage)
+    .maybeSingle()
+  translation = translationData || null
   
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
@@ -537,9 +535,9 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     })
   }
   
-  // For English: ALWAYS use data.name from plants table (authoritative, has unique constraint)
-  // For other languages: use translation name, fallback to plants.name
-  const plantName = isEnglish ? data.name : (translation?.name || data.name)
+  // All translatable fields come from plant_translations (for ALL languages including English)
+  // Fallback to plants table data if translation doesn't exist yet
+  const plantName = translation?.name || data.name
   
   const plant: Plant = {
       id: data.id,
@@ -943,7 +941,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       const isEnglish = saveLanguage === 'en'
       const existingPlantId = plantToSave.id || id
       
-      // For non-English saves, the plant MUST exist in the database first
+      // For non-English saves, the plant base record MUST exist in the database first
       // Use existingLoaded (not just existingPlantId) because "Add From" generates a new ID
       // in memory that doesn't exist in the database yet
       if (!isEnglish && !existingLoaded) {
@@ -959,47 +957,35 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         console.log('[savePlant] Starting save:', {
           plantId,
           trimmedName,
-          isEnglish,
+          saveLanguage,
           existingLoaded,
           existingPlantId,
         })
         
-        // For English saves, check if a plant with this name already exists (for a DIFFERENT plant)
-        // This prevents the confusing 409 error from Supabase
+        // For new plants (English first save), check if a plant with this name already exists
         // The DB has a unique index on lower(name), so we need to check case-insensitively
-        if (isEnglish) {
-          // Use filter with lower() to match exactly how the DB unique index works
+        if (isEnglish && !existingLoaded) {
           const { data: existingPlants, error: checkError } = await supabase
             .from('plants')
             .select('id, name')
             .filter('name', 'ilike', trimmedName)
           
-          // Find any plant with matching name (case-insensitive) that isn't the current plant
           const conflictingPlant = (existingPlants || []).find(
             (p) => p.name.toLowerCase() === trimmedName.toLowerCase() && p.id !== plantId
           )
-          
-          console.log('[savePlant] Name check result:', {
-            trimmedName,
-            trimmedNameLower: trimmedName.toLowerCase(),
-            existingPlants,
-            conflictingPlant,
-            checkError,
-            plantId,
-          })
           
           if (checkError) {
             console.error('[savePlant] Error checking for existing plant:', checkError)
           }
           
-          // If a plant with this name exists AND it's not the same plant we're editing
           if (conflictingPlant) {
             setError(`A plant with the name "${conflictingPlant.name}" already exists. Please choose a different name.`)
             setSaving(false)
             return
           }
         }
-        // For new plants: set creator to current user's display name, preserve existing if already set
+        
+        // For new plants: set creator to current user's display name
         // For existing plants: preserve the original creator
         const createdByValue = existingLoaded 
           ? (plantToSave.meta?.createdBy || null)
@@ -1007,7 +993,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         const createdTimeValue = existingLoaded 
           ? (plantToSave.meta?.createdAt || null)
           : (plantToSave.meta?.createdAt || new Date().toISOString())
-        // Always set the updater to the current user when saving
         const updatedByValue = profile?.display_name || plantToSave.meta?.updatedBy || null
         const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.miscellaneous?.sources || []
@@ -1038,79 +1023,51 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         let payloadUpdatedTime: string | null = null
         const normalizedStatus = (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase()
 
+        // STEP 1: Save/update the base plant record (non-translatable fields)
+        // For English (first save): create the plant record with all base data
+        // For other languages: only update meta fields (status, updated_by, etc.)
         if (isEnglish) {
-          const payload = {
+          // Full plant record with non-translatable base data
+          const basePayload = {
             id: plantId,
-            name: trimmedName,
+            name: trimmedName, // Keep name in plants table for unique constraint and fallback
             plant_type: normalizedPlantType || null,
             utility: normalizedUtility,
             comestible_part: normalizedComestible,
             fruit_type: normalizedFruit,
-            given_names: plantToSave.identity?.givenNames || [],
-            scientific_name: plantToSave.identity?.scientificName || null,
-            family: plantToSave.identity?.family || null,
-            overview: plantToSave.identity?.overview || null,
-            promotion_month: normalizedPromotionMonth,
-            life_cycle: normalizedLifeCycle || null,
-            season: normalizedIdentitySeasons,
-            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
             spiked: coerceBoolean(plantToSave.identity?.spiked, false),
-            toxicity_human: normalizedToxicityHuman || null,
-            toxicity_pets: normalizedToxicityPets || null,
-            allergens: plantToSave.identity?.allergens || [],
             scent: coerceBoolean(plantToSave.identity?.scent, false),
-            symbolism: plantToSave.identity?.symbolism || [],
-            living_space: normalizedLivingSpace || null,
-            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
-            maintenance_level: normalizedMaintenance || null,
             multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
             bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
-            origin: plantToSave.plantCare?.origin || [],
-            habitat: normalizedHabitat,
             temperature_max: plantToSave.plantCare?.temperatureMax || null,
             temperature_min: plantToSave.plantCare?.temperatureMin || null,
             temperature_ideal: plantToSave.plantCare?.temperatureIdeal || null,
-            level_sun: normalizedLevelSun || null,
             hygrometry: plantToSave.plantCare?.hygrometry || null,
             watering_type: normalizedWateringType,
             division: normalizedDivision,
             soil: normalizedSoil,
-            advice_soil: plantToSave.plantCare?.adviceSoil || null,
             mulching: normalizedMulching,
-            advice_mulching: plantToSave.plantCare?.adviceMulching || null,
             nutrition_need: normalizedNutritionNeed,
             fertilizer: normalizedFertilizer,
-            advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
             sowing_month: monthNumbersToSlugs(plantToSave.growth?.sowingMonth),
             flowering_month: monthNumbersToSlugs(plantToSave.growth?.floweringMonth),
             fruiting_month: monthNumbersToSlugs(plantToSave.growth?.fruitingMonth),
             height_cm: plantToSave.growth?.height || null,
             wingspan_cm: plantToSave.growth?.wingspan || null,
             tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
-            advice_tutoring: plantToSave.growth?.adviceTutoring || null,
             sow_type: normalizedSowType,
             separation_cm: plantToSave.growth?.separation || null,
             transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
-            advice_sowing: plantToSave.growth?.adviceSowing || null,
-            cut: plantToSave.growth?.cut || null,
-            advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
-            nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
             infusion: coerceBoolean(plantToSave.usage?.infusion, false),
-            advice_infusion: plantToSave.usage?.adviceInfusion || null,
-            recipes_ideas: plantToSave.usage?.recipesIdeas || [],
             aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
             spice_mixes: plantToSave.usage?.spiceMixes || [],
             melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
             polenizer: normalizedPolenizer,
             be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
-            ground_effect: plantToSave.ecology?.groundEffect || null,
             conservation_status: normalizedConservationStatus || null,
             pests: plantToSave.danger?.pests || [],
             diseases: plantToSave.danger?.diseases || [],
             companions: plantToSave.miscellaneous?.companions || [],
-            tags: plantToSave.miscellaneous?.tags || [],
-            source_name: primarySource?.name || null,
-            source_url: primarySource?.url || null,
             status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
             created_by: createdByValue,
@@ -1118,16 +1075,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
           }
-          payloadUpdatedTime = payload.updated_time
+          payloadUpdatedTime = basePayload.updated_time
+          
           const { data, error: insertError } = await supabase
             .from('plants')
-            .upsert(payload)
+            .upsert(basePayload)
             .select('id')
             .maybeSingle()
           if (insertError) {
             throw { ...insertError, context: 'plant' }
           }
           savedId = data?.id || plantId
+          
+          // Save related non-translatable data
           const colorIds = await upsertColors(plantToSave.identity?.colors || [])
           await linkColors(savedId, colorIds)
           await upsertImages(savedId, plantToSave.images || [])
@@ -1137,67 +1097,67 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           })
           await upsertSources(savedId, sources)
           await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
-          
-          // English data is stored in the plants table only - no translation entry needed
+        } else {
+          // For non-English: only update meta fields in plants table
+          const metaUpdatePayload = {
+            status: normalizedStatus,
+            admin_commentary: plantToSave.meta?.adminCommentary || null,
+            updated_by: updatedByValue,
+            updated_time: new Date().toISOString(),
+          }
+          const { error: metaUpdateError } = await supabase
+            .from('plants')
+            .update(metaUpdatePayload)
+            .eq('id', savedId)
+          if (metaUpdateError) {
+            throw new Error(metaUpdateError.message)
+          }
+          payloadUpdatedTime = metaUpdatePayload.updated_time
         }
 
-        if (!isEnglish) {
-          const translationPayload = {
-            plant_id: savedId,
-            language: saveLanguage,
-            name: trimmedName,
-            given_names: plantToSave.identity?.givenNames || [],
-            scientific_name: plantToSave.identity?.scientificName || null,
-            family: plantToSave.identity?.family || null,
-            overview: plantToSave.identity?.overview || null,
-            promotion_month: normalizedPromotionMonth,
-            life_cycle: normalizedLifeCycle || null,
-            season: normalizedIdentitySeasons,
-            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
-            toxicity_human: normalizedToxicityHuman || null,
-            toxicity_pets: normalizedToxicityPets || null,
-            allergens: plantToSave.identity?.allergens || [],
-            symbolism: plantToSave.identity?.symbolism || [],
-            living_space: normalizedLivingSpace || null,
-            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
-            maintenance_level: normalizedMaintenance || null,
-            origin: plantToSave.plantCare?.origin || [],
-            habitat: normalizedHabitat,
-            advice_soil: plantToSave.plantCare?.adviceSoil || null,
-            advice_mulching: plantToSave.plantCare?.adviceMulching || null,
-            advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
-            advice_tutoring: plantToSave.growth?.adviceTutoring || null,
-            advice_sowing: plantToSave.growth?.adviceSowing || null,
-            cut: plantToSave.growth?.cut || null,
-            advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
-            nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
-            recipes_ideas: plantToSave.usage?.recipesIdeas || [],
-            advice_infusion: plantToSave.usage?.adviceInfusion || null,
-            ground_effect: plantToSave.ecology?.groundEffect || null,
-            source_name: primarySource?.name || null,
-            source_url: primarySource?.url || null,
-            tags: plantToSave.miscellaneous?.tags || [],
-          }
-          const { error: translationError } = await supabase
-            .from('plant_translations')
-            .upsert(translationPayload, { onConflict: 'plant_id,language' })
-          if (translationError) {
-            throw { ...translationError, context: 'translation' }
-          }
-            const metaUpdatePayload = {
-              status: normalizedStatus,
-              admin_commentary: plantToSave.meta?.adminCommentary || null,
-              updated_by: updatedByValue,
-              updated_time: new Date().toISOString(),
-            }
-            const { error: metaUpdateError } = await supabase
-              .from('plants')
-              .update(metaUpdatePayload)
-              .eq('id', savedId)
-            if (metaUpdateError) {
-              throw new Error(metaUpdateError.message)
-            }
-            payloadUpdatedTime = metaUpdatePayload.updated_time
+        // STEP 2: Save translatable fields to plant_translations (for ALL languages including English)
+        const translationPayload = {
+          plant_id: savedId,
+          language: saveLanguage,
+          name: trimmedName,
+          given_names: plantToSave.identity?.givenNames || [],
+          scientific_name: plantToSave.identity?.scientificName || null,
+          family: plantToSave.identity?.family || null,
+          overview: plantToSave.identity?.overview || null,
+          promotion_month: normalizedPromotionMonth,
+          life_cycle: normalizedLifeCycle || null,
+          season: normalizedIdentitySeasons,
+          foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
+          toxicity_human: normalizedToxicityHuman || null,
+          toxicity_pets: normalizedToxicityPets || null,
+          allergens: plantToSave.identity?.allergens || [],
+          symbolism: plantToSave.identity?.symbolism || [],
+          living_space: normalizedLivingSpace || null,
+          composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+          maintenance_level: normalizedMaintenance || null,
+          origin: plantToSave.plantCare?.origin || [],
+          habitat: normalizedHabitat,
+          level_sun: normalizedLevelSun || null,
+          advice_soil: plantToSave.plantCare?.adviceSoil || null,
+          advice_mulching: plantToSave.plantCare?.adviceMulching || null,
+          advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
+          advice_tutoring: plantToSave.growth?.adviceTutoring || null,
+          advice_sowing: plantToSave.growth?.adviceSowing || null,
+          cut: plantToSave.growth?.cut || null,
+          advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+          nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
+          recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+          advice_infusion: plantToSave.usage?.adviceInfusion || null,
+          ground_effect: plantToSave.ecology?.groundEffect || null,
+          source_name: primarySource?.name || null,
+          source_url: primarySource?.url || null,
+          tags: plantToSave.miscellaneous?.tags || [],
+        }
+        const { error: translationError } = await supabase
+          .from('plant_translations')
+          .upsert(translationPayload, { onConflict: 'plant_id,language' })
+        if (translationError) {
+          throw { ...translationError, context: 'translation' }
         }
 
           const savedPlant = {
@@ -1436,8 +1396,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const translatePlant = async () => {
-    // Only translate to non-English languages (English is stored in main plants table, not translations)
-    const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language && lang !== 'en')
+    // Translate to all other languages (all languages including English are stored in plant_translations)
+    const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language)
     if (!targets.length) {
       setError(t('plantAdmin.translationNoTargets', 'No other languages configured for translation.'))
       return

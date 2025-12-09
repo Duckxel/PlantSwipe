@@ -134,19 +134,17 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
   if (error) throw new Error(error.message)
   if (!data) return null
   
-  // English data is stored in the plants table directly (no translation needed)
-  // Only load translation for non-English languages
-  const isEnglish = !language || language === 'en'
+  // All translatable fields are stored in plant_translations for ALL languages (including English)
+  // Load translation for the requested language
+  const targetLanguage = language || 'en'
   let translation: any = null
-  if (!isEnglish) {
-    const { data: translationData } = await supabase
-      .from('plant_translations')
-      .select('*')
-      .eq('plant_id', id)
-      .eq('language', language)
-      .maybeSingle()
-    translation = translationData || null
-  }
+  const { data: translationData } = await supabase
+    .from('plant_translations')
+    .select('*')
+    .eq('plant_id', id)
+    .eq('language', targetLanguage)
+    .maybeSingle()
+  translation = translationData || null
   
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
