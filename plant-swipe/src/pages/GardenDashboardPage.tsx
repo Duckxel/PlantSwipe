@@ -1890,7 +1890,7 @@ export const GardenDashboardPage: React.FC = () => {
         return;
       }
 
-      // Load translations for current language
+      // Load translations for ALL languages (including English)
       const plantIds = fullPlants.map((p: any) => p.id);
       const { data: translations } = await supabase
         .from("plant_translations")
@@ -1898,7 +1898,6 @@ export const GardenDashboardPage: React.FC = () => {
         .eq("language", currentLang)
         .in("plant_id", plantIds);
 
-      // Create translation map
       const translationMap = new Map();
       if (translations) {
         translations.forEach((t: any) => {
@@ -2201,8 +2200,8 @@ export const GardenDashboardPage: React.FC = () => {
     if (!id || !user?.id) return;
     setImportingFromBookmark(true);
     try {
-      // Fetch bookmark details with full plant data
-      const bookmark = await getBookmarkDetails(bookmarkId);
+      // Fetch bookmark details with full plant data (with translations)
+      const bookmark = await getBookmarkDetails(bookmarkId, currentLang);
       const items = bookmark.items || [];
       
       if (items.length === 0) {

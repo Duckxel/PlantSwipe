@@ -335,12 +335,12 @@ export function mergePlantWithTranslation(
 
 /**
  * Load plants with translations for a specific language
- * Always loads translations for the specified language, regardless of whether it's the default language.
- * This ensures plants created in one language display correctly when viewed in another language.
+ * All translatable fields are stored in plant_translations for ALL languages (including English)
  */
 export async function loadPlantsWithTranslations(language: SupportedLanguage): Promise<Plant[]> {
     try {
       const TOP_LIKED_LIMIT = 5
+      
       const [plantsResponse, topLikedResponse] = await Promise.all([
         supabase
           .from('plants')
@@ -370,6 +370,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
       })
     }
 
+    // Load translations for ALL languages (including English)
     const plantIds = plants.map((p) => p.id)
     const { data: translations } = await supabase
       .from('plant_translations')
@@ -394,7 +395,8 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         name: pc?.colors?.name,
         hexCode: pc?.colors?.hex_code,
       })).filter((c) => c.name)
-        const seasonsRaw = translation.season ?? basePlant.season ?? []
+        // season is a non-translatable enum field, always from plants table
+        const seasonsRaw = basePlant.season ?? []
         const seasons: PlantSeason[] = seasonEnum.toUiArray(seasonsRaw) as PlantSeason[]
         const images: PlantImage[] = ((basePlant.plant_images as any[]) || []).map((img) => ({
           link: img?.link,
@@ -416,11 +418,12 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
             url: src?.url,
           }))
           .filter((src) => src.name)
-      if (!sources.length && (translation.source_name || basePlant.source_name)) {
+      // source_name and source_url are now only in plant_translations
+      if (!sources.length && translation.source_name) {
         sources.push({
           id: `${basePlant.id}-legacy-source-${sources.length}`,
-          name: translation.source_name || basePlant.source_name,
-          url: translation.source_url || basePlant.source_url,
+          name: translation.source_name,
+          url: translation.source_url,
         })
       }
       const primaryImage = images.find((i) => i.use === 'primary')?.link
@@ -438,6 +441,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           const plant: Plant = {
             id: String(basePlant.id),
             name: translation.name || basePlant.name || '',
+            // Non-translatable fields from plants table
             plantType: (plantTypeEnum.toUi(basePlant.plant_type) as Plant["plantType"]) || undefined,
             utility: utilityEnum.toUiArray(basePlant.utility) as Plant["utility"],
             comestiblePart: comestiblePartEnum.toUiArray(basePlant.comestible_part) as Plant["comestiblePart"],
@@ -445,123 +449,135 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
             images,
             image: primaryImage,
             identity: {
-              givenNames: translation.given_names || basePlant.given_names || [],
-              scientificName: translation.scientific_name || basePlant.scientific_name || undefined,
-              family: translation.family || basePlant.family || undefined,
-              overview: translation.overview || basePlant.overview || undefined,
-              promotionMonth:
-                monthSlugToNumber(translation.promotion_month || basePlant.promotion_month) ?? undefined,
-            lifeCycle:
-              (lifeCycleEnum.toUi(translation.life_cycle || basePlant.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) ||
-              undefined,
-            season: seasons,
-            foliagePersistance: expandFoliagePersistanceFromDb(translation.foliage_persistance || basePlant.foliage_persistance),
-          spiked: basePlant.spiked ?? false,
-            toxicityHuman:
-              (toxicityEnum.toUi(translation.toxicity_human || basePlant.toxicity_human) as NonNullable<
-                Plant["identity"]
-              >["toxicityHuman"]) || undefined,
-            toxicityPets:
-              (toxicityEnum.toUi(translation.toxicity_pets || basePlant.toxicity_pets) as NonNullable<
-                Plant["identity"]
-              >["toxicityPets"]) || undefined,
-          allergens: translation.allergens || basePlant.allergens || [],
-          scent: basePlant.scent ?? false,
-          symbolism: translation.symbolism || basePlant.symbolism || [],
-            livingSpace:
-              (livingSpaceEnum.toUi(translation.living_space || basePlant.living_space) as NonNullable<
-                Plant["identity"]
-              >["livingSpace"]) || undefined,
-            composition: expandCompositionFromDb(translation.composition || basePlant.composition || []) as IdentityComposition,
-            maintenanceLevel:
-              (maintenanceLevelEnum.toUi(translation.maintenance_level || basePlant.maintenance_level) as NonNullable<
-                Plant["identity"]
-              >["maintenanceLevel"]) || undefined,
-          colors: colorObjects,
-          multicolor: basePlant.multicolor ?? false,
-          bicolor: basePlant.bicolor ?? false,
-        },
-        plantCare: {
-          origin: translation.origin || basePlant.origin || [],
-            habitat: habitatEnum.toUiArray(translation.habitat || basePlant.habitat) as PlantCareData["habitat"],
-          temperatureMax: basePlant.temperature_max || undefined,
-          temperatureMin: basePlant.temperature_min || undefined,
-          temperatureIdeal: basePlant.temperature_ideal || undefined,
-            levelSun:
-              (levelSunEnum.toUi(translation.level_sun || basePlant.level_sun) as PlantCareData["levelSun"]) || undefined,
-          hygrometry: basePlant.hygrometry || undefined,
-            wateringType: wateringTypeEnum.toUiArray(translation.watering_type || basePlant.watering_type) as PlantCareData["wateringType"],
-            division: divisionEnum.toUiArray(translation.division || basePlant.division) as PlantCareData["division"],
-            soil: soilEnum.toUiArray(translation.soil || basePlant.soil) as PlantCareData["soil"],
-          adviceSoil: translation.advice_soil || basePlant.advice_soil || undefined,
-            mulching: mulchingEnum.toUiArray(translation.mulching || basePlant.mulching) as PlantCareData["mulching"],
-          adviceMulching: translation.advice_mulching || basePlant.advice_mulching || undefined,
-            nutritionNeed: nutritionNeedEnum.toUiArray(translation.nutrition_need || basePlant.nutrition_need) as PlantCareData["nutritionNeed"],
-            fertilizer: fertilizerEnum.toUiArray(translation.fertilizer || basePlant.fertilizer) as PlantCareData["fertilizer"],
-          adviceFertilizer: translation.advice_fertilizer || basePlant.advice_fertilizer || undefined,
-          watering: {
-            schedules,
-          },
-        },
-          growth: {
-            sowingMonth: monthSlugsToNumbers(basePlant.sowing_month),
-            floweringMonth: monthSlugsToNumbers(basePlant.flowering_month),
-            fruitingMonth: monthSlugsToNumbers(basePlant.fruiting_month),
-          height: basePlant.height_cm || undefined,
-          wingspan: basePlant.wingspan_cm || undefined,
-          tutoring: basePlant.tutoring || false,
-          adviceTutoring: translation.advice_tutoring || basePlant.advice_tutoring || undefined,
-            sowType: sowTypeEnum.toUiArray(translation.sow_type || basePlant.sow_type) as PlantGrowthData["sowType"],
-          separation: basePlant.separation_cm || undefined,
-          transplanting: basePlant.transplanting || undefined,
-          adviceSowing: translation.advice_sowing || basePlant.advice_sowing || undefined,
-          cut: translation.cut || basePlant.cut || undefined,
-        },
-          usage: {
-          adviceMedicinal: translation.advice_medicinal || basePlant.advice_medicinal || undefined,
-          nutritionalIntake: translation.nutritional_intake || basePlant.nutritional_intake || [],
-          infusion: basePlant.infusion || false,
-          adviceInfusion: translation.advice_infusion || basePlant.advice_infusion || undefined,
-            infusionMix,
-          recipesIdeas: translation.recipes_ideas || basePlant.recipes_ideas || [],
-          aromatherapy: basePlant.aromatherapy || false,
-          spiceMixes: basePlant.spice_mixes || [],
-        },
-        ecology: {
-          melliferous: basePlant.melliferous || false,
-            polenizer: polenizerEnum.toUiArray(translation.polenizer || basePlant.polenizer) as PlantEcologyData["polenizer"],
-          beFertilizer: basePlant.be_fertilizer || false,
-          groundEffect: translation.ground_effect || basePlant.ground_effect || undefined,
-            conservationStatus:
-              (conservationStatusEnum.toUi(translation.conservation_status || basePlant.conservation_status) as PlantEcologyData["conservationStatus"]) ||
-              undefined,
-        },
-        danger: {
-          pests: basePlant.pests || [],
-          diseases: basePlant.diseases || [],
-        },
-        miscellaneous: {
-          companions: basePlant.companions || [],
-          tags: basePlant.tags || [],
-          sources,
-        },
-        meta: {
-          status: basePlant.status || undefined,
-          adminCommentary: basePlant.admin_commentary || undefined,
-          createdBy: basePlant.created_by || undefined,
-          createdAt: basePlant.created_time || basePlant.created_at || undefined,
-          updatedBy: basePlant.updated_by || undefined,
-          updatedAt: basePlant.updated_time || basePlant.updated_at || undefined,
-        },
-        seasons,
-        colors: colorObjects.map((c) => c.name as string),
-        multicolor: basePlant.multicolor ?? false,
-        bicolor: basePlant.bicolor ?? false,
-        description: translation.overview || basePlant.overview || '',
-        rarity: (basePlant.rarity || 'Common') as Plant['rarity'],
-        classification: basePlant.plant_type ? { type: basePlant.plant_type } : undefined,
-        popularity: popularityMap.get(String(basePlant.id)),
-      }
+              // Translatable fields from plant_translations only
+              givenNames: translation.given_names || [],
+              // Non-translatable fields from plants table
+              scientificName: basePlant.scientific_name || undefined,
+              family: basePlant.family || undefined,
+              // Translatable field from plant_translations
+              overview: translation.overview || undefined,
+              // Non-translatable fields from plants table (enums)
+              promotionMonth: monthSlugToNumber(basePlant.promotion_month) ?? undefined,
+              lifeCycle: (lifeCycleEnum.toUi(basePlant.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
+              season: seasons,
+              foliagePersistance: expandFoliagePersistanceFromDb(basePlant.foliage_persistance),
+              spiked: basePlant.spiked ?? false,
+              toxicityHuman: (toxicityEnum.toUi(basePlant.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || undefined,
+              toxicityPets: (toxicityEnum.toUi(basePlant.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || undefined,
+              // Translatable fields from plant_translations only
+              allergens: translation.allergens || [],
+              // Non-translatable fields from plants table
+              scent: basePlant.scent ?? false,
+              // Translatable fields from plant_translations only
+              symbolism: translation.symbolism || [],
+              // Non-translatable fields from plants table (enums)
+              livingSpace: (livingSpaceEnum.toUi(basePlant.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || undefined,
+              composition: expandCompositionFromDb(basePlant.composition || []) as IdentityComposition,
+              maintenanceLevel: (maintenanceLevelEnum.toUi(basePlant.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || undefined,
+              colors: colorObjects,
+              multicolor: basePlant.multicolor ?? false,
+              bicolor: basePlant.bicolor ?? false,
+            },
+            plantCare: {
+              // Translatable fields from plant_translations only
+              origin: translation.origin || [],
+              // Non-translatable fields from plants table
+              habitat: habitatEnum.toUiArray(basePlant.habitat) as PlantCareData["habitat"],
+              temperatureMax: basePlant.temperature_max || undefined,
+              temperatureMin: basePlant.temperature_min || undefined,
+              temperatureIdeal: basePlant.temperature_ideal || undefined,
+              // Non-translatable field from plants table
+              levelSun: (levelSunEnum.toUi(basePlant.level_sun) as PlantCareData["levelSun"]) || undefined,
+              hygrometry: basePlant.hygrometry || undefined,
+              wateringType: wateringTypeEnum.toUiArray(basePlant.watering_type) as PlantCareData["wateringType"],
+              division: divisionEnum.toUiArray(basePlant.division) as PlantCareData["division"],
+              soil: soilEnum.toUiArray(basePlant.soil) as PlantCareData["soil"],
+              // Translatable fields from plant_translations only
+              adviceSoil: translation.advice_soil || undefined,
+              // Non-translatable fields from plants table
+              mulching: mulchingEnum.toUiArray(basePlant.mulching) as PlantCareData["mulching"],
+              // Translatable fields from plant_translations only
+              adviceMulching: translation.advice_mulching || undefined,
+              // Non-translatable fields from plants table
+              nutritionNeed: nutritionNeedEnum.toUiArray(basePlant.nutrition_need) as PlantCareData["nutritionNeed"],
+              fertilizer: fertilizerEnum.toUiArray(basePlant.fertilizer) as PlantCareData["fertilizer"],
+              // Translatable fields from plant_translations only
+              adviceFertilizer: translation.advice_fertilizer || undefined,
+              watering: {
+                schedules,
+              },
+            },
+            growth: {
+              // Non-translatable fields from plants table
+              sowingMonth: monthSlugsToNumbers(basePlant.sowing_month),
+              floweringMonth: monthSlugsToNumbers(basePlant.flowering_month),
+              fruitingMonth: monthSlugsToNumbers(basePlant.fruiting_month),
+              height: basePlant.height_cm || undefined,
+              wingspan: basePlant.wingspan_cm || undefined,
+              tutoring: basePlant.tutoring || false,
+              // Translatable fields from plant_translations only
+              adviceTutoring: translation.advice_tutoring || undefined,
+              // Non-translatable fields from plants table
+              sowType: sowTypeEnum.toUiArray(basePlant.sow_type) as PlantGrowthData["sowType"],
+              separation: basePlant.separation_cm || undefined,
+              transplanting: basePlant.transplanting || undefined,
+              // Translatable fields from plant_translations only
+              adviceSowing: translation.advice_sowing || undefined,
+              cut: translation.cut || undefined,
+            },
+            usage: {
+              // Translatable fields from plant_translations only
+              adviceMedicinal: translation.advice_medicinal || undefined,
+              nutritionalIntake: translation.nutritional_intake || [],
+              // Non-translatable fields from plants table
+              infusion: basePlant.infusion || false,
+              // Translatable fields from plant_translations only
+              adviceInfusion: translation.advice_infusion || undefined,
+              infusionMix,
+              recipesIdeas: translation.recipes_ideas || [],
+              // Non-translatable fields from plants table
+              aromatherapy: basePlant.aromatherapy || false,
+              spiceMixes: basePlant.spice_mixes || [],
+            },
+            ecology: {
+              // Non-translatable fields from plants table
+              melliferous: basePlant.melliferous || false,
+              polenizer: polenizerEnum.toUiArray(basePlant.polenizer) as PlantEcologyData["polenizer"],
+              beFertilizer: basePlant.be_fertilizer || false,
+              // Translatable fields from plant_translations only
+              groundEffect: translation.ground_effect || undefined,
+              // Non-translatable fields from plants table
+              conservationStatus: (conservationStatusEnum.toUi(basePlant.conservation_status) as PlantEcologyData["conservationStatus"]) || undefined,
+            },
+            danger: {
+              pests: basePlant.pests || [],
+              diseases: basePlant.diseases || [],
+            },
+            miscellaneous: {
+              companions: basePlant.companions || [],
+              // Translatable fields from plant_translations only
+              tags: translation.tags || [],
+              sources,
+            },
+            meta: {
+              status: basePlant.status || undefined,
+              adminCommentary: basePlant.admin_commentary || undefined,
+              createdBy: basePlant.created_by || undefined,
+              createdAt: basePlant.created_time || basePlant.created_at || undefined,
+              updatedBy: basePlant.updated_by || undefined,
+              updatedAt: basePlant.updated_time || basePlant.updated_at || undefined,
+            },
+            seasons,
+            colors: colorObjects.map((c) => c.name as string),
+            // Non-translatable fields from plants table
+            multicolor: basePlant.multicolor ?? false,
+            bicolor: basePlant.bicolor ?? false,
+            // Translatable fields from plant_translations only
+            description: translation.overview || '',
+            rarity: (basePlant.rarity || 'Common') as Plant['rarity'],
+            classification: basePlant.plant_type ? { type: basePlant.plant_type } : undefined,
+            popularity: popularityMap.get(String(basePlant.id)),
+          }
 
       return sanitizeDeep(plant) as Plant
     })
@@ -605,19 +621,24 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
 /**
  * Optimized loader for plant previews (discovery/swipe/search)
  * Fetches only the fields necessary for listing, filtering, and swipe cards.
+ * All translatable fields are stored in plant_translations for ALL languages (including English)
  */
 export async function loadPlantPreviews(language: SupportedLanguage): Promise<Plant[]> {
   try {
     const TOP_LIKED_LIMIT = 5
     
+    // Note: advice_medicinal and origin are now in plant_translations only
+    // All enum fields and non-translatable fields come from plants table
     const plantColumns = [
       'id', 'name', 'scientific_name', 'plant_type', 
       'utility', 'comestible_part', 'fruit_type',
-      'season', 
-      'level_sun', 
-      'promotion_month',
+      'season', 'habitat', 'level_sun', 'promotion_month',
+      'family', 'life_cycle', 'foliage_persistance',
+      'toxicity_human', 'toxicity_pets', 'living_space',
+      'composition', 'maintenance_level',
+      'multicolor', 'bicolor', 'spiked', 'scent',
       'created_time', 'updated_time',
-      'scent', 'aromatherapy', 'advice_medicinal', 'origin', 'composition',
+      'aromatherapy',
       'plant_images (link,use)',
       'plant_colors (colors (id,name,hex_code))',
       'plant_watering_schedules (season,quantity,time_period)',
@@ -655,16 +676,16 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       })
     }
 
+    // Load translations for ALL languages (including English)
     const plantIds = plants.map((p) => p.id)
     const { data: translationsData } = await supabase
       .from('plant_translations')
-      .select('*') // Select all columns to support flat schema
+      .select('*')
       .eq('language', language)
       .in('plant_id', plantIds)
 
-    const translations = translationsData as any[]
-
     const translationMap = new Map<string, any>()
+    const translations = translationsData as any[]
     if (translations) {
       translations.forEach((t) => translationMap.set(t.plant_id, t))
     }
@@ -675,6 +696,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     }
 
     return plants.map((basePlant: any) => {
+      // Translation contains translated data, fallback to plants table if not found
       const translation = translationMap.get(basePlant.id) || {}
       
       const parseIfNeeded = (val: any) => (typeof val === 'string' ? JSON.parse(val) : val)
@@ -690,7 +712,8 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         hexCode: pc?.colors?.hex_code,
       })).filter((c) => c.name)
 
-      const seasonsRaw = translation.season ?? basePlant.season ?? []
+      // season is a non-translatable enum field, always from plants table
+      const seasonsRaw = basePlant.season ?? []
       const seasons: PlantSeason[] = seasonEnum.toUiArray(seasonsRaw) as PlantSeason[]
 
       const images: PlantImage[] = ((basePlant.plant_images as any[]) || []).map((img) => ({
@@ -702,25 +725,39 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         || images[0]?.link
 
       // Merge flat columns into structured objects to match Plant interface
+      // Non-translatable fields come from basePlant (plants table) only
       const mergedIdentity = {
         ...transIdentity,
-        scientificName: translation.scientific_name || basePlant.scientific_name || transIdentity.scientificName,
-        promotionMonth: monthSlugToNumber(translation.promotion_month || basePlant.promotion_month) ?? undefined,
+        scientificName: basePlant.scientific_name || transIdentity.scientificName,
+        promotionMonth: monthSlugToNumber(basePlant.promotion_month) ?? undefined,
+        family: basePlant.family || transIdentity.family,
+        lifeCycle: (lifeCycleEnum.toUi(basePlant.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || transIdentity.lifeCycle,
+        foliagePersistance: expandFoliagePersistanceFromDb(basePlant.foliage_persistance) || transIdentity.foliagePersistance,
+        toxicityHuman: (toxicityEnum.toUi(basePlant.toxicity_human) as NonNullable<Plant["identity"]>["toxicityHuman"]) || transIdentity.toxicityHuman,
+        toxicityPets: (toxicityEnum.toUi(basePlant.toxicity_pets) as NonNullable<Plant["identity"]>["toxicityPets"]) || transIdentity.toxicityPets,
+        livingSpace: (livingSpaceEnum.toUi(basePlant.living_space) as NonNullable<Plant["identity"]>["livingSpace"]) || transIdentity.livingSpace,
+        composition: expandCompositionFromDb(basePlant.composition || []) || transIdentity.composition,
+        maintenanceLevel: (maintenanceLevelEnum.toUi(basePlant.maintenance_level) as NonNullable<Plant["identity"]>["maintenanceLevel"]) || transIdentity.maintenanceLevel,
         colors: colorObjects,
         season: seasons,
         scent: basePlant.scent ?? transIdentity.scent ?? false,
+        spiked: basePlant.spiked ?? transIdentity.spiked ?? false,
+        multicolor: basePlant.multicolor ?? transIdentity.multicolor ?? false,
+        bicolor: basePlant.bicolor ?? transIdentity.bicolor ?? false,
         // Map other flat fields if needed for preview
       }
 
       const mergedUsage = {
         ...transUsage,
-        adviceMedicinal: translation.advice_medicinal || transUsage.adviceMedicinal || basePlant.advice_medicinal,
+        // advice_medicinal is now only in plant_translations
+        adviceMedicinal: translation.advice_medicinal || transUsage.adviceMedicinal,
         aromatherapy: basePlant.aromatherapy ?? transUsage.aromatherapy ?? false,
       }
       
       const mergedEcology = {
         ...transEcology,
-        nativeRange: translation.origin || transEcology.nativeRange || basePlant.origin || undefined,
+        // origin is now only in plant_translations
+        nativeRange: translation.origin || transEcology.nativeRange || undefined,
       }
 
       const containerFriendly = basePlant.composition && Array.isArray(basePlant.composition) && basePlant.composition.includes('pot')
@@ -748,6 +785,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         
         plantCare: {
           levelSun: (levelSunEnum.toUi(basePlant.level_sun) as PlantCareData["levelSun"]) || undefined,
+          habitat: habitatEnum.toUiArray(basePlant.habitat) as PlantCareData["habitat"],
           watering: {
             schedules: ((basePlant.plant_watering_schedules as any[]) || []).map((row) => ({
                season: row?.season ? toTitleCase(row.season) : undefined,

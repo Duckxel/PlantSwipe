@@ -592,9 +592,19 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
       .select('*, plant_images (id,link,use)')
       .in('id', plantIds)
   
-  // Always load translations for the specified language (including English)
-  // This ensures plants created in one language display correctly in another
+  // Load translations for ALL languages (including English)
   // Only fetch name field to minimize egress (~90% reduction)
+  let translationMap = new Map()
+  const targetLanguage = language || 'en'
+  const { data: translations } = await supabase
+    .from('plant_translations')
+    .select('plant_id, name')
+    .eq('language', targetLanguage)
+    .in('plant_id', plantIds)
+  if (translations) {
+    translations.forEach(t => {
+      translationMap.set(t.plant_id, { name: t.name })
+    })
   const translationMap = new Map()
   if (language) {
     const { data: translations } = await supabase

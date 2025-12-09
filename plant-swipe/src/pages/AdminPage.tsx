@@ -11,6 +11,7 @@ import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel"
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
+import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -42,7 +43,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
-  FileText,
   ScrollText,
   Mail,
   CloudUpload,
@@ -101,6 +101,7 @@ type AdminTab =
   | "overview"
   | "members"
   | "requests"
+  | "stocks"
   | "upload"
   | "notifications"
   | "emails"
@@ -127,8 +128,8 @@ type NormalizedPlantStatus =
   | "approved"
   | "other";
 const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
-  { key: "requests", label: "Request" },
-  { key: "plants", label: "PLANTS" },
+  { key: "requests", label: "Requests" },
+  { key: "plants", label: "Plants" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -438,6 +439,12 @@ export const AdminPage: React.FC = () => {
     React.useState<boolean>(false);
   // Default collapsed on load; will auto-open only if an active broadcast exists
   const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false);
+  // Server Controls - collapsed by default
+  const [serverControlsOpen, setServerControlsOpen] = React.useState<boolean>(false);
+  const [setupPassword, setSetupPassword] = React.useState<string>("");
+  const [runningSetup, setRunningSetup] = React.useState<boolean>(false);
+  const [clearingMemory, setClearingMemory] = React.useState<boolean>(false);
+  const [gitPulling, setGitPulling] = React.useState<boolean>(false);
   // On initial load, if a broadcast is currently active, auto-open the section
   React.useEffect(() => {
     let cancelled = false;
@@ -1078,6 +1085,246 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[restart] Failed to restart services: ? ${message}`);
     } finally {
       setRestarting(false);
+    }
+  };
+
+  // --- Server Controls: Restart Server with Password ---
+  const restartServerWithPassword = async () => {
+    if (restarting) return;
+    if (!setupPassword.trim()) {
+      setConsoleOpen(true);
+      appendConsole("[restart] Root password is required to restart server");
+      return;
+    }
+    setRestarting(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[restart] Starting server restart...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/restart-server", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ password: setupPassword }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data.startsWith("{")) {
+              try {
+                const json = JSON.parse(data);
+                if (json.ok === false && json.code) {
+                  appendConsole(`[restart] Completed with exit code ${json.code}`);
+                }
+              } catch {}
+            } else if (data.trim()) {
+              appendConsole(data);
+            }
+          }
+        }
+      }
+      appendConsole("[restart] Server restart completed");
+      setReloadReady(true);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[restart] Failed: ${message}`);
+    } finally {
+      setRestarting(false);
+    }
+  };
+
+  // --- Server Controls: Run Setup.sh ---
+  const runSetup = async () => {
+    if (runningSetup) return;
+    if (!setupPassword.trim()) {
+      setConsoleOpen(true);
+      appendConsole("[setup] Root password is required to run setup.sh");
+      return;
+    }
+    setRunningSetup(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[setup] Starting setup.sh...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/run-setup", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ password: setupPassword }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data.startsWith("{")) {
+              try {
+                const json = JSON.parse(data);
+                if (json.ok === false && json.code) {
+                  appendConsole(`[setup] Completed with exit code ${json.code}`);
+                }
+              } catch {}
+            } else if (data.trim()) {
+              appendConsole(data);
+            }
+          }
+        }
+      }
+      appendConsole("[setup] Setup.sh completed");
+      setSetupPassword(""); // Clear password after use
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[setup] Failed: ${message}`);
+    } finally {
+      setRunningSetup(false);
+    }
+  };
+
+  // --- Server Controls: Clear Memory ---
+  const clearMemory = async () => {
+    if (clearingMemory) return;
+    setClearingMemory(true);
+    try {
+      setConsoleOpen(true);
+      appendConsole("[memory] Clearing system memory cache...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/clear-memory", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: "{}",
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data?.ok) {
+        appendConsole("[memory] Memory cache cleared successfully");
+      } else {
+        throw new Error(data?.error || `HTTP ${response.status}`);
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[memory] Failed to clear memory: ${message}`);
+    } finally {
+      setClearingMemory(false);
+    }
+  };
+
+  // --- Server Controls: Git Pull Only ---
+  const gitPullOnly = async () => {
+    if (gitPulling) return;
+    setGitPulling(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[git] Starting git pull...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        Accept: "text/event-stream",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/git-pull/stream", {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data.startsWith("{")) {
+              try {
+                const json = JSON.parse(data);
+                if (json.ok === false && json.code) {
+                  appendConsole(`[git] Completed with exit code ${json.code}`);
+                }
+              } catch {}
+            } else if (data.trim()) {
+              appendConsole(data);
+            }
+          }
+        }
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[git] Failed: ${message}`);
+    } finally {
+      setGitPulling(false);
     }
   };
 
@@ -2930,7 +3177,8 @@ export const AdminPage: React.FC = () => {
   }> = [
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin" },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members" },
-    { key: "requests", label: "Requests", Icon: FileText, path: "/admin/requests" },
+    { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
+    { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks" },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
@@ -2940,6 +3188,7 @@ export const AdminPage: React.FC = () => {
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
     if (currentPath.includes("/admin/requests")) return "requests";
+    if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
     if (currentPath.includes("/admin/emails")) return "emails";
@@ -4212,6 +4461,88 @@ export const AdminPage: React.FC = () => {
                             </span>
                           </div>
                           <HealthProgressBar percent={systemHealth.disk?.percent ?? 0} />
+                        </div>
+
+                        {/* Collapsible: Server Controls */}
+                        <div className="mt-4 pt-3 border-t border-stone-200 dark:border-[#3e3e42]">
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 text-sm font-medium w-full"
+                            onClick={() => setServerControlsOpen((o) => !o)}
+                            aria-expanded={serverControlsOpen}
+                            aria-controls="server-controls"
+                          >
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform ${serverControlsOpen ? "rotate-180" : ""}`}
+                            />
+                            <Server className="h-4 w-4 opacity-70" />
+                            Server Controls
+                          </button>
+                          {serverControlsOpen && (
+                            <div className="mt-3 space-y-3" id="server-controls">
+                              {/* Root Password Input (shared) */}
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 space-y-2 bg-stone-50/50 dark:bg-stone-900/20">
+                                <div className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                                  Root Password (required for most actions)
+                                </div>
+                                <Input
+                                  type="password"
+                                  placeholder="Enter root password"
+                                  value={setupPassword}
+                                  onChange={(e) => setSetupPassword(e.target.value)}
+                                  className="rounded-xl text-sm"
+                                  disabled={runningSetup || restarting}
+                                />
+                              </div>
+
+                              {/* Restart Server Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={restartServerWithPassword}
+                                disabled={restarting || !setupPassword.trim()}
+                              >
+                                <RefreshCw className={`h-4 w-4 ${restarting ? "animate-spin" : ""}`} />
+                                {restarting ? "Restarting..." : "Restart Server"}
+                              </Button>
+
+                              {/* Git Pull Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={gitPullOnly}
+                                disabled={gitPulling}
+                              >
+                                <Github className={`h-4 w-4 ${gitPulling ? "animate-pulse" : ""}`} />
+                                {gitPulling ? "Pulling..." : "Git Pull Only"}
+                              </Button>
+
+                              {/* Clear Memory Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={clearMemory}
+                                disabled={clearingMemory}
+                              >
+                                <Database className={`h-4 w-4 ${clearingMemory ? "animate-pulse" : ""}`} />
+                                {clearingMemory ? "Clearing..." : "Clear Memory"}
+                              </Button>
+
+                              {/* Run Setup Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={runSetup}
+                                disabled={runningSetup || !setupPassword.trim()}
+                              >
+                                <Package className={`h-4 w-4 ${runningSetup ? "animate-spin" : ""}`} />
+                                {runningSetup ? "Running Setup..." : "Execute setup.sh"}
+                              </Button>
+                              <div className="text-[10px] text-stone-400">
+                                setup.sh runs the full server provisioning script with root privileges
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -5537,6 +5868,11 @@ export const AdminPage: React.FC = () => {
                   </>
                 )}
 
+                {/* Stocks Tab */}
+                {activeTab === "stocks" && (
+                  <AdminStocksPanel />
+                )}
+
                 {/* Requests Tab */}
                   {activeTab === "requests" && (
                     <div className="space-y-4">
@@ -5620,19 +5956,15 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-purple-300 dark:hover:border-purple-800 hover:shadow-lg hover:shadow-purple-500/5">
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
                                 <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                                    <Target className="h-5 w-5 sm:h-5 sm:w-5 text-purple-600 dark:text-purple-400" />
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
                                   </div>
                                   <div>
-                                    <div className="text-xs text-stone-500 dark:text-stone-400">Coverage</div>
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
                                     <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
-                                      {requestsVsApproved.ratio !== null
-                                        ? `${requestsVsApproved.percent.toFixed(0)}%`
-                                        : requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0
-                                          ? "∞"
-                                          : "0%"}
+                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
                                     </div>
                                   </div>
                                 </div>
@@ -5652,7 +5984,7 @@ export const AdminPage: React.FC = () => {
                                   <div className="text-left">
                                     <div className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base">Analytics & Charts</div>
                                     <div className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-                                      Status distribution, coverage gauge, and promotion calendar
+                                      Status distribution, progress gauge, and promotion calendar
                                     </div>
                                   </div>
                                 </div>
@@ -5888,7 +6220,17 @@ export const AdminPage: React.FC = () => {
                                                 cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}
                                                 formatter={(value: number) => [`${value} plants`, "Promotions"]}
                                               />
-                                              <Bar dataKey="value" fill={accentColor} radius={6} />
+                                              <Bar 
+                                                dataKey="value" 
+                                                fill={accentColor} 
+                                                radius={6}
+                                                cursor="pointer"
+                                                onClick={(data: { slug?: string }) => {
+                                                  if (data?.slug) {
+                                                    setSelectedPromotionMonth(data.slug as PromotionMonthSlug);
+                                                  }
+                                                }}
+                                              />
                                             </BarChart>
                                           </ResponsiveContainer>
                                         </ChartSuspense>
