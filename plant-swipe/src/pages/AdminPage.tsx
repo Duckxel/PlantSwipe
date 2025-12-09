@@ -11,6 +11,7 @@ import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel"
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
+import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -42,7 +43,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
-  FileText,
   ScrollText,
   Mail,
   CloudUpload,
@@ -100,7 +100,7 @@ const {
 type AdminTab =
   | "overview"
   | "members"
-  | "requests"
+  | "plants"
   | "upload"
   | "notifications"
   | "emails"
@@ -119,16 +119,17 @@ type MemberListSort = "newest" | "oldest" | "rpm";
 
 const MEMBER_LIST_PAGE_SIZE = 20;
 
-type RequestViewMode = "requests" | "plants";
+type PlantsViewMode = "requests" | "inventory" | "stocks";
 type NormalizedPlantStatus =
   | "in progres"
   | "review"
   | "rework"
   | "approved"
   | "other";
-const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
-  { key: "requests", label: "Request" },
-  { key: "plants", label: "PLANTS" },
+const PLANTS_VIEW_TABS: Array<{ key: PlantsViewMode; label: string }> = [
+  { key: "requests", label: "Requests" },
+  { key: "inventory", label: "Inventory" },
+  { key: "stocks", label: "Stocks" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -1267,8 +1268,9 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
   const [createPlantName, setCreatePlantName] = React.useState<string>("");
-  const requestViewMode: RequestViewMode = React.useMemo(() => {
-    if (currentPath.includes("/admin/requests/plants")) return "plants";
+  const plantsViewMode: PlantsViewMode = React.useMemo(() => {
+    if (currentPath.includes("/admin/plants/inventory")) return "inventory";
+    if (currentPath.includes("/admin/plants/stocks")) return "stocks";
     return "requests";
   }, [currentPath]);
   const [plantDashboardRows, setPlantDashboardRows] = React.useState<
@@ -1745,7 +1747,8 @@ export const AdminPage: React.FC = () => {
       });
   }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery]);
 
-  const plantViewIsPlants = requestViewMode === "plants";
+  const plantViewIsInventory = plantsViewMode === "inventory";
+  const plantViewIsStocks = plantsViewMode === "stocks";
   const plantTableLoading =
     plantDashboardLoading && !plantDashboardInitialized;
   const visiblePlantStatusesSet = React.useMemo(
@@ -2930,7 +2933,7 @@ export const AdminPage: React.FC = () => {
   }> = [
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin" },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members" },
-    { key: "requests", label: "Requests", Icon: FileText, path: "/admin/requests" },
+    { key: "plants", label: "Plants", Icon: Leaf, path: "/admin/plants" },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
@@ -2939,7 +2942,7 @@ export const AdminPage: React.FC = () => {
 
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
-    if (currentPath.includes("/admin/requests")) return "requests";
+    if (currentPath.includes("/admin/plants")) return "plants";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
     if (currentPath.includes("/admin/emails")) return "emails";
@@ -2960,14 +2963,14 @@ export const AdminPage: React.FC = () => {
   }, [plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
-    if (activeTab !== "requests" || plantRequestsInitialized) return;
+    if (activeTab !== "plants" || plantRequestsInitialized) return;
     loadPlantRequests({ initial: true });
   }, [activeTab, plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
     if (
-      activeTab !== "requests" ||
-      !plantViewIsPlants ||
+      activeTab !== "plants" ||
+      !plantViewIsInventory ||
       plantDashboardInitialized ||
       plantDashboardLoading
     ) {
@@ -2976,7 +2979,7 @@ export const AdminPage: React.FC = () => {
     loadPlantDashboard();
   }, [
     activeTab,
-    plantViewIsPlants,
+    plantViewIsInventory,
     plantDashboardInitialized,
     plantDashboardLoading,
     loadPlantDashboard,
@@ -5537,14 +5540,14 @@ export const AdminPage: React.FC = () => {
                   </>
                 )}
 
-                {/* Requests Tab */}
-                  {activeTab === "requests" && (
+                {/* Plants Tab */}
+                  {activeTab === "plants" && (
                     <div className="space-y-4">
                       <div className="flex justify-center">
                         <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
-                          {REQUEST_VIEW_TABS.map((tab) => {
-                            const isActive = requestViewMode === tab.key;
-                            const tabPath = tab.key === "plants" ? "/admin/requests/plants" : "/admin/requests";
+                          {PLANTS_VIEW_TABS.map((tab) => {
+                            const isActive = plantsViewMode === tab.key;
+                            const tabPath = tab.key === "inventory" ? "/admin/plants/inventory" : tab.key === "stocks" ? "/admin/plants/stocks" : "/admin/plants";
                             return (
                               <Link
                                 key={tab.key}
@@ -5561,7 +5564,9 @@ export const AdminPage: React.FC = () => {
                           })}
                         </div>
                       </div>
-                        {plantViewIsPlants ? (
+                        {plantViewIsStocks ? (
+                          <AdminStocksPanel />
+                        ) : plantViewIsInventory ? (
                           <div className="space-y-6 sm:space-y-8">
                             {/* Header Section */}
                             <div className="flex flex-col gap-4 sm:gap-6">

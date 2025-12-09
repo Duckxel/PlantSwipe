@@ -6898,3 +6898,55 @@ alter table if exists public.garden_ai_advice add column if not exists translati
 
 -- Add language preference to gardens for advice translation
 alter table if exists public.gardens add column if not exists preferred_language text default 'en';
+
+-- ========== Plant Stocks Management ==========
+-- Table to manage plant seed/plant availability, quantity, and pricing for the shop
+create table if not exists public.plant_stocks (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  quantity integer not null default 0 check (quantity >= 0),
+  price numeric(10,2) not null default 0.00 check (price >= 0),
+  is_available boolean not null default false,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique(plant_id)
+);
+
+create index if not exists plant_stocks_plant_id_idx on public.plant_stocks(plant_id);
+create index if not exists plant_stocks_available_idx on public.plant_stocks(is_available) where is_available = true;
+
+alter table public.plant_stocks enable row level security;
+
+-- Anyone can read plant stocks (for shop display)
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_select_all') then
+    drop policy plant_stocks_select_all on public.plant_stocks;
+  end if;
+  create policy plant_stocks_select_all on public.plant_stocks for select to authenticated using (true);
+end $$;
+
+-- Only admins can insert/update/delete plant stocks
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_insert_admin') then
+    drop policy plant_stocks_insert_admin on public.plant_stocks;
+  end if;
+  create policy plant_stocks_insert_admin on public.plant_stocks for insert to authenticated
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_update_admin') then
+    drop policy plant_stocks_update_admin on public.plant_stocks;
+  end if;
+  create policy plant_stocks_update_admin on public.plant_stocks for update to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_delete_admin') then
+    drop policy plant_stocks_delete_admin on public.plant_stocks;
+  end if;
+  create policy plant_stocks_delete_admin on public.plant_stocks for delete to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;

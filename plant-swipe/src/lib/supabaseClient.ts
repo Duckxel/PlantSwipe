@@ -142,4 +142,14 @@ export type GardenTransactionRow = {
   notes: string | null
 }
 
+export type PlantStockRow = {
+  id: string
+  plant_id: string
+  quantity: number
+  price: number
+  is_available: boolean
+  updated_at: string
+  updated_by: string | null
+  created_at: string
+}
 
