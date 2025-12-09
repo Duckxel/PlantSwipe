@@ -180,9 +180,9 @@ PGDATABASE=your-database
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_DB_PASSWORD=your-db-password
 
-# Optional: DeepL Translation API
+# Optional: DeepL Translation API (Pro)
 DEEPL_API_KEY=your-deepl-api-key
-DEEPL_API_URL=https://api-free.deepl.com/v2/translate
+DEEPL_API_URL=https://api.deepl.com/v2/translate
 ```
 
 </details>

@@ -9091,8 +9091,8 @@ app.post('/api/translate', async (req, res) => {
       return res.status(500).json({ error: 'Translation service not configured' })
     }
     
-    // Use DeepL API (free tier: https://api-free.deepl.com)
-    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    // Use DeepL API (Pro: https://api.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
     
     const response = await fetch(deeplUrl, {
       method: 'POST',
@@ -12634,7 +12634,7 @@ async function translateWithDeepL(text, targetLang, sourceLang = 'EN') {
   }
   
   try {
-    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
     const response = await fetch(deeplUrl, {
       method: 'POST',
       headers: {
@@ -14607,7 +14607,7 @@ async function translateNotificationText(text, targetLang, sourceLang = 'EN') {
   }
   
   try {
-    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
     const response = await fetch(deeplUrl, {
       method: 'POST',
       headers: {
