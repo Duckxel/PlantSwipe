@@ -15565,11 +15565,13 @@ ${alternateLinks(page.loc)}
   </url>`).join('\n') + '\n'
   }
   
-  // Add dynamic content WITH lastmod (blog posts, plants, profiles, gardens)
-  if (supabaseServer) {
+  // Add dynamic content WITH lastmod (blog posts, plants, profiles, gardens, bookmarks)
+  // Use supabaseServiceClient (service role key) to bypass RLS and fetch ALL content including private
+  const sitemapDb = supabaseServiceClient || supabaseServer
+  if (sitemapDb) {
     try {
       // Recent blog posts (with lastmod)
-      const { data: posts } = await supabaseServer
+      const { data: posts } = await sitemapDb
         .from('blog_posts')
         .select('slug, updated_at, published_at')
         .eq('is_published', true)
@@ -15593,7 +15595,7 @@ ${alternateLinks(path)}
       }
       
       // Popular plants (with lastmod based on when they were updated)
-      const { data: plants } = await supabaseServer
+      const { data: plants } = await sitemapDb
         .from('plants')
         .select('id, updated_at, created_at')
         .order('created_at', { ascending: false })
@@ -15617,7 +15619,7 @@ ${alternateLinks(path)}
       
       // ALL user profiles (public and private) with different priorities
       // Public profiles: priority 0.5, Private profiles: priority 0.3
-      const { data: profiles } = await supabaseServer
+      const { data: profiles } = await sitemapDb
         .from('profiles')
         .select(`
           id, 
@@ -15650,7 +15652,7 @@ ${alternateLinks(path)}
       
       // ALL gardens (public and private) with different priorities
       // Public gardens: priority 0.6, Private gardens: priority 0.4
-      const { data: gardens } = await supabaseServer
+      const { data: gardens } = await sitemapDb
         .from('gardens')
         .select(`
           id,
@@ -15683,7 +15685,7 @@ ${alternateLinks(path)}
       
       // ALL bookmarks (public and private) with different priorities
       // Public bookmarks: priority 0.5, Private bookmarks: priority 0.3
-      const { data: bookmarks } = await supabaseServer
+      const { data: bookmarks } = await sitemapDb
         .from('bookmarks')
         .select(`
           id,

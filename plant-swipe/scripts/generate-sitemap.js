@@ -581,19 +581,33 @@ function getSupabaseClient() {
     process.env.REACT_APP_SUPABASE_URL ||
     process.env.NEXT_PUBLIC_SUPABASE_URL
 
-  const supabaseKey =
+  // Prefer service role key to bypass RLS and fetch ALL content (including private profiles/gardens/bookmarks)
+  const serviceRoleKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
     process.env.SUPABASE_SERVICE_ROLE ||
     process.env.SUPABASE_SERVICE_ROLE_TOKEN ||
+    ''
+
+  const anonKey =
     process.env.SUPABASE_ANON_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY ||
     process.env.REACT_APP_SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     ''
 
+  // Use service role key if available (bypasses RLS), otherwise fall back to anon key
+  const supabaseKey = serviceRoleKey || anonKey
+
   if (!supabaseUrl || !supabaseKey) {
     return null
+  }
+
+  // Log which key type is being used
+  if (serviceRoleKey) {
+    console.log('[sitemap] Using service role key (RLS bypassed - will include private content)')
+  } else if (anonKey) {
+    console.warn('[sitemap] Using anon key (subject to RLS - private content may be excluded)')
   }
 
   return createSupabaseClient(supabaseUrl, supabaseKey, {
