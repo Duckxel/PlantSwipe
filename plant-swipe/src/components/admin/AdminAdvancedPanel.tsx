@@ -17,7 +17,9 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  Palette,
 } from "lucide-react"
+import { AdminColorsPanel } from "./AdminColorsPanel"
 
 // ========================
 // LOGS TAB (existing AdminLogs functionality)
@@ -679,7 +681,7 @@ const ErrorLogsTab: React.FC = () => {
 // ========================
 // MAIN PANEL COMPONENT
 // ========================
-type AdvancedView = "logs" | "sitemap" | "errors"
+type AdvancedView = "logs" | "sitemap" | "errors" | "colors"
 
 export const AdminAdvancedPanel: React.FC = () => {
   const location = useLocation()
@@ -687,6 +689,7 @@ export const AdminAdvancedPanel: React.FC = () => {
   const activeView: AdvancedView = React.useMemo(() => {
     if (location.pathname.includes("/advanced/sitemap")) return "sitemap"
     if (location.pathname.includes("/advanced/errors")) return "errors"
+    if (location.pathname.includes("/advanced/colors")) return "colors"
     return "logs"
   }, [location.pathname])
 
@@ -739,6 +742,18 @@ export const AdminAdvancedPanel: React.FC = () => {
             <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Error Logs
           </Link>
+          <Link
+            to="/admin/advanced/colors"
+            className={cn(
+              "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
+              activeView === "colors"
+                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+            )}
+          >
+            <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            Colors
+          </Link>
         </div>
       </div>
 
@@ -746,6 +761,7 @@ export const AdminAdvancedPanel: React.FC = () => {
       {activeView === "logs" && <LogsTab />}
       {activeView === "sitemap" && <SitemapTab />}
       {activeView === "errors" && <ErrorLogsTab />}
+      {activeView === "colors" && <AdminColorsPanel />}
     </div>
   )
 }

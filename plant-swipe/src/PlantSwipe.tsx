@@ -58,7 +58,14 @@ const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
-type ColorOption = { id: string; name: string; hexCode: string }
+type ColorOption = { 
+  id: string
+  name: string
+  hexCode: string
+  isPrimary: boolean
+  parentIds: string[]
+  translations: Record<string, string>  // language -> translated name
+}
 
 type ExtendedWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
@@ -176,23 +183,23 @@ export default function PlantSwipe() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [colorOptions, setColorOptions] = useState<ColorOption[]>([])
 
-  const { singleWordColors, multiWordColors } = React.useMemo(() => {
-    const single: ColorOption[] = []
-    const multi: ColorOption[] = []
+  // Separate colors into primary and advanced based on is_primary field
+  const { primaryColors, advancedColors } = React.useMemo(() => {
+    const primary: ColorOption[] = []
+    const advanced: ColorOption[] = []
 
     colorOptions.forEach((color) => {
       const normalized = (color.name || "").trim()
       const preparedColor = color.name === normalized ? color : { ...color, name: normalized }
-      const hasSingleWord = normalized.length > 0 && !/\s/.test(normalized)
 
-      if (hasSingleWord) {
-        single.push(preparedColor)
+      if (color.isPrimary) {
+        primary.push(preparedColor)
       } else {
-        multi.push(preparedColor)
+        advanced.push(preparedColor)
       }
     })
 
-    return { singleWordColors: single, multiWordColors: multi }
+    return { primaryColors: primary, advancedColors: advanced }
   }, [colorOptions])
   
   const typeOptions = useMemo(() => {
@@ -257,13 +264,13 @@ export default function PlantSwipe() {
     loadPlants()
   }, [loadPlants])
 
-  // Load colors from database
+  // Load colors from database with translations
   React.useEffect(() => {
     const loadColors = async () => {
       try {
         const { data, error } = await supabase
           .from('colors')
-          .select('id, name, hex_code')
+          .select('id, name, hex_code, is_primary, parent_ids')
           .order('name', { ascending: true })
 
         if (error) {
@@ -271,11 +278,30 @@ export default function PlantSwipe() {
           return
         }
 
+        // Load translations
+        const { data: translationsData } = await supabase
+          .from('color_translations')
+          .select('color_id, language, name')
+
+        // Build translations map
+        const translationsMap = new Map<string, Record<string, string>>()
+        if (translationsData) {
+          translationsData.forEach((t: { color_id: string; language: string; name: string }) => {
+            if (!translationsMap.has(t.color_id)) {
+              translationsMap.set(t.color_id, {})
+            }
+            translationsMap.get(t.color_id)![t.language] = t.name
+          })
+        }
+
         if (data) {
           setColorOptions(data.map((c) => ({
             id: c.id,
             name: (c.name ?? "").trim(),
-            hexCode: c.hex_code ?? ""
+            hexCode: c.hex_code ?? "",
+            isPrimary: c.is_primary ?? false,
+            parentIds: c.parent_ids ?? [],
+            translations: translationsMap.get(c.id) || {}
           })))
         }
       } catch (e) {
@@ -288,12 +314,15 @@ export default function PlantSwipe() {
 
   React.useEffect(() => {
     if (colorFilter.length === 0) return
-    // Open advanced colors section if any selected color has whitespace
-    const hasMultiWordColor = colorFilter.some((color) => /\s/.test(color.trim()))
-    if (hasMultiWordColor) {
+    // Open advanced colors section if any selected color is not primary
+    const hasAdvancedColor = colorFilter.some((colorName) => {
+      const color = colorOptions.find((c) => c.name === colorName)
+      return color && !color.isPrimary
+    })
+    if (hasAdvancedColor) {
       setAdvancedColorsOpen(true)
     }
-  }, [colorFilter])
+  }, [colorFilter, colorOptions])
 
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
@@ -453,15 +482,32 @@ export default function PlantSwipe() {
     const normalizedUsage = usageFilters.map((u) => u.toLowerCase())
     const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
 
+    // Build a map of color IDs that should match for each selected filter
+    // When a primary color is selected, include all its children colors
+    const getMatchingColorNames = (filterColorName: string): string[] => {
+      const filterColor = colorOptions.find((c) => c.name.toLowerCase() === filterColorName)
+      if (!filterColor) return [filterColorName]
+
+      const matchingNames = [filterColorName]
+      
+      // If this is a primary color, include all colors that have it as a parent
+      if (filterColor.isPrimary) {
+        colorOptions.forEach((c) => {
+          if (c.parentIds.includes(filterColor.id)) {
+            matchingNames.push(c.name.toLowerCase())
+          }
+        })
+      }
+
+      return matchingNames
+    }
+
+    // Build expanded color filters including children
+    const expandedColorFilters = normalizedColorFilters.flatMap((f) => getMatchingColorNames(f))
+
     const colorMatches = (colorName: string, normalizedColorFilter: string): boolean => {
       const normalizedColor = (colorName || "").toLowerCase().trim()
       if (!normalizedColor) return false
-
-      const colorFilterHasWhitespace = /\s/.test(normalizedColorFilter)
-
-      if (colorFilterHasWhitespace) {
-        return normalizedColor === normalizedColorFilter
-      }
 
       if (normalizedColor === normalizedColorFilter) {
         return true
@@ -487,10 +533,10 @@ export default function PlantSwipe() {
         .toLowerCase()
         .includes(lowerQuery)
       const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
-      // Match if any of the selected colors matches any of the plant's colors (OR logic)
-      const matchesColor = normalizedColorFilters.length === 0 
+      // Match if any of the selected colors (including children) matches any of the plant's colors (OR logic)
+      const matchesColor = expandedColorFilters.length === 0 
         ? true 
-        : normalizedColorFilters.some((filterColor) => 
+        : expandedColorFilters.some((filterColor) => 
             colors.some((plantColor) => colorMatches(plantColor, filterColor))
           )
       const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
@@ -503,7 +549,7 @@ export default function PlantSwipe() {
         : true
       return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage
     })
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, likedSet])
+  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, likedSet, colorOptions])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
@@ -860,7 +906,9 @@ export default function PlantSwipe() {
     const FilterControls = () => {
       const renderColorOption = (color: ColorOption) => {
         const isActive = colorFilter.includes(color.name)
-        const label = color.name || t("plant.unknownColor", { defaultValue: "Unnamed color" })
+        // Use translated name if available for the current language, fallback to default name
+        const translatedName = color.translations[currentLang] || color.name
+        const label = translatedName || t("plant.unknownColor", { defaultValue: "Unnamed color" })
 
         return (
           <button
@@ -1022,15 +1070,15 @@ export default function PlantSwipe() {
                 ) : (
                   <>
                     <div className="flex flex-wrap gap-2">
-                      {singleWordColors.length > 0 ? (
-                        singleWordColors.map(renderColorOption)
+                      {primaryColors.length > 0 ? (
+                        primaryColors.map(renderColorOption)
                       ) : (
                         <p className="text-xs opacity-60">
-                          {t("plant.noSimpleColors", { defaultValue: "No single-word colors available." })}
+                          {t("plant.noPrimaryColors", { defaultValue: "No primary colors available." })}
                         </p>
                       )}
                     </div>
-                    {multiWordColors.length > 0 && (
+                    {advancedColors.length > 0 && (
                       <div className="rounded-2xl border border-dashed border-stone-200 dark:border-[#3e3e42] p-3 bg-white/70 dark:bg-[#2d2d30]/50">
                         <button
                           type="button"
@@ -1043,7 +1091,7 @@ export default function PlantSwipe() {
                         </button>
                         {advancedColorsOpen && (
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {multiWordColors.map(renderColorOption)}
+                            {advancedColors.map(renderColorOption)}
                           </div>
                         )}
                       </div>
