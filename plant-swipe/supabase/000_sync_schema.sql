@@ -1096,21 +1096,16 @@ end $$;
 -- ========== Remove translatable columns from plants table ==========
 -- These columns have been migrated to plant_translations and are no longer needed
 -- in the plants table. Only 'name' is kept as the canonical English name.
+-- 
+-- The following columns stay in plants table (NOT translated - they are enums or Latin names):
+--   promotion_month, scientific_name, family, life_cycle, season, foliage_persistance,
+--   toxicity_human, toxicity_pets, living_space, composition, maintenance_level
+--
+-- The following columns ARE translated and only exist in plant_translations:
 alter table if exists public.plants drop column if exists given_names;
-alter table if exists public.plants drop column if exists scientific_name;
-alter table if exists public.plants drop column if exists family;
 alter table if exists public.plants drop column if exists overview;
--- promotion_month stays in plants table (not translated)
-alter table if exists public.plants drop column if exists life_cycle;
-alter table if exists public.plants drop column if exists season;
-alter table if exists public.plants drop column if exists foliage_persistance;
-alter table if exists public.plants drop column if exists toxicity_human;
-alter table if exists public.plants drop column if exists toxicity_pets;
 alter table if exists public.plants drop column if exists allergens;
 alter table if exists public.plants drop column if exists symbolism;
-alter table if exists public.plants drop column if exists living_space;
-alter table if exists public.plants drop column if exists composition;
-alter table if exists public.plants drop column if exists maintenance_level;
 alter table if exists public.plants drop column if exists origin;
 alter table if exists public.plants drop column if exists habitat;
 alter table if exists public.plants drop column if exists level_sun;
