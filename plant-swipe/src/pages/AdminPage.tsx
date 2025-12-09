@@ -5628,19 +5628,15 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-purple-300 dark:hover:border-purple-800 hover:shadow-lg hover:shadow-purple-500/5">
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
                                 <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                                    <Target className="h-5 w-5 sm:h-5 sm:w-5 text-purple-600 dark:text-purple-400" />
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
                                   </div>
                                   <div>
-                                    <div className="text-xs text-stone-500 dark:text-stone-400">Coverage</div>
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
                                     <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
-                                      {requestsVsApproved.ratio !== null
-                                        ? `${requestsVsApproved.percent.toFixed(0)}%`
-                                        : requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0
-                                          ? "∞"
-                                          : "0%"}
+                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
                                     </div>
                                   </div>
                                 </div>
@@ -5660,7 +5656,7 @@ export const AdminPage: React.FC = () => {
                                   <div className="text-left">
                                     <div className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base">Analytics & Charts</div>
                                     <div className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-                                      Status distribution, coverage gauge, and promotion calendar
+                                      Status distribution, progress gauge, and promotion calendar
                                     </div>
                                   </div>
                                 </div>
@@ -5896,7 +5892,17 @@ export const AdminPage: React.FC = () => {
                                                 cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}
                                                 formatter={(value: number) => [`${value} plants`, "Promotions"]}
                                               />
-                                              <Bar dataKey="value" fill={accentColor} radius={6} />
+                                              <Bar 
+                                                dataKey="value" 
+                                                fill={accentColor} 
+                                                radius={6}
+                                                cursor="pointer"
+                                                onClick={(data: { slug?: string }) => {
+                                                  if (data?.slug) {
+                                                    setSelectedPromotionMonth(data.slug as PromotionMonthSlug);
+                                                  }
+                                                }}
+                                              />
                                             </BarChart>
                                           </ResponsiveContainer>
                                         </ChartSuspense>

@@ -26,6 +26,7 @@ type PlantStockRow = {
   is_available: boolean;
   updated_at: string;
   plant_name: string;
+  plant_status: string;
   plant_image: string | null;
 };
 
@@ -46,11 +47,10 @@ export const AdminStocksPanel: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      // First, get all approved plants
+      // Get all plants (any status) for stock management
       const { data: plants, error: plantsError } = await supabase
         .from("plants")
-        .select("id, name, plant_images(link, use)")
-        .eq("status", "approved")
+        .select("id, name, status, plant_images(link, use)")
         .order("name");
 
       if (plantsError) throw new Error(plantsError.message);
@@ -80,6 +80,7 @@ export const AdminStocksPanel: React.FC = () => {
       type PlantRecord = {
         id: string;
         name: string;
+        status?: string;
         plant_images?: Array<{ link: string; use: string }>;
       };
       const merged: PlantStockRow[] = (plants || []).map((plant: PlantRecord) => {
@@ -95,6 +96,7 @@ export const AdminStocksPanel: React.FC = () => {
           is_available: stock?.is_available ?? false,
           updated_at: stock?.updated_at || "",
           plant_name: plant.name,
+          plant_status: plant.status || "unknown",
           plant_image: primaryImage,
         };
       });
@@ -368,9 +370,19 @@ export const AdminStocksPanel: React.FC = () => {
                                 <Package className="h-5 w-5 text-stone-400" />
                               </div>
                             )}
-                            <span className="font-medium text-stone-900 dark:text-white truncate max-w-[200px]">
-                              {row.plant_name}
-                            </span>
+                                    <div className="flex flex-col">
+                              <span className="font-medium text-stone-900 dark:text-white truncate max-w-[200px]">
+                                {row.plant_name}
+                              </span>
+                              <span className={`text-xs capitalize ${
+                                row.plant_status === "approved" ? "text-emerald-600 dark:text-emerald-400" :
+                                row.plant_status === "review" ? "text-amber-600 dark:text-amber-400" :
+                                row.plant_status === "rework" ? "text-rose-600 dark:text-rose-400" :
+                                "text-stone-400"
+                              }`}>
+                                {row.plant_status === "in progres" ? "In Progress" : row.plant_status}
+                              </span>
+                            </div>
                           </div>
                         </td>
                         <td className="py-3 px-2 text-center">
