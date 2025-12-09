@@ -506,20 +506,21 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   if (error) throw new Error(error.message)
   if (!data) return null
   
-  // Load translation if language is provided
-  // For English, the plants.name is the authoritative source (has unique constraint)
-  // For other languages, use plant_translations
+  // Load translation for the requested language (including English)
+  // The plants table contains the base English data, but plant_translations
+  // may have updated/different content for each language including English
   const isEnglish = !language || language === 'en'
+  const targetLanguage = language || 'en'
   let translation: any = null
-  if (language && !isEnglish) {
-    const { data: translationData } = await supabase
-      .from('plant_translations')
-      .select('*')
-      .eq('plant_id', id)
-      .eq('language', language)
-      .maybeSingle()
-    translation = translationData || null
-  }
+  
+  // Always load translation for the requested language
+  const { data: translationData } = await supabase
+    .from('plant_translations')
+    .select('*')
+    .eq('plant_id', id)
+    .eq('language', targetLanguage)
+    .maybeSingle()
+  translation = translationData || null
   
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
