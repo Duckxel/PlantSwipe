@@ -1463,9 +1463,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const dbMaintenance = maintenanceLevelEnum.toDb(plant.identity?.maintenanceLevel)
           const dbToxicityHuman = toxicityEnum.toDb(plant.identity?.toxicityHuman)
           const dbToxicityPets = toxicityEnum.toDb(plant.identity?.toxicityPets)
-          const dbHabitat = habitatEnum.toDbArray(plant.plantCare?.habitat)
+          // dbHabitat removed - habitat is NOT translated, stays in plants table only
 
-          // Note: scientific_name and promotion_month are NOT translated - they stay in plants table only
+          // Note: scientific_name, promotion_month, habitat, level_sun are NOT translated - they stay in plants table only
           translatedRows.push({
           plant_id: plant.id,
           language: target,
