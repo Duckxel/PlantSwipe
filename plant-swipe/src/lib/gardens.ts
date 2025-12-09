@@ -594,7 +594,7 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   
   // Load translations for ALL languages (including English)
   // Only fetch name field to minimize egress (~90% reduction)
-  let translationMap = new Map()
+  const translationMap = new Map()
   const targetLanguage = language || 'en'
   const { data: translations } = await supabase
     .from('plant_translations')
@@ -605,18 +605,6 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
     translations.forEach(t => {
       translationMap.set(t.plant_id, { name: t.name })
     })
-  const translationMap = new Map()
-  if (language) {
-    const { data: translations } = await supabase
-      .from('plant_translations')
-      .select('plant_id, name')
-      .eq('language', language)
-      .in('plant_id', plantIds)
-    if (translations) {
-      translations.forEach(t => {
-        translationMap.set(t.plant_id, { name: t.name })
-      })
-    }
   }
   
   const idToPlant: Record<string, Plant> = {}
