@@ -933,8 +933,9 @@ alter table if exists public.plant_translations drop column if exists problems;
 alter table if exists public.plant_translations add column if not exists overview text;
 alter table if exists public.plant_translations add column if not exists family text;
 alter table if exists public.plant_translations add column if not exists given_names text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists scientific_name text;
-alter table if exists public.plant_translations add column if not exists promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december'));
+-- scientific_name and promotion_month are NOT translated - they stay only in plants table
+alter table if exists public.plant_translations drop column if exists scientific_name;
+alter table if exists public.plant_translations drop column if exists promotion_month;
 alter table if exists public.plant_translations add column if not exists life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic'));
 alter table if exists public.plant_translations add column if not exists season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']);
 alter table if exists public.plant_translations add column if not exists foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent'));

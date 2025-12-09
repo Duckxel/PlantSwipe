@@ -550,10 +550,13 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     identity: {
       // Translatable fields from plant_translations only
       givenNames: translation?.given_names || [],
-      scientificName: translation?.scientific_name || undefined,
+      // Non-translatable fields from plants table
+      scientificName: data.scientific_name || undefined,
+      // Translatable field
       family: translation?.family || undefined,
       overview: translation?.overview || undefined,
-      promotionMonth: monthSlugToNumber(translation?.promotion_month) ?? undefined,
+      // Non-translatable field from plants table
+      promotionMonth: monthSlugToNumber(data.promotion_month) ?? undefined,
       lifeCycle: (lifeCycleEnum.toUi(translation?.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
       season: seasonEnum.toUiArray(translation?.season) as NonNullable<Plant["identity"]>["season"],
       foliagePersistance: expandFoliagePersistanceFromDb(translation?.foliage_persistance),
@@ -1060,6 +1063,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const basePayload = {
             id: plantId,
             name: trimmedName, // Keep name in plants table for unique constraint and fallback
+            scientific_name: plantToSave.identity?.scientificName || null,
+            promotion_month: normalizedPromotionMonth,
             plant_type: normalizedPlantType || null,
             utility: normalizedUtility,
             comestible_part: normalizedComestible,
@@ -1145,15 +1150,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         }
 
         // STEP 2: Save translatable fields to plant_translations (for ALL languages including English)
+        // Note: scientific_name and promotion_month are NOT translated - they stay in plants table only
         const translationPayload = {
           plant_id: savedId,
           language: saveLanguage,
           name: trimmedName,
           given_names: plantToSave.identity?.givenNames || [],
-          scientific_name: plantToSave.identity?.scientificName || null,
           family: plantToSave.identity?.family || null,
           overview: plantToSave.identity?.overview || null,
-          promotion_month: normalizedPromotionMonth,
           life_cycle: normalizedLifeCycle || null,
           season: normalizedIdentitySeasons,
           foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
@@ -1461,17 +1465,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const dbToxicityPets = toxicityEnum.toDb(plant.identity?.toxicityPets)
           const dbHabitat = habitatEnum.toDbArray(plant.plantCare?.habitat)
 
+          // Note: scientific_name and promotion_month are NOT translated - they stay in plants table only
           translatedRows.push({
           plant_id: plant.id,
           language: target,
           name: translatedName,
           given_names: translatedGivenNames,
-          scientific_name: plant.identity?.scientificName || null,
           family: plant.identity?.family || null,
           overview: plant.identity?.overview
             ? await translateText(plant.identity.overview, target, sourceLang)
             : plant.identity?.overview || null,
-            promotion_month: monthNumberToSlug(plant.identity?.promotionMonth),
             life_cycle: dbLifeCycle || null,
             season: dbSeasons,
             foliage_persistance: normalizeFoliagePersistanceForDb(plant.identity?.foliagePersistance),

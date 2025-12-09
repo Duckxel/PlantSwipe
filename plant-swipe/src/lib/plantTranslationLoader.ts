@@ -449,10 +449,13 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
             identity: {
               // Translatable fields from plant_translations only
               givenNames: translation.given_names || [],
-              scientificName: translation.scientific_name || undefined,
+              // Non-translatable fields from plants table
+              scientificName: basePlant.scientific_name || undefined,
+              // Translatable fields from plant_translations only
               family: translation.family || undefined,
               overview: translation.overview || undefined,
-              promotionMonth: monthSlugToNumber(translation.promotion_month) ?? undefined,
+              // Non-translatable field from plants table
+              promotionMonth: monthSlugToNumber(basePlant.promotion_month) ?? undefined,
               lifeCycle: (lifeCycleEnum.toUi(translation.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
               season: seasons,
               foliagePersistance: expandFoliagePersistanceFromDb(translation.foliage_persistance),
