@@ -662,6 +662,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
   const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
+  // Cache of plant data per language to preserve edits when switching languages
+  const [plantByLanguage, setPlantByLanguage] = React.useState<Partial<Record<SupportedLanguage, Plant>>>({})
+  // Track which languages have been loaded from DB
+  const [loadedLanguages, setLoadedLanguages] = React.useState<Set<SupportedLanguage>>(new Set())
   const [loading, setLoading] = React.useState<boolean>(!!id || !!prefillFromId)
   const [saving, setSaving] = React.useState(false)
   const [prefillSourceName, setPrefillSourceName] = React.useState<string | null>(null)
@@ -718,29 +722,65 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       languageRef.current = language
     }, [language])
 
-    // Track if initial load is complete to avoid reloading on language change for edits
+    // Track if initial load is complete
     const initialLoadCompleteRef = React.useRef(false)
+    // Track the previous language to save edits before switching
+    const previousLanguageRef = React.useRef<SupportedLanguage>(initialLanguage)
     
+    // Handle language changes - save current edits and load new language data
+    React.useEffect(() => {
+      if (!id) { return }
+      
+      const prevLang = previousLanguageRef.current
+      const newLang = language
+      
+      // If language actually changed, save current plant to cache for previous language
+      if (prevLang !== newLang && initialLoadCompleteRef.current) {
+        setPlantByLanguage(prev => ({
+          ...prev,
+          [prevLang]: plant
+        }))
+      }
+      
+      previousLanguageRef.current = newLang
+    }, [language, id, plant])
+    
+    // Load plant data for the current language
     React.useEffect(() => {
       if (!id) { setLoading(false); return }
       
-      // For existing plants, only load once on mount
-      // Language changes should NOT reload and overwrite user edits
-      // The user edits in English (base language), translations are handled separately
-      if (initialLoadCompleteRef.current) {
+      const requestedLanguage = language
+      
+      // Check if we already have this language's data in cache
+      const cachedPlant = plantByLanguage[requestedLanguage]
+      if (cachedPlant) {
+        setPlant(cachedPlant)
+        return
+      }
+      
+      // Check if this language was already loaded from DB
+      if (loadedLanguages.has(requestedLanguage) && initialLoadCompleteRef.current) {
+        // Already attempted to load but no data exists (translation doesn't exist yet)
+        // For non-English, start with English base data
+        if (requestedLanguage !== 'en' && plantByLanguage['en']) {
+          setPlant(plantByLanguage['en'])
+        }
         return
       }
       
       let ignore = false
-      const requestedLanguage = language
       setLoading(true)
       const fetchPlant = async () => {
         try {
-          // Load plant with translations for the current language (for viewing)
-          // When editing, users edit the base language, but can view translations
+          // Load plant with translations for the current language
           const loaded = await loadPlant(id, requestedLanguage)
           if (!ignore && loaded && languageRef.current === requestedLanguage) {
             setPlant(loaded)
+            setPlantByLanguage(prev => ({
+              ...prev,
+              [requestedLanguage]: loaded
+            }))
+            setLoadedLanguages(prev => new Set(prev).add(requestedLanguage))
             setExistingLoaded(true)
             initialLoadCompleteRef.current = true
           }
@@ -756,7 +796,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
       fetchPlant()
       return () => { ignore = true }
-    }, [id, language])
+    }, [id, language, plantByLanguage, loadedLanguages])
 
     // Track if we've already prefilled to avoid re-running on language changes
     const prefillCompleteRef = React.useRef(false)
@@ -1201,22 +1241,29 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             payloadUpdatedTime = metaUpdatePayload.updated_time
         }
 
+          const savedPlant = {
+            ...plantToSave,
+            plantCare: { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } },
+            miscellaneous: { ...(plantToSave.miscellaneous || {}), sources },
+            id: savedId,
+            meta: {
+              ...plantToSave.meta,
+              createdBy: createdByValue || undefined,
+              createdAt: createdTimeValue || undefined,
+                updatedBy: payloadUpdatedTime
+                  ? (updatedByValue || plantToSave.meta?.updatedBy)
+                  : plantToSave.meta?.updatedBy,
+                updatedAt: payloadUpdatedTime || plantToSave.meta?.updatedAt,
+            },
+          }
           if (languageRef.current === saveLanguage) {
-            setPlant({
-              ...plantToSave,
-              plantCare: { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } },
-              miscellaneous: { ...(plantToSave.miscellaneous || {}), sources },
-              id: savedId,
-              meta: {
-                ...plantToSave.meta,
-                createdBy: createdByValue || undefined,
-                createdAt: createdTimeValue || undefined,
-                  updatedBy: payloadUpdatedTime
-                    ? (updatedByValue || plantToSave.meta?.updatedBy)
-                    : plantToSave.meta?.updatedBy,
-                  updatedAt: payloadUpdatedTime || plantToSave.meta?.updatedAt,
-              },
-            })
+            setPlant(savedPlant)
+            // Update the language cache with saved data
+            setPlantByLanguage(prev => ({
+              ...prev,
+              [saveLanguage]: savedPlant
+            }))
+            setLoadedLanguages(prev => new Set(prev).add(saveLanguage))
           }
         if (isEnglish && !existingLoaded) setExistingLoaded(true)
         onSaved?.(savedId)
