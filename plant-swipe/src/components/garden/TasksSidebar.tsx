@@ -2,6 +2,7 @@ import React from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from 'react-i18next'
+import { CheckCircle2 } from 'lucide-react'
 
 const taskTypeConfig = {
   water: { emoji: '💧', color: 'bg-blue-600 dark:bg-blue-500' },

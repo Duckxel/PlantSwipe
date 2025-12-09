@@ -297,13 +297,6 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
     ? selectedLocation.name !== gardenCity || selectedLocation.country !== gardenCountry
     : false;
 
-  // Format location display (reserved for future use)
-  const _formatLocation = (loc: LocationSuggestion) => {
-    const parts = [loc.name];
-    if (loc.admin1) parts.push(loc.admin1);
-    if (loc.country) parts.push(loc.country);
-    return parts.join(", ");
-  };
 
   return (
     <div className="space-y-4">

@@ -301,6 +301,7 @@ export interface PlantMeta {
   updatedBy?: string
   updatedTime?: string
   createdAt?: string
+  updatedAt?: string
   rarity?: string
   tags?: string[]
   funFact?: string
@@ -361,20 +362,31 @@ export interface Plant {
 // Legacy compatibility aliases (older components still import these names)
 export type PlantIdentifiers = PlantIdentity
 export interface PlantTraits {
+  lifeCycle?: string
+  habit?: string[]
+  deciduousEvergreen?: string
+  growthRate?: string
+  thornsSpines?: boolean
+  fragrance?: string
   dogFriendly?: boolean
   catFriendly?: boolean
   toxicity?: { toHumans?: string; toPets?: string }
+  allergenicity?: string
+  invasiveness?: { status?: string; regions?: string[] }
   [key: string]: unknown
 }
 export interface PlantDimensions {
   height?: { minCm?: number; maxCm?: number }
   spread?: { minCm?: number; maxCm?: number }
   spacing?: { rowCm?: number; plantCm?: number }
+  containerFriendly?: boolean
   [key: string]: unknown
 }
 export interface PlantPhenology {
   bloomMonths?: string[]
   fruitMonths?: string[]
+  floweringMonths?: number[]
+  fruitingMonths?: number[]
   seasons?: string[]
   flowerColors?: ColorInfo[]
   leafColors?: ColorInfo[]
@@ -382,16 +394,23 @@ export interface PlantPhenology {
   [key: string]: unknown
 }
 export interface PlantEnvironment {
-  soil?: { texture?: string[]; drainage?: string[]; fertility?: string[]; pH?: { min?: number; max?: number } }
+  soil?: { texture?: string[]; drainage?: string; fertility?: string; pH?: { min?: number; max?: number } }
   climate?: { usdaZones?: string[]; rhsH?: string[] }
+  hardiness?: { usdaZones?: number[]; rhsH?: string }
+  temperature?: { minC?: number; maxC?: number }
   moisture?: { min?: number; max?: number }
   light?: string
+  lightIntensity?: string
   sunExposure?: string
+  climatePref?: string[]
+  humidityPref?: string
+  windTolerance?: string
   [key: string]: unknown
 }
 export interface PlantPropagation {
   methods?: string[]
   stratification?: string
+  seed?: { stratification?: string; germinationDays?: { min?: number; max?: number } }
   germination?: { germinationDays?: { min?: number; max?: number } }
   [key: string]: unknown
 }
@@ -400,11 +419,13 @@ export type PlantEcologyLegacy = PlantEcology
 export interface PlantCommerce {
   availabilityRegions?: string[]
   distributors?: string[]
+  seedsAvailable?: boolean
   [key: string]: unknown
 }
 export interface PlantProblems {
   pests?: string[]
   diseases?: string[]
+  hazards?: string[]
   [key: string]: unknown
 }
 export interface PlantPlanting {
@@ -412,6 +433,12 @@ export interface PlantPlanting {
   sowingMonths?: number[]
   plantingOutMonths?: number[]
   promotionMonth?: number
+  calendar?: {
+    hemisphere?: string
+    sowingMonths?: number[]
+    plantingOutMonths?: number[]
+    promotionMonth?: number
+  }
   sitePrep?: string[]
   companionPlants?: string[]
   avoidNear?: string[]

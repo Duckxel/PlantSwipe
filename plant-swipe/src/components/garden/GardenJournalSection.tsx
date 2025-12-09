@@ -17,7 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Image,
+  Image as ImageIcon,
   Loader2,
   Sparkles,
   BookOpen,
@@ -1423,7 +1423,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         </div>
                         {entry.photos && entry.photos.length > 0 && (
                           <div className="flex items-center gap-1">
-                            <Image className="w-3 h-3" />
+                            <ImageIcon className="w-3 h-3" />
                             {entry.photos.length} {t("gardenDashboard.journalSection.photos", "photos")}
                           </div>
                         )}
