@@ -1100,7 +1100,7 @@ alter table if exists public.plants drop column if exists given_names;
 alter table if exists public.plants drop column if exists scientific_name;
 alter table if exists public.plants drop column if exists family;
 alter table if exists public.plants drop column if exists overview;
-alter table if exists public.plants drop column if exists promotion_month;
+-- promotion_month stays in plants table (not translated)
 alter table if exists public.plants drop column if exists life_cycle;
 alter table if exists public.plants drop column if exists season;
 alter table if exists public.plants drop column if exists foliage_persistance;

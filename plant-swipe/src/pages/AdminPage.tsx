@@ -1562,17 +1562,14 @@ export const AdminPage: React.FC = () => {
             id,
             name,
             status,
+            promotion_month,
             updated_time,
             plant_images (
               link,
               use
-            ),
-            plant_translations!inner (
-              promotion_month
             )
           `,
         )
-        .eq("plant_translations.language", "en")
         .order("name", { ascending: true });
 
       if (error) throw new Error(error.message);
@@ -1587,16 +1584,12 @@ export const AdminPage: React.FC = () => {
             images.find((img: any) => img?.use === "primary") ??
             images.find((img: any) => img?.use === "discovery") ??
             images[0];
-          
-          // Get promotion_month from the first translation (English)
-          const translations = Array.isArray(row?.plant_translations) ? row.plant_translations : [];
-          const promotionMonth = translations[0]?.promotion_month || null;
 
             return {
               id: String(row.id),
               name: row?.name ? String(row.name) : "Unnamed plant",
               status: normalizePlantStatus(row?.status),
-              promotionMonth: toPromotionMonthSlug(promotionMonth),
+              promotionMonth: toPromotionMonthSlug(row?.promotion_month),
               primaryImage: primaryImage?.link
                 ? String(primaryImage.link)
                 : null,
