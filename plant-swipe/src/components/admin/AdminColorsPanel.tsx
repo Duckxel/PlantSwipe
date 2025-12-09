@@ -13,7 +13,6 @@ import {
   Check,
   X,
   Loader2,
-  Search,
   Star,
   Link as LinkIcon,
   Languages,
@@ -619,7 +618,7 @@ export const AdminColorsPanel: React.FC = () => {
   }
 
   // Color form component
-  const ColorForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => (
+  const ColorForm: React.FC = () => (
     <div className="space-y-4">
       {/* Name */}
       <div className="space-y-2">
@@ -977,7 +976,7 @@ export const AdminColorsPanel: React.FC = () => {
             </SheetTitle>
           </SheetHeader>
           <div className="mt-6 space-y-6">
-            <ColorForm isEdit />
+            <ColorForm />
 
             {/* Similar Colors in Edit Mode */}
             {similarColors.length > 0 && formData.hexCode && (
