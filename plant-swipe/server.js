@@ -15680,6 +15680,39 @@ ${alternateLinks(path)}
           }).join('\n') + '\n'
         }
       }
+      
+      // ALL bookmarks (public and private) with different priorities
+      // Public bookmarks: priority 0.5, Private bookmarks: priority 0.3
+      const { data: bookmarks } = await supabaseServer
+        .from('bookmarks')
+        .select(`
+          id,
+          created_at,
+          visibility
+        `)
+        .order('created_at', { ascending: false })
+        .limit(500)
+      
+      if (bookmarks?.length) {
+        for (const lang of languages) {
+          urls += bookmarks.map(bookmark => {
+            // Use created_at for lastmod
+            const lastmodStr = bookmark.created_at ? `\n    <lastmod>${new Date(bookmark.created_at).toISOString().split('T')[0]}</lastmod>` : ''
+            
+            const path = `/bookmarks/${bookmark.id}`
+            // Public bookmarks get higher priority (0.5)
+            // Private bookmarks get lower priority (0.3)
+            const isPrivate = bookmark.visibility === 'private'
+            const priority = isPrivate ? '0.3' : '0.5'
+            return `  <url>
+    <loc>${langUrl(path, lang)}</loc>${lastmodStr}
+    <changefreq>weekly</changefreq>
+    <priority>${priority}</priority>
+${alternateLinks(path)}
+  </url>`
+          }).join('\n') + '\n'
+        }
+      }
     } catch (err) {
       console.error('[sitemap] Error fetching dynamic content:', err?.message)
     }

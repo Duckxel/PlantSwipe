@@ -283,10 +283,13 @@ const getTypeIcon = (pathname: string) => {
   if (pathname.includes("/blog")) return "📝"
   if (pathname.includes("/plants")) return "🌱"
   if (pathname.includes("/garden")) return "🏡"
+  if (pathname.includes("/bookmarks")) return "🔖"
   if (pathname.includes("/u/")) return "👤"
   if (pathname.includes("/contact")) return "📧"
   if (pathname.includes("/search")) return "🔍"
+  if (pathname.includes("/discovery")) return "✨"
   if (pathname.includes("/download")) return "📥"
+  if (pathname.includes("/pricing")) return "💰"
   if (pathname.includes("/about")) return "ℹ️"
   if (pathname.includes("/terms")) return "📋"
   if (pathname === "/" || pathname === "/fr") return "🏠"
@@ -396,7 +399,7 @@ const SitemapTab: React.FC = () => {
 
   // Filter entries
   const filteredEntries = React.useMemo(() => {
-    return entries.filter((entry) => {
+    const filtered = entries.filter((entry) => {
       // Text filter
       if (filter.trim()) {
         const q = filter.toLowerCase()
@@ -434,6 +437,15 @@ const SitemapTab: React.FC = () => {
       
       return true
     })
+    // Sort: English first, then other languages, then by URL
+    filtered.sort((a, b) => {
+      const aIsEn = !a.loc.includes("/fr/") && !a.loc.endsWith("/fr")
+      const bIsEn = !b.loc.includes("/fr/") && !b.loc.endsWith("/fr")
+      if (aIsEn && !bIsEn) return -1
+      if (!aIsEn && bIsEn) return 1
+      return a.loc.localeCompare(b.loc)
+    })
+    return filtered
   }, [entries, filter, typeFilter, langFilter, priorityFilter])
 
   // Group entries by path segment
@@ -453,6 +465,16 @@ const SitemapTab: React.FC = () => {
         if (!groups["other"]) groups["other"] = []
         groups["other"].push(entry)
       }
+    })
+    // Sort entries within each group: English first, then French, then by URL
+    Object.keys(groups).forEach((group) => {
+      groups[group].sort((a, b) => {
+        const aIsEn = !a.loc.includes("/fr/") && !a.loc.endsWith("/fr")
+        const bIsEn = !b.loc.includes("/fr/") && !b.loc.endsWith("/fr")
+        if (aIsEn && !bIsEn) return -1
+        if (!aIsEn && bIsEn) return 1
+        return a.loc.localeCompare(b.loc)
+      })
     })
     return groups
   }, [filteredEntries])
@@ -685,11 +707,28 @@ const SitemapTab: React.FC = () => {
                 className="h-8 px-2 text-sm rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               >
                 <option value="all">All Types</option>
-                {availableTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type === "home" ? "🏠 Home" : type === "u" ? "👤 Profiles" : type} ({stats.byType[type]})
-                  </option>
-                ))}
+                {availableTypes.map((type) => {
+                  const typeLabels: Record<string, string> = {
+                    home: "🏠 Home",
+                    u: "👤 Profiles",
+                    bookmarks: "🔖 Bookmarks",
+                    garden: "🏡 Gardens",
+                    plants: "🌱 Plants",
+                    blog: "📝 Blog",
+                    discovery: "✨ Discovery",
+                    pricing: "💰 Pricing",
+                    contact: "📧 Contact",
+                    search: "🔍 Search",
+                    download: "📥 Download",
+                    about: "ℹ️ About",
+                    terms: "📋 Terms",
+                  }
+                  return (
+                    <option key={type} value={type}>
+                      {typeLabels[type] || type} ({stats.byType[type]})
+                    </option>
+                  )
+                })}
               </select>
               
               <select
@@ -947,7 +986,7 @@ const SitemapTab: React.FC = () => {
                   <span className="text-lg">{getTypeIcon(`/${type}`)}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">
-                      {type === "home" ? "Home" : type === "u" ? "Profiles" : type}
+                      {type === "home" ? "Home" : type === "u" ? "Profiles" : type === "bookmarks" ? "Bookmarks" : type === "garden" ? "Gardens" : type}
                     </p>
                     <p className="text-xs text-stone-500 dark:text-stone-400">{count} ({pct}%)</p>
                   </div>

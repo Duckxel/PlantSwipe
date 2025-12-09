@@ -42,10 +42,12 @@ const defaultLanguage = (process.env.SITEMAP_DEFAULT_LANGUAGE || 'en').trim() ||
 
 const STATIC_ROUTES = [
   { path: '/', changefreq: 'daily', priority: 1.0 },
+  { path: '/discovery', changefreq: 'daily', priority: 0.9 },
   { path: '/blog', changefreq: 'daily', priority: 0.9 },
   { path: '/search', changefreq: 'daily', priority: 0.9 },
   { path: '/gardens', changefreq: 'weekly', priority: 0.8 },
   { path: '/contact', changefreq: 'monthly', priority: 0.8 },
+  { path: '/pricing', changefreq: 'monthly', priority: 0.8 },
   { path: '/download', changefreq: 'monthly', priority: 0.7 },
   { path: '/about', changefreq: 'monthly', priority: 0.6 },
   { path: '/contact/business', changefreq: 'monthly', priority: 0.6 },
@@ -77,7 +79,12 @@ async function main() {
     return []
   })
 
-  const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes, ...blogRoutes, ...profileRoutes, ...gardenRoutes])
+  const bookmarkRoutes = await loadBookmarkRoutes().catch((error) => {
+    console.warn(`[sitemap] Failed to load dynamic bookmark routes: ${error.message || error}`)
+    return []
+  })
+
+  const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes, ...blogRoutes, ...profileRoutes, ...gardenRoutes, ...bookmarkRoutes])
 
   const nowIso = new Date().toISOString()
   const urlEntries = []
@@ -115,7 +122,18 @@ async function main() {
     }
   }
 
-  urlEntries.sort((a, b) => a.loc.localeCompare(b.loc))
+  // Sort: English first, then other languages, then by URL path
+  urlEntries.sort((a, b) => {
+    // Default language (en) should come first
+    const aIsDefault = a.lang === defaultLanguage
+    const bIsDefault = b.lang === defaultLanguage
+    if (aIsDefault && !bIsDefault) return -1
+    if (!aIsDefault && bIsDefault) return 1
+    // Then sort by language
+    if (a.lang !== b.lang) return a.lang.localeCompare(b.lang)
+    // Then sort by URL
+    return a.loc.localeCompare(b.loc)
+  })
 
   const xml = [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -142,8 +160,8 @@ async function main() {
   await fs.writeFile(sitemapPath, xml, 'utf8')
 
   const relPath = path.relative(appRoot, sitemapPath)
-  const dynamicCount = dynamicRoutes.length + blogRoutes.length + profileRoutes.length + gardenRoutes.length
-  console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicCount} dynamic: ${dynamicRoutes.length} plants, ${blogRoutes.length} blogs, ${profileRoutes.length} profiles, ${gardenRoutes.length} gardens) in ${Date.now() - startedAt}ms → ${relPath}`)
+  const dynamicCount = dynamicRoutes.length + blogRoutes.length + profileRoutes.length + gardenRoutes.length + bookmarkRoutes.length
+  console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicCount} dynamic: ${dynamicRoutes.length} plants, ${blogRoutes.length} blogs, ${profileRoutes.length} profiles, ${gardenRoutes.length} gardens, ${bookmarkRoutes.length} bookmarks) in ${Date.now() - startedAt}ms → ${relPath}`)
 }
 
 main().catch((error) => {
@@ -493,6 +511,60 @@ async function loadGardenRoutes() {
       }
       results.push(route)
       if (results.length >= maxGardens) break
+    }
+
+    if (data.length < limit) break
+    offset += limit
+  }
+
+  return results
+}
+
+async function loadBookmarkRoutes() {
+  const client = getSupabaseClient()
+  if (!client) {
+    console.warn('[sitemap] Supabase credentials missing — skipping bookmark routes.')
+    return []
+  }
+
+  const maxBookmarks = positiveInteger(process.env.SITEMAP_MAX_BOOKMARK_URLS, 1000)
+  const batchSize = positiveInteger(process.env.SITEMAP_BOOKMARK_BATCH_SIZE, 500)
+
+  const results = []
+  let offset = 0
+
+  while (results.length < maxBookmarks) {
+    const limit = Math.min(batchSize, maxBookmarks - results.length)
+    const to = offset + limit - 1
+    // Fetch ALL bookmarks (public and private) with visibility info
+    const { data, error } = await client
+      .from('bookmarks')
+      .select('id, created_at, visibility')
+      .order('created_at', { ascending: false })
+      .range(offset, to)
+
+    if (error) {
+      throw new Error(error.message || 'Supabase query failed for bookmarks')
+    }
+
+    if (!data || data.length === 0) {
+      break
+    }
+
+    for (const row of data) {
+      if (!row?.id) continue
+      const normalizedId = encodeURIComponent(String(row.id))
+      // Public bookmarks get higher priority (0.5)
+      // Private bookmarks get lower priority (0.3)
+      const isPrivate = row.visibility === 'private'
+      const route = {
+        path: `/bookmarks/${normalizedId}`,
+        changefreq: 'weekly',
+        priority: isPrivate ? 0.3 : 0.5,
+        lastmod: toIsoString(row.created_at),
+      }
+      results.push(route)
+      if (results.length >= maxBookmarks) break
     }
 
     if (data.length < limit) break
