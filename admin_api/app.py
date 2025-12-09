@@ -624,6 +624,217 @@ def sync_schema():
         return jsonify({"ok": False, "error": str(e) or "Failed to run psql"}), 500
 
 
+def _setup_script_path(repo_root: str) -> str:
+    return str(Path(repo_root) / "setup.sh")
+
+
+@app.post("/admin/run-setup")
+def run_setup():
+    """Run setup.sh with provided root password. Requires password in body."""
+    _verify_request()
+    body = request.get_json(silent=True) or {}
+    password = body.get("password", "")
+    if not password:
+        return jsonify({"ok": False, "error": "Root password required"}), 400
+
+    repo_root = _get_repo_root()
+    script_path = _setup_script_path(repo_root)
+    if not os.path.isfile(script_path):
+        return jsonify({"ok": False, "error": f"setup.sh not found at {script_path}"}), 500
+
+    _ensure_executable(script_path)
+
+    try:
+        _log_admin_action("run_setup", "setup.sh")
+    except Exception:
+        pass
+
+    # Run setup.sh using sudo with password via stdin
+    def generate():
+        yield "event: open\ndata: {\"ok\": true, \"message\": \"Starting setup.sh...\"}\n\n"
+        try:
+            env = os.environ.copy()
+            env["CI"] = "true"  # Non-interactive mode
+
+            # Use sudo -S to read password from stdin
+            p = subprocess.Popen(
+                ["sudo", "-S", script_path],
+                cwd=repo_root,
+                env=env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=1,
+                universal_newlines=True,
+            )
+
+            # Send password to sudo
+            try:
+                p.stdin.write(password + "\n")
+                p.stdin.flush()
+                p.stdin.close()
+            except Exception:
+                pass
+
+            try:
+                assert p.stdout is not None
+                for line in p.stdout:
+                    txt = line.rstrip("\n\r")
+                    if not txt:
+                        continue
+                    # Skip password prompt echoes
+                    if "[sudo]" in txt.lower() or "password" in txt.lower():
+                        continue
+                    # Truncate very long lines
+                    if len(txt) > 4000:
+                        txt = txt[:4000] + "…"
+                    yield f"data: {txt}\n\n"
+            finally:
+                code = p.wait()
+                if code == 0:
+                    yield "event: done\ndata: {\"ok\": true}\n\n"
+                else:
+                    yield f"event: done\ndata: {{\"ok\": false, \"code\": {code}}}\n\n"
+        except Exception as e:
+            yield f"event: error\ndata: {str(e)}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
+
+
+@app.post("/admin/clear-memory")
+def clear_memory():
+    """Clear system memory cache (sync + drop_caches)."""
+    _verify_request()
+    try:
+        _log_admin_action("clear_memory", "system")
+    except Exception:
+        pass
+
+    try:
+        # Sync filesystem first
+        subprocess.run(["sync"], check=True, timeout=30)
+        # Drop page cache, dentries and inodes (value 3)
+        subprocess.run(
+            ["sudo", "bash", "-c", "echo 3 > /proc/sys/vm/drop_caches"],
+            check=True,
+            timeout=30
+        )
+        return jsonify({
+            "ok": True,
+            "message": "Memory cache cleared successfully"
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "Operation timed out"}), 504
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e) or "Failed to clear memory"}), 500
+
+
+@app.get("/admin/git-pull/stream")
+def git_pull_stream():
+    """Simple git pull as www-data with streaming output."""
+    _verify_request()
+    try:
+        _log_admin_action("git_pull", "simple")
+    except Exception:
+        pass
+
+    repo_root = _get_repo_root()
+
+    def generate():
+        yield "event: open\ndata: {\"ok\": true, \"message\": \"Starting git pull...\"}\n\n"
+        try:
+            env = os.environ.copy()
+            # Run git pull as www-data user
+            git_cmd = [
+                "sudo", "-u", "www-data",
+                "git", "-c", f"safe.directory={repo_root}",
+                "-C", repo_root,
+                "pull", "--ff-only"
+            ]
+
+            yield f"data: [git] Running git pull in {repo_root}\n\n"
+
+            p = subprocess.Popen(
+                git_cmd,
+                cwd=repo_root,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=1,
+                universal_newlines=True,
+            )
+
+            try:
+                assert p.stdout is not None
+                for line in p.stdout:
+                    txt = line.rstrip("\n\r")
+                    if not txt:
+                        continue
+                    if len(txt) > 4000:
+                        txt = txt[:4000] + "…"
+                    yield f"data: {txt}\n\n"
+            finally:
+                code = p.wait()
+                if code == 0:
+                    yield "data: [git] Git pull completed successfully\n\n"
+                    yield "event: done\ndata: {\"ok\": true}\n\n"
+                else:
+                    yield f"data: [git] Git pull failed with code {code}\n\n"
+                    yield f"event: done\ndata: {{\"ok\": false, \"code\": {code}}}\n\n"
+        except Exception as e:
+            yield f"event: error\ndata: {str(e)}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
+
+
+@app.get("/admin/git-pull")
+@app.post("/admin/git-pull")
+def git_pull():
+    """Simple git pull as www-data (non-streaming)."""
+    _verify_request()
+    try:
+        _log_admin_action("git_pull", "simple")
+    except Exception:
+        pass
+
+    repo_root = _get_repo_root()
+
+    try:
+        git_cmd = [
+            "sudo", "-u", "www-data",
+            "git", "-c", f"safe.directory={repo_root}",
+            "-C", repo_root,
+            "pull", "--ff-only"
+        ]
+
+        result = subprocess.run(
+            git_cmd,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if result.returncode == 0:
+            return jsonify({
+                "ok": True,
+                "message": "Git pull completed successfully",
+                "output": result.stdout
+            })
+        else:
+            return jsonify({
+                "ok": False,
+                "error": "Git pull failed",
+                "output": result.stdout,
+                "stderr": result.stderr,
+                "code": result.returncode
+            }), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "Git pull timed out"}), 504
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e) or "Failed to run git pull"}), 500
+
+
 if __name__ == "__main__":
     # Dev-only server. In production we run via gunicorn.
     app.run(host="127.0.0.1", port=5001)

@@ -438,6 +438,12 @@ export const AdminPage: React.FC = () => {
     React.useState<boolean>(false);
   // Default collapsed on load; will auto-open only if an active broadcast exists
   const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false);
+  // Server Controls - collapsed by default
+  const [serverControlsOpen, setServerControlsOpen] = React.useState<boolean>(false);
+  const [setupPassword, setSetupPassword] = React.useState<string>("");
+  const [runningSetup, setRunningSetup] = React.useState<boolean>(false);
+  const [clearingMemory, setClearingMemory] = React.useState<boolean>(false);
+  const [gitPulling, setGitPulling] = React.useState<boolean>(false);
   // On initial load, if a broadcast is currently active, auto-open the section
   React.useEffect(() => {
     let cancelled = false;
@@ -1078,6 +1084,175 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[restart] Failed to restart services: ? ${message}`);
     } finally {
       setRestarting(false);
+    }
+  };
+
+  // --- Server Controls: Run Setup.sh ---
+  const runSetup = async () => {
+    if (runningSetup) return;
+    if (!setupPassword.trim()) {
+      setConsoleOpen(true);
+      appendConsole("[setup] Root password is required to run setup.sh");
+      return;
+    }
+    setRunningSetup(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[setup] Starting setup.sh...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/run-setup", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ password: setupPassword }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data.startsWith("{")) {
+              try {
+                const json = JSON.parse(data);
+                if (json.ok === false && json.code) {
+                  appendConsole(`[setup] Completed with exit code ${json.code}`);
+                }
+              } catch {}
+            } else if (data.trim()) {
+              appendConsole(data);
+            }
+          }
+        }
+      }
+      appendConsole("[setup] Setup.sh completed");
+      setSetupPassword(""); // Clear password after use
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[setup] Failed: ${message}`);
+    } finally {
+      setRunningSetup(false);
+    }
+  };
+
+  // --- Server Controls: Clear Memory ---
+  const clearMemory = async () => {
+    if (clearingMemory) return;
+    setClearingMemory(true);
+    try {
+      setConsoleOpen(true);
+      appendConsole("[memory] Clearing system memory cache...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/clear-memory", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: "{}",
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data?.ok) {
+        appendConsole("[memory] Memory cache cleared successfully");
+      } else {
+        throw new Error(data?.error || `HTTP ${response.status}`);
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[memory] Failed to clear memory: ${message}`);
+    } finally {
+      setClearingMemory(false);
+    }
+  };
+
+  // --- Server Controls: Git Pull Only ---
+  const gitPullOnly = async () => {
+    if (gitPulling) return;
+    setGitPulling(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[git] Starting git pull...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        Accept: "text/event-stream",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/git-pull/stream", {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data.startsWith("{")) {
+              try {
+                const json = JSON.parse(data);
+                if (json.ok === false && json.code) {
+                  appendConsole(`[git] Completed with exit code ${json.code}`);
+                }
+              } catch {}
+            } else if (data.trim()) {
+              appendConsole(data);
+            }
+          }
+        }
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[git] Failed: ${message}`);
+    } finally {
+      setGitPulling(false);
     }
   };
 
@@ -4212,6 +4387,86 @@ export const AdminPage: React.FC = () => {
                             </span>
                           </div>
                           <HealthProgressBar percent={systemHealth.disk?.percent ?? 0} />
+                        </div>
+
+                        {/* Collapsible: Server Controls */}
+                        <div className="mt-4 pt-3 border-t border-stone-200 dark:border-[#3e3e42]">
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 text-sm font-medium w-full"
+                            onClick={() => setServerControlsOpen((o) => !o)}
+                            aria-expanded={serverControlsOpen}
+                            aria-controls="server-controls"
+                          >
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform ${serverControlsOpen ? "rotate-180" : ""}`}
+                            />
+                            <Server className="h-4 w-4 opacity-70" />
+                            Server Controls
+                          </button>
+                          {serverControlsOpen && (
+                            <div className="mt-3 space-y-3" id="server-controls">
+                              {/* Restart Server Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={restartServer}
+                                disabled={restarting}
+                              >
+                                <RefreshCw className={`h-4 w-4 ${restarting ? "animate-spin" : ""}`} />
+                                {restarting ? "Restarting..." : "Restart Server"}
+                              </Button>
+
+                              {/* Git Pull Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={gitPullOnly}
+                                disabled={gitPulling}
+                              >
+                                <Github className={`h-4 w-4 ${gitPulling ? "animate-pulse" : ""}`} />
+                                {gitPulling ? "Pulling..." : "Git Pull Only"}
+                              </Button>
+
+                              {/* Clear Memory Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={clearMemory}
+                                disabled={clearingMemory}
+                              >
+                                <Database className={`h-4 w-4 ${clearingMemory ? "animate-pulse" : ""}`} />
+                                {clearingMemory ? "Clearing..." : "Clear Memory"}
+                              </Button>
+
+                              {/* Run Setup Section */}
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 space-y-2">
+                                <div className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                                  Run Setup Script
+                                </div>
+                                <Input
+                                  type="password"
+                                  placeholder="Root password"
+                                  value={setupPassword}
+                                  onChange={(e) => setSetupPassword(e.target.value)}
+                                  className="rounded-xl text-sm"
+                                  disabled={runningSetup}
+                                />
+                                <Button
+                                  variant="outline"
+                                  className="w-full rounded-xl justify-start gap-2"
+                                  onClick={runSetup}
+                                  disabled={runningSetup || !setupPassword.trim()}
+                                >
+                                  <Package className={`h-4 w-4 ${runningSetup ? "animate-spin" : ""}`} />
+                                  {runningSetup ? "Running Setup..." : "Execute setup.sh"}
+                                </Button>
+                                <div className="text-[10px] text-stone-400">
+                                  Runs the full server setup script with root privileges
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
