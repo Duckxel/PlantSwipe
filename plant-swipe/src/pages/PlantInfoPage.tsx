@@ -207,14 +207,13 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     plantCare: {
       // Translatable fields from plant_translations only
       origin: translation?.origin || [],
-      habitat: habitatEnum.toUiArray(translation?.habitat) as PlantCareData["habitat"],
       // Non-translatable fields from plants table
+      habitat: habitatEnum.toUiArray(data.habitat) as PlantCareData["habitat"],
       temperatureMax: data.temperature_max || undefined,
       temperatureMin: data.temperature_min || undefined,
       temperatureIdeal: data.temperature_ideal || undefined,
-      // Translatable fields from plant_translations only
-      levelSun: (levelSunEnum.toUi(translation?.level_sun) as PlantCareData["levelSun"]) || undefined,
-      // Non-translatable fields from plants table
+      // Non-translatable field from plants table
+      levelSun: (levelSunEnum.toUi(data.level_sun) as PlantCareData["levelSun"]) || undefined,
       hygrometry: data.hygrometry || undefined,
       wateringType: wateringTypeEnum.toUiArray(data.watering_type) as PlantCareData["wateringType"],
       division: divisionEnum.toUiArray(data.division) as PlantCareData["division"],

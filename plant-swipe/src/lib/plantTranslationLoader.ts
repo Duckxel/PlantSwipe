@@ -480,14 +480,13 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
             plantCare: {
               // Translatable fields from plant_translations only
               origin: translation.origin || [],
-              habitat: habitatEnum.toUiArray(translation.habitat) as PlantCareData["habitat"],
               // Non-translatable fields from plants table
+              habitat: habitatEnum.toUiArray(basePlant.habitat) as PlantCareData["habitat"],
               temperatureMax: basePlant.temperature_max || undefined,
               temperatureMin: basePlant.temperature_min || undefined,
               temperatureIdeal: basePlant.temperature_ideal || undefined,
-              // Translatable fields from plant_translations only
-              levelSun: (levelSunEnum.toUi(translation.level_sun) as PlantCareData["levelSun"]) || undefined,
-              // Non-translatable fields from plants table
+              // Non-translatable field from plants table
+              levelSun: (levelSunEnum.toUi(basePlant.level_sun) as PlantCareData["levelSun"]) || undefined,
               hygrometry: basePlant.hygrometry || undefined,
               wateringType: wateringTypeEnum.toUiArray(basePlant.watering_type) as PlantCareData["wateringType"],
               division: divisionEnum.toUiArray(basePlant.division) as PlantCareData["division"],

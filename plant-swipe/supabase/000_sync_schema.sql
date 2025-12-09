@@ -933,9 +933,11 @@ alter table if exists public.plant_translations drop column if exists problems;
 alter table if exists public.plant_translations add column if not exists overview text;
 alter table if exists public.plant_translations add column if not exists family text;
 alter table if exists public.plant_translations add column if not exists given_names text[] not null default '{}';
--- scientific_name and promotion_month are NOT translated - they stay only in plants table
+-- The following are NOT translated - they stay only in plants table (enums/Latin names)
 alter table if exists public.plant_translations drop column if exists scientific_name;
 alter table if exists public.plant_translations drop column if exists promotion_month;
+alter table if exists public.plant_translations drop column if exists level_sun;
+alter table if exists public.plant_translations drop column if exists habitat;
 alter table if exists public.plant_translations add column if not exists life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic'));
 alter table if exists public.plant_translations add column if not exists season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']);
 alter table if exists public.plant_translations add column if not exists foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent'));
@@ -1098,9 +1100,10 @@ end $$;
 -- These columns have been migrated to plant_translations and are no longer needed
 -- in the plants table. Only 'name' is kept as the canonical English name.
 -- 
--- The following columns stay in plants table (NOT translated - they are enums or Latin names):
+-- The following columns stay in plants table (NOT translated - they are enums, Latin names, or non-text):
 --   promotion_month, scientific_name, family, life_cycle, season, foliage_persistance,
---   toxicity_human, toxicity_pets, living_space, composition, maintenance_level
+--   toxicity_human, toxicity_pets, living_space, composition, maintenance_level,
+--   habitat, level_sun
 --
 -- The following columns ARE translated and only exist in plant_translations:
 alter table if exists public.plants drop column if exists given_names;
@@ -1108,8 +1111,7 @@ alter table if exists public.plants drop column if exists overview;
 alter table if exists public.plants drop column if exists allergens;
 alter table if exists public.plants drop column if exists symbolism;
 alter table if exists public.plants drop column if exists origin;
-alter table if exists public.plants drop column if exists habitat;
-alter table if exists public.plants drop column if exists level_sun;
+-- habitat and level_sun are enums - NOT translated, stay in plants table
 alter table if exists public.plants drop column if exists advice_soil;
 alter table if exists public.plants drop column if exists advice_mulching;
 alter table if exists public.plants drop column if exists advice_fertilizer;

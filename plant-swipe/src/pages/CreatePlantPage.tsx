@@ -581,14 +581,13 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     plantCare: {
       // Translatable fields from plant_translations only
       origin: translation?.origin || [],
-      habitat: habitatEnum.toUiArray(translation?.habitat) as PlantCareData["habitat"],
       // Non-translatable fields from plants table
+      habitat: habitatEnum.toUiArray(data.habitat) as PlantCareData["habitat"],
       temperatureMax: data.temperature_max || undefined,
       temperatureMin: data.temperature_min || undefined,
       temperatureIdeal: data.temperature_ideal || undefined,
-      // Translatable fields from plant_translations only
-      levelSun: (levelSunEnum.toUi(translation?.level_sun) as PlantCareData["levelSun"]) || undefined,
-      // Non-translatable fields from plants table
+      // Non-translatable field from plants table
+      levelSun: (levelSunEnum.toUi(data.level_sun) as PlantCareData["levelSun"]) || undefined,
       hygrometry: data.hygrometry || undefined,
       wateringType: wateringTypeEnum.toUiArray(data.watering_type) as PlantCareData["wateringType"],
       division: divisionEnum.toUiArray(data.division) as PlantCareData["division"],
@@ -1077,6 +1076,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             temperature_min: plantToSave.plantCare?.temperatureMin || null,
             temperature_ideal: plantToSave.plantCare?.temperatureIdeal || null,
             hygrometry: plantToSave.plantCare?.hygrometry || null,
+            level_sun: normalizedLevelSun || null,
+            habitat: normalizedHabitat,
             watering_type: normalizedWateringType,
             division: normalizedDivision,
             soil: normalizedSoil,
@@ -1169,8 +1170,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           composition: normalizeCompositionForDb(plantToSave.identity?.composition),
           maintenance_level: normalizedMaintenance || null,
           origin: plantToSave.plantCare?.origin || [],
-          habitat: normalizedHabitat,
-          level_sun: normalizedLevelSun || null,
+          // habitat and level_sun are NOT translated - they are in plants table only
           advice_soil: plantToSave.plantCare?.adviceSoil || null,
           advice_mulching: plantToSave.plantCare?.adviceMulching || null,
           advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
@@ -1486,7 +1486,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             composition: normalizeCompositionForDb(plant.identity?.composition),
             maintenance_level: dbMaintenance || null,
           origin: await translateArraySafe(plant.plantCare?.origin),
-            habitat: dbHabitat,
+          // habitat is NOT translated - it is in plants table only
           advice_soil: plant.plantCare?.adviceSoil
             ? await translateText(plant.plantCare.adviceSoil, target, sourceLang)
             : plant.plantCare?.adviceSoil || null,
