@@ -729,6 +729,78 @@ def clear_memory():
         return jsonify({"ok": False, "error": str(e) or "Failed to clear memory"}), 500
 
 
+@app.post("/admin/restart-server")
+def restart_server_with_password():
+    """Restart server services with provided root password. Requires password in body."""
+    _verify_request()
+    body = request.get_json(silent=True) or {}
+    password = body.get("password", "")
+    if not password:
+        return jsonify({"ok": False, "error": "Root password required"}), 400
+
+    try:
+        _log_admin_action("restart_server", "services")
+    except Exception:
+        pass
+
+    def generate():
+        yield "event: open\ndata: {\"ok\": true, \"message\": \"Starting server restart...\"}\n\n"
+        try:
+            services = ["nginx", "plant-swipe-node", "admin-api"]
+            
+            # First reload nginx
+            yield "data: [restart] Reloading nginx...\n\n"
+            p = subprocess.Popen(
+                ["sudo", "-S", "systemctl", "reload", "nginx"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+            )
+            try:
+                p.stdin.write(password + "\n")
+                p.stdin.flush()
+                p.stdin.close()
+            except Exception:
+                pass
+            out, _ = p.communicate(timeout=30)
+            if p.returncode != 0:
+                yield f"data: [restart] Warning: nginx reload returned code {p.returncode}\n\n"
+            else:
+                yield "data: [restart] nginx reloaded\n\n"
+
+            # Restart each service
+            for svc in ["plant-swipe-node", "admin-api"]:
+                yield f"data: [restart] Restarting {svc}...\n\n"
+                p = subprocess.Popen(
+                    ["sudo", "-S", "systemctl", "restart", svc],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                )
+                try:
+                    p.stdin.write(password + "\n")
+                    p.stdin.flush()
+                    p.stdin.close()
+                except Exception:
+                    pass
+                out, _ = p.communicate(timeout=60)
+                if p.returncode != 0:
+                    yield f"data: [restart] Warning: {svc} restart returned code {p.returncode}\n\n"
+                else:
+                    yield f"data: [restart] {svc} restarted\n\n"
+
+            yield "data: [restart] All services restarted successfully\n\n"
+            yield "event: done\ndata: {\"ok\": true}\n\n"
+        except subprocess.TimeoutExpired:
+            yield "event: error\ndata: Operation timed out\n\n"
+        except Exception as e:
+            yield f"event: error\ndata: {str(e)}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
+
+
 @app.get("/admin/git-pull/stream")
 def git_pull_stream():
     """Simple git pull as www-data with streaming output."""

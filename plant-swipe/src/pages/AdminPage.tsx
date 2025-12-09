@@ -1087,6 +1087,77 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  // --- Server Controls: Restart Server with Password ---
+  const restartServerWithPassword = async () => {
+    if (restarting) return;
+    if (!setupPassword.trim()) {
+      setConsoleOpen(true);
+      appendConsole("[restart] Root password is required to restart server");
+      return;
+    }
+    setRestarting(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[restart] Starting server restart...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/restart-server", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ password: setupPassword }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data.startsWith("{")) {
+              try {
+                const json = JSON.parse(data);
+                if (json.ok === false && json.code) {
+                  appendConsole(`[restart] Completed with exit code ${json.code}`);
+                }
+              } catch {}
+            } else if (data.trim()) {
+              appendConsole(data);
+            }
+          }
+        }
+      }
+      appendConsole("[restart] Server restart completed");
+      setReloadReady(true);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[restart] Failed: ${message}`);
+    } finally {
+      setRestarting(false);
+    }
+  };
+
   // --- Server Controls: Run Setup.sh ---
   const runSetup = async () => {
     if (runningSetup) return;
@@ -4406,12 +4477,27 @@ export const AdminPage: React.FC = () => {
                           </button>
                           {serverControlsOpen && (
                             <div className="mt-3 space-y-3" id="server-controls">
+                              {/* Root Password Input (shared) */}
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 space-y-2 bg-stone-50/50 dark:bg-stone-900/20">
+                                <div className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                                  Root Password (required for most actions)
+                                </div>
+                                <Input
+                                  type="password"
+                                  placeholder="Enter root password"
+                                  value={setupPassword}
+                                  onChange={(e) => setSetupPassword(e.target.value)}
+                                  className="rounded-xl text-sm"
+                                  disabled={runningSetup || restarting}
+                                />
+                              </div>
+
                               {/* Restart Server Button */}
                               <Button
                                 variant="outline"
                                 className="w-full rounded-xl justify-start gap-2"
-                                onClick={restartServer}
-                                disabled={restarting}
+                                onClick={restartServerWithPassword}
+                                disabled={restarting || !setupPassword.trim()}
                               >
                                 <RefreshCw className={`h-4 w-4 ${restarting ? "animate-spin" : ""}`} />
                                 {restarting ? "Restarting..." : "Restart Server"}
@@ -4439,31 +4525,18 @@ export const AdminPage: React.FC = () => {
                                 {clearingMemory ? "Clearing..." : "Clear Memory"}
                               </Button>
 
-                              {/* Run Setup Section */}
-                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 space-y-2">
-                                <div className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                                  Run Setup Script
-                                </div>
-                                <Input
-                                  type="password"
-                                  placeholder="Root password"
-                                  value={setupPassword}
-                                  onChange={(e) => setSetupPassword(e.target.value)}
-                                  className="rounded-xl text-sm"
-                                  disabled={runningSetup}
-                                />
-                                <Button
-                                  variant="outline"
-                                  className="w-full rounded-xl justify-start gap-2"
-                                  onClick={runSetup}
-                                  disabled={runningSetup || !setupPassword.trim()}
-                                >
-                                  <Package className={`h-4 w-4 ${runningSetup ? "animate-spin" : ""}`} />
-                                  {runningSetup ? "Running Setup..." : "Execute setup.sh"}
-                                </Button>
-                                <div className="text-[10px] text-stone-400">
-                                  Runs the full server setup script with root privileges
-                                </div>
+                              {/* Run Setup Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={runSetup}
+                                disabled={runningSetup || !setupPassword.trim()}
+                              >
+                                <Package className={`h-4 w-4 ${runningSetup ? "animate-spin" : ""}`} />
+                                {runningSetup ? "Running Setup..." : "Execute setup.sh"}
+                              </Button>
+                              <div className="text-[10px] text-stone-400">
+                                setup.sh runs the full server provisioning script with root privileges
                               </div>
                             </div>
                           )}
