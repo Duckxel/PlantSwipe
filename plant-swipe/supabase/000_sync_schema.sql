@@ -941,6 +941,28 @@ alter table if exists public.plant_translations add column if not exists origin 
 -- Migrate data from plant_translations to plants before dropping columns
 do $$
 begin
+  -- Migrate scientific_name from plant_translations to plants (prefer English, then any)
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'scientific_name') then
+    update public.plants p set scientific_name = pt.scientific_name
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.scientific_name is not null and (p.scientific_name is null or trim(p.scientific_name) = '');
+    
+    update public.plants p set scientific_name = pt.scientific_name
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.scientific_name is not null and (p.scientific_name is null or trim(p.scientific_name) = '');
+  end if;
+  
+  -- Migrate promotion_month from plant_translations to plants (prefer English, then any)
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'promotion_month') then
+    update public.plants p set promotion_month = pt.promotion_month
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.promotion_month is not null and p.promotion_month is null;
+    
+    update public.plants p set promotion_month = pt.promotion_month
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.promotion_month is not null and p.promotion_month is null;
+  end if;
+  
   -- Migrate level_sun from plant_translations to plants (prefer English, then any)
   if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'level_sun') then
     update public.plants p set level_sun = pt.level_sun
