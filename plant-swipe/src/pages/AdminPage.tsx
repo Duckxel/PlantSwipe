@@ -100,7 +100,8 @@ const {
 type AdminTab =
   | "overview"
   | "members"
-  | "plants"
+  | "requests"
+  | "stocks"
   | "upload"
   | "notifications"
   | "emails"
@@ -119,17 +120,16 @@ type MemberListSort = "newest" | "oldest" | "rpm";
 
 const MEMBER_LIST_PAGE_SIZE = 20;
 
-type PlantsViewMode = "requests" | "inventory" | "stocks";
+type RequestViewMode = "requests" | "plants";
 type NormalizedPlantStatus =
   | "in progres"
   | "review"
   | "rework"
   | "approved"
   | "other";
-const PLANTS_VIEW_TABS: Array<{ key: PlantsViewMode; label: string }> = [
+const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
   { key: "requests", label: "Requests" },
-  { key: "inventory", label: "Inventory" },
-  { key: "stocks", label: "Stocks" },
+  { key: "plants", label: "Plants" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -1268,9 +1268,8 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
   const [createPlantName, setCreatePlantName] = React.useState<string>("");
-  const plantsViewMode: PlantsViewMode = React.useMemo(() => {
-    if (currentPath.includes("/admin/plants/inventory")) return "inventory";
-    if (currentPath.includes("/admin/plants/stocks")) return "stocks";
+  const requestViewMode: RequestViewMode = React.useMemo(() => {
+    if (currentPath.includes("/admin/requests/plants")) return "plants";
     return "requests";
   }, [currentPath]);
   const [plantDashboardRows, setPlantDashboardRows] = React.useState<
@@ -1747,8 +1746,7 @@ export const AdminPage: React.FC = () => {
       });
   }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery]);
 
-  const plantViewIsInventory = plantsViewMode === "inventory";
-  const plantViewIsStocks = plantsViewMode === "stocks";
+  const plantViewIsPlants = requestViewMode === "plants";
   const plantTableLoading =
     plantDashboardLoading && !plantDashboardInitialized;
   const visiblePlantStatusesSet = React.useMemo(
@@ -2933,7 +2931,8 @@ export const AdminPage: React.FC = () => {
   }> = [
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin" },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members" },
-    { key: "plants", label: "Plants", Icon: Leaf, path: "/admin/plants" },
+    { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
+    { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks" },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
@@ -2942,7 +2941,8 @@ export const AdminPage: React.FC = () => {
 
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
-    if (currentPath.includes("/admin/plants")) return "plants";
+    if (currentPath.includes("/admin/requests")) return "requests";
+    if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
     if (currentPath.includes("/admin/emails")) return "emails";
@@ -2963,14 +2963,14 @@ export const AdminPage: React.FC = () => {
   }, [plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
-    if (activeTab !== "plants" || plantRequestsInitialized) return;
+    if (activeTab !== "requests" || plantRequestsInitialized) return;
     loadPlantRequests({ initial: true });
   }, [activeTab, plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
     if (
-      activeTab !== "plants" ||
-      !plantViewIsInventory ||
+      activeTab !== "requests" ||
+      !plantViewIsPlants ||
       plantDashboardInitialized ||
       plantDashboardLoading
     ) {
@@ -2979,7 +2979,7 @@ export const AdminPage: React.FC = () => {
     loadPlantDashboard();
   }, [
     activeTab,
-    plantViewIsInventory,
+    plantViewIsPlants,
     plantDashboardInitialized,
     plantDashboardLoading,
     loadPlantDashboard,
@@ -5540,14 +5540,19 @@ export const AdminPage: React.FC = () => {
                   </>
                 )}
 
-                {/* Plants Tab */}
-                  {activeTab === "plants" && (
+                {/* Stocks Tab */}
+                {activeTab === "stocks" && (
+                  <AdminStocksPanel />
+                )}
+
+                {/* Requests Tab */}
+                  {activeTab === "requests" && (
                     <div className="space-y-4">
                       <div className="flex justify-center">
                         <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
-                          {PLANTS_VIEW_TABS.map((tab) => {
-                            const isActive = plantsViewMode === tab.key;
-                            const tabPath = tab.key === "inventory" ? "/admin/plants/inventory" : tab.key === "stocks" ? "/admin/plants/stocks" : "/admin/plants";
+                          {REQUEST_VIEW_TABS.map((tab) => {
+                            const isActive = requestViewMode === tab.key;
+                            const tabPath = tab.key === "plants" ? "/admin/requests/plants" : "/admin/requests";
                             return (
                               <Link
                                 key={tab.key}
@@ -5564,9 +5569,7 @@ export const AdminPage: React.FC = () => {
                           })}
                         </div>
                       </div>
-                        {plantViewIsStocks ? (
-                          <AdminStocksPanel />
-                        ) : plantViewIsInventory ? (
+                        {plantViewIsPlants ? (
                           <div className="space-y-6 sm:space-y-8">
                             {/* Header Section */}
                             <div className="flex flex-col gap-4 sm:gap-6">
