@@ -978,6 +978,98 @@ do $$ begin
   create policy plant_translations_delete on public.plant_translations for delete to authenticated using (true);
 end $$;
 
+-- Add level_sun column to plant_translations (needed for new architecture)
+alter table if exists public.plant_translations add column if not exists level_sun text check (level_sun in ('low light','shade','partial sun','full sun'));
+
+-- ========== Migrate English data from plants to plant_translations ==========
+-- This ensures all plants have English translations in the new architecture
+-- where ALL translatable fields (including English) are in plant_translations
+do $$
+begin
+  -- Insert English translations for plants that don't have one yet
+  insert into public.plant_translations (
+    plant_id,
+    language,
+    name,
+    given_names,
+    scientific_name,
+    family,
+    overview,
+    promotion_month,
+    life_cycle,
+    season,
+    foliage_persistance,
+    toxicity_human,
+    toxicity_pets,
+    allergens,
+    symbolism,
+    living_space,
+    composition,
+    maintenance_level,
+    origin,
+    habitat,
+    level_sun,
+    advice_soil,
+    advice_mulching,
+    advice_fertilizer,
+    advice_tutoring,
+    advice_sowing,
+    advice_medicinal,
+    advice_infusion,
+    ground_effect,
+    source_name,
+    source_url,
+    tags,
+    nutritional_intake,
+    recipes_ideas,
+    cut
+  )
+  select
+    p.id,
+    'en',
+    p.name,
+    p.given_names,
+    p.scientific_name,
+    p.family,
+    p.overview,
+    p.promotion_month,
+    p.life_cycle,
+    p.season,
+    p.foliage_persistance,
+    p.toxicity_human,
+    p.toxicity_pets,
+    p.allergens,
+    p.symbolism,
+    p.living_space,
+    p.composition,
+    p.maintenance_level,
+    p.origin,
+    p.habitat,
+    p.level_sun,
+    p.advice_soil,
+    p.advice_mulching,
+    p.advice_fertilizer,
+    p.advice_tutoring,
+    p.advice_sowing,
+    p.advice_medicinal,
+    p.advice_infusion,
+    p.ground_effect,
+    p.source_name,
+    p.source_url,
+    p.tags,
+    p.nutritional_intake,
+    p.recipes_ideas,
+    p.cut
+  from public.plants p
+  where not exists (
+    select 1 from public.plant_translations pt 
+    where pt.plant_id = p.id and pt.language = 'en'
+  );
+  
+  -- Log how many translations were created
+  raise notice 'English translations migration completed';
+end $$;
+
 -- ========== Requested plants (user requests for new plants) ==========
 create table if not exists public.requested_plants (
   id uuid primary key default gen_random_uuid(),

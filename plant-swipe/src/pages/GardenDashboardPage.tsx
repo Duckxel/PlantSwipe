@@ -2203,8 +2203,8 @@ export const GardenDashboardPage: React.FC = () => {
     if (!id || !user?.id) return;
     setImportingFromBookmark(true);
     try {
-      // Fetch bookmark details with full plant data
-      const bookmark = await getBookmarkDetails(bookmarkId);
+      // Fetch bookmark details with full plant data (with translations)
+      const bookmark = await getBookmarkDetails(bookmarkId, currentLang);
       const items = bookmark.items || [];
       
       if (items.length === 0) {
