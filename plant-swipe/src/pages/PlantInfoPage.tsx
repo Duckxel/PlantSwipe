@@ -134,9 +134,11 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
   if (error) throw new Error(error.message)
   if (!data) return null
   
-  // Load translation if language is provided
+  // English data is stored in the plants table directly (no translation needed)
+  // Only load translation for non-English languages
+  const isEnglish = !language || language === 'en'
   let translation: any = null
-  if (language) {
+  if (!isEnglish) {
     const { data: translationData } = await supabase
       .from('plant_translations')
       .select('*')

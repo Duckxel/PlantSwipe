@@ -1893,20 +1893,22 @@ export const GardenDashboardPage: React.FC = () => {
         return;
       }
 
-      // Load translations for current language
-      const plantIds = fullPlants.map((p: any) => p.id);
-      const { data: translations } = await supabase
-        .from("plant_translations")
-        .select("*")
-        .eq("language", currentLang)
-        .in("plant_id", plantIds);
-
-      // Create translation map
+      // Load translations for current language (skip for English - uses plants table directly)
       const translationMap = new Map();
-      if (translations) {
-        translations.forEach((t: any) => {
-          translationMap.set(t.plant_id, t);
-        });
+      const isEnglish = currentLang === 'en';
+      if (!isEnglish) {
+        const plantIds = fullPlants.map((p: any) => p.id);
+        const { data: translations } = await supabase
+          .from("plant_translations")
+          .select("*")
+          .eq("language", currentLang)
+          .in("plant_id", plantIds);
+
+        if (translations) {
+          translations.forEach((t: any) => {
+            translationMap.set(t.plant_id, t);
+          });
+        }
       }
 
       // Merge translations with base plants and filter by search query
