@@ -417,11 +417,12 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
             url: src?.url,
           }))
           .filter((src) => src.name)
-      if (!sources.length && (translation.source_name || basePlant.source_name)) {
+      // source_name and source_url are now only in plant_translations
+      if (!sources.length && translation.source_name) {
         sources.push({
           id: `${basePlant.id}-legacy-source-${sources.length}`,
-          name: translation.source_name || basePlant.source_name,
-          url: translation.source_url || basePlant.source_url,
+          name: translation.source_name,
+          url: translation.source_url,
         })
       }
       const primaryImage = images.find((i) => i.use === 'primary')?.link
@@ -626,13 +627,13 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
   try {
     const TOP_LIKED_LIMIT = 5
     
+    // Note: advice_medicinal and origin are now in plant_translations only
     const plantColumns = [
       'id', 'name', 'scientific_name', 'plant_type', 
       'utility', 'comestible_part', 'fruit_type',
-      'season', 
-      'level_sun', 
+      'season', 'habitat', 'level_sun', 'promotion_month',
       'created_time', 'updated_time',
-      'scent', 'aromatherapy', 'advice_medicinal', 'origin', 'composition',
+      'scent', 'aromatherapy', 'composition',
       'plant_images (link,use)',
       'plant_colors (colors (id,name,hex_code))',
       'plant_watering_schedules (season,quantity,time_period)',
@@ -730,13 +731,15 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
 
       const mergedUsage = {
         ...transUsage,
-        adviceMedicinal: translation.advice_medicinal || transUsage.adviceMedicinal || basePlant.advice_medicinal,
+        // advice_medicinal is now only in plant_translations
+        adviceMedicinal: translation.advice_medicinal || transUsage.adviceMedicinal,
         aromatherapy: basePlant.aromatherapy ?? transUsage.aromatherapy ?? false,
       }
       
       const mergedEcology = {
         ...transEcology,
-        nativeRange: translation.origin || transEcology.nativeRange || basePlant.origin || undefined,
+        // origin is now only in plant_translations
+        nativeRange: translation.origin || transEcology.nativeRange || undefined,
       }
 
       const containerFriendly = basePlant.composition && Array.isArray(basePlant.composition) && basePlant.composition.includes('pot')
