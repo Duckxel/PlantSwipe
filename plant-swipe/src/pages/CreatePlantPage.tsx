@@ -1495,6 +1495,18 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           .from('plant_translations')
           .upsert(translatedRows, { onConflict: 'plant_id,language' })
         if (translateError) throw new Error(translateError.message)
+        
+        // Clear cache for translated languages so they reload fresh data
+        setLoadedLanguages(prev => {
+          const newSet = new Set(prev)
+          targets.forEach(lang => newSet.delete(lang))
+          return newSet
+        })
+        setPlantByLanguage(prev => {
+          const newCache = { ...prev }
+          targets.forEach(lang => delete newCache[lang])
+          return newCache
+        })
       }
 
       setPlant((prev) => ({
