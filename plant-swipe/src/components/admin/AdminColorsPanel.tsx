@@ -486,11 +486,6 @@ export const AdminColorsPanel: React.FC = () => {
       .join(', ')
   }
 
-  // Get children colors
-  const getChildrenCount = (colorId: string): number => {
-    return colors.filter((c) => c.parentIds.includes(colorId)).length
-  }
-
   // Copy hex to clipboard
   const copyHex = async (hex: string) => {
     try {
@@ -641,13 +636,13 @@ export const AdminColorsPanel: React.FC = () => {
 
   // Color form component
   const ColorForm: React.FC = () => {
-    // Stop propagation on input focus to prevent sheet from closing
-    const handleInputClick = (e: React.MouseEvent) => {
+    // Stop propagation on events to prevent sheet from closing
+    const stopPropagation = (e: React.SyntheticEvent) => {
       e.stopPropagation()
     }
 
     return (
-      <div className="space-y-4" onClick={handleInputClick}>
+      <div className="space-y-4" onClick={stopPropagation}>
         {/* Name */}
         <div className="space-y-2">
           <Label htmlFor="color-name">Color Name *</Label>
@@ -655,8 +650,8 @@ export const AdminColorsPanel: React.FC = () => {
             id="color-name"
             value={formData.name}
             onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-            onClick={handleInputClick}
-            onFocus={handleInputClick}
+            onClick={stopPropagation}
+            onFocus={stopPropagation}
             placeholder="e.g., Emerald Green"
             className="rounded-xl"
             autoComplete="off"
@@ -671,8 +666,8 @@ export const AdminColorsPanel: React.FC = () => {
               id="color-hex"
               value={formData.hexCode}
               onChange={(e) => setFormData((prev) => ({ ...prev, hexCode: e.target.value }))}
-              onClick={handleInputClick}
-              onFocus={handleInputClick}
+              onClick={stopPropagation}
+              onFocus={stopPropagation}
               placeholder="#00ff00"
               className="rounded-xl font-mono"
               autoComplete="off"
@@ -809,8 +804,8 @@ export const AdminColorsPanel: React.FC = () => {
                     <Input
                       value={translation?.name || ''}
                       onChange={(e) => updateTranslation(lang, e.target.value)}
-                      onClick={handleInputClick}
-                      onFocus={handleInputClick}
+                      onClick={stopPropagation}
+                      onFocus={stopPropagation}
                       placeholder={`Translation in ${lang.toUpperCase()}`}
                       className="rounded-xl flex-1"
                       autoComplete="off"
