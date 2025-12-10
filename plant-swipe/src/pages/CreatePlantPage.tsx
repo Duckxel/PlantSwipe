@@ -158,7 +158,9 @@ function parseSupabaseError(error: any, context?: string): string {
   }
   
   if (message.includes('plant_images_use_unique')) {
-    return 'Only one primary or discovery image is allowed. Please check your image assignments.'
+    // This should not happen with proper normalization - log for debugging
+    console.error('[parseSupabaseError] plant_images_use_unique violation - this indicates a bug in image normalization')
+    return 'Image save conflict detected. Please try saving again. If the problem persists, try removing and re-adding the images.'
   }
   
   // Handle 409 conflicts
@@ -330,112 +332,93 @@ async function linkColors(plantId: string, colorIds: string[]) {
 }
 
 async function upsertImages(plantId: string, images: Plant["images"]) {
-  const normalized = (() => {
-    const list = images && images.length ? images : []
-    let primaryUsed = false
-    let discoveryUsed = false
+  const list = images && images.length ? images : []
+  
+  console.log('[upsertImages] Input images:', list.map(img => ({ link: img.link?.slice(0, 50), use: img.use })))
+  
+  // Build final insert list with strict enforcement of 1 primary, 1 discovery, unlimited other
+  const seenLinks = new Set<string>()
+  
+  // First pass: filter and deduplicate
+  const filtered = list.filter((img) => {
+    const link = img.link?.trim()
+    if (!link) return false
+    const linkLower = link.toLowerCase()
+    if (seenLinks.has(linkLower)) return false
+    seenLinks.add(linkLower)
+    return true
+  })
+  
+  // Second pass: normalize use values - ensure EXACTLY 1 primary, at most 1 discovery
+  // Normalize use value to lowercase and valid values only
+  const normalizeUse = (use: unknown): 'primary' | 'discovery' | 'other' => {
+    if (typeof use !== 'string') return 'other'
+    const lower = use.toLowerCase().trim()
+    if (lower === 'primary') return 'primary'
+    if (lower === 'discovery') return 'discovery'
+    return 'other'
+  }
+  
+  let hasPrimary = false
+  let hasDiscovery = false
+  
+  const normalized = filtered.map((img) => {
+    const normalizedUse = normalizeUse(img.use)
+    let finalUse: 'primary' | 'discovery' | 'other' = 'other'
     
-    // First pass: normalize the use values, ensuring only one primary and one discovery
-    const mapped = list.map((img, idx) => {
-      let use = img.use || (idx === 0 ? 'primary' : 'other')
-      
-      // Handle primary: only allow the first one
-      if (use === 'primary') {
-        if (primaryUsed) {
-          use = 'other' // Convert subsequent primary images to other
-        } else {
-          primaryUsed = true
-        }
-      }
-      
-      // Handle discovery: only allow the first one
-      if (use === 'discovery') {
-        if (discoveryUsed) {
-          use = 'other' // Convert subsequent discovery images to other
-        } else {
-          discoveryUsed = true
-        }
-      }
-      
-      // Ensure other images stay as 'other'
-      if (use !== 'primary' && use !== 'discovery') {
-        use = 'other'
-      }
-      
-      return { ...img, use }
-    })
-    
-    // If no primary or discovery was set and we have images, set the first one as primary
-    // This ensures at least one image has a special role, but allows multiple "other" photos
-    if (!primaryUsed && !discoveryUsed && mapped.length > 0) {
-      mapped[0] = { ...mapped[0], use: 'primary' }
-      primaryUsed = true
+    if (normalizedUse === 'primary' && !hasPrimary) {
+      finalUse = 'primary'
+      hasPrimary = true
+    } else if (normalizedUse === 'discovery' && !hasDiscovery) {
+      finalUse = 'discovery'
+      hasDiscovery = true
+    } else {
+      finalUse = 'other'
     }
     
-    return mapped
-  })()
+    return {
+      plant_id: plantId,
+      link: img.link!.trim(),
+      use: finalUse,
+    }
+  })
+  
+  // If no primary was set and we have images, set the first one as primary
+  if (!hasPrimary && normalized.length > 0) {
+    normalized[0] = { ...normalized[0], use: 'primary' }
+    hasPrimary = true
+  }
+  
+  console.log('[upsertImages] Normalized for insert:', normalized.map(img => ({ link: img.link?.slice(0, 50), use: img.use })))
   
   // Delete all existing images for this plant
-  await supabase.from('plant_images').delete().eq('plant_id', plantId)
-  
-  if (!normalized?.length) return
-  
-  // Filter out images without links and ensure use is always set
-  // Also deduplicate links within this plant to avoid constraint violations
-  const seenLinks = new Set<string>()
-  const inserts = normalized
-    .filter((img) => {
-      const link = img.link?.trim()
-      if (!link) return false
-      // Deduplicate links within the same plant
-      if (seenLinks.has(link.toLowerCase())) return false
-      seenLinks.add(link.toLowerCase())
-      return true
-    })
-    .map((img) => ({ 
-      plant_id: plantId, 
-      link: img.link!.trim(), 
-      use: (img.use === 'primary' || img.use === 'discovery') ? img.use : 'other' 
-    }))
-  
-  if (inserts.length === 0) return
-  
-  // Verify we only have one primary and one discovery before inserting
-  const primaryCount = inserts.filter(i => i.use === 'primary').length
-  const discoveryCount = inserts.filter(i => i.use === 'discovery').length
-  
-  if (primaryCount > 1) {
-    // Keep only the first primary, convert rest to other
-    let foundPrimary = false
-    for (let i = 0; i < inserts.length; i++) {
-      if (inserts[i].use === 'primary') {
-        if (foundPrimary) {
-          inserts[i].use = 'other'
-        } else {
-          foundPrimary = true
-        }
-      }
-    }
+  const { error: deleteError } = await supabase.from('plant_images').delete().eq('plant_id', plantId)
+  if (deleteError) {
+    console.error('[upsertImages] Failed to delete existing images:', deleteError)
+    throw { ...deleteError, context: 'images' }
   }
   
-  if (discoveryCount > 1) {
-    // Keep only the first discovery, convert rest to other
-    let foundDiscovery = false
-    for (let i = 0; i < inserts.length; i++) {
-      if (inserts[i].use === 'discovery') {
-        if (foundDiscovery) {
-          inserts[i].use = 'other'
-        } else {
-          foundDiscovery = true
-        }
-      }
-    }
+  if (!normalized?.length) {
+    console.log('[upsertImages] No images to insert')
+    return
   }
   
-  const { error } = await supabase.from('plant_images').insert(inserts)
+  // Final verification: ensure only 1 primary and 1 discovery
+  const primaryCount = normalized.filter(i => i.use === 'primary').length
+  const discoveryCount = normalized.filter(i => i.use === 'discovery').length
+  console.log('[upsertImages] Final counts - primary:', primaryCount, 'discovery:', discoveryCount, 'total:', normalized.length)
+  
+  if (primaryCount > 1 || discoveryCount > 1) {
+    console.error('[upsertImages] ERROR: Multiple primary or discovery images detected after normalization!')
+  }
+  
+  const { error } = await supabase.from('plant_images').insert(normalized)
   if (error) {
+    console.error('[upsertImages] Insert error:', error)
     throw { ...error, context: 'images' }
   }
+  
+  console.log('[upsertImages] Successfully inserted', normalized.length, 'images')
 }
 
 async function upsertWateringSchedules(plantId: string, schedules: Plant["plantCare"] | undefined) {
