@@ -512,9 +512,6 @@ export const AdminColorsPanel: React.FC = () => {
 
   // Color card component
   const ColorCard: React.FC<{ color: ColorData }> = ({ color }) => {
-    const childCount = getChildrenCount(color.id)
-    const parentNames = getParentNames(color.parentIds)
-
     return (
       <div className="group relative rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1f1f1f] overflow-hidden hover:shadow-lg transition-all">
         {/* Color preview */}
@@ -583,25 +580,27 @@ export const AdminColorsPanel: React.FC = () => {
             )}
           </div>
           
-          {color.translations.length > 0 && (
-            <div className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400">
-              <Languages className="h-3 w-3" />
-              {color.translations.length} translations
-            </div>
-          )}
-
-          {/* Parent/children info */}
-          {!color.isPrimary && parentNames && (
-            <div className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1">
-              <LinkIcon className="h-3 w-3" />
-              Parent: {parentNames}
-            </div>
-          )}
-          {color.isPrimary && childCount > 0 && (
-            <div className="text-xs text-stone-500 dark:text-stone-400">
-              {childCount} child color{childCount !== 1 ? 's' : ''}
-            </div>
-          )}
+          {/* Status icons */}
+          <div className="flex items-center gap-2">
+            {/* Translated in all languages */}
+            {color.translations.length >= SUPPORTED_LANGUAGES.length - 1 && (
+              <div 
+                className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-900/30"
+                title="Translated in all languages"
+              >
+                <Languages className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+            )}
+            {/* Has parent */}
+            {color.parentIds.length > 0 && (
+              <div 
+                className="p-1 rounded-md bg-blue-100 dark:bg-blue-900/30"
+                title={`Parent: ${getParentNames(color.parentIds)}`}
+              >
+                <LinkIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Delete confirmation overlay */}
