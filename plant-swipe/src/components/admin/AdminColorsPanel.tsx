@@ -537,7 +537,7 @@ export const AdminColorsPanel: React.FC = () => {
                 <Copy className="h-3.5 w-3.5" />
               </button>
             )}
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <button
                   className="p-1.5 rounded-lg bg-black/20 hover:bg-black/40 transition-colors"
