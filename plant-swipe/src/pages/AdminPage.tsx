@@ -4626,28 +4626,29 @@ export const AdminPage: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Uptime & Connections Row */}
-                        <div className="grid grid-cols-2 gap-3 mb-4">
-                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-900/10 dark:to-teal-900/10 p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <div className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                                <Clock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                              </div>
-                              <span className="text-xs font-medium text-stone-500 dark:text-stone-400">Uptime</span>
+                        {/* Uptime & Connections Row - Compact */}
+                        <div className="flex items-center gap-4 mb-4 py-2 px-3 rounded-xl bg-stone-50/80 dark:bg-stone-900/30 border border-stone-200/60 dark:border-stone-700/40">
+                          <div className="flex items-center gap-2.5 flex-1">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm">
+                              <Clock className="h-4 w-4 text-white" />
                             </div>
-                            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
-                              {formatUptime(systemHealth.uptime)}
+                            <div className="flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wide font-medium text-stone-400 dark:text-stone-500">Uptime</span>
+                              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                {formatUptime(systemHealth.uptime)}
+                              </span>
                             </div>
                           </div>
-                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-900/10 dark:to-pink-900/10 p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <div className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center">
-                                <Users className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                              </div>
-                              <span className="text-xs font-medium text-stone-500 dark:text-stone-400">Connections</span>
+                          <div className="w-px h-8 bg-stone-200 dark:bg-stone-700" />
+                          <div className="flex items-center gap-2.5 flex-1">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-sm">
+                              <Users className="h-4 w-4 text-white" />
                             </div>
-                            <div className="text-lg font-bold text-purple-700 dark:text-purple-400">
-                              {systemHealth.connections !== null ? systemHealth.connections : "-"}
+                            <div className="flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wide font-medium text-stone-400 dark:text-stone-500">Connections</span>
+                              <span className="text-sm font-bold text-violet-600 dark:text-violet-400 tabular-nums">
+                                {systemHealth.connections !== null ? systemHealth.connections : "-"}
+                              </span>
                             </div>
                           </div>
                         </div>
