@@ -1288,7 +1288,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
 
       <Dialog open={open} onOpenChange={(v) => v ? setOpen(true) : resetAndClose()}>
         <DialogTrigger asChild>
-          <Button type="button" variant="outline" className="w-fit">
+          <Button type="button" variant="outline" className="w-full">
             <span className="w-4 h-4 rounded-full bg-gradient-to-br from-red-400 via-green-400 to-blue-400 mr-2" />
             {t('plantAdmin.colors.addColorButton', 'Add color')}
           </Button>
