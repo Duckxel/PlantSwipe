@@ -765,8 +765,12 @@ create table if not exists public.plant_images (
 alter table if exists public.plant_images drop constraint if exists plant_images_link_key;
 -- Ensure composite uniqueness on (plant_id, link)
 create unique index if not exists plant_images_plant_link_unique on public.plant_images (plant_id, link);
--- Keep uniqueness on (plant_id, use) for primary/discovery images
-create unique index if not exists plant_images_use_unique on public.plant_images (plant_id, use) where use in ('primary', 'discovery');
+-- Drop old use uniqueness constraint that may have been created without the WHERE clause
+-- This is needed because CREATE INDEX IF NOT EXISTS won't update an existing index
+drop index if exists public.plant_images_use_unique;
+-- Keep uniqueness on (plant_id, use) ONLY for primary/discovery images
+-- This allows unlimited 'other' images per plant, but only 1 primary and 1 discovery
+create unique index plant_images_use_unique on public.plant_images (plant_id, use) where use in ('primary', 'discovery');
 alter table public.plant_images enable row level security;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_images' and policyname='plant_images_select') then
