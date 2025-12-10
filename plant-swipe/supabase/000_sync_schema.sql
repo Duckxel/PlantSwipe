@@ -85,6 +85,7 @@ do $$ declare
     'plant_images',
     'colors',
     'plant_colors',
+    'color_translations',
     'translation_languages',
     'plant_translations',
     'requested_plants',
@@ -782,17 +783,57 @@ end $$;
 create table if not exists public.colors (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
-  hex_code text not null unique,
-  created_at timestamptz not null default now()
+  hex_code text,
+  is_primary boolean not null default false,
+  parent_ids uuid[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
+
+-- Add new columns if they don't exist (for existing databases)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='colors' and column_name='is_primary') then
+    alter table public.colors add column is_primary boolean not null default false;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='colors' and column_name='parent_ids') then
+    alter table public.colors add column parent_ids uuid[] not null default '{}';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='colors' and column_name='updated_at') then
+    alter table public.colors add column updated_at timestamptz not null default now();
+  end if;
+  -- Make hex_code nullable (it was previously not null unique, but we want to allow colors without hex)
+  alter table public.colors alter column hex_code drop not null;
+exception when others then null;
+end $$;
+
+-- Drop the unique constraint on hex_code if it exists (allow multiple colors with same hex or null hex)
+do $$ begin
+  alter table public.colors drop constraint if exists colors_hex_code_key;
+exception when others then null;
+end $$;
+
 create table if not exists public.plant_colors (
   plant_id text not null references public.plants(id) on delete cascade,
   color_id uuid not null references public.colors(id) on delete cascade,
   added_at timestamptz not null default now(),
   primary key (plant_id, color_id)
 );
+
+-- ========== Color translations ==========
+create table if not exists public.color_translations (
+  id uuid primary key default gen_random_uuid(),
+  color_id uuid not null references public.colors(id) on delete cascade,
+  language text not null,
+  name text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (color_id, language)
+);
+
 alter table public.colors enable row level security;
 alter table public.plant_colors enable row level security;
+alter table public.color_translations enable row level security;
+
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='colors' and policyname='colors_read_all') then
     drop policy colors_read_all on public.colors;
@@ -810,7 +851,22 @@ do $$ begin
     drop policy plant_colors_read on public.plant_colors;
   end if;
   create policy plant_colors_read on public.plant_colors for select to authenticated, anon using (true);
+  -- Color translations policies
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='color_translations' and policyname='color_translations_read_all') then
+    drop policy color_translations_read_all on public.color_translations;
+  end if;
+  create policy color_translations_read_all on public.color_translations for select to authenticated, anon using (true);
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='color_translations' and policyname='color_translations_modify') then
+    drop policy color_translations_modify on public.color_translations;
+  end if;
+  create policy color_translations_modify on public.color_translations for all to authenticated using (true) with check (true);
 end $$;
+
+-- Create index for faster parent lookups
+create index if not exists idx_colors_parent_ids on public.colors using gin (parent_ids);
+create index if not exists idx_colors_is_primary on public.colors (is_primary) where is_primary = true;
+create index if not exists idx_color_translations_color_id on public.color_translations (color_id);
+create index if not exists idx_color_translations_language on public.color_translations (language);
 
 -- Language catalog for translations
 create table if not exists public.translation_languages (
@@ -1160,24 +1216,18 @@ declare
   migrated_count integer := 0;
 begin
   -- Insert English translations for plants that don't have one yet
+  -- NOTE: The following columns are NOT included because they stay in plants table only (not translated):
+  -- scientific_name, promotion_month, level_sun, habitat, family, life_cycle, season,
+  -- foliage_persistance, toxicity_human, toxicity_pets, living_space, composition, maintenance_level
   with inserted as (
     insert into public.plant_translations (
       plant_id,
       language,
       name,
       given_names,
-      family,
       overview,
-      life_cycle,
-      season,
-      foliage_persistance,
-      toxicity_human,
-      toxicity_pets,
       allergens,
       symbolism,
-      living_space,
-      composition,
-      maintenance_level,
       origin,
       advice_soil,
       advice_mulching,
@@ -1199,18 +1249,9 @@ begin
       'en',
       p.name,
       coalesce(p.given_names, '{}'),
-      p.family,
       p.overview,
-      p.life_cycle,
-      coalesce(p.season, '{}'),
-      p.foliage_persistance,
-      p.toxicity_human,
-      p.toxicity_pets,
       coalesce(p.allergens, '{}'),
       coalesce(p.symbolism, '{}'),
-      p.living_space,
-      coalesce(p.composition, '{}'),
-      p.maintenance_level,
       coalesce(p.origin, '{}'),
       p.advice_soil,
       p.advice_mulching,
