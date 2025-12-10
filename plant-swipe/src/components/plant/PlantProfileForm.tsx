@@ -826,6 +826,11 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
   const [previewErrors, setPreviewErrors] = React.useState<Record<string, boolean>>({})
   const [isCollapsed, setIsCollapsed] = React.useState<boolean>(true)
 
+  // Count images by type
+  const primaryCount = list.filter((img) => img.use === "primary").length
+  const discoveryCount = list.filter((img) => img.use === "discovery").length
+  const otherCount = list.filter((img) => img.use === "other" || !img.use).length
+
   const getPreviewKey = (img: PlantImage, idx: number) => img.id || img.link || `idx-${idx}`
 
   const updateImage = (idx: number, patch: Partial<PlantImage>) => {
@@ -846,6 +851,7 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
     onChange(
       list.map((img, i) => {
         if (i === idx) return { ...img, use }
+        // Enforce only 1 Primary and 1 Discovery - convert existing to "other"
         if (use === "primary" && img.use === "primary") return { ...img, use: "other" }
         if (use === "discovery" && img.use === "discovery") return { ...img, use: "other" }
         return img
@@ -887,7 +893,9 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
           </button>
           {list.length > 0 && (
-            <span className="text-xs text-muted-foreground">({list.length})</span>
+            <span className="text-xs text-muted-foreground">
+              ({list.length} total: {primaryCount > 0 ? `${primaryCount} Primary` : ''}{primaryCount > 0 && discoveryCount > 0 ? ', ' : ''}{discoveryCount > 0 ? `${discoveryCount} Discovery` : ''}{(primaryCount > 0 || discoveryCount > 0) && otherCount > 0 ? ', ' : ''}{otherCount > 0 ? `${otherCount} Other` : ''})
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -946,7 +954,7 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
               })}
             </div>
           )}
-          <p className="text-xs text-muted-foreground mt-2">Click to expand and edit images. Primary appears on detail pages; Discovery on list cards.</p>
+          <p className="text-xs text-muted-foreground mt-2">Click to expand and edit images. Only 1 Primary (detail pages) and 1 Discovery (list cards) allowed. Add unlimited Other images for the gallery.</p>
         </div>
       ) : (
         // Expanded view: Show full editor
@@ -1010,10 +1018,10 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {img.use === 'primary'
-                          ? 'Shown as the hero/detail image.'
+                          ? 'Hero/detail image (only 1 allowed).'
                           : img.use === 'discovery'
-                            ? 'Used in discovery cards and lists.'
-                            : 'Supports the gallery.'}
+                            ? 'Discovery cards/lists (only 1 allowed).'
+                            : 'Gallery image (unlimited).'}
                       </p>
                     </div>
                   </div>
