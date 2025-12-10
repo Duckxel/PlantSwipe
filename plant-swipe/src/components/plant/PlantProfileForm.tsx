@@ -1040,22 +1040,50 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
   )
 }
 
+interface ColorWithMeta extends PlantColor {
+  isPrimary?: boolean
+}
+
 function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v: PlantColor[]) => void }) {
   const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
-  const [available, setAvailable] = React.useState<PlantColor[]>([])
+  const [available, setAvailable] = React.useState<ColorWithMeta[]>([])
+  const [primaryColors, setPrimaryColors] = React.useState<ColorWithMeta[]>([])
   const [loading, setLoading] = React.useState(false)
   const [search, setSearch] = React.useState("")
   const [insertName, setInsertName] = React.useState("")
   const [insertHex, setInsertHex] = React.useState("#")
+  const [insertIsPrimary, setInsertIsPrimary] = React.useState(false)
+  const [insertParentIds, setInsertParentIds] = React.useState<string[]>([])
   const [inserting, setInserting] = React.useState(false)
+  const [showAdvanced, setShowAdvanced] = React.useState(false)
 
   const loadColors = React.useCallback(async (term?: string) => {
     setLoading(true)
-    const query = supabase.from('colors').select('id,name,hex_code').order('name')
+    const query = supabase.from('colors').select('id,name,hex_code,is_primary').order('name')
     if (term?.trim()) query.ilike('name', `%${term.trim()}%`)
     const { data } = await query
-    setAvailable((data || []).map((row) => ({ id: row.id as string, name: row.name as string, hexCode: (row as any).hex_code as string | undefined })))
+    const mapped = (data || []).map((row) => ({ 
+      id: row.id as string, 
+      name: row.name as string, 
+      hexCode: (row as any).hex_code as string | undefined,
+      isPrimary: row.is_primary as boolean
+    }))
+    setAvailable(mapped)
+    // Also load all primary colors for parent selection
+    const primaries = mapped.filter(c => c.isPrimary)
+    if (primaries.length === 0 && !term) {
+      // Load primary colors separately if not in search results
+      const { data: primaryData } = await supabase.from('colors').select('id,name,hex_code,is_primary').eq('is_primary', true).order('name')
+      setPrimaryColors((primaryData || []).map((row) => ({ 
+        id: row.id as string, 
+        name: row.name as string, 
+        hexCode: (row as any).hex_code as string | undefined,
+        isPrimary: true
+      })))
+    } else {
+      setPrimaryColors(primaries)
+    }
     setLoading(false)
   }, [])
 
@@ -1071,18 +1099,79 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
     setOpen(false)
   }
 
+  const toggleParent = (parentId: string) => {
+    setInsertParentIds(prev => 
+      prev.includes(parentId) 
+        ? prev.filter(id => id !== parentId)
+        : [...prev, parentId]
+    )
+  }
+
+  // Auto-translate color name to all supported languages
+  const autoTranslateColor = async (colorId: string, colorName: string) => {
+    try {
+      // Import dynamically to avoid circular deps
+      const { translateText } = await import('@/lib/deepl')
+      const { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } = await import('@/lib/i18n')
+      
+      const translations: { color_id: string; language: string; name: string }[] = []
+      
+      for (const lang of SUPPORTED_LANGUAGES) {
+        if (lang === DEFAULT_LANGUAGE) continue
+        try {
+          const translated = await translateText(colorName, lang, DEFAULT_LANGUAGE)
+          if (translated && translated !== colorName) {
+            translations.push({ color_id: colorId, language: lang, name: translated })
+          }
+        } catch (e) {
+          console.error(`Failed to translate color to ${lang}:`, e)
+        }
+      }
+      
+      if (translations.length > 0) {
+        await supabase.from('color_translations').upsert(translations, { onConflict: 'color_id,language' })
+      }
+    } catch (e) {
+      console.error('Auto-translate failed:', e)
+    }
+  }
+
   const handleInsert = async () => {
     if (!insertName.trim()) return
+    // Non-primary colors must have at least one parent
+    if (!insertIsPrimary && insertParentIds.length === 0) {
+      return
+    }
+    
     setInserting(true)
-    const payload = { name: insertName.trim(), hex_code: normalizeHex(insertHex) || null }
+    const payload = { 
+      name: insertName.trim(), 
+      hex_code: normalizeHex(insertHex) || null,
+      is_primary: insertIsPrimary,
+      parent_ids: insertIsPrimary ? [] : insertParentIds
+    }
     const { data, error } = await supabase.from('colors').insert(payload).select('id,name,hex_code').maybeSingle()
-    setInserting(false)
-    if (error) return
+    
+    if (error) {
+      setInserting(false)
+      return
+    }
+    
     const newColor: PlantColor = { id: data?.id, name: data?.name ?? insertName.trim(), hexCode: (data as any)?.hex_code || normalizeHex(insertHex) }
+    
+    // Auto-translate in background
+    if (data?.id) {
+      autoTranslateColor(data.id, insertName.trim())
+    }
+    
     setAvailable((prev) => [...prev, newColor])
     if (!alreadyAdded(newColor)) onChange([...(colors || []), newColor])
     setInsertName("")
     setInsertHex("#")
+    setInsertIsPrimary(false)
+    setInsertParentIds([])
+    setShowAdvanced(false)
+    setInserting(false)
     setOpen(false)
   }
 
@@ -1101,7 +1190,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
           <DialogTrigger asChild>
             <Button type="button" variant="outline">{t('plantAdmin.colors.addColorButton', 'Add color')}</Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t('plantAdmin.colors.dialogTitle', 'Select or add a color')}</DialogTitle>
             </DialogHeader>
@@ -1118,7 +1207,10 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
                   >
                     <span className="w-6 h-6 rounded-full border" style={{ backgroundColor: c.hexCode || "transparent" }} />
                     <span className="text-left">
-                      <div className="font-medium text-sm">{c.name}</div>
+                      <div className="font-medium text-sm flex items-center gap-1">
+                        {c.name}
+                        {c.isPrimary && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 text-amber-700">Primary</span>}
+                      </div>
                         <div className="text-xs text-muted-foreground">{c.hexCode || t('plantAdmin.colors.noHex', 'No hex')}</div>
                     </span>
                   </button>
@@ -1128,17 +1220,95 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
                   <div className="col-span-full text-center text-sm text-muted-foreground">{t('plantAdmin.colors.empty', 'No colors found.')}</div>
               )}
             </div>
-            <div className="grid gap-2 border-t pt-3">
+            <div className="grid gap-3 border-t pt-3">
                 <div className="font-medium text-sm">{t('plantAdmin.colors.insertHeading', 'Insert a new color')}</div>
-              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-center">
+              <div className="grid gap-2">
+                <div className="grid gap-2 sm:grid-cols-[1fr_1fr] items-center">
                   <Input value={insertName} onChange={(e) => setInsertName(e.target.value)} placeholder={t('plantAdmin.colors.colorNamePlaceholder', 'Color name')} />
-                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
                     <Input value={insertHex} onChange={(e) => setInsertHex(e.target.value)} placeholder={t('plantAdmin.colors.hexPlaceholder', '#hexcode')} />
-                  <span className="w-8 h-8 rounded border" style={{ backgroundColor: normalizeHex(insertHex) || "transparent" }} />
+                    <span className="w-8 h-8 rounded border flex-shrink-0" style={{ backgroundColor: normalizeHex(insertHex) || "transparent" }} />
+                  </div>
                 </div>
-                  <Button type="button" onClick={handleInsert} disabled={inserting || !insertName.trim()}>
-                    {inserting ? t('plantAdmin.colors.saving', 'Saving...') : t('plantAdmin.colors.insertButton', 'Insert')}
-                  </Button>
+                
+                {/* Advanced options toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  {showAdvanced ? '▼' : '▶'} {t('plantAdmin.colors.advancedOptions', 'Advanced options')}
+                </button>
+                
+                {showAdvanced && (
+                  <div className="grid gap-3 p-3 rounded-lg bg-muted/50">
+                    {/* Primary toggle */}
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={insertIsPrimary}
+                          onChange={(e) => {
+                            setInsertIsPrimary(e.target.checked)
+                            if (e.target.checked) setInsertParentIds([])
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className={`w-9 h-5 rounded-full transition-colors ${insertIsPrimary ? 'bg-amber-500' : 'bg-stone-300 dark:bg-stone-600'}`} />
+                        <div className={`absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${insertIsPrimary ? 'translate-x-4' : ''}`} />
+                      </div>
+                      <span className="text-sm font-medium">{t('plantAdmin.colors.primary', 'Primary Color')}</span>
+                    </label>
+                    
+                    {/* Parent selection (only for non-primary) */}
+                    {!insertIsPrimary && (
+                      <div className="grid gap-2">
+                        <div className="text-sm font-medium">
+                          {t('plantAdmin.colors.parentColors', 'Parent Colors')} *
+                          <span className="text-xs text-muted-foreground ml-1">(required)</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 p-2 rounded border bg-background max-h-32 overflow-auto">
+                          {primaryColors.length === 0 ? (
+                            <span className="text-sm text-muted-foreground">{t('plantAdmin.colors.noPrimaries', 'No primary colors available')}</span>
+                          ) : (
+                            primaryColors.map((parent) => (
+                              <button
+                                key={parent.id}
+                                type="button"
+                                onClick={() => toggleParent(parent.id!)}
+                                className={`flex items-center gap-2 px-2 py-1 rounded text-sm transition-all ${
+                                  insertParentIds.includes(parent.id!)
+                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500'
+                                    : 'bg-white dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700'
+                                }`}
+                              >
+                                <span className="w-4 h-4 rounded-full border" style={{ backgroundColor: parent.hexCode || 'transparent' }} />
+                                {parent.name}
+                                {insertParentIds.includes(parent.id!) && <span>✓</span>}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-muted-foreground">
+                      {t('plantAdmin.colors.autoTranslateNote', 'Color will be auto-translated to all supported languages')}
+                    </p>
+                  </div>
+                )}
+                
+                <Button 
+                  type="button" 
+                  onClick={handleInsert} 
+                  disabled={inserting || !insertName.trim() || (!insertIsPrimary && insertParentIds.length === 0)}
+                  className="w-full sm:w-auto"
+                >
+                  {inserting ? t('plantAdmin.colors.saving', 'Saving...') : t('plantAdmin.colors.insertButton', 'Insert')}
+                </Button>
+                {!insertIsPrimary && insertParentIds.length === 0 && insertName.trim() && (
+                  <p className="text-xs text-amber-600">{t('plantAdmin.colors.parentRequired', 'Non-primary colors must have at least one parent')}</p>
+                )}
               </div>
             </div>
           </div>

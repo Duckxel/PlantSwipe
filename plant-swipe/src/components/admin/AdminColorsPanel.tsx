@@ -369,6 +369,35 @@ export const AdminColorsPanel: React.FC = () => {
     }
   }
 
+  // Auto-translate color name to missing languages
+  const autoTranslateColorName = async (colorName: string, existingTranslations: ColorTranslation[]): Promise<ColorTranslation[]> => {
+    const missingLanguages = SUPPORTED_LANGUAGES.filter(
+      lang => lang !== DEFAULT_LANGUAGE && !existingTranslations.some(t => t.language === lang && t.name.trim())
+    )
+    
+    if (missingLanguages.length === 0) return existingTranslations
+    
+    const newTranslations: ColorTranslation[] = [...existingTranslations]
+    
+    for (const lang of missingLanguages) {
+      try {
+        const translated = await translateText(colorName, lang as SupportedLanguage, DEFAULT_LANGUAGE)
+        if (translated && translated !== colorName) {
+          const existing = newTranslations.find(t => t.language === lang)
+          if (existing) {
+            existing.name = translated
+          } else {
+            newTranslations.push({ language: lang, name: translated })
+          }
+        }
+      } catch (e) {
+        console.error(`Failed to auto-translate to ${lang}:`, e)
+      }
+    }
+    
+    return newTranslations
+  }
+
   // Save color (create or update)
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -423,12 +452,24 @@ export const AdminColorsPanel: React.FC = () => {
         colorId = newColor.id
       }
 
+      // Auto-translate if translations are missing
+      let translationsToSave = formData.translations
+      const hasAllTranslations = SUPPORTED_LANGUAGES
+        .filter(lang => lang !== DEFAULT_LANGUAGE)
+        .every(lang => translationsToSave.some(t => t.language === lang && t.name.trim()))
+      
+      if (!hasAllTranslations) {
+        // Auto-translate missing languages
+        translationsToSave = await autoTranslateColorName(formData.name.trim(), translationsToSave)
+      }
+
       // Save translations
-      if (formData.translations.length > 0) {
-        const translationInserts = formData.translations.map((t) => ({
+      const validTranslations = translationsToSave.filter(t => t.name.trim())
+      if (validTranslations.length > 0) {
+        const translationInserts = validTranslations.map((t) => ({
           color_id: colorId,
           language: t.language,
-          name: t.name,
+          name: t.name.trim(),
         }))
 
         const { error: translationError } = await supabase
