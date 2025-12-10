@@ -6282,36 +6282,6 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   </div>
 
-                                  {/* Search and Filter Row */}
-                                  <div className="flex flex-col sm:flex-row gap-3">
-                                    <div className="relative flex-1">
-                                      <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-                                      <Input
-                                        value={plantSearchQuery}
-                                        onChange={(e) => setPlantSearchQuery(e.target.value)}
-                                        placeholder="Search plants..."
-                                        className="pl-10 h-10 sm:h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
-                                      />
-                                    </div>
-                                    <div className="flex gap-2">
-                                      <select
-                                        className="flex-1 sm:w-44 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 h-10 sm:h-11"
-                                        value={selectedPromotionMonth}
-                                        onChange={(e) =>
-                                          setSelectedPromotionMonth(e.target.value as PromotionMonthSlug | "none" | "all")
-                                        }
-                                      >
-                                        <option value="all">All months</option>
-                                        <option value="none">None assigned</option>
-                                        {PROMOTION_MONTH_SLUGS.map((slug) => (
-                                          <option key={slug} value={slug}>
-                                            {PROMOTION_MONTH_LABELS[slug]}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  </div>
-
                                   {/* Status Filter Pills */}
                                   <div className="flex flex-wrap gap-2">
                                     {PLANT_STATUS_FILTER_OPTIONS.map((option) => {
