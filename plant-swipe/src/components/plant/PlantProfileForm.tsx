@@ -1044,78 +1044,166 @@ interface ColorWithMeta extends PlantColor {
   isPrimary?: boolean
 }
 
+// Helper functions for color manipulation
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  if (!result) {
+    const shortResult = /^#?([a-f\d])([a-f\d])([a-f\d])$/i.exec(hex)
+    if (shortResult) {
+      return {
+        r: parseInt(shortResult[1] + shortResult[1], 16),
+        g: parseInt(shortResult[2] + shortResult[2], 16),
+        b: parseInt(shortResult[3] + shortResult[3], 16),
+      }
+    }
+    return null
+  }
+  return {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16),
+  }
+}
+
+function getHue(hex: string): number {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return 999
+  const r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min
+  let hue = 0
+  if (delta !== 0) {
+    if (max === r) hue = ((g - b) / delta) % 6
+    else if (max === g) hue = (b - r) / delta + 2
+    else hue = (r - g) / delta + 4
+    hue = Math.round(hue * 60)
+    if (hue < 0) hue += 360
+  }
+  return hue
+}
+
+function colorDistance(hex1: string, hex2: string): number {
+  const rgb1 = hexToRgb(hex1), rgb2 = hexToRgb(hex2)
+  if (!rgb1 || !rgb2) return Infinity
+  const dr = rgb1.r - rgb2.r, dg = rgb1.g - rgb2.g, db = rgb1.b - rgb2.b
+  return Math.sqrt(dr * dr + dg * dg + db * db)
+}
+
+function isValidHex(hex: string): boolean {
+  return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(hex)
+}
+
+function getContrastColor(hex: string): string {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return '#000000'
+  const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255
+  return luminance > 0.5 ? '#000000' : '#ffffff'
+}
+
 function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v: PlantColor[]) => void }) {
   const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
-  const [available, setAvailable] = React.useState<ColorWithMeta[]>([])
+  const [allColors, setAllColors] = React.useState<ColorWithMeta[]>([])
   const [primaryColors, setPrimaryColors] = React.useState<ColorWithMeta[]>([])
   const [loading, setLoading] = React.useState(false)
   const [search, setSearch] = React.useState("")
+  const [mode, setMode] = React.useState<'pick' | 'create'>('pick')
+  
+  // Create mode state
   const [insertName, setInsertName] = React.useState("")
   const [insertHex, setInsertHex] = React.useState("#")
   const [insertIsPrimary, setInsertIsPrimary] = React.useState(false)
   const [insertParentIds, setInsertParentIds] = React.useState<string[]>([])
   const [inserting, setInserting] = React.useState(false)
-  const [showAdvanced, setShowAdvanced] = React.useState(false)
 
-  const loadColors = React.useCallback(async (term?: string) => {
+  // Load all colors once when dialog opens
+  const loadColors = React.useCallback(async () => {
     setLoading(true)
-    const query = supabase.from('colors').select('id,name,hex_code,is_primary').order('name')
-    if (term?.trim()) query.ilike('name', `%${term.trim()}%`)
-    const { data } = await query
+    const { data } = await supabase.from('colors').select('id,name,hex_code,is_primary')
     const mapped = (data || []).map((row) => ({ 
       id: row.id as string, 
       name: row.name as string, 
       hexCode: (row as any).hex_code as string | undefined,
       isPrimary: row.is_primary as boolean
     }))
-    setAvailable(mapped)
-    // Also load all primary colors for parent selection
-    const primaries = mapped.filter(c => c.isPrimary)
-    if (primaries.length === 0 && !term) {
-      // Load primary colors separately if not in search results
-      const { data: primaryData } = await supabase.from('colors').select('id,name,hex_code,is_primary').eq('is_primary', true).order('name')
-      setPrimaryColors((primaryData || []).map((row) => ({ 
-        id: row.id as string, 
-        name: row.name as string, 
-        hexCode: (row as any).hex_code as string | undefined,
-        isPrimary: true
-      })))
-    } else {
-      setPrimaryColors(primaries)
-    }
+    setAllColors(mapped)
+    setPrimaryColors(mapped.filter(c => c.isPrimary))
     setLoading(false)
   }, [])
 
   React.useEffect(() => {
-    if (open) loadColors(search)
-  }, [open, search, loadColors])
+    if (open) loadColors()
+  }, [open, loadColors])
 
-  const alreadyAdded = (candidate: PlantColor) => (colors || []).some((c) => (c.id && candidate.id && c.id === candidate.id) || c.name.toLowerCase() === candidate.name.toLowerCase())
+  // Filter and sort colors based on search
+  const filteredColors = React.useMemo(() => {
+    let result = allColors
+    const query = search.trim().toLowerCase()
+    
+    if (query) {
+      // Check if search looks like a hex code
+      const isHexSearch = query.startsWith('#') || /^[a-f0-9]{3,6}$/i.test(query)
+      
+      if (isHexSearch) {
+        const searchHex = normalizeHex(query)
+        if (isValidHex(searchHex)) {
+          // Sort by color distance for approximate hex match
+          result = [...allColors]
+            .map(c => ({ color: c, distance: c.hexCode ? colorDistance(searchHex, c.hexCode) : Infinity }))
+            .sort((a, b) => a.distance - b.distance)
+            .map(item => item.color)
+        }
+      } else {
+        // Name search
+        result = allColors.filter(c => c.name.toLowerCase().includes(query))
+      }
+    }
+    
+    // Sort by hue if not searching by hex
+    if (!query || !query.startsWith('#')) {
+      result = [...result].sort((a, b) => {
+        const hueA = a.hexCode ? getHue(a.hexCode) : 999
+        const hueB = b.hexCode ? getHue(b.hexCode) : 999
+        return hueA - hueB
+      })
+    }
+    
+    return result
+  }, [allColors, search])
+
+  // Similar colors for create mode
+  const similarColors = React.useMemo(() => {
+    const hex = normalizeHex(insertHex)
+    if (!isValidHex(hex)) return []
+    return allColors
+      .filter(c => c.hexCode && isValidHex(c.hexCode))
+      .map(c => ({ color: c, distance: colorDistance(hex, c.hexCode!) }))
+      .filter(item => item.distance < 80 && item.distance > 0)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 6)
+      .map(item => item.color)
+  }, [allColors, insertHex])
+
+  const alreadyAdded = (candidate: PlantColor) => 
+    (colors || []).some((c) => (c.id && candidate.id && c.id === candidate.id) || c.name.toLowerCase() === candidate.name.toLowerCase())
 
   const addColor = (c: PlantColor) => {
-    if (alreadyAdded(c)) { setOpen(false); return }
+    if (alreadyAdded(c)) return
     onChange([...(colors || []), { id: c.id, name: c.name, hexCode: c.hexCode }])
     setOpen(false)
+    setSearch("")
   }
 
   const toggleParent = (parentId: string) => {
     setInsertParentIds(prev => 
-      prev.includes(parentId) 
-        ? prev.filter(id => id !== parentId)
-        : [...prev, parentId]
+      prev.includes(parentId) ? prev.filter(id => id !== parentId) : [...prev, parentId]
     )
   }
 
-  // Auto-translate color name to all supported languages
   const autoTranslateColor = async (colorId: string, colorName: string) => {
     try {
-      // Import dynamically to avoid circular deps
       const { translateText } = await import('@/lib/deepl')
       const { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } = await import('@/lib/i18n')
-      
       const translations: { color_id: string; language: string; name: string }[] = []
-      
       for (const lang of SUPPORTED_LANGUAGES) {
         if (lang === DEFAULT_LANGUAGE) continue
         try {
@@ -1123,25 +1211,17 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
           if (translated && translated !== colorName) {
             translations.push({ color_id: colorId, language: lang, name: translated })
           }
-        } catch (e) {
-          console.error(`Failed to translate color to ${lang}:`, e)
-        }
+        } catch (e) { console.error(`Failed to translate to ${lang}:`, e) }
       }
-      
       if (translations.length > 0) {
         await supabase.from('color_translations').upsert(translations, { onConflict: 'color_id,language' })
       }
-    } catch (e) {
-      console.error('Auto-translate failed:', e)
-    }
+    } catch (e) { console.error('Auto-translate failed:', e) }
   }
 
   const handleInsert = async () => {
     if (!insertName.trim()) return
-    // Non-primary colors must have at least one parent
-    if (!insertIsPrimary && insertParentIds.length === 0) {
-      return
-    }
+    if (!insertIsPrimary && insertParentIds.length === 0) return
     
     setInserting(true)
     const payload = { 
@@ -1152,166 +1232,335 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
     }
     const { data, error } = await supabase.from('colors').insert(payload).select('id,name,hex_code').maybeSingle()
     
-    if (error) {
-      setInserting(false)
-      return
-    }
-    
-    const newColor: PlantColor = { id: data?.id, name: data?.name ?? insertName.trim(), hexCode: (data as any)?.hex_code || normalizeHex(insertHex) }
-    
-    // Auto-translate in background
-    if (data?.id) {
+    if (!error && data) {
+      const newColor: PlantColor = { id: data.id, name: data.name, hexCode: (data as any).hex_code || normalizeHex(insertHex) }
       autoTranslateColor(data.id, insertName.trim())
+      setAllColors(prev => [...prev, { ...newColor, isPrimary: insertIsPrimary }])
+      if (!alreadyAdded(newColor)) onChange([...(colors || []), newColor])
+      setInsertName("")
+      setInsertHex("#")
+      setInsertIsPrimary(false)
+      setInsertParentIds([])
+      setMode('pick')
+      setOpen(false)
     }
-    
-    setAvailable((prev) => [...prev, newColor])
-    if (!alreadyAdded(newColor)) onChange([...(colors || []), newColor])
+    setInserting(false)
+  }
+
+  const resetAndClose = () => {
+    setOpen(false)
+    setSearch("")
+    setMode('pick')
     setInsertName("")
     setInsertHex("#")
     setInsertIsPrimary(false)
     setInsertParentIds([])
-    setShowAdvanced(false)
-    setInserting(false)
-    setOpen(false)
   }
 
   return (
     <div className="grid gap-3">
+      {/* Selected colors display */}
       <div className="flex flex-wrap gap-2">
         {(colors || []).map((c, idx) => (
-          <span key={`${c.name}-${idx}`} className="px-2 py-1 rounded bg-stone-100 dark:bg-[#2d2d30] text-sm flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full border" style={{ backgroundColor: c.hexCode || "transparent" }} />
-            {c.name}
-            <button type="button" className="text-red-600" onClick={() => onChange(colors.filter((_, i) => i !== idx))}>×</button>
+          <span 
+            key={`${c.name}-${idx}`} 
+            className="group px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2 border transition-all hover:shadow-sm"
+            style={{ 
+              backgroundColor: c.hexCode ? `${c.hexCode}20` : undefined,
+              borderColor: c.hexCode || '#e5e7eb'
+            }}
+          >
+            <span 
+              className="w-4 h-4 rounded-full border shadow-sm" 
+              style={{ backgroundColor: c.hexCode || "transparent" }} 
+            />
+            <span className="font-medium">{c.name}</span>
+            <button 
+              type="button" 
+              className="opacity-50 hover:opacity-100 hover:text-red-600 transition-opacity" 
+              onClick={() => onChange(colors.filter((_, i) => i !== idx))}
+            >
+              ×
+            </button>
           </span>
         ))}
       </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button type="button" variant="outline">{t('plantAdmin.colors.addColorButton', 'Add color')}</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+
+      <Dialog open={open} onOpenChange={(v) => v ? setOpen(true) : resetAndClose()}>
+        <DialogTrigger asChild>
+          <Button type="button" variant="outline" className="w-fit">
+            <span className="w-4 h-4 rounded-full bg-gradient-to-br from-red-400 via-green-400 to-blue-400 mr-2" />
+            {t('plantAdmin.colors.addColorButton', 'Add color')}
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+          {/* Header */}
+          <div className="p-4 pb-3 border-b">
             <DialogHeader>
-              <DialogTitle>{t('plantAdmin.colors.dialogTitle', 'Select or add a color')}</DialogTitle>
+              <DialogTitle className="text-lg">
+                {mode === 'pick' 
+                  ? t('plantAdmin.colors.dialogTitle', 'Select a color') 
+                  : t('plantAdmin.colors.createTitle', 'Create new color')}
+              </DialogTitle>
             </DialogHeader>
-            <div className="grid gap-3">
-              <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('plantAdmin.colors.searchPlaceholder', 'Search colors by name')} />
-              <div className="max-h-64 overflow-auto border rounded p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {loading ? <div className="col-span-full text-center text-sm text-muted-foreground">{t('plantAdmin.colors.loading', 'Loading colors...')}</div> : (
-                (available || []).map((c) => (
-                  <button
-                    key={c.id || c.name}
-                    type="button"
-                    onClick={() => addColor(c)}
-                    className="flex items-center gap-3 rounded border p-2 hover:bg-muted"
-                  >
-                    <span className="w-6 h-6 rounded-full border" style={{ backgroundColor: c.hexCode || "transparent" }} />
-                    <span className="text-left">
-                      <div className="font-medium text-sm flex items-center gap-1">
-                        {c.name}
-                        {c.isPrimary && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 text-amber-700">Primary</span>}
-                      </div>
-                        <div className="text-xs text-muted-foreground">{c.hexCode || t('plantAdmin.colors.noHex', 'No hex')}</div>
-                    </span>
-                  </button>
-                ))
-              )}
-              {!loading && (available || []).length === 0 && (
-                  <div className="col-span-full text-center text-sm text-muted-foreground">{t('plantAdmin.colors.empty', 'No colors found.')}</div>
-              )}
-            </div>
-            <div className="grid gap-3 border-t pt-3">
-                <div className="font-medium text-sm">{t('plantAdmin.colors.insertHeading', 'Insert a new color')}</div>
-              <div className="grid gap-2">
-                <div className="grid gap-2 sm:grid-cols-[1fr_1fr] items-center">
-                  <Input value={insertName} onChange={(e) => setInsertName(e.target.value)} placeholder={t('plantAdmin.colors.colorNamePlaceholder', 'Color name')} />
-                  <div className="flex items-center gap-2">
-                    <Input value={insertHex} onChange={(e) => setInsertHex(e.target.value)} placeholder={t('plantAdmin.colors.hexPlaceholder', '#hexcode')} />
-                    <span className="w-8 h-8 rounded border flex-shrink-0" style={{ backgroundColor: normalizeHex(insertHex) || "transparent" }} />
-                  </div>
-                </div>
-                
-                {/* Advanced options toggle */}
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
-                >
-                  {showAdvanced ? '▼' : '▶'} {t('plantAdmin.colors.advancedOptions', 'Advanced options')}
-                </button>
-                
-                {showAdvanced && (
-                  <div className="grid gap-3 p-3 rounded-lg bg-muted/50">
-                    {/* Primary toggle */}
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <div className="relative">
-                        <input
-                          type="checkbox"
-                          checked={insertIsPrimary}
-                          onChange={(e) => {
-                            setInsertIsPrimary(e.target.checked)
-                            if (e.target.checked) setInsertParentIds([])
-                          }}
-                          className="sr-only peer"
-                        />
-                        <div className={`w-9 h-5 rounded-full transition-colors ${insertIsPrimary ? 'bg-amber-500' : 'bg-stone-300 dark:bg-stone-600'}`} />
-                        <div className={`absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${insertIsPrimary ? 'translate-x-4' : ''}`} />
-                      </div>
-                      <span className="text-sm font-medium">{t('plantAdmin.colors.primary', 'Primary Color')}</span>
-                    </label>
-                    
-                    {/* Parent selection (only for non-primary) */}
-                    {!insertIsPrimary && (
-                      <div className="grid gap-2">
-                        <div className="text-sm font-medium">
-                          {t('plantAdmin.colors.parentColors', 'Parent Colors')} *
-                          <span className="text-xs text-muted-foreground ml-1">(required)</span>
-                        </div>
-                        <div className="flex flex-wrap gap-2 p-2 rounded border bg-background max-h-32 overflow-auto">
-                          {primaryColors.length === 0 ? (
-                            <span className="text-sm text-muted-foreground">{t('plantAdmin.colors.noPrimaries', 'No primary colors available')}</span>
-                          ) : (
-                            primaryColors.map((parent) => (
-                              <button
-                                key={parent.id}
-                                type="button"
-                                onClick={() => toggleParent(parent.id!)}
-                                className={`flex items-center gap-2 px-2 py-1 rounded text-sm transition-all ${
-                                  insertParentIds.includes(parent.id!)
-                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500'
-                                    : 'bg-white dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700'
-                                }`}
-                              >
-                                <span className="w-4 h-4 rounded-full border" style={{ backgroundColor: parent.hexCode || 'transparent' }} />
-                                {parent.name}
-                                {insertParentIds.includes(parent.id!) && <span>✓</span>}
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    
-                    <p className="text-xs text-muted-foreground">
-                      {t('plantAdmin.colors.autoTranslateNote', 'Color will be auto-translated to all supported languages')}
-                    </p>
-                  </div>
-                )}
-                
-                <Button 
-                  type="button" 
-                  onClick={handleInsert} 
-                  disabled={inserting || !insertName.trim() || (!insertIsPrimary && insertParentIds.length === 0)}
-                  className="w-full sm:w-auto"
-                >
-                  {inserting ? t('plantAdmin.colors.saving', 'Saving...') : t('plantAdmin.colors.insertButton', 'Insert')}
-                </Button>
-                {!insertIsPrimary && insertParentIds.length === 0 && insertName.trim() && (
-                  <p className="text-xs text-amber-600">{t('plantAdmin.colors.parentRequired', 'Non-primary colors must have at least one parent')}</p>
-                )}
-              </div>
+            
+            {/* Mode toggle */}
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => setMode('pick')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                  mode === 'pick' 
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' 
+                    : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
+                }`}
+              >
+                Pick existing
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('create')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                  mode === 'create' 
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' 
+                    : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
+                }`}
+              >
+                Create new
+              </button>
             </div>
           </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {mode === 'pick' ? (
+              <div className="space-y-4">
+                {/* Search */}
+                <div className="relative">
+                  <SearchInput 
+                    value={search} 
+                    onChange={(e) => setSearch(e.target.value)} 
+                    placeholder={t('plantAdmin.colors.searchPlaceholder', 'Search by name or hex code (e.g., #ff0000)')}
+                    className="w-full"
+                  />
+                  {search && (
+                    <button 
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                {/* Color grid */}
+                {loading ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {t('plantAdmin.colors.loading', 'Loading colors...')}
+                  </div>
+                ) : filteredColors.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {t('plantAdmin.colors.empty', 'No colors found.')}
+                    <button 
+                      type="button"
+                      onClick={() => setMode('create')}
+                      className="block mx-auto mt-2 text-emerald-600 hover:underline"
+                    >
+                      Create a new color
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                    {filteredColors.map((c) => {
+                      const isAdded = alreadyAdded(c)
+                      return (
+                        <button
+                          key={c.id || c.name}
+                          type="button"
+                          onClick={() => !isAdded && addColor(c)}
+                          disabled={isAdded}
+                          className={`group relative aspect-square rounded-xl overflow-hidden transition-all ${
+                            isAdded 
+                              ? 'opacity-50 cursor-not-allowed ring-2 ring-emerald-500' 
+                              : 'hover:scale-105 hover:shadow-lg hover:z-10'
+                          }`}
+                          title={`${c.name}${c.hexCode ? ` (${c.hexCode})` : ''}`}
+                        >
+                          {/* Color fill */}
+                          <div 
+                            className="absolute inset-0"
+                            style={{ backgroundColor: c.hexCode || '#e5e7eb' }}
+                          />
+                          
+                          {/* Hover overlay with name */}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end justify-center p-1">
+                            <span 
+                              className="text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity text-center leading-tight truncate w-full px-1"
+                              style={{ color: c.hexCode ? getContrastColor(c.hexCode) : '#000' }}
+                            >
+                              {c.name}
+                            </span>
+                          </div>
+                          
+                          {/* Primary indicator */}
+                          {c.isPrimary && (
+                            <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-white" />
+                          )}
+                          
+                          {/* Added checkmark */}
+                          {isAdded && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                              <span className="text-white text-lg">✓</span>
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Create mode */
+              <div className="space-y-4">
+                {/* Name and Hex inputs */}
+                <div className="grid gap-3">
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Color Name *</label>
+                    <Input 
+                      value={insertName} 
+                      onChange={(e) => setInsertName(e.target.value)} 
+                      placeholder="e.g., Emerald Green"
+                      className="w-full"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Hex Code</label>
+                    <div className="flex gap-2">
+                      <Input 
+                        value={insertHex} 
+                        onChange={(e) => setInsertHex(e.target.value)} 
+                        placeholder="#00ff00"
+                        className="flex-1 font-mono"
+                      />
+                      <div 
+                        className="w-12 h-10 rounded-lg border-2 shadow-inner flex-shrink-0 transition-colors"
+                        style={{ 
+                          backgroundColor: isValidHex(normalizeHex(insertHex)) ? normalizeHex(insertHex) : '#f5f5f5',
+                          borderColor: isValidHex(normalizeHex(insertHex)) ? normalizeHex(insertHex) : '#e5e7eb'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Similar colors warning */}
+                {similarColors.length > 0 && (
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-2">
+                      Similar colors already exist:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {similarColors.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            addColor(c)
+                            setMode('pick')
+                          }}
+                          className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white dark:bg-stone-800 border hover:border-emerald-500 transition-colors"
+                        >
+                          <span 
+                            className="w-5 h-5 rounded-full border shadow-sm" 
+                            style={{ backgroundColor: c.hexCode || 'transparent' }}
+                          />
+                          <span className="text-sm">{c.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Primary toggle */}
+                <label className="flex items-center gap-3 p-3 rounded-lg bg-stone-50 dark:bg-stone-800/50 cursor-pointer">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={insertIsPrimary}
+                      onChange={(e) => {
+                        setInsertIsPrimary(e.target.checked)
+                        if (e.target.checked) setInsertParentIds([])
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className={`w-10 h-6 rounded-full transition-colors ${insertIsPrimary ? 'bg-amber-500' : 'bg-stone-300 dark:bg-stone-600'}`} />
+                    <div className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${insertIsPrimary ? 'translate-x-4' : ''}`} />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium">Primary Color</span>
+                    <p className="text-xs text-muted-foreground">Basic colors like Red, Blue, Green</p>
+                  </div>
+                </label>
+
+                {/* Parent selection */}
+                {!insertIsPrimary && (
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">
+                      Parent Colors * <span className="text-muted-foreground font-normal">(required)</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2 p-3 rounded-lg border bg-stone-50 dark:bg-stone-800/50">
+                      {primaryColors.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">No primary colors available</span>
+                      ) : (
+                        primaryColors.map((parent) => (
+                          <button
+                            key={parent.id}
+                            type="button"
+                            onClick={() => toggleParent(parent.id!)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                              insertParentIds.includes(parent.id!)
+                                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500'
+                                : 'bg-white dark:bg-stone-700 hover:bg-stone-100 dark:hover:bg-stone-600 border'
+                            }`}
+                          >
+                            <span 
+                              className="w-4 h-4 rounded-full border shadow-sm" 
+                              style={{ backgroundColor: parent.hexCode || 'transparent' }} 
+                            />
+                            {parent.name}
+                            {insertParentIds.includes(parent.id!) && <span>✓</span>}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    {!insertIsPrimary && insertParentIds.length === 0 && insertName.trim() && (
+                      <p className="text-xs text-amber-600 mt-1">Select at least one parent color</p>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  Color will be auto-translated to all supported languages
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer for create mode */}
+          {mode === 'create' && (
+            <div className="p-4 border-t bg-stone-50 dark:bg-stone-900">
+              <Button 
+                type="button" 
+                onClick={handleInsert} 
+                disabled={inserting || !insertName.trim() || (!insertIsPrimary && insertParentIds.length === 0)}
+                className="w-full"
+              >
+                {inserting ? 'Creating...' : 'Create Color'}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
