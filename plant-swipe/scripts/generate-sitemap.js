@@ -42,13 +42,15 @@ const defaultLanguage = (process.env.SITEMAP_DEFAULT_LANGUAGE || 'en').trim() ||
 
 const STATIC_ROUTES = [
   { path: '/', changefreq: 'daily', priority: 1.0 },
+  { path: '/discovery', changefreq: 'daily', priority: 0.9 },
   { path: '/blog', changefreq: 'daily', priority: 0.9 },
   { path: '/search', changefreq: 'daily', priority: 0.9 },
   { path: '/gardens', changefreq: 'weekly', priority: 0.8 },
+  { path: '/contact', changefreq: 'monthly', priority: 0.8 },
+  { path: '/pricing', changefreq: 'monthly', priority: 0.8 },
   { path: '/download', changefreq: 'monthly', priority: 0.7 },
   { path: '/about', changefreq: 'monthly', priority: 0.6 },
-  { path: '/contact', changefreq: 'monthly', priority: 0.6 },
-  { path: '/contact/business', changefreq: 'monthly', priority: 0.5 },
+  { path: '/contact/business', changefreq: 'monthly', priority: 0.6 },
   { path: '/terms', changefreq: 'yearly', priority: 0.4 },
 ]
 
@@ -67,7 +69,7 @@ async function main() {
     return []
   })
 
-  const profileRoutes = await loadPublicProfileRoutes().catch((error) => {
+  const profileRoutes = await loadProfileRoutes().catch((error) => {
     console.warn(`[sitemap] Failed to load dynamic profile routes: ${error.message || error}`)
     return []
   })
@@ -77,7 +79,12 @@ async function main() {
     return []
   })
 
-  const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes, ...blogRoutes, ...profileRoutes, ...gardenRoutes])
+  const bookmarkRoutes = await loadBookmarkRoutes().catch((error) => {
+    console.warn(`[sitemap] Failed to load dynamic bookmark routes: ${error.message || error}`)
+    return []
+  })
+
+  const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes, ...blogRoutes, ...profileRoutes, ...gardenRoutes, ...bookmarkRoutes])
 
   const nowIso = new Date().toISOString()
   const urlEntries = []
@@ -115,7 +122,18 @@ async function main() {
     }
   }
 
-  urlEntries.sort((a, b) => a.loc.localeCompare(b.loc))
+  // Sort: English first, then other languages, then by URL path
+  urlEntries.sort((a, b) => {
+    // Default language (en) should come first
+    const aIsDefault = a.lang === defaultLanguage
+    const bIsDefault = b.lang === defaultLanguage
+    if (aIsDefault && !bIsDefault) return -1
+    if (!aIsDefault && bIsDefault) return 1
+    // Then sort by language
+    if (a.lang !== b.lang) return a.lang.localeCompare(b.lang)
+    // Then sort by URL
+    return a.loc.localeCompare(b.loc)
+  })
 
   const xml = [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -142,8 +160,8 @@ async function main() {
   await fs.writeFile(sitemapPath, xml, 'utf8')
 
   const relPath = path.relative(appRoot, sitemapPath)
-  const dynamicCount = dynamicRoutes.length + blogRoutes.length + profileRoutes.length + gardenRoutes.length
-  console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicCount} dynamic: ${dynamicRoutes.length} plants, ${blogRoutes.length} blogs, ${profileRoutes.length} profiles, ${gardenRoutes.length} gardens) in ${Date.now() - startedAt}ms → ${relPath}`)
+  const dynamicCount = dynamicRoutes.length + blogRoutes.length + profileRoutes.length + gardenRoutes.length + bookmarkRoutes.length
+  console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicCount} dynamic: ${dynamicRoutes.length} plants, ${blogRoutes.length} blogs, ${profileRoutes.length} profiles, ${gardenRoutes.length} gardens, ${bookmarkRoutes.length} bookmarks) in ${Date.now() - startedAt}ms → ${relPath}`)
 }
 
 main().catch((error) => {
@@ -182,8 +200,9 @@ async function loadPlantRoutes() {
     return []
   }
 
-  const maxPlants = positiveInteger(process.env.SITEMAP_MAX_PLANT_URLS, 5000)
-  const batchSize = positiveInteger(process.env.SITEMAP_PLANT_BATCH_SIZE, 500)
+  // Increased default to 10000 to ensure all plants are included
+  const maxPlants = positiveInteger(process.env.SITEMAP_MAX_PLANT_URLS, 10000)
+  const batchSize = positiveInteger(process.env.SITEMAP_PLANT_BATCH_SIZE, 1000)
 
   const results = []
   let offset = 0
@@ -193,7 +212,7 @@ async function loadPlantRoutes() {
     const to = offset + limit - 1
     const { data, error } = await client
       .from('plants')
-      .select('id, updated_time, created_time')
+      .select('id, updated_time, created_time, status')
       .order('updated_time', { ascending: false, nullsFirst: false })
       .range(offset, to)
 
@@ -208,10 +227,13 @@ async function loadPlantRoutes() {
     for (const row of data) {
       if (!row?.id) continue
       const normalizedId = encodeURIComponent(String(row.id))
+      // Approved plants get higher priority (0.7), other statuses get lower priority (0.4)
+      const status = (row.status || '').toLowerCase().trim()
+      const isApproved = status === 'approved'
       const route = {
         path: `/plants/${normalizedId}`,
         changefreq: 'weekly',
-        priority: 0.7,
+        priority: isApproved ? 0.7 : 0.4,
         lastmod: pickLastmod(row),
       }
       results.push(route)
@@ -393,15 +415,16 @@ async function loadBlogRoutes() {
   }).filter(Boolean)
 }
 
-async function loadPublicProfileRoutes() {
+async function loadProfileRoutes() {
   const client = getSupabaseClient()
   if (!client) {
     console.warn('[sitemap] Supabase credentials missing — skipping profile routes.')
     return []
   }
 
-  const maxProfiles = positiveInteger(process.env.SITEMAP_MAX_PROFILE_URLS, 2000)
-  const batchSize = positiveInteger(process.env.SITEMAP_PROFILE_BATCH_SIZE, 500)
+  // Increased defaults to ensure all profiles are included
+  const maxProfiles = positiveInteger(process.env.SITEMAP_MAX_PROFILE_URLS, 10000)
+  const batchSize = positiveInteger(process.env.SITEMAP_PROFILE_BATCH_SIZE, 1000)
 
   const results = []
   let offset = 0
@@ -409,11 +432,12 @@ async function loadPublicProfileRoutes() {
   while (results.length < maxProfiles) {
     const limit = Math.min(batchSize, maxProfiles - results.length)
     const to = offset + limit - 1
+    // Fetch ALL profiles (public and private) - public profiles listed first
     const { data, error } = await client
       .from('profiles')
       .select('display_name, is_private')
-      .eq('is_private', false)
       .not('display_name', 'is', null)
+      .order('is_private', { ascending: true }) // public (false) first, then private (true)
       .order('display_name', { ascending: true })
       .range(offset, to)
 
@@ -429,10 +453,12 @@ async function loadPublicProfileRoutes() {
       if (!row?.display_name) continue
       const normalizedName = encodeURIComponent(String(row.display_name).trim())
       if (!normalizedName) continue
+      // Public profiles get higher priority (0.5), private profiles get lower priority (0.3)
+      const isPrivate = row.is_private === true
       const route = {
         path: `/u/${normalizedName}`,
         changefreq: 'weekly',
-        priority: 0.5,
+        priority: isPrivate ? 0.3 : 0.5,
       }
       results.push(route)
       if (results.length >= maxProfiles) break
@@ -452,8 +478,9 @@ async function loadGardenRoutes() {
     return []
   }
 
-  const maxGardens = positiveInteger(process.env.SITEMAP_MAX_GARDEN_URLS, 1000)
-  const batchSize = positiveInteger(process.env.SITEMAP_GARDEN_BATCH_SIZE, 500)
+  // Increased defaults to ensure all gardens are included
+  const maxGardens = positiveInteger(process.env.SITEMAP_MAX_GARDEN_URLS, 10000)
+  const batchSize = positiveInteger(process.env.SITEMAP_GARDEN_BATCH_SIZE, 1000)
 
   const results = []
   let offset = 0
@@ -461,9 +488,10 @@ async function loadGardenRoutes() {
   while (results.length < maxGardens) {
     const limit = Math.min(batchSize, maxGardens - results.length)
     const to = offset + limit - 1
+    // Fetch ALL gardens (public and private) with privacy info
     const { data, error } = await client
       .from('gardens')
-      .select('id, created_at')
+      .select('id, created_at, privacy')
       .order('created_at', { ascending: false })
       .range(offset, to)
 
@@ -478,14 +506,72 @@ async function loadGardenRoutes() {
     for (const row of data) {
       if (!row?.id) continue
       const normalizedId = encodeURIComponent(String(row.id))
+      // Public gardens (privacy = 'public' or null) get higher priority (0.6)
+      // Private gardens get lower priority (0.4)
+      const isPrivate = row.privacy === 'private'
       const route = {
         path: `/garden/${normalizedId}`,
         changefreq: 'weekly',
-        priority: 0.6,
+        priority: isPrivate ? 0.4 : 0.6,
         lastmod: toIsoString(row.created_at),
       }
       results.push(route)
       if (results.length >= maxGardens) break
+    }
+
+    if (data.length < limit) break
+    offset += limit
+  }
+
+  return results
+}
+
+async function loadBookmarkRoutes() {
+  const client = getSupabaseClient()
+  if (!client) {
+    console.warn('[sitemap] Supabase credentials missing — skipping bookmark routes.')
+    return []
+  }
+
+  // Increased defaults to ensure all bookmarks are included
+  const maxBookmarks = positiveInteger(process.env.SITEMAP_MAX_BOOKMARK_URLS, 10000)
+  const batchSize = positiveInteger(process.env.SITEMAP_BOOKMARK_BATCH_SIZE, 1000)
+
+  const results = []
+  let offset = 0
+
+  while (results.length < maxBookmarks) {
+    const limit = Math.min(batchSize, maxBookmarks - results.length)
+    const to = offset + limit - 1
+    // Fetch ALL bookmarks (public and private) with visibility info
+    const { data, error } = await client
+      .from('bookmarks')
+      .select('id, created_at, visibility')
+      .order('created_at', { ascending: false })
+      .range(offset, to)
+
+    if (error) {
+      throw new Error(error.message || 'Supabase query failed for bookmarks')
+    }
+
+    if (!data || data.length === 0) {
+      break
+    }
+
+    for (const row of data) {
+      if (!row?.id) continue
+      const normalizedId = encodeURIComponent(String(row.id))
+      // Public bookmarks get higher priority (0.5)
+      // Private bookmarks get lower priority (0.3)
+      const isPrivate = row.visibility === 'private'
+      const route = {
+        path: `/bookmarks/${normalizedId}`,
+        changefreq: 'weekly',
+        priority: isPrivate ? 0.3 : 0.5,
+        lastmod: toIsoString(row.created_at),
+      }
+      results.push(route)
+      if (results.length >= maxBookmarks) break
     }
 
     if (data.length < limit) break
@@ -502,19 +588,33 @@ function getSupabaseClient() {
     process.env.REACT_APP_SUPABASE_URL ||
     process.env.NEXT_PUBLIC_SUPABASE_URL
 
-  const supabaseKey =
+  // Prefer service role key to bypass RLS and fetch ALL content (including private profiles/gardens/bookmarks)
+  const serviceRoleKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
     process.env.SUPABASE_SERVICE_ROLE ||
     process.env.SUPABASE_SERVICE_ROLE_TOKEN ||
+    ''
+
+  const anonKey =
     process.env.SUPABASE_ANON_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY ||
     process.env.REACT_APP_SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     ''
 
+  // Use service role key if available (bypasses RLS), otherwise fall back to anon key
+  const supabaseKey = serviceRoleKey || anonKey
+
   if (!supabaseUrl || !supabaseKey) {
     return null
+  }
+
+  // Log which key type is being used
+  if (serviceRoleKey) {
+    console.log('[sitemap] Using service role key (RLS bypassed - will include private content)')
+  } else if (anonKey) {
+    console.warn('[sitemap] Using anon key (subject to RLS - private content may be excluded)')
   }
 
   return createSupabaseClient(supabaseUrl, supabaseKey, {
