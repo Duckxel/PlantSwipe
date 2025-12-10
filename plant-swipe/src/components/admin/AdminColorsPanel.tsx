@@ -114,6 +114,35 @@ function getContrastColor(hex: string): string {
   return luminance > 0.5 ? '#000000' : '#ffffff'
 }
 
+// Convert RGB to HSL and return hue (0-360)
+function getHue(hex: string): number {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return 0
+  
+  const r = rgb.r / 255
+  const g = rgb.g / 255
+  const b = rgb.b / 255
+  
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const delta = max - min
+  
+  let hue = 0
+  if (delta !== 0) {
+    if (max === r) {
+      hue = ((g - b) / delta) % 6
+    } else if (max === g) {
+      hue = (b - r) / delta + 2
+    } else {
+      hue = (r - g) / delta + 4
+    }
+    hue = Math.round(hue * 60)
+    if (hue < 0) hue += 360
+  }
+  
+  return hue
+}
+
 export const AdminColorsPanel: React.FC = () => {
   const [colors, setColors] = React.useState<ColorData[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -199,7 +228,7 @@ export const AdminColorsPanel: React.FC = () => {
     loadColors()
   }, [loadColors])
 
-  // Filter colors based on search and filter
+  // Filter colors based on search and filter, sorted by hue
   const filteredColors = React.useMemo(() => {
     let result = colors
 
@@ -219,6 +248,13 @@ export const AdminColorsPanel: React.FC = () => {
     } else if (filterPrimary === 'advanced') {
       result = result.filter((c) => !c.isPrimary)
     }
+
+    // Sort by hue value (gradient order)
+    result = [...result].sort((a, b) => {
+      const hueA = a.hexCode ? getHue(a.hexCode) : 999
+      const hueB = b.hexCode ? getHue(b.hexCode) : 999
+      return hueA - hueB
+    })
 
     return result
   }, [colors, searchQuery, filterPrimary])
@@ -566,35 +602,40 @@ export const AdminColorsPanel: React.FC = () => {
 
         {/* Color info */}
         <div className="p-3 space-y-1.5">
+          {/* Name - full width */}
+          <h3 className="font-semibold text-sm truncate" title={color.name}>{color.name}</h3>
+          
+          {/* Bottom row: hex code and status icons */}
           <div className="flex items-center justify-between gap-2">
-            <h3 className="font-semibold text-sm truncate">{color.name}</h3>
+            {/* Hex code */}
             {color.hexCode && (
-              <span className="text-xs font-mono text-stone-500 dark:text-stone-400 flex-shrink-0">
+              <span className="text-xs font-mono text-stone-500 dark:text-stone-400">
                 {color.hexCode}
               </span>
             )}
-          </div>
-          
-          {/* Status icons */}
-          <div className="flex items-center gap-2">
-            {/* Translated in all languages */}
-            {color.translations.length >= SUPPORTED_LANGUAGES.length - 1 && (
-              <div 
-                className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-900/30"
-                title="Translated in all languages"
-              >
-                <Languages className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-            )}
-            {/* Has parent */}
-            {color.parentIds.length > 0 && (
-              <div 
-                className="p-1 rounded-md bg-blue-100 dark:bg-blue-900/30"
-                title={`Parent: ${getParentNames(color.parentIds)}`}
-              >
-                <LinkIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-              </div>
-            )}
+            {!color.hexCode && <span />}
+            
+            {/* Status icons */}
+            <div className="flex items-center gap-1.5">
+              {/* Translated in all languages */}
+              {color.translations.length >= SUPPORTED_LANGUAGES.length - 1 && (
+                <div 
+                  className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-900/30"
+                  title="Translated in all languages"
+                >
+                  <Languages className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+              )}
+              {/* Has parent */}
+              {color.parentIds.length > 0 && (
+                <div 
+                  className="p-1 rounded-md bg-blue-100 dark:bg-blue-900/30"
+                  title={`Parent: ${getParentNames(color.parentIds)}`}
+                >
+                  <LinkIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -634,191 +675,169 @@ export const AdminColorsPanel: React.FC = () => {
     )
   }
 
-  // Color form component
-  const ColorForm: React.FC = () => {
-    // Stop propagation on events to prevent sheet from closing
-    const stopPropagation = (e: React.SyntheticEvent) => {
-      e.stopPropagation()
-    }
+  // Color form content - rendered inline to avoid focus issues
+  const renderColorForm = () => (
+    <div className="space-y-4">
+      {/* Name */}
+      <div className="space-y-2">
+        <Label htmlFor="color-name">Color Name *</Label>
+        <Input
+          id="color-name"
+          value={formData.name}
+          onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+          placeholder="e.g., Emerald Green"
+          className="rounded-xl"
+          autoComplete="off"
+        />
+      </div>
 
-    return (
-      <div className="space-y-4" onClick={stopPropagation}>
-        {/* Name */}
-        <div className="space-y-2">
-          <Label htmlFor="color-name">Color Name *</Label>
+      {/* Hex Code */}
+      <div className="space-y-2">
+        <Label htmlFor="color-hex">Hex Code</Label>
+        <div className="flex items-center gap-2">
           <Input
-            id="color-name"
-            value={formData.name}
-            onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-            onClick={stopPropagation}
-            onFocus={stopPropagation}
-            placeholder="e.g., Emerald Green"
-            className="rounded-xl"
+            id="color-hex"
+            value={formData.hexCode}
+            onChange={(e) => setFormData((prev) => ({ ...prev, hexCode: e.target.value }))}
+            placeholder="#00ff00"
+            className="rounded-xl font-mono"
             autoComplete="off"
           />
-        </div>
-
-        {/* Hex Code */}
-        <div className="space-y-2">
-          <Label htmlFor="color-hex">Hex Code</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="color-hex"
-              value={formData.hexCode}
-              onChange={(e) => setFormData((prev) => ({ ...prev, hexCode: e.target.value }))}
-              onClick={stopPropagation}
-              onFocus={stopPropagation}
-              placeholder="#00ff00"
-              className="rounded-xl font-mono"
-              autoComplete="off"
+          {formData.hexCode && isValidHex(normalizeHex(formData.hexCode)) && (
+            <div
+              className="h-10 w-10 rounded-xl border border-stone-200 dark:border-[#3e3e42] flex-shrink-0"
+              style={{ backgroundColor: normalizeHex(formData.hexCode) }}
             />
-            {formData.hexCode && isValidHex(normalizeHex(formData.hexCode)) && (
-              <div
-                className="h-10 w-10 rounded-xl border border-stone-200 dark:border-[#3e3e42] flex-shrink-0"
-                style={{ backgroundColor: normalizeHex(formData.hexCode) }}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Primary Toggle - using checkbox for better accessibility */}
-        <label className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-[#2d2d30] cursor-pointer select-none">
-          <div className="relative">
-            <input
-              type="checkbox"
-              checked={formData.isPrimary}
-              onChange={(e) => setFormData((prev) => ({ 
-                ...prev, 
-                isPrimary: e.target.checked, 
-                parentIds: e.target.checked ? [] : prev.parentIds 
-              }))}
-              className="sr-only peer"
-            />
-            <div className={cn(
-              "w-11 h-6 rounded-full transition-colors",
-              formData.isPrimary ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
-            )} />
-            <div className={cn(
-              "absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform",
-              formData.isPrimary && "translate-x-5"
-            )} />
-          </div>
-          <div className="flex-1">
-            <div className="text-sm font-medium flex items-center gap-1.5">
-              <Star className={cn("h-4 w-4", formData.isPrimary ? "text-amber-500" : "text-stone-400")} />
-              Primary Color
-            </div>
-            <p className="text-xs text-stone-500 dark:text-stone-400">
-              Primary colors are basic colors like Red, Blue, Green
-            </p>
-          </div>
-        </label>
-
-        {/* Parent Selection (only for non-primary) */}
-        {!formData.isPrimary && (
-          <div className="space-y-2">
-            <Label>
-              Parent Colors * 
-              <span className="text-xs text-stone-500 ml-1">(at least one required)</span>
-            </Label>
-            <div className="flex flex-wrap gap-2 p-3 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2d2d30]">
-              {primaryColors.length === 0 ? (
-                <p className="text-sm text-stone-500">No primary colors available. Create primary colors first.</p>
-              ) : (
-                primaryColors.map((parent) => (
-                  <button
-                    key={parent.id}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleParent(parent.id)
-                    }}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm transition-all",
-                      formData.parentIds.includes(parent.id)
-                        ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500"
-                        : "bg-white dark:bg-[#1f1f1f] hover:bg-stone-100 dark:hover:bg-[#3e3e42]"
-                    )}
-                  >
-                    {parent.hexCode && (
-                      <span
-                        className="h-4 w-4 rounded-full border border-stone-200 dark:border-stone-600"
-                        style={{ backgroundColor: parent.hexCode }}
-                      />
-                    )}
-                    {parent.name}
-                    {formData.parentIds.includes(parent.id) && (
-                      <Check className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Translations */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="flex items-center gap-1.5">
-              <Languages className="h-4 w-4" />
-              Translations
-            </Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-xl"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleTranslate()
-              }}
-              disabled={translating || !formData.name.trim()}
-            >
-              {translating ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-              ) : (
-                <Sparkles className="h-4 w-4 mr-1.5" />
-              )}
-              DeepL Translate
-            </Button>
-          </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              setShowTranslations(!showTranslations)
-            }}
-            className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-700 dark:hover:text-stone-300"
-          >
-            {showTranslations ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            {showTranslations ? 'Hide' : 'Show'} translations
-          </button>
-          {showTranslations && (
-            <div className="space-y-2 p-3 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2d2d30]">
-              {SUPPORTED_LANGUAGES.filter((lang) => lang !== DEFAULT_LANGUAGE).map((lang) => {
-                const translation = formData.translations.find((t) => t.language === lang)
-                return (
-                  <div key={lang} className="flex items-center gap-2">
-                    <span className="w-8 text-xs font-medium uppercase text-stone-500">{lang}</span>
-                    <Input
-                      value={translation?.name || ''}
-                      onChange={(e) => updateTranslation(lang, e.target.value)}
-                      onClick={stopPropagation}
-                      onFocus={stopPropagation}
-                      placeholder={`Translation in ${lang.toUpperCase()}`}
-                      className="rounded-xl flex-1"
-                      autoComplete="off"
-                    />
-                  </div>
-                )
-              })}
-            </div>
           )}
         </div>
       </div>
-    )
-  }
+
+      {/* Primary Toggle - using checkbox for better accessibility */}
+      <label className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-[#2d2d30] cursor-pointer select-none">
+        <div className="relative">
+          <input
+            type="checkbox"
+            checked={formData.isPrimary}
+            onChange={(e) => setFormData((prev) => ({ 
+              ...prev, 
+              isPrimary: e.target.checked, 
+              parentIds: e.target.checked ? [] : prev.parentIds 
+            }))}
+            className="sr-only peer"
+          />
+          <div className={cn(
+            "w-11 h-6 rounded-full transition-colors",
+            formData.isPrimary ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
+          )} />
+          <div className={cn(
+            "absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform",
+            formData.isPrimary && "translate-x-5"
+          )} />
+        </div>
+        <div className="flex-1">
+          <div className="text-sm font-medium flex items-center gap-1.5">
+            <Star className={cn("h-4 w-4", formData.isPrimary ? "text-amber-500" : "text-stone-400")} />
+            Primary Color
+          </div>
+          <p className="text-xs text-stone-500 dark:text-stone-400">
+            Primary colors are basic colors like Red, Blue, Green
+          </p>
+        </div>
+      </label>
+
+      {/* Parent Selection (only for non-primary) */}
+      {!formData.isPrimary && (
+        <div className="space-y-2">
+          <Label>
+            Parent Colors * 
+            <span className="text-xs text-stone-500 ml-1">(at least one required)</span>
+          </Label>
+          <div className="flex flex-wrap gap-2 p-3 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2d2d30]">
+            {primaryColors.length === 0 ? (
+              <p className="text-sm text-stone-500">No primary colors available. Create primary colors first.</p>
+            ) : (
+              primaryColors.map((parent) => (
+                <button
+                  key={parent.id}
+                  type="button"
+                  onClick={() => toggleParent(parent.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm transition-all",
+                    formData.parentIds.includes(parent.id)
+                      ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500"
+                      : "bg-white dark:bg-[#1f1f1f] hover:bg-stone-100 dark:hover:bg-[#3e3e42]"
+                  )}
+                >
+                  {parent.hexCode && (
+                    <span
+                      className="h-4 w-4 rounded-full border border-stone-200 dark:border-stone-600"
+                      style={{ backgroundColor: parent.hexCode }}
+                    />
+                  )}
+                  {parent.name}
+                  {formData.parentIds.includes(parent.id) && (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Translations */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="flex items-center gap-1.5">
+            <Languages className="h-4 w-4" />
+            Translations
+          </Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-xl"
+            onClick={() => handleTranslate()}
+            disabled={translating || !formData.name.trim()}
+          >
+            {translating ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-1.5" />
+            )}
+            DeepL Translate
+          </Button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowTranslations(!showTranslations)}
+          className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-700 dark:hover:text-stone-300"
+        >
+          {showTranslations ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {showTranslations ? 'Hide' : 'Show'} translations
+        </button>
+        {showTranslations && (
+          <div className="space-y-2 p-3 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2d2d30]">
+            {SUPPORTED_LANGUAGES.filter((lang) => lang !== DEFAULT_LANGUAGE).map((lang) => {
+              const translation = formData.translations.find((t) => t.language === lang)
+              return (
+                <div key={lang} className="flex items-center gap-2">
+                  <span className="w-8 text-xs font-medium uppercase text-stone-500">{lang}</span>
+                  <Input
+                    value={translation?.name || ''}
+                    onChange={(e) => updateTranslation(lang, e.target.value)}
+                    placeholder={`Translation in ${lang.toUpperCase()}`}
+                    className="rounded-xl flex-1"
+                    autoComplete="off"
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -902,7 +921,7 @@ export const AdminColorsPanel: React.FC = () => {
                 </Button>
               </div>
 
-              <ColorForm />
+              {renderColorForm()}
 
               {/* Similar Colors */}
               {similarColors.length > 0 && (
@@ -1023,7 +1042,7 @@ export const AdminColorsPanel: React.FC = () => {
             </SheetTitle>
           </SheetHeader>
           <div className="mt-6 space-y-6">
-            <ColorForm />
+            {renderColorForm()}
 
             {/* Similar Colors in Edit Mode */}
             {similarColors.length > 0 && formData.hexCode && (
