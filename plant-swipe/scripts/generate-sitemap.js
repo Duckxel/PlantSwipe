@@ -212,7 +212,7 @@ async function loadPlantRoutes() {
     const to = offset + limit - 1
     const { data, error } = await client
       .from('plants')
-      .select('id, updated_time, created_time')
+      .select('id, updated_time, created_time, status')
       .order('updated_time', { ascending: false, nullsFirst: false })
       .range(offset, to)
 
@@ -227,10 +227,13 @@ async function loadPlantRoutes() {
     for (const row of data) {
       if (!row?.id) continue
       const normalizedId = encodeURIComponent(String(row.id))
+      // Approved plants get higher priority (0.7), other statuses get lower priority (0.4)
+      const status = (row.status || '').toLowerCase().trim()
+      const isApproved = status === 'approved'
       const route = {
         path: `/plants/${normalizedId}`,
         changefreq: 'weekly',
-        priority: 0.7,
+        priority: isApproved ? 0.7 : 0.4,
         lastmod: pickLastmod(row),
       }
       results.push(route)

@@ -15595,6 +15595,7 @@ ${alternateLinks(path)}
       }
       
       // ALL plants (with lastmod based on when they were updated)
+      // Approved plants get higher priority, other statuses get lower priority
       // Fetch in batches to get all plants
       const allPlants = []
       const plantBatchSize = 1000
@@ -15604,7 +15605,7 @@ ${alternateLinks(path)}
       while (allPlants.length < maxPlants) {
         const { data: plantBatch, error: plantError } = await sitemapDb
           .from('plants')
-          .select('id, updated_time, created_time')
+          .select('id, updated_time, created_time, status')
           .order('updated_time', { ascending: false, nullsFirst: false })
           .range(plantOffset, plantOffset + plantBatchSize - 1)
         
@@ -15626,10 +15627,14 @@ ${alternateLinks(path)}
             const lastmod = plant.updated_time || plant.created_time
             const lastmodStr = lastmod ? `\n    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>` : ''
             const path = `/plants/${plant.id}`
+            // Approved plants get higher priority (0.7), other statuses get lower priority (0.4)
+            const status = (plant.status || '').toLowerCase().trim()
+            const isApproved = status === 'approved'
+            const priority = isApproved ? '0.7' : '0.4'
             return `  <url>
     <loc>${langUrl(path, lang)}</loc>${lastmodStr}
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>${priority}</priority>
 ${alternateLinks(path)}
   </url>`
           }).join('\n') + '\n'
