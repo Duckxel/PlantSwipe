@@ -200,8 +200,9 @@ async function loadPlantRoutes() {
     return []
   }
 
-  const maxPlants = positiveInteger(process.env.SITEMAP_MAX_PLANT_URLS, 5000)
-  const batchSize = positiveInteger(process.env.SITEMAP_PLANT_BATCH_SIZE, 500)
+  // Increased default to 10000 to ensure all plants are included
+  const maxPlants = positiveInteger(process.env.SITEMAP_MAX_PLANT_URLS, 10000)
+  const batchSize = positiveInteger(process.env.SITEMAP_PLANT_BATCH_SIZE, 1000)
 
   const results = []
   let offset = 0
@@ -418,8 +419,9 @@ async function loadProfileRoutes() {
     return []
   }
 
-  const maxProfiles = positiveInteger(process.env.SITEMAP_MAX_PROFILE_URLS, 2000)
-  const batchSize = positiveInteger(process.env.SITEMAP_PROFILE_BATCH_SIZE, 500)
+  // Increased defaults to ensure all profiles are included
+  const maxProfiles = positiveInteger(process.env.SITEMAP_MAX_PROFILE_URLS, 10000)
+  const batchSize = positiveInteger(process.env.SITEMAP_PROFILE_BATCH_SIZE, 1000)
 
   const results = []
   let offset = 0
@@ -473,8 +475,9 @@ async function loadGardenRoutes() {
     return []
   }
 
-  const maxGardens = positiveInteger(process.env.SITEMAP_MAX_GARDEN_URLS, 1000)
-  const batchSize = positiveInteger(process.env.SITEMAP_GARDEN_BATCH_SIZE, 500)
+  // Increased defaults to ensure all gardens are included
+  const maxGardens = positiveInteger(process.env.SITEMAP_MAX_GARDEN_URLS, 10000)
+  const batchSize = positiveInteger(process.env.SITEMAP_GARDEN_BATCH_SIZE, 1000)
 
   const results = []
   let offset = 0
@@ -527,8 +530,9 @@ async function loadBookmarkRoutes() {
     return []
   }
 
-  const maxBookmarks = positiveInteger(process.env.SITEMAP_MAX_BOOKMARK_URLS, 1000)
-  const batchSize = positiveInteger(process.env.SITEMAP_BOOKMARK_BATCH_SIZE, 500)
+  // Increased defaults to ensure all bookmarks are included
+  const maxBookmarks = positiveInteger(process.env.SITEMAP_MAX_BOOKMARK_URLS, 10000)
+  const batchSize = positiveInteger(process.env.SITEMAP_BOOKMARK_BATCH_SIZE, 1000)
 
   const results = []
   let offset = 0

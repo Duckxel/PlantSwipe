@@ -15594,17 +15594,36 @@ ${alternateLinks(path)}
         }
       }
       
-      // Popular plants (with lastmod based on when they were updated)
-      const { data: plants } = await sitemapDb
-        .from('plants')
-        .select('id, updated_at, created_at')
-        .order('created_at', { ascending: false })
-        .limit(500)
+      // ALL plants (with lastmod based on when they were updated)
+      // Fetch in batches to get all plants
+      const allPlants = []
+      const plantBatchSize = 1000
+      const maxPlants = 10000
+      let plantOffset = 0
       
-      if (plants?.length) {
+      while (allPlants.length < maxPlants) {
+        const { data: plantBatch, error: plantError } = await sitemapDb
+          .from('plants')
+          .select('id, updated_time, created_time')
+          .order('updated_time', { ascending: false, nullsFirst: false })
+          .range(plantOffset, plantOffset + plantBatchSize - 1)
+        
+        if (plantError) {
+          console.error('[sitemap] Error fetching plants batch:', plantError.message)
+          break
+        }
+        
+        if (!plantBatch || plantBatch.length === 0) break
+        
+        allPlants.push(...plantBatch)
+        if (plantBatch.length < plantBatchSize) break
+        plantOffset += plantBatchSize
+      }
+      
+      if (allPlants.length) {
         for (const lang of languages) {
-          urls += plants.map(plant => {
-            const lastmod = plant.updated_at || plant.created_at
+          urls += allPlants.map(plant => {
+            const lastmod = plant.updated_time || plant.created_time
             const lastmodStr = lastmod ? `\n    <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>` : ''
             const path = `/plants/${plant.id}`
             return `  <url>
@@ -15619,22 +15638,36 @@ ${alternateLinks(path)}
       
       // ALL user profiles (public and private) with different priorities
       // Public profiles: priority 0.5, Private profiles: priority 0.3
-      const { data: profiles } = await sitemapDb
-        .from('profiles')
-        .select(`
-          id, 
-          display_name, 
-          username,
-          is_private
-        `)
-        .not('display_name', 'is', null)
-        .order('is_private', { ascending: true }) // public first
-        .order('display_name', { ascending: true })
-        .limit(500)
+      // Fetch in batches to get all profiles
+      const allProfiles = []
+      const profileBatchSize = 1000
+      const maxProfiles = 10000
+      let profileOffset = 0
       
-      if (profiles?.length) {
+      while (allProfiles.length < maxProfiles) {
+        const { data: profileBatch, error: profileError } = await sitemapDb
+          .from('profiles')
+          .select('id, display_name, username, is_private')
+          .not('display_name', 'is', null)
+          .order('is_private', { ascending: true }) // public first
+          .order('display_name', { ascending: true })
+          .range(profileOffset, profileOffset + profileBatchSize - 1)
+        
+        if (profileError) {
+          console.error('[sitemap] Error fetching profiles batch:', profileError.message)
+          break
+        }
+        
+        if (!profileBatch || profileBatch.length === 0) break
+        
+        allProfiles.push(...profileBatch)
+        if (profileBatch.length < profileBatchSize) break
+        profileOffset += profileBatchSize
+      }
+      
+      if (allProfiles.length) {
         for (const lang of languages) {
-          urls += profiles.map(profile => {
+          urls += allProfiles.map(profile => {
             // Use username if available, otherwise display_name
             const urlPath = profile.username || profile.display_name
             const path = `/u/${encodeURIComponent(urlPath)}`
@@ -15652,19 +15685,34 @@ ${alternateLinks(path)}
       
       // ALL gardens (public and private) with different priorities
       // Public gardens: priority 0.6, Private gardens: priority 0.4
-      const { data: gardens } = await sitemapDb
-        .from('gardens')
-        .select(`
-          id,
-          created_at,
-          privacy
-        `)
-        .order('created_at', { ascending: false })
-        .limit(500)
+      // Fetch in batches to get all gardens
+      const allGardens = []
+      const gardenBatchSize = 1000
+      const maxGardens = 10000
+      let gardenOffset = 0
       
-      if (gardens?.length) {
+      while (allGardens.length < maxGardens) {
+        const { data: gardenBatch, error: gardenError } = await sitemapDb
+          .from('gardens')
+          .select('id, created_at, privacy')
+          .order('created_at', { ascending: false })
+          .range(gardenOffset, gardenOffset + gardenBatchSize - 1)
+        
+        if (gardenError) {
+          console.error('[sitemap] Error fetching gardens batch:', gardenError.message)
+          break
+        }
+        
+        if (!gardenBatch || gardenBatch.length === 0) break
+        
+        allGardens.push(...gardenBatch)
+        if (gardenBatch.length < gardenBatchSize) break
+        gardenOffset += gardenBatchSize
+      }
+      
+      if (allGardens.length) {
         for (const lang of languages) {
-          urls += gardens.map(garden => {
+          urls += allGardens.map(garden => {
             // Use created_at for lastmod
             const lastmodStr = garden.created_at ? `\n    <lastmod>${new Date(garden.created_at).toISOString().split('T')[0]}</lastmod>` : ''
             
@@ -15685,19 +15733,34 @@ ${alternateLinks(path)}
       
       // ALL bookmarks (public and private) with different priorities
       // Public bookmarks: priority 0.5, Private bookmarks: priority 0.3
-      const { data: bookmarks } = await sitemapDb
-        .from('bookmarks')
-        .select(`
-          id,
-          created_at,
-          visibility
-        `)
-        .order('created_at', { ascending: false })
-        .limit(500)
+      // Fetch in batches to get all bookmarks
+      const allBookmarks = []
+      const bookmarkBatchSize = 1000
+      const maxBookmarks = 10000
+      let bookmarkOffset = 0
       
-      if (bookmarks?.length) {
+      while (allBookmarks.length < maxBookmarks) {
+        const { data: bookmarkBatch, error: bookmarkError } = await sitemapDb
+          .from('bookmarks')
+          .select('id, created_at, visibility')
+          .order('created_at', { ascending: false })
+          .range(bookmarkOffset, bookmarkOffset + bookmarkBatchSize - 1)
+        
+        if (bookmarkError) {
+          console.error('[sitemap] Error fetching bookmarks batch:', bookmarkError.message)
+          break
+        }
+        
+        if (!bookmarkBatch || bookmarkBatch.length === 0) break
+        
+        allBookmarks.push(...bookmarkBatch)
+        if (bookmarkBatch.length < bookmarkBatchSize) break
+        bookmarkOffset += bookmarkBatchSize
+      }
+      
+      if (allBookmarks.length) {
         for (const lang of languages) {
-          urls += bookmarks.map(bookmark => {
+          urls += allBookmarks.map(bookmark => {
             // Use created_at for lastmod
             const lastmodStr = bookmark.created_at ? `\n    <lastmod>${new Date(bookmark.created_at).toISOString().split('T')[0]}</lastmod>` : ''
             
