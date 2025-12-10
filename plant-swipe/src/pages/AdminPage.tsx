@@ -4343,6 +4343,256 @@ export const AdminPage: React.FC = () => {
                       </CardContent>
                     </Card>
 
+                    {/* Quick Stats Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Currently Online Card */}
+                        <div className="group relative rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-cyan-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300 overflow-hidden">
+                          {/* Decorative background element */}
+                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-emerald-200/40 to-teal-200/40 dark:from-emerald-800/20 dark:to-teal-800/20 blur-2xl" />
+                          <div className="relative">
+                            <div className="flex items-start justify-between gap-3 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                                  <Wifi className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                                    Currently Online
+                                  </div>
+                                  <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+                                    {onlineUpdatedAt
+                                      ? `${formatTimeAgo(onlineUpdatedAt)}`
+                                      : "Updating..."}
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Refresh currently online"
+                                onClick={() => {
+                                  loadOnlineUsers({ initial: false });
+                                  loadOnlineIpsList({ initial: false });
+                                }}
+                                disabled={
+                                  onlineLoading ||
+                                  onlineRefreshing ||
+                                  ipsLoading ||
+                                  ipsRefreshing
+                                }
+                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-emerald-900/30 hover:bg-white dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
+                              >
+                                <RefreshCw
+                                  className={`h-4 w-4 ${onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing ? "animate-spin" : ""}`}
+                                />
+                              </Button>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                              <div className="text-4xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                                {onlineLoading ? (
+                                  <span className="inline-block w-12 h-10 bg-emerald-200/50 dark:bg-emerald-800/30 rounded-lg animate-pulse" />
+                                ) : (
+                                  onlineUsers
+                                )}
+                              </div>
+                              {!onlineLoading && onlineUsers > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="relative flex h-2.5 w-2.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                                  </span>
+                                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">live</span>
+                                </div>
+                              )}
+                            </div>
+                            {/* Collapsible Connected IPs */}
+                            <div className="mt-4 pt-3 border-t border-emerald-200/50 dark:border-emerald-800/30">
+                              <button
+                                type="button"
+                                className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-colors"
+                                onClick={() => setIpsOpen((o) => !o)}
+                                aria-expanded={ipsOpen}
+                                aria-controls="connected-ips"
+                              >
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${ipsOpen ? "rotate-180" : ""}`}
+                                />
+                                Connected IPs
+                                {ips.length > 0 && (
+                                  <span className="text-xs bg-emerald-200 dark:bg-emerald-800/50 px-2 py-0.5 rounded-full">
+                                    {ips.length}
+                                  </span>
+                                )}
+                              </button>
+                              {ipsOpen && (
+                                <div className="mt-3" id="connected-ips">
+                                  <div className="rounded-xl bg-white/70 dark:bg-emerald-950/50 border border-emerald-200/50 dark:border-emerald-800/30 p-3 max-h-48 overflow-auto">
+                                    {ipsLoading ? (
+                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
+                                        Loading...
+                                      </div>
+                                    ) : ips.length === 0 ? (
+                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
+                                        No IPs connected.
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-wrap gap-2">
+                                        {ips.map((ip) => (
+                                          <Badge
+                                            key={ip}
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => jumpToIpLookup(ip)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter" || e.key === " ") {
+                                                e.preventDefault();
+                                                jumpToIpLookup(ip);
+                                              }
+                                            }}
+                                            title={`Lookup members for ${ip}`}
+                                            aria-label={`Lookup members for ${ip}`}
+                                            className="rounded-full px-2.5 py-1 text-xs font-mono cursor-pointer bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/50 border-0 transition-colors"
+                                          >
+                                            {ip}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Registered Accounts Card */}
+                        <div className="group relative rounded-2xl border border-violet-200 dark:border-violet-800/50 bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 dark:from-violet-950/40 dark:via-purple-950/30 dark:to-fuchsia-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-300 overflow-hidden">
+                          {/* Decorative background element */}
+                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-violet-200/40 to-purple-200/40 dark:from-violet-800/20 dark:to-purple-800/20 blur-2xl" />
+                          <div className="relative">
+                            <div className="flex items-start justify-between gap-3 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
+                                  <Users className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-violet-900 dark:text-violet-100">
+                                    Registered Accounts
+                                  </div>
+                                  <div className="text-xs text-violet-600/70 dark:text-violet-400/70">
+                                    {registeredUpdatedAt
+                                      ? `${formatTimeAgo(registeredUpdatedAt)}`
+                                      : "Updating..."}
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Refresh registered accounts"
+                                onClick={() =>
+                                  loadRegisteredCount({ initial: false })
+                                }
+                                disabled={
+                                  registeredLoading || registeredRefreshing
+                                }
+                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-violet-900/30 hover:bg-white dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300"
+                              >
+                                <RefreshCw
+                                  className={`h-4 w-4 ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`}
+                                />
+                              </Button>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                              <div className="text-4xl font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                                {registeredLoading ? (
+                                  <span className="inline-block w-16 h-10 bg-violet-200/50 dark:bg-violet-800/30 rounded-lg animate-pulse" />
+                                ) : registeredUpdatedAt !== null ? (
+                                  registeredCount ?? "-"
+                                ) : (
+                                  "-"
+                                )}
+                              </div>
+                              <span className="text-sm font-medium text-violet-500 dark:text-violet-400">
+                                users
+                              </span>
+                            </div>
+                            {/* Progress indicator */}
+                            <div className="mt-4 pt-3 border-t border-violet-200/50 dark:border-violet-800/30">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-violet-600/70 dark:text-violet-400/70">Total registered members</span>
+                                <span className="font-medium text-violet-700 dark:text-violet-300">
+                                  {registeredCount !== null && registeredCount > 0 ? "Active" : "—"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Total Plants Card */}
+                        <div className="group relative rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/30 dark:to-yellow-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 overflow-hidden">
+                          {/* Decorative background element */}
+                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-amber-200/40 to-orange-200/40 dark:from-amber-800/20 dark:to-orange-800/20 blur-2xl" />
+                          <div className="relative">
+                            <div className="flex items-start justify-between gap-3 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                                  <Leaf className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                                    Total Plants
+                                  </div>
+                                  <div className="text-xs text-amber-600/70 dark:text-amber-400/70">
+                                    {plantsUpdatedAt
+                                      ? `${formatTimeAgo(plantsUpdatedAt)}`
+                                      : "Updating..."}
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Refresh total plants"
+                                onClick={() =>
+                                  loadRegisteredCount({ initial: false })
+                                }
+                                disabled={plantsLoading || plantsRefreshing}
+                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-amber-900/30 hover:bg-white dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300"
+                              >
+                                <RefreshCw
+                                  className={`h-4 w-4 ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`}
+                                />
+                              </Button>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                              <div className="text-4xl font-bold tabular-nums text-amber-700 dark:text-amber-300">
+                                {plantsLoading ? (
+                                  <span className="inline-block w-14 h-10 bg-amber-200/50 dark:bg-amber-800/30 rounded-lg animate-pulse" />
+                                ) : plantsUpdatedAt !== null ? (
+                                  plantsCount ?? "-"
+                                ) : (
+                                  "-"
+                                )}
+                              </div>
+                              <span className="text-sm font-medium text-amber-500 dark:text-amber-400">
+                                plants
+                              </span>
+                            </div>
+                            {/* Database indicator */}
+                            <div className="mt-4 pt-3 border-t border-amber-200/50 dark:border-amber-800/30">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-amber-600/70 dark:text-amber-400/70">In database</span>
+                                <div className="flex items-center gap-1.5">
+                                  <Database className="h-3 w-3 text-amber-500 dark:text-amber-400" />
+                                  <span className="font-medium text-amber-700 dark:text-amber-300">Synced</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
                     {/* System Health Stats */}
                     <Card className={glassCardClass}>
                       <CardContent className="p-4">
@@ -4843,255 +5093,6 @@ export const AdminPage: React.FC = () => {
                         </div>
                       </CardContent>
                     </Card>
-                    <div className="pt-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                        {/* Currently Online Card */}
-                        <div className="group relative rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-cyan-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300 overflow-hidden">
-                          {/* Decorative background element */}
-                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-emerald-200/40 to-teal-200/40 dark:from-emerald-800/20 dark:to-teal-800/20 blur-2xl" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                                  <Wifi className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-                                    Currently Online
-                                  </div>
-                                  <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
-                                    {onlineUpdatedAt
-                                      ? `${formatTimeAgo(onlineUpdatedAt)}`
-                                      : "Updating..."}
-                                  </div>
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Refresh currently online"
-                                onClick={() => {
-                                  loadOnlineUsers({ initial: false });
-                                  loadOnlineIpsList({ initial: false });
-                                }}
-                                disabled={
-                                  onlineLoading ||
-                                  onlineRefreshing ||
-                                  ipsLoading ||
-                                  ipsRefreshing
-                                }
-                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-emerald-900/30 hover:bg-white dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ${onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
-                            </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-4xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-                                {onlineLoading ? (
-                                  <span className="inline-block w-12 h-10 bg-emerald-200/50 dark:bg-emerald-800/30 rounded-lg animate-pulse" />
-                                ) : (
-                                  onlineUsers
-                                )}
-                              </div>
-                              {!onlineLoading && onlineUsers > 0 && (
-                                <div className="flex items-center gap-1">
-                                  <span className="relative flex h-2.5 w-2.5">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-                                  </span>
-                                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">live</span>
-                                </div>
-                              )}
-                            </div>
-                            {/* Collapsible Connected IPs */}
-                            <div className="mt-4 pt-3 border-t border-emerald-200/50 dark:border-emerald-800/30">
-                              <button
-                                type="button"
-                                className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-colors"
-                                onClick={() => setIpsOpen((o) => !o)}
-                                aria-expanded={ipsOpen}
-                                aria-controls="connected-ips"
-                              >
-                                <ChevronDown
-                                  className={`h-4 w-4 transition-transform ${ipsOpen ? "rotate-180" : ""}`}
-                                />
-                                Connected IPs
-                                {ips.length > 0 && (
-                                  <span className="text-xs bg-emerald-200 dark:bg-emerald-800/50 px-2 py-0.5 rounded-full">
-                                    {ips.length}
-                                  </span>
-                                )}
-                              </button>
-                              {ipsOpen && (
-                                <div className="mt-3" id="connected-ips">
-                                  <div className="rounded-xl bg-white/70 dark:bg-emerald-950/50 border border-emerald-200/50 dark:border-emerald-800/30 p-3 max-h-48 overflow-auto">
-                                    {ipsLoading ? (
-                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
-                                        Loading...
-                                      </div>
-                                    ) : ips.length === 0 ? (
-                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
-                                        No IPs connected.
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-wrap gap-2">
-                                        {ips.map((ip) => (
-                                          <Badge
-                                            key={ip}
-                                            role="button"
-                                            tabIndex={0}
-                                            onClick={() => jumpToIpLookup(ip)}
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Enter" || e.key === " ") {
-                                                e.preventDefault();
-                                                jumpToIpLookup(ip);
-                                              }
-                                            }}
-                                            title={`Lookup members for ${ip}`}
-                                            aria-label={`Lookup members for ${ip}`}
-                                            className="rounded-full px-2.5 py-1 text-xs font-mono cursor-pointer bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/50 border-0 transition-colors"
-                                          >
-                                            {ip}
-                                          </Badge>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Registered Accounts Card */}
-                        <div className="group relative rounded-2xl border border-violet-200 dark:border-violet-800/50 bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 dark:from-violet-950/40 dark:via-purple-950/30 dark:to-fuchsia-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-300 overflow-hidden">
-                          {/* Decorative background element */}
-                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-violet-200/40 to-purple-200/40 dark:from-violet-800/20 dark:to-purple-800/20 blur-2xl" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
-                                  <Users className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-semibold text-violet-900 dark:text-violet-100">
-                                    Registered Accounts
-                                  </div>
-                                  <div className="text-xs text-violet-600/70 dark:text-violet-400/70">
-                                    {registeredUpdatedAt
-                                      ? `${formatTimeAgo(registeredUpdatedAt)}`
-                                      : "Updating..."}
-                                  </div>
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Refresh registered accounts"
-                                onClick={() =>
-                                  loadRegisteredCount({ initial: false })
-                                }
-                                disabled={
-                                  registeredLoading || registeredRefreshing
-                                }
-                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-violet-900/30 hover:bg-white dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
-                            </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-4xl font-bold tabular-nums text-violet-700 dark:text-violet-300">
-                                {registeredLoading ? (
-                                  <span className="inline-block w-16 h-10 bg-violet-200/50 dark:bg-violet-800/30 rounded-lg animate-pulse" />
-                                ) : registeredUpdatedAt !== null ? (
-                                  registeredCount ?? "-"
-                                ) : (
-                                  "-"
-                                )}
-                              </div>
-                              <span className="text-sm font-medium text-violet-500 dark:text-violet-400">
-                                users
-                              </span>
-                            </div>
-                            {/* Progress indicator */}
-                            <div className="mt-4 pt-3 border-t border-violet-200/50 dark:border-violet-800/30">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-violet-600/70 dark:text-violet-400/70">Total registered members</span>
-                                <span className="font-medium text-violet-700 dark:text-violet-300">
-                                  {registeredCount !== null && registeredCount > 0 ? "Active" : "—"}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Total Plants Card */}
-                        <div className="group relative rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/30 dark:to-yellow-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 overflow-hidden">
-                          {/* Decorative background element */}
-                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-amber-200/40 to-orange-200/40 dark:from-amber-800/20 dark:to-orange-800/20 blur-2xl" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
-                                  <Leaf className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                                    Total Plants
-                                  </div>
-                                  <div className="text-xs text-amber-600/70 dark:text-amber-400/70">
-                                    {plantsUpdatedAt
-                                      ? `${formatTimeAgo(plantsUpdatedAt)}`
-                                      : "Updating..."}
-                                  </div>
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Refresh total plants"
-                                onClick={() =>
-                                  loadRegisteredCount({ initial: false })
-                                }
-                                disabled={plantsLoading || plantsRefreshing}
-                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-amber-900/30 hover:bg-white dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
-                            </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-4xl font-bold tabular-nums text-amber-700 dark:text-amber-300">
-                                {plantsLoading ? (
-                                  <span className="inline-block w-14 h-10 bg-amber-200/50 dark:bg-amber-800/30 rounded-lg animate-pulse" />
-                                ) : plantsUpdatedAt !== null ? (
-                                  plantsCount ?? "-"
-                                ) : (
-                                  "-"
-                                )}
-                              </div>
-                              <span className="text-sm font-medium text-amber-500 dark:text-amber-400">
-                                plants
-                              </span>
-                            </div>
-                            {/* Database indicator */}
-                            <div className="mt-4 pt-3 border-t border-amber-200/50 dark:border-amber-800/30">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-amber-600/70 dark:text-amber-400/70">In database</span>
-                                <div className="flex items-center gap-1.5">
-                                  <Database className="h-3 w-3 text-amber-500 dark:text-amber-400" />
-                                  <span className="font-medium text-amber-700 dark:text-amber-300">Synced</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
                       <Card className={glassCardClass}>
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between gap-2 mb-2">
@@ -5938,7 +5939,6 @@ export const AdminPage: React.FC = () => {
                           </a>
                         </Button>
                       </div>
-                    </div>
                   </>
                 )}
 
