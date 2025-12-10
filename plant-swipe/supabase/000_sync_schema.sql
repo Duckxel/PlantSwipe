@@ -1216,24 +1216,18 @@ declare
   migrated_count integer := 0;
 begin
   -- Insert English translations for plants that don't have one yet
+  -- NOTE: The following columns are NOT included because they stay in plants table only (not translated):
+  -- scientific_name, promotion_month, level_sun, habitat, family, life_cycle, season,
+  -- foliage_persistance, toxicity_human, toxicity_pets, living_space, composition, maintenance_level
   with inserted as (
     insert into public.plant_translations (
       plant_id,
       language,
       name,
       given_names,
-      family,
       overview,
-      life_cycle,
-      season,
-      foliage_persistance,
-      toxicity_human,
-      toxicity_pets,
       allergens,
       symbolism,
-      living_space,
-      composition,
-      maintenance_level,
       origin,
       advice_soil,
       advice_mulching,
@@ -1255,18 +1249,9 @@ begin
       'en',
       p.name,
       coalesce(p.given_names, '{}'),
-      p.family,
       p.overview,
-      p.life_cycle,
-      coalesce(p.season, '{}'),
-      p.foliage_persistance,
-      p.toxicity_human,
-      p.toxicity_pets,
       coalesce(p.allergens, '{}'),
       coalesce(p.symbolism, '{}'),
-      p.living_space,
-      coalesce(p.composition, '{}'),
-      p.maintenance_level,
       coalesce(p.origin, '{}'),
       p.advice_soil,
       p.advice_mulching,
