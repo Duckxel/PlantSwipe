@@ -1472,6 +1472,96 @@ async function isAdminFromRequest(req) {
   }
 }
 
+// Determine whether a user has editor access (admin OR editor role)
+// This allows editors to access plant creation, blog, notifications, emails, and requests
+async function isEditorFromRequest(req) {
+  try {
+    // Allow explicit public mode for maintenance
+    if (adminPublicMode === true) return true
+    // Static header token support for non-authenticated admin actions (CI/ops)
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return true
+
+    // Bearer token path: resolve user and check admin or editor role
+    const user = await getUserFromRequest(req)
+    if (!user?.id) return false
+    let hasAccess = false
+    // Prefer DB flag
+    if (sql) {
+      try {
+        const exists = await sql`select 1 from information_schema.tables where table_schema='public' and table_name='profiles'`
+        if (exists?.length) {
+          const rows = await sql`select is_admin, roles from public.profiles where id = ${user.id} limit 1`
+          if (rows?.[0]) {
+            // Check is_admin flag
+            if (rows[0].is_admin === true) hasAccess = true
+            // Check roles array for admin or editor
+            const roles = Array.isArray(rows[0].roles) ? rows[0].roles : []
+            if (roles.includes('admin') || roles.includes('editor')) hasAccess = true
+          }
+        }
+      } catch {}
+    }
+    // Supabase REST fallback
+    if (!hasAccess && supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const bearer = getBearerTokenFromRequest(req)
+        if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
+        const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin,roles&limit=1`
+        const resp = await fetch(url, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          if (Array.isArray(arr) && arr[0]) {
+            if (arr[0].is_admin === true) hasAccess = true
+            const roles = Array.isArray(arr[0].roles) ? arr[0].roles : []
+            if (roles.includes('admin') || roles.includes('editor')) hasAccess = true
+          }
+        }
+      } catch {}
+    }
+    // Environment allowlists as fallback (for admin only, not editor)
+    if (!hasAccess) {
+      const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      const allowedUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+      const email = (user.email || '').toLowerCase()
+      if ((email && allowedEmails.includes(email)) || allowedUserIds.includes(user.id)) {
+        hasAccess = true
+      }
+    }
+    return hasAccess
+  } catch {
+    return false
+  }
+}
+
+// Helper function to ensure editor access (admin OR editor role)
+async function ensureEditor(req, res) {
+  try {
+    // Public mode or static token
+    if (adminPublicMode === true) return 'public'
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return 'static-admin'
+
+    // Bearer token path
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return null
+    }
+    
+    const hasAccess = await isEditorFromRequest(req)
+    if (!hasAccess) {
+      res.status(403).json({ error: 'Editor privileges required' })
+      return null
+    }
+    return user.id
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Authorization check failed' })
+    return null
+  }
+}
+
 // Helper: insert admin_activity_logs row via Supabase REST when DB is unavailable
 async function insertAdminActivityViaRest(req, row) {
   try {
@@ -2804,10 +2894,10 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   }
 })
 
-// Admin: AI plant name verification
+// Admin/Editor: AI plant name verification
 app.post('/api/admin/ai/plant-fill/verify-name', async (req, res) => {
   try {
-    const caller = await ensureAdmin(req, res)
+    const caller = await ensureEditor(req, res)
     if (!caller) return
     if (!openaiClient) {
       res.status(503).json({ error: 'AI plant fill is not configured' })
@@ -2834,10 +2924,10 @@ app.options('/api/admin/ai/plant-fill/verify-name', (_req, res) => {
   res.status(204).end()
 })
 
-// Admin: AI-assisted plant data fill
+// Admin/Editor: AI-assisted plant data fill
 app.post('/api/admin/ai/plant-fill', async (req, res) => {
   try {
-    const caller = await ensureAdmin(req, res)
+    const caller = await ensureEditor(req, res)
     if (!caller) return
     if (!openaiClient) {
       res.status(503).json({ error: 'AI plant fill is not configured' })
@@ -2943,7 +3033,7 @@ app.options('/api/admin/ai/plant-fill/field', (_req, res) => {
 
 app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
   try {
-    const caller = await ensureAdmin(req, res)
+    const caller = await ensureEditor(req, res)
     if (!caller) return
     if (!openaiClient) {
       res.status(503).json({ error: 'AI plant fill is not configured' })
@@ -4651,7 +4741,7 @@ app.post('/api/admin/upload-image', async (req, res) => {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
     return
   }
-  const adminPrincipal = await ensureAdmin(req, res)
+  const adminPrincipal = await ensureEditor(req, res)
   if (!adminPrincipal) return
 
   try {
@@ -4687,7 +4777,7 @@ app.post('/api/blog/upload-image', async (req, res) => {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
     return
   }
-  const adminPrincipal = await ensureAdmin(req, res)
+  const adminPrincipal = await ensureEditor(req, res)
   if (!adminPrincipal) return
 
   try {
@@ -4723,7 +4813,7 @@ app.post('/api/blog/summarize', async (req, res) => {
     res.status(503).json({ error: 'OpenAI client not configured' })
     return
   }
-  const adminPrincipal = await ensureAdmin(req, res)
+  const adminPrincipal = await ensureEditor(req, res)
   if (!adminPrincipal) return
 
   const html = typeof req.body?.html === 'string' ? req.body.html : ''
@@ -4770,7 +4860,7 @@ app.post('/api/blog/summarize', async (req, res) => {
 })
 
 app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
-  const caller = await ensureAdmin(req, res)
+  const caller = await ensureEditor(req, res)
   if (!caller) return
   try {
     await ensurePlantTranslationsSchema()
@@ -4787,7 +4877,7 @@ app.options('/api/admin/plant-translations/ensure-schema', (_req, res) => {
 })
 
 app.get('/api/admin/media', async (req, res) => {
-  const admin = await ensureAdmin(req, res)
+  const admin = await ensureEditor(req, res)
   if (!admin) return
 
   const limitParam = Number.parseInt(String(req.query?.limit || ''), 10)
@@ -4872,7 +4962,7 @@ app.delete('/api/admin/media/:id', async (req, res) => {
     res.status(500).json({ error: 'Supabase service role key not configured for media deletion' })
     return
   }
-  const admin = await ensureAdmin(req, res)
+  const admin = await ensureEditor(req, res)
   if (!admin) return
 
   try {
@@ -4948,7 +5038,7 @@ app.options('/api/admin/media/:id', (_req, res) => {
 })
 
 app.get('/api/admin/notifications', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5025,7 +5115,7 @@ app.get('/api/admin/notifications', async (req, res) => {
 })
 
 app.post('/api/admin/notifications', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5174,7 +5264,7 @@ app.post('/api/admin/notifications', async (req, res) => {
 })
 
 app.put('/api/admin/notifications/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5325,7 +5415,7 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
 })
 
 app.delete('/api/admin/notifications/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5361,7 +5451,7 @@ app.delete('/api/admin/notifications/:id', async (req, res) => {
 })
 
 app.post('/api/admin/notifications/:id/trigger', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5398,7 +5488,7 @@ app.post('/api/admin/notifications/:id/trigger', async (req, res) => {
 })
 
 app.post('/api/admin/notifications/:id/state', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5442,7 +5532,7 @@ app.post('/api/admin/notifications/:id/state', async (req, res) => {
 
 // Debug endpoint for notification diagnostics
 app.get('/api/admin/notifications/debug', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5552,7 +5642,7 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
 
 // ---- Recipient Count Endpoint ----
 app.get('/api/admin/notifications/recipient-count', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5622,7 +5712,7 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
 
 // ---- Notification Templates ----
 app.get('/api/admin/notification-templates', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5663,7 +5753,7 @@ app.get('/api/admin/notification-templates', async (req, res) => {
 })
 
 app.post('/api/admin/notification-templates', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5713,7 +5803,7 @@ app.post('/api/admin/notification-templates', async (req, res) => {
 })
 
 app.put('/api/admin/notification-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5765,7 +5855,7 @@ app.put('/api/admin/notification-templates/:id', async (req, res) => {
 })
 
 app.delete('/api/admin/notification-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5809,7 +5899,7 @@ app.delete('/api/admin/notification-templates/:id', async (req, res) => {
 
 // ---- Notification Template Translations ----
 app.get('/api/admin/notification-templates/:id/translations', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5842,7 +5932,7 @@ app.get('/api/admin/notification-templates/:id/translations', async (req, res) =
 })
 
 app.put('/api/admin/notification-templates/:id/translations/:lang', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5900,7 +5990,7 @@ app.put('/api/admin/notification-templates/:id/translations/:lang', async (req, 
 
 // Batch save all translations for a template
 app.put('/api/admin/notification-templates/:id/translations', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6019,7 +6109,7 @@ async function ensureDefaultAutomations() {
 }
 
 app.get('/api/admin/notification-automations', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6107,7 +6197,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
 })
 
 app.put('/api/admin/notification-automations/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6171,7 +6261,7 @@ app.put('/api/admin/notification-automations/:id', async (req, res) => {
 
 // Trigger automation manually (for testing)
 app.post('/api/admin/notification-automations/:id/trigger', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6337,7 +6427,7 @@ async function runAutomation(automation) {
 
 // ---- Admin email templates ----
 app.get('/api/admin/email-templates', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6367,7 +6457,7 @@ app.get('/api/admin/email-templates', async (req, res) => {
 })
 
 app.get('/api/admin/email-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6404,7 +6494,7 @@ app.get('/api/admin/email-templates/:id', async (req, res) => {
 })
 
 app.post('/api/admin/email-templates', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6455,7 +6545,7 @@ app.post('/api/admin/email-templates', async (req, res) => {
 })
 
 app.put('/api/admin/email-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6517,7 +6607,7 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
 })
 
 app.delete('/api/admin/email-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6559,7 +6649,7 @@ app.delete('/api/admin/email-templates/:id', async (req, res) => {
 
 // ---- Admin email campaigns ----
 app.get('/api/admin/email-campaigns', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6584,7 +6674,7 @@ app.get('/api/admin/email-campaigns', async (req, res) => {
 })
 
 app.get('/api/admin/email-campaigns/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6616,7 +6706,7 @@ app.get('/api/admin/email-campaigns/:id', async (req, res) => {
 })
 
 app.post('/api/admin/email-campaigns', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6718,7 +6808,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
 })
 
 app.put('/api/admin/email-campaigns/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6856,7 +6946,7 @@ app.put('/api/admin/email-campaigns/:id', async (req, res) => {
 })
 
 app.delete('/api/admin/email-campaigns/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6891,7 +6981,7 @@ app.delete('/api/admin/email-campaigns/:id', async (req, res) => {
 })
 
 app.post('/api/admin/email-campaigns/:id/cancel', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6927,7 +7017,7 @@ app.post('/api/admin/email-campaigns/:id/cancel', async (req, res) => {
 })
 
 app.post('/api/admin/email-campaigns/:id/run', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -7067,7 +7157,7 @@ function normalizeEmailTriggerRow(row) {
 }
 
 app.get('/api/admin/email-triggers', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -7089,7 +7179,7 @@ app.get('/api/admin/email-triggers', async (req, res) => {
 })
 
 app.get('/api/admin/email-triggers/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -7121,7 +7211,7 @@ app.get('/api/admin/email-triggers/:id', async (req, res) => {
 })
 
 app.put('/api/admin/email-triggers/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })

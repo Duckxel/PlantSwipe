@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { useTranslation } from "react-i18next"
+import { checkEditorAccess } from "@/constants/userRoles"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 interface MobileNavBarProps {
@@ -194,7 +195,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             <SheetTitle>{label}</SheetTitle>
           </SheetHeader>
           <div className="mt-6 space-y-2">
-            {profile?.is_admin && (
+            {checkEditorAccess(profile) && (
               <button
                 onClick={() => {
                   setProfileMenuOpen(false)

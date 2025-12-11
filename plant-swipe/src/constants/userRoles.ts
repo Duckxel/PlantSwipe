@@ -147,6 +147,41 @@ export function hasAnyRole(roles: UserRole[] | null | undefined, checkRoles: Use
 /**
  * Check if user has admin-level access (admin or editor)
  */
-export function hasAdminAccess(roles: UserRole[] | null | undefined): boolean {
-  return hasAnyRole(roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
+export function hasAdminAccess(roles: string[] | null | undefined): boolean {
+  return hasAnyRole(roles as UserRole[] | null | undefined, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
+}
+
+/**
+ * Check if user has full admin access (admin role only)
+ */
+export function hasFullAdminAccess(roles: string[] | null | undefined, isAdmin?: boolean | null): boolean {
+  if (isAdmin === true) return true
+  return hasRole(roles as UserRole[] | null | undefined, USER_ROLES.ADMIN)
+}
+
+/**
+ * Check if user has editor access (admin or editor role)
+ * Editors can access: plant creation/editing, requests, blog, notifications, emails
+ */
+export function hasEditorAccess(roles: string[] | null | undefined, isAdmin?: boolean | null): boolean {
+  if (isAdmin === true) return true
+  return hasAnyRole(roles as UserRole[] | null | undefined, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
+}
+
+/**
+ * Check access from a profile object (supports both roles array and legacy is_admin)
+ */
+export function checkEditorAccess(profile: { is_admin?: boolean | null; roles?: string[] | null } | null | undefined): boolean {
+  if (!profile) return false
+  if (profile.is_admin === true) return true
+  return hasEditorAccess(profile.roles)
+}
+
+/**
+ * Check full admin access from a profile object
+ */
+export function checkFullAdminAccess(profile: { is_admin?: boolean | null; roles?: string[] | null } | null | undefined): boolean {
+  if (!profile) return false
+  if (profile.is_admin === true) return true
+  return hasRole(profile.roles as UserRole[] | null | undefined, USER_ROLES.ADMIN)
 }

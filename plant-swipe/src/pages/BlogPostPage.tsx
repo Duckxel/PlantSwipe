@@ -10,6 +10,7 @@ import { usePageMetadata } from '@/hooks/usePageMetadata'
 import type { BlogPost } from '@/types/blog'
 import { fetchBlogPost } from '@/lib/blogs'
 import { useAuth } from '@/context/AuthContext'
+import { checkEditorAccess } from '@/constants/userRoles'
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return ''
@@ -49,7 +50,7 @@ export default function BlogPostPage() {
 
   const publishedLabel = formatDateTime(post?.publishedAt)
   const authorLabel = post?.authorName || t('blogPage.card.unknownAuthor', { defaultValue: 'Team Aphylia' })
-  const isAdmin = Boolean(profile?.is_admin)
+  const isAdmin = checkEditorAccess(profile)
   const isDraft = post ? !post.isPublished : false
   const isScheduled = post ? post.isPublished && Date.parse(post.publishedAt) > Date.now() : false
 

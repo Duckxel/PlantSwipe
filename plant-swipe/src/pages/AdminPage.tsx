@@ -151,6 +151,8 @@ import {
   ADMIN_ASSIGNABLE_ROLES,
   ROLE_CONFIG,
   type UserRole,
+  checkFullAdminAccess,
+  checkEditorAccess,
 } from "@/constants/userRoles";
 import { UserRoleBadge } from "@/components/profile/UserRoleBadges";
 
@@ -3178,21 +3180,32 @@ export const AdminPage: React.FC = () => {
   }, [loadVisitorsStats]);
 
   // ---- Members tab state ----
-  const navItems: Array<{
+  // Check if user has full admin access (not just editor)
+  const isFullAdmin = checkFullAdminAccess(profile);
+  
+  // Define all nav items with admin-only flag
+  const allNavItems: Array<{
     key: AdminTab;
     label: string;
     Icon: React.ComponentType<{ className?: string }>;
     path: string;
+    adminOnly?: boolean;
   }> = [
-    { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin" },
-    { key: "members", label: "Members", Icon: Users, path: "/admin/members" },
+    { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin", adminOnly: true },
+    { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
     { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
-    { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks" },
+    { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
-    { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced" },
+    { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced", adminOnly: true },
   ];
+  
+  // Filter nav items based on user's access level
+  const navItems = React.useMemo(() => {
+    if (isFullAdmin) return allNavItems;
+    return allNavItems.filter(item => !item.adminOnly);
+  }, [isFullAdmin]);
 
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
@@ -3204,6 +3217,16 @@ export const AdminPage: React.FC = () => {
     if (currentPath.includes("/admin/advanced")) return "admin_logs";
     return "overview";
   }, [currentPath]);
+  
+  // Redirect editors away from admin-only tabs
+  React.useEffect(() => {
+    if (isFullAdmin) return; // Admins can access everything
+    const adminOnlyTabs: AdminTab[] = ["overview", "members", "stocks", "admin_logs"];
+    if (adminOnlyTabs.includes(activeTab)) {
+      // Redirect to requests tab (default for editors)
+      navigate("/admin/requests", { replace: true });
+    }
+  }, [activeTab, isFullAdmin, navigate]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const toggleSidebarCollapsed = React.useCallback(
     () => setSidebarCollapsed((prev) => !prev),
