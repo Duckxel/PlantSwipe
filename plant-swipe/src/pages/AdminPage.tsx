@@ -63,6 +63,7 @@ import {
   Crown,
   Pencil,
   Shield,
+  Store,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -163,7 +164,7 @@ import {
   checkFullAdminAccess,
   checkEditorAccess,
 } from "@/constants/userRoles";
-import { UserRoleBadge } from "@/components/profile/UserRoleBadges";
+import { UserRoleBadge, ProfileNameBadges } from "@/components/profile/UserRoleBadges";
 
 const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_COLORS;
 
@@ -3287,6 +3288,7 @@ export const AdminPage: React.FC = () => {
     React.useState(false);
   const [memberListSort, setMemberListSort] =
     React.useState<MemberListSort>("newest");
+  const [roleFilter, setRoleFilter] = React.useState<string | null>(null);
   const [roleStats, setRoleStats] = React.useState<RoleStats | null>(null);
   const [roleStatsLoading, setRoleStatsLoading] = React.useState(false);
   const [lookupEmail, setLookupEmail] = React.useState("");
@@ -3501,12 +3503,13 @@ export const AdminPage: React.FC = () => {
   );
 
   const loadMemberList = React.useCallback(
-    async (opts?: { reset?: boolean; sort?: MemberListSort }) => {
+    async (opts?: { reset?: boolean; sort?: MemberListSort; role?: string | null }) => {
       if (memberListLoading) return;
       const reset = !!opts?.reset;
       const limit = MEMBER_LIST_PAGE_SIZE;
       const offset = reset ? 0 : memberListOffset;
       const sortParam: MemberListSort = opts?.sort ?? memberListSort;
+      const roleParam: string | null = opts?.role !== undefined ? opts.role : roleFilter;
       setMemberListLoading(true);
       setMemberListError(null);
       try {
@@ -3519,8 +3522,9 @@ export const AdminPage: React.FC = () => {
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
+        const roleQuery = roleParam ? `&role=${encodeURIComponent(roleParam)}` : "";
         const resp = await fetch(
-          `/api/admin/member-list?limit=${limit}&offset=${offset}&sort=${encodeURIComponent(sortParam)}`,
+          `/api/admin/member-list?limit=${limit}&offset=${offset}&sort=${encodeURIComponent(sortParam)}${roleQuery}`,
           { headers, credentials: "same-origin" },
         );
         const data = await safeJson(resp);
@@ -3584,7 +3588,7 @@ export const AdminPage: React.FC = () => {
         setMemberListInitialized(true);
       }
     },
-    [memberListLoading, memberListOffset, memberListSort, safeJson],
+    [memberListLoading, memberListOffset, memberListSort, roleFilter, safeJson],
   );
 
   const loadRoleStats = React.useCallback(async () => {
@@ -3906,6 +3910,28 @@ export const AdminPage: React.FC = () => {
       memberListSort,
       loadMemberList,
     ],
+  );
+
+  const handleRoleFilterChange = React.useCallback(
+    (nextRole: string | null) => {
+      if (nextRole === roleFilter) {
+        // Toggle off if same role clicked
+        setRoleFilter(null);
+        setMemberList([]);
+        setMemberListOffset(0);
+        setMemberListHasMore(true);
+        setMemberListError(null);
+        loadMemberList({ reset: true, role: null });
+      } else {
+        setRoleFilter(nextRole);
+        setMemberList([]);
+        setMemberListOffset(0);
+        setMemberListHasMore(true);
+        setMemberListError(null);
+        loadMemberList({ reset: true, role: nextRole });
+      }
+    },
+    [roleFilter, loadMemberList],
   );
 
   // Auto-load visits series when a member is selected
@@ -8380,8 +8406,16 @@ export const AdminPage: React.FC = () => {
                     {membersView === "list" && (
                       <div className="space-y-4">
                         {/* Role Stats Cards */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-stone-300 dark:hover:border-[#4e4e52]">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleRoleFilterChange(null)}
+                            className={`group relative rounded-xl border p-3 transition-all text-left ${
+                              roleFilter === null
+                                ? "border-stone-400 dark:border-stone-500 bg-stone-50 dark:bg-stone-800/50 ring-2 ring-stone-400/30 dark:ring-stone-500/30"
+                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                            }`}
+                          >
                             <div className="flex items-center gap-2">
                               <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-stone-100 dark:bg-stone-800 flex items-center justify-center">
                                 <Users className="h-4 w-4 text-stone-600 dark:text-stone-400" />
@@ -8391,8 +8425,16 @@ export const AdminPage: React.FC = () => {
                                 <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.totalMembers ?? "-"}</div>
                               </div>
                             </div>
-                          </div>
-                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-purple-300 dark:hover:border-purple-800">
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRoleFilterChange("admin")}
+                            className={`group relative rounded-xl border p-3 transition-all text-left ${
+                              roleFilter === "admin"
+                                ? "border-purple-400 dark:border-purple-500 bg-purple-50 dark:bg-purple-900/30 ring-2 ring-purple-400/30 dark:ring-purple-500/30"
+                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-purple-300 dark:hover:border-purple-800"
+                            }`}
+                          >
                             <div className="flex items-center gap-2">
                               <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
                                 <Shield className="h-4 w-4 text-purple-600 dark:text-purple-400" />
@@ -8402,8 +8444,16 @@ export const AdminPage: React.FC = () => {
                                 <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.admin ?? 0}</div>
                               </div>
                             </div>
-                          </div>
-                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-blue-300 dark:hover:border-blue-800">
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRoleFilterChange("editor")}
+                            className={`group relative rounded-xl border p-3 transition-all text-left ${
+                              roleFilter === "editor"
+                                ? "border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-400/30 dark:ring-blue-500/30"
+                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-blue-300 dark:hover:border-blue-800"
+                            }`}
+                          >
                             <div className="flex items-center gap-2">
                               <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                                 <Pencil className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -8413,8 +8463,16 @@ export const AdminPage: React.FC = () => {
                                 <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.editor ?? 0}</div>
                               </div>
                             </div>
-                          </div>
-                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-emerald-300 dark:hover:border-emerald-800">
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRoleFilterChange("pro")}
+                            className={`group relative rounded-xl border p-3 transition-all text-left ${
+                              roleFilter === "pro"
+                                ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 ring-2 ring-emerald-400/30 dark:ring-emerald-500/30"
+                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800"
+                            }`}
+                          >
                             <div className="flex items-center gap-2">
                               <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
                                 <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -8424,8 +8482,16 @@ export const AdminPage: React.FC = () => {
                                 <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.pro ?? 0}</div>
                               </div>
                             </div>
-                          </div>
-                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-amber-300 dark:hover:border-amber-800">
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRoleFilterChange("vip")}
+                            className={`group relative rounded-xl border p-3 transition-all text-left ${
+                              roleFilter === "vip"
+                                ? "border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/30 ring-2 ring-amber-400/30 dark:ring-amber-500/30"
+                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-amber-300 dark:hover:border-amber-800"
+                            }`}
+                          >
                             <div className="flex items-center gap-2">
                               <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
                                 <Crown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -8435,8 +8501,16 @@ export const AdminPage: React.FC = () => {
                                 <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.vip ?? 0}</div>
                               </div>
                             </div>
-                          </div>
-                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-slate-300 dark:hover:border-slate-600">
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRoleFilterChange("plus")}
+                            className={`group relative rounded-xl border p-3 transition-all text-left ${
+                              roleFilter === "plus"
+                                ? "border-slate-400 dark:border-slate-500 bg-slate-50 dark:bg-slate-800/50 ring-2 ring-slate-400/30 dark:ring-slate-500/30"
+                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-slate-300 dark:hover:border-slate-600"
+                            }`}
+                          >
                             <div className="flex items-center gap-2">
                               <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                                 <Plus className="h-4 w-4 text-slate-600 dark:text-slate-400" />
@@ -8446,8 +8520,16 @@ export const AdminPage: React.FC = () => {
                                 <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.plus ?? 0}</div>
                               </div>
                             </div>
-                          </div>
-                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-pink-300 dark:hover:border-pink-800">
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRoleFilterChange("creator")}
+                            className={`group relative rounded-xl border p-3 transition-all text-left ${
+                              roleFilter === "creator"
+                                ? "border-pink-400 dark:border-pink-500 bg-pink-50 dark:bg-pink-900/30 ring-2 ring-pink-400/30 dark:ring-pink-500/30"
+                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-pink-300 dark:hover:border-pink-800"
+                            }`}
+                          >
                             <div className="flex items-center gap-2">
                               <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center">
                                 <Sparkles className="h-4 w-4 text-pink-600 dark:text-pink-400" />
@@ -8457,7 +8539,26 @@ export const AdminPage: React.FC = () => {
                                 <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.creator ?? 0}</div>
                               </div>
                             </div>
-                          </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRoleFilterChange("merchant")}
+                            className={`group relative rounded-xl border p-3 transition-all text-left ${
+                              roleFilter === "merchant"
+                                ? "border-sky-400 dark:border-sky-500 bg-sky-50 dark:bg-sky-900/30 ring-2 ring-sky-400/30 dark:ring-sky-500/30"
+                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-sky-300 dark:hover:border-sky-800"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                                <Store className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Merchant</div>
+                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.merchant ?? 0}</div>
+                              </div>
+                            </div>
+                          </button>
                         </div>
 
                         <Card className="rounded-2xl">
@@ -8472,29 +8573,47 @@ export const AdminPage: React.FC = () => {
                                   needed.
                                 </div>
                               </div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-[11px] uppercase tracking-wide opacity-60">
-                                  Sort
-                                </span>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {memberListSortOptions.map((option) => (
-                                    <Button
-                                      key={option.value}
-                                      size="sm"
-                                      variant={
-                                        memberListSort === option.value
-                                          ? "default"
-                                          : "outline"
-                                      }
-                                      className="rounded-2xl text-xs"
-                                      onClick={() =>
-                                        handleMemberSortChange(option.value)
-                                      }
-                                    >
-                                      {option.label}
-                                    </Button>
-                                  ))}
+                              <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[11px] uppercase tracking-wide opacity-60">
+                                    Sort
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {memberListSortOptions.map((option) => (
+                                      <Button
+                                        key={option.value}
+                                        size="sm"
+                                        variant={
+                                          memberListSort === option.value
+                                            ? "default"
+                                            : "outline"
+                                        }
+                                        className="rounded-2xl text-xs"
+                                        onClick={() =>
+                                          handleMemberSortChange(option.value)
+                                        }
+                                      >
+                                        {option.label}
+                                      </Button>
+                                    ))}
+                                  </div>
                                 </div>
+                                {roleFilter && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] uppercase tracking-wide opacity-60">
+                                      Filter
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      className="rounded-2xl text-xs gap-1.5 capitalize"
+                                      onClick={() => handleRoleFilterChange(null)}
+                                    >
+                                      {roleFilter}
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                             {memberListError && (
@@ -8543,60 +8662,32 @@ export const AdminPage: React.FC = () => {
                                     onClick={() => handleMemberCardClick(member)}
                                   >
                                     <div className="flex items-center justify-between gap-3">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="font-semibold truncate">
-                                          {member.displayName ||
-                                            member.email ||
-                                            `User ${member.id.slice(0, 8)}`}
-                                        </div>
-                                        <div className="text-xs opacity-70 truncate">
-                                          {member.email || "No email"}
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="font-semibold truncate">
+                                              {member.displayName ||
+                                                member.email ||
+                                                `User ${member.id.slice(0, 8)}`}
+                                            </span>
+                                            {/* Role badges next to name like Profile page */}
+                                            <ProfileNameBadges 
+                                              roles={member.roles as UserRole[]} 
+                                              isAdmin={member.isAdmin} 
+                                              size="sm" 
+                                            />
+                                          </div>
+                                          <div className="text-xs opacity-70 truncate">
+                                            {member.email || "No email"}
+                                          </div>
                                         </div>
                                       </div>
-                                      <div className="flex flex-wrap items-center gap-1.5">
-                                        {/* Display role badges */}
-                                        {(member.isAdmin || member.roles.includes("admin")) && (
-                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-0">
-                                            Admin
-                                          </Badge>
-                                        )}
-                                        {member.roles.includes("editor") && (
-                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-0">
-                                            Editor
-                                          </Badge>
-                                        )}
-                                        {member.roles.includes("pro") && (
-                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-0">
-                                            Pro
-                                          </Badge>
-                                        )}
-                                        {member.roles.includes("vip") && (
-                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-0">
-                                            VIP
-                                          </Badge>
-                                        )}
-                                        {member.roles.includes("plus") && (
-                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-0">
-                                            Plus
-                                          </Badge>
-                                        )}
-                                        {member.roles.includes("creator") && (
-                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-0">
-                                            Creator
-                                          </Badge>
-                                        )}
-                                        {member.roles.includes("merchant") && (
-                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 border-0">
-                                            Merchant
-                                          </Badge>
-                                        )}
-                                        {/* Show "Member" if no special roles */}
-                                        {!member.isAdmin && member.roles.length === 0 && (
-                                          <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[10px]">
-                                            Member
-                                          </Badge>
-                                        )}
-                                      </div>
+                                      {/* Show "Member" badge if no special roles */}
+                                      {!member.isAdmin && member.roles.length === 0 && (
+                                        <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[10px] flex-shrink-0">
+                                          Member
+                                        </Badge>
+                                      )}
                                     </div>
                                       <div className="text-xs opacity-60 mt-1 flex flex-wrap items-center gap-2">
                                         <span>
