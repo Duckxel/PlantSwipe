@@ -1558,6 +1558,9 @@ export const AdminPage: React.FC = () => {
   >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
+  const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
+  const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
+  const [deletingPlant, setDeletingPlant] = React.useState(false);
   const [isAnalyticsPanelCollapsed, setIsAnalyticsPanelCollapsed] =
     React.useState<boolean>(true);
   const [addFromDialogOpen, setAddFromDialogOpen] = React.useState(false);
@@ -1567,6 +1570,9 @@ export const AdminPage: React.FC = () => {
   >([]);
   const [addFromSearchLoading, setAddFromSearchLoading] = React.useState(false);
   const [addButtonExpanded, setAddButtonExpanded] = React.useState(false);
+  const [addFromDuplicating, setAddFromDuplicating] = React.useState(false);
+  const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
+  const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -1809,14 +1815,174 @@ export const AdminPage: React.FC = () => {
   }, []);
 
   const handleSelectPlantForPrefill = React.useCallback(
-    (plantId: string) => {
-      setAddFromDialogOpen(false);
-      setAddFromSearchQuery("");
-      setAddFromSearchResults([]);
-      setAddButtonExpanded(false);
-      navigate(`/create?prefillFrom=${plantId}`);
+    async (plantId: string, plantName: string) => {
+      setAddFromDuplicating(true);
+      setAddFromDuplicateError(null);
+      setAddFromDuplicateSuccess(null);
+      
+      try {
+        // Generate new UUID for the duplicated plant
+        const newId = crypto.randomUUID?.() || 
+          'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        
+        // Create new name: original name + short uuid
+        const shortUuid = newId.split('-')[0]; // First 8 characters
+        const newName = `${plantName} ${shortUuid}`;
+        
+        // Step 1: Load the source plant base data
+        const { data: sourcePlant, error: plantError } = await supabase
+          .from('plants')
+          .select('*')
+          .eq('id', plantId)
+          .single();
+        
+        if (plantError || !sourcePlant) {
+          throw new Error('Source plant not found');
+        }
+        
+        // Step 2: Load all translations for the source plant
+        const { data: sourceTranslations, error: translationsError } = await supabase
+          .from('plant_translations')
+          .select('*')
+          .eq('plant_id', plantId);
+        
+        if (translationsError) {
+          console.error('Failed to load translations:', translationsError);
+          // Continue without translations if they fail to load
+        }
+        
+        // Step 3: Load related data (colors, images, etc.)
+        const { data: colorLinks } = await supabase
+          .from('plant_colors')
+          .select('color_id')
+          .eq('plant_id', plantId);
+        
+        const { data: wateringSchedules } = await supabase
+          .from('watering_schedules')
+          .select('*')
+          .eq('plant_id', plantId);
+        
+        const { data: plantSources } = await supabase
+          .from('plant_sources')
+          .select('*')
+          .eq('plant_id', plantId);
+        
+        const { data: infusionMixes } = await supabase
+          .from('infusion_mixes')
+          .select('*')
+          .eq('plant_id', plantId);
+        
+        // Step 4: Create the new plant record (copy all non-translatable fields)
+        const timestamp = new Date().toISOString();
+        const newPlantPayload = {
+          ...sourcePlant,
+          id: newId,
+          name: newName,
+          // Clear scientific name to avoid unique constraint violation
+          scientific_name: null,
+          // Update meta fields
+          status: 'in progres',
+          created_by: profile?.display_name || sourcePlant.created_by,
+          created_time: timestamp,
+          updated_by: profile?.display_name || null,
+          updated_time: timestamp,
+        };
+        
+        const { error: insertError } = await supabase
+          .from('plants')
+          .insert(newPlantPayload);
+        
+        if (insertError) {
+          throw new Error(`Failed to create plant: ${insertError.message}`);
+        }
+        
+        // Step 5: Copy all translations to the new plant
+        if (sourceTranslations && sourceTranslations.length > 0) {
+          const newTranslations = sourceTranslations.map((t) => ({
+            ...t,
+            plant_id: newId,
+            // Update the name in each translation to the new name
+            name: newName,
+            created_at: timestamp,
+            updated_at: timestamp,
+          }));
+          
+          const { error: translationInsertError } = await supabase
+            .from('plant_translations')
+            .insert(newTranslations);
+          
+          if (translationInsertError) {
+            console.error('Failed to copy translations:', translationInsertError);
+            // Continue even if translations fail
+          }
+        }
+        
+        // Step 6: Copy color links
+        if (colorLinks && colorLinks.length > 0) {
+          const newColorLinks = colorLinks.map((c) => ({
+            plant_id: newId,
+            color_id: c.color_id,
+          }));
+          
+          await supabase.from('plant_colors').insert(newColorLinks);
+        }
+        
+        // Step 7: Copy watering schedules
+        if (wateringSchedules && wateringSchedules.length > 0) {
+          const newSchedules = wateringSchedules.map((s) => ({
+            plant_id: newId,
+            season: s.season,
+            frequency: s.frequency,
+            amount: s.amount,
+          }));
+          
+          await supabase.from('watering_schedules').insert(newSchedules);
+        }
+        
+        // Step 8: Copy plant sources
+        if (plantSources && plantSources.length > 0) {
+          const newSources = plantSources.map((s) => ({
+            plant_id: newId,
+            name: s.name,
+            url: s.url,
+          }));
+          
+          await supabase.from('plant_sources').insert(newSources);
+        }
+        
+        // Step 9: Copy infusion mixes
+        if (infusionMixes && infusionMixes.length > 0) {
+          const newMixes = infusionMixes.map((m) => ({
+            plant_id: newId,
+            plant_name: m.plant_name,
+          }));
+          
+          await supabase.from('infusion_mixes').insert(newMixes);
+        }
+        
+        // Success! Show success message and navigate
+        setAddFromDuplicateSuccess({
+          id: newId,
+          name: newName,
+          originalName: plantName,
+        });
+        
+        // Mark plant dashboard as needing refresh so it reloads when user visits it
+        setPlantDashboardInitialized(false);
+        
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to duplicate plant';
+        setAddFromDuplicateError(message);
+        console.error('Duplicate plant error:', err);
+      } finally {
+        setAddFromDuplicating(false);
+      }
     },
-    [navigate],
+    [profile?.display_name],
   );
 
   const loadPlantDashboard = React.useCallback(async () => {
@@ -1884,6 +2050,55 @@ export const AdminPage: React.FC = () => {
       setPlantDashboardLoading(false);
     }
   }, [supabase]);
+
+  const handleDeletePlant = React.useCallback(async () => {
+    if (!plantToDelete) return;
+    
+    setDeletingPlant(true);
+    try {
+      const plantId = plantToDelete.id;
+      
+      // Delete related data first (in order to respect foreign key constraints)
+      // Delete plant translations
+      await supabase.from('plant_translations').delete().eq('plant_id', plantId);
+      
+      // Delete plant colors
+      await supabase.from('plant_colors').delete().eq('plant_id', plantId);
+      
+      // Delete plant images
+      await supabase.from('plant_images').delete().eq('plant_id', plantId);
+      
+      // Delete watering schedules
+      await supabase.from('watering_schedules').delete().eq('plant_id', plantId);
+      
+      // Delete plant sources
+      await supabase.from('plant_sources').delete().eq('plant_id', plantId);
+      
+      // Delete infusion mixes
+      await supabase.from('infusion_mixes').delete().eq('plant_id', plantId);
+      
+      // Finally delete the plant itself
+      const { error } = await supabase.from('plants').delete().eq('id', plantId);
+      
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      // Remove from local state
+      setPlantDashboardRows((prev) => prev.filter((p) => p.id !== plantId));
+      
+      // Close the dialog
+      setDeletePlantDialogOpen(false);
+      setPlantToDelete(null);
+      
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete plant';
+      setPlantDashboardError(message);
+      console.error('Delete plant error:', err);
+    } finally {
+      setDeletingPlant(false);
+    }
+  }, [plantToDelete, supabase]);
 
   const plantStatusCounts = React.useMemo(() => {
     return plantDashboardRows.reduce(
@@ -6683,7 +6898,7 @@ export const AdminPage: React.FC = () => {
                                         </div>
                                       </div>
 
-                                      {/* Status Badge */}
+                                      {/* Status Badge & Actions */}
                                       <div className="flex items-center gap-2">
                                         <span
                                           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${PLANT_STATUS_BADGE_CLASSES[plant.status]}`}
@@ -6694,6 +6909,18 @@ export const AdminPage: React.FC = () => {
                                           />
                                           {PLANT_STATUS_LABELS[plant.status]}
                                         </span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPlantToDelete({ id: plant.id, name: plant.name });
+                                            setDeletePlantDialogOpen(true);
+                                          }}
+                                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/30 text-stone-400 hover:text-red-600 dark:hover:text-red-400 transition-all"
+                                          title="Delete plant"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </button>
                                         <ChevronRight className="h-4 w-4 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
                                       </div>
                                     </div>
@@ -8634,59 +8861,203 @@ export const AdminPage: React.FC = () => {
       if (!open) {
         setAddFromSearchQuery("");
         setAddFromSearchResults([]);
+        setAddFromDuplicateError(null);
+        setAddFromDuplicateSuccess(null);
       }
     }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add Plant FROM Existing</DialogTitle>
           <DialogDescription>
-            Search for an existing plant to use as a template. All data including translations will be copied to a new plant.
+            Search for an existing plant to duplicate. All data including translations will be copied to a new plant.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <SearchInput
-            value={addFromSearchQuery}
-            onChange={(e) => {
-              setAddFromSearchQuery(e.target.value);
-              searchPlantsForAddFrom(e.target.value);
-            }}
-            placeholder="Search plants by name..."
-          />
-          <div className="max-h-[300px] overflow-y-auto rounded-xl border border-stone-200 dark:border-[#3e3e42]">
-            {addFromSearchLoading ? (
-              <div className="p-4 text-sm text-center opacity-60">Searching...</div>
-            ) : addFromSearchQuery.trim() && addFromSearchResults.length === 0 ? (
-              <div className="p-4 text-sm text-center opacity-60">No plants found</div>
-            ) : addFromSearchResults.length === 0 ? (
-              <div className="p-4 text-sm text-center opacity-60">Type to search for plants</div>
-            ) : (
-              <div className="divide-y divide-stone-200 dark:divide-[#2f2f35]">
-                {addFromSearchResults.map((plant) => (
-                  <button
-                    key={plant.id}
-                    type="button"
-                    onClick={() => handleSelectPlantForPrefill(plant.id)}
-                    className="w-full px-4 py-3 text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
-                  >
-                    <div className="font-medium text-sm">{plant.name}</div>
-                    {plant.scientific_name && (
-                      <div className="text-xs italic opacity-60">{plant.scientific_name}</div>
-                    )}
-                    {plant.status && (
-                      <Badge variant="outline" className="mt-1 text-[10px]">
-                        {plant.status}
-                      </Badge>
-                    )}
-                  </button>
-                ))}
+        
+        {/* Success State */}
+        {addFromDuplicateSuccess ? (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+              <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-medium text-emerald-900 dark:text-emerald-100">
+                  Plant duplicated successfully!
+                </div>
+                <div className="text-sm text-emerald-700 dark:text-emerald-300">
+                  Created "<span className="font-medium">{addFromDuplicateSuccess.name}</span>"
+                </div>
+                <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-2">
+                  <Info className="h-3.5 w-3.5" />
+                  From original plant: {addFromDuplicateSuccess.originalName}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => {
+                  setAddFromDuplicateSuccess(null);
+                  setAddFromSearchQuery("");
+                  setAddFromSearchResults([]);
+                }}
+              >
+                Duplicate Another
+              </Button>
+              <Button
+                className="flex-1 rounded-xl"
+                onClick={() => {
+                  const successId = addFromDuplicateSuccess.id;
+                  const originalName = addFromDuplicateSuccess.originalName;
+                  setAddFromDialogOpen(false);
+                  setAddFromSearchQuery("");
+                  setAddFromSearchResults([]);
+                  setAddFromDuplicateSuccess(null);
+                  navigate(`/create/${successId}?duplicatedFrom=${encodeURIComponent(originalName)}`);
+                }}
+              >
+                Edit Plant
+                <ArrowUpRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        ) : addFromDuplicating ? (
+          /* Duplicating State */
+          <div className="flex flex-col items-center justify-center py-8 space-y-3">
+            <RefreshCw className="h-8 w-8 text-emerald-600 dark:text-emerald-400 animate-spin" />
+            <div className="text-sm font-medium">Duplicating plant...</div>
+            <div className="text-xs opacity-60">Copying all data and translations</div>
+          </div>
+        ) : (
+          /* Search State */
+          <div className="space-y-4">
+            {addFromDuplicateError && (
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-medium text-red-900 dark:text-red-100">
+                    Duplication failed
+                  </div>
+                  <div className="text-sm text-red-700 dark:text-red-300">
+                    {addFromDuplicateError}
+                  </div>
+                </div>
               </div>
             )}
+            <SearchInput
+              value={addFromSearchQuery}
+              onChange={(e) => {
+                setAddFromSearchQuery(e.target.value);
+                searchPlantsForAddFrom(e.target.value);
+              }}
+              placeholder="Search plants by name..."
+            />
+            <div className="max-h-[300px] overflow-y-auto rounded-xl border border-stone-200 dark:border-[#3e3e42]">
+              {addFromSearchLoading ? (
+                <div className="p-4 text-sm text-center opacity-60">Searching...</div>
+              ) : addFromSearchQuery.trim() && addFromSearchResults.length === 0 ? (
+                <div className="p-4 text-sm text-center opacity-60">No plants found</div>
+              ) : addFromSearchResults.length === 0 ? (
+                <div className="p-4 text-sm text-center opacity-60">Type to search for plants</div>
+              ) : (
+                <div className="divide-y divide-stone-200 dark:divide-[#2f2f35]">
+                  {addFromSearchResults.map((plant) => (
+                    <button
+                      key={plant.id}
+                      type="button"
+                      onClick={() => handleSelectPlantForPrefill(plant.id, plant.name)}
+                      className="w-full px-4 py-3 text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
+                    >
+                      <div className="font-medium text-sm">{plant.name}</div>
+                      {plant.scientific_name && (
+                        <div className="text-xs italic opacity-60">{plant.scientific_name}</div>
+                      )}
+                      {plant.status && (
+                        <Badge variant="outline" className="mt-1 text-[10px]">
+                          {plant.status}
+                        </Badge>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+        
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline" className="rounded-xl">Cancel</Button>
+            <Button variant="outline" className="rounded-xl" disabled={addFromDuplicating}>
+              {addFromDuplicateSuccess ? 'Close' : 'Cancel'}
+            </Button>
           </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Delete Plant Confirmation Dialog */}
+    <Dialog open={deletePlantDialogOpen} onOpenChange={(open) => {
+      if (!deletingPlant) {
+        setDeletePlantDialogOpen(open);
+        if (!open) {
+          setPlantToDelete(null);
+        }
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <AlertTriangle className="h-5 w-5" />
+            Delete Plant
+          </DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete this plant? This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        
+        {plantToDelete && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-stone-100 dark:bg-[#2a2a2d] border border-stone-200 dark:border-[#3e3e42]">
+              <div className="font-medium text-stone-900 dark:text-white">
+                {plantToDelete.name}
+              </div>
+              <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 font-mono">
+                ID: {plantToDelete.id}
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800 dark:text-amber-200">
+                This will permanently delete the plant and all associated data including translations, images, and schedules.
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <DialogFooter className="gap-2 sm:gap-0">
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl" disabled={deletingPlant}>
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            className="rounded-xl"
+            onClick={handleDeletePlant}
+            disabled={deletingPlant}
+          >
+            {deletingPlant ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Plant
+              </>
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
