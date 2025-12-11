@@ -3947,26 +3947,31 @@ export const AdminPage: React.FC = () => {
     }
   }, [memberData?.user?.id, loadMemberVisitsSeries]);
 
+  // Refresh member list every time the list view is opened
   React.useEffect(() => {
     if (activeTab !== "members") return;
     if (membersView !== "list") return;
-    if (memberListInitialized || memberListLoading) return;
+    if (memberListLoading) return;
+    // Always refresh when opening the list view
     loadMemberList({ reset: true });
   }, [
     activeTab,
     membersView,
-    memberListInitialized,
-    memberListLoading,
-    loadMemberList,
+    // Intentionally exclude memberListLoading to only trigger on view change
   ]);
 
-  // Load role stats when members list tab is active
+  // Refresh role stats every time the list view is opened
   React.useEffect(() => {
     if (activeTab !== "members") return;
     if (membersView !== "list") return;
-    if (roleStats !== null || roleStatsLoading) return;
+    if (roleStatsLoading) return;
+    // Always refresh when opening the list view
     loadRoleStats();
-  }, [activeTab, membersView, roleStats, roleStatsLoading, loadRoleStats]);
+  }, [
+    activeTab,
+    membersView,
+    // Intentionally exclude roleStatsLoading to only trigger on view change
+  ]);
 
   const performBan = React.useCallback(async () => {
     if (!lookupEmail || banSubmitting) return;
