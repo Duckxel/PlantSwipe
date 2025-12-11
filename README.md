@@ -30,6 +30,7 @@ Made with care by **Neolite** & **Five**
 | 🌱 **Grow Together** | Gardens, inventories, task management, and shared activity |
 | 📱 **Progressive Web App** | Installable, works offline, push notifications, and native-like experience |
 | 📝 **Rich Content** | Blog system with TipTap editor for rich text editing |
+| 🤖 **AI-Powered** | Smart analytics and recommendations powered by OpenAI |
 | 🛠️ **Developer-friendly** | Modern, readable stack with clear, safe conventions |
 
 ---
@@ -433,15 +434,15 @@ sudo systemctl reload nginx
 | ✅ | Friends system and public profiles | Complete |
 | ✅ | Multi-language support (i18n) | Complete |
 | ✅ | Plant translations (DeepL) | Complete |
-| ✅ | Progressive Web App | Complete |
+| ✅ | Progressive Web App (installable mobile experience) | Complete |
 | ✅ | Push notifications | Complete |
 | ✅ | Blog system with rich text | Complete |
 | ✅ | Task caching system | Complete |
+| ✅ | AI-powered analytics & recommendations | Complete |
 | ⏳ | Garden events with reminders | In Progress |
 | ⏳ | Collaborative collections and sharing | Planned |
-| 🔬 | Advanced AI recommendations | Research |
-| 🔬 | Mobile app (React Native) | Future |
 | 🔬 | Plant disease identification | Future |
+| 🔬 | Advanced plant care AI assistant | Future |
 
 ---
 
@@ -522,7 +523,7 @@ A: Plant data can be translated manually or automatically via DeepL API integrat
 A: Yes — extend `SUPPORTED_LANGUAGES` in the i18n config and add translation files in `public/locales/`.
 
 **Q: Is there a mobile app?**  
-A: The web app is a PWA — installable on mobile with offline support. A native app is on the roadmap.
+A: Yes! Aphylia is a Progressive Web App (PWA) — fully installable on iOS, Android, and desktop with offline support, push notifications, and a native-like experience. No app store needed!
 
 **Q: How does the PWA work offline?**  
 A: The service worker caches routes, translations, and static assets. API calls use NetworkFirst strategy with fallback.
