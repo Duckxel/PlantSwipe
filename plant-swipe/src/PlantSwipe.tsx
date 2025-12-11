@@ -1300,97 +1300,97 @@ export default function PlantSwipe() {
             onSignup={openSignup}
           />
 
+          {/* Sticky search bar for search view - outside grid for proper sticky behavior */}
+          {currentView === "search" && (
+            <div className="sticky top-0 z-30 bg-stone-50/95 dark:bg-[#1a1a1a]/95 backdrop-blur-sm -mx-4 px-4 py-3 lg:relative lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-none lg:py-0 lg:mx-0">
+              <div className="max-w-6xl mx-auto">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                  <div className="flex-1">
+                    <Label htmlFor="plant-search-main" className="sr-only">
+                      {t("common.search")}
+                    </Label>
+                    <SearchInput
+                      id="plant-search-main"
+                      variant="lg"
+                      className="rounded-2xl"
+                      placeholder={t("plant.searchPlaceholder")}
+                      value={query}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        setQuery(e.target.value)
+                        setIndex(0)
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
+                    <Button
+                      variant="outline"
+                      className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
+                      onClick={() => setShowFilters((prev) => !prev)}
+                      aria-expanded={showFilters}
+                    >
+                      <span className="flex items-center gap-2">
+                        <ListFilter className="h-4 w-4" />
+                        <span>{t(showFilters ? "plant.hideFilters" : "plant.showFilters")}</span>
+                      </span>
+                      {showFilters ? (
+                        <ChevronUp className="h-4 w-4 lg:hidden" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 lg:hidden" />
+                      )}
+                    </Button>
+                    {user && (
+                      <>
+                        <Button
+                          variant="secondary"
+                          className="rounded-2xl w-full lg:w-auto"
+                          onClick={() => setRequestPlantDialogOpen(true)}
+                        >
+                          <MessageSquarePlus className="h-4 w-4 mr-2" />
+                          {t("requestPlant.button") || "Request Plant"}
+                        </Button>
+                        {checkEditorAccess(profile) && (
+                          <Button
+                            variant="default"
+                            className="rounded-2xl w-full lg:w-auto"
+                            onClick={() => navigate("/create")}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            {t("common.addPlant")}
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className={`lg:hidden mt-3 ${showFilters ? "space-y-6" : "hidden"}`}>
+                  <FilterControls />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Layout: grid only when search view (to avoid narrow column in other views) */}
-        <div
-          className={`max-w-6xl mx-auto mt-6 ${
-            currentView === "search"
-              ? showFilters
-                ? "lg:grid lg:grid-cols-[260px_1fr] lg:gap-10"
-                : "lg:grid lg:grid-cols-1"
-              : ""
-          }`}
-        >
-        {/* Sidebar / Filters */}
-          {currentView === "search" && showFilters && (
-            <>
+          <div
+            className={`max-w-6xl mx-auto mt-4 lg:mt-6 ${
+              currentView === "search"
+                ? showFilters
+                  ? "lg:grid lg:grid-cols-[260px_1fr] lg:gap-10"
+                  : "lg:grid lg:grid-cols-1"
+                : ""
+            }`}
+          >
+            {/* Sidebar / Filters */}
+            {currentView === "search" && showFilters && (
               <aside
                 className="hidden lg:block mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start"
                 aria-label="Filters"
               >
                 <FilterControls />
               </aside>
-            </>
-          )}
-
-          {/* Main content area */}
-          <main className="min-h-[60vh]" aria-live="polite">
-            {currentView === "search" && (
-              <div className="mb-6 space-y-3">
-                <div className="sticky top-0 z-30 bg-stone-50/95 dark:bg-[#1a1a1a]/95 backdrop-blur-sm -mx-4 px-4 py-3 lg:-mx-0 lg:px-0 lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-none lg:static lg:py-0">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                      <div className="flex-1">
-                        <Label htmlFor="plant-search-main" className="sr-only">
-                          {t("common.search")}
-                        </Label>
-                        <SearchInput
-                          id="plant-search-main"
-                          variant="lg"
-                          className="rounded-2xl"
-                          placeholder={t("plant.searchPlaceholder")}
-                          value={query}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            setQuery(e.target.value)
-                            setIndex(0)
-                          }}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
-                        onClick={() => setShowFilters((prev) => !prev)}
-                        aria-expanded={showFilters}
-                      >
-                        <span className="flex items-center gap-2">
-                          <ListFilter className="h-4 w-4" />
-                          <span>{t(showFilters ? "plant.hideFilters" : "plant.showFilters")}</span>
-                        </span>
-                        {showFilters ? (
-                          <ChevronUp className="h-4 w-4 lg:hidden" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4 lg:hidden" />
-                        )}
-                      </Button>
-                      {user && (
-                        <>
-                          <Button
-                            variant="secondary"
-                            className="rounded-2xl w-full lg:w-auto"
-                            onClick={() => setRequestPlantDialogOpen(true)}
-                          >
-                            <MessageSquarePlus className="h-4 w-4 mr-2" />
-                            {t("requestPlant.button") || "Request Plant"}
-                          </Button>
-                          {checkEditorAccess(profile) && (
-                            <Button
-                              variant="default"
-                              className="rounded-2xl w-full lg:w-auto"
-                              onClick={() => navigate("/create")}
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              {t("common.addPlant")}
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                  <div className={`lg:hidden ${showFilters ? "space-y-6" : "hidden"}`}>
-                    <FilterControls />
-                  </div>
-              </div>
             )}
+
+            {/* Main content area */}
+            <main className="min-h-[60vh]" aria-live="polite">
 
           <Routes>
             <Route
