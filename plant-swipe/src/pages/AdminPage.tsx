@@ -1558,6 +1558,9 @@ export const AdminPage: React.FC = () => {
   >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
+  const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
+  const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
+  const [deletingPlant, setDeletingPlant] = React.useState(false);
   const [isAnalyticsPanelCollapsed, setIsAnalyticsPanelCollapsed] =
     React.useState<boolean>(true);
   const [addFromDialogOpen, setAddFromDialogOpen] = React.useState(false);
@@ -2047,6 +2050,55 @@ export const AdminPage: React.FC = () => {
       setPlantDashboardLoading(false);
     }
   }, [supabase]);
+
+  const handleDeletePlant = React.useCallback(async () => {
+    if (!plantToDelete) return;
+    
+    setDeletingPlant(true);
+    try {
+      const plantId = plantToDelete.id;
+      
+      // Delete related data first (in order to respect foreign key constraints)
+      // Delete plant translations
+      await supabase.from('plant_translations').delete().eq('plant_id', plantId);
+      
+      // Delete plant colors
+      await supabase.from('plant_colors').delete().eq('plant_id', plantId);
+      
+      // Delete plant images
+      await supabase.from('plant_images').delete().eq('plant_id', plantId);
+      
+      // Delete watering schedules
+      await supabase.from('watering_schedules').delete().eq('plant_id', plantId);
+      
+      // Delete plant sources
+      await supabase.from('plant_sources').delete().eq('plant_id', plantId);
+      
+      // Delete infusion mixes
+      await supabase.from('infusion_mixes').delete().eq('plant_id', plantId);
+      
+      // Finally delete the plant itself
+      const { error } = await supabase.from('plants').delete().eq('id', plantId);
+      
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      // Remove from local state
+      setPlantDashboardRows((prev) => prev.filter((p) => p.id !== plantId));
+      
+      // Close the dialog
+      setDeletePlantDialogOpen(false);
+      setPlantToDelete(null);
+      
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete plant';
+      setPlantDashboardError(message);
+      console.error('Delete plant error:', err);
+    } finally {
+      setDeletingPlant(false);
+    }
+  }, [plantToDelete, supabase]);
 
   const plantStatusCounts = React.useMemo(() => {
     return plantDashboardRows.reduce(
@@ -6846,7 +6898,7 @@ export const AdminPage: React.FC = () => {
                                         </div>
                                       </div>
 
-                                      {/* Status Badge */}
+                                      {/* Status Badge & Actions */}
                                       <div className="flex items-center gap-2">
                                         <span
                                           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${PLANT_STATUS_BADGE_CLASSES[plant.status]}`}
@@ -6857,6 +6909,18 @@ export const AdminPage: React.FC = () => {
                                           />
                                           {PLANT_STATUS_LABELS[plant.status]}
                                         </span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPlantToDelete({ id: plant.id, name: plant.name });
+                                            setDeletePlantDialogOpen(true);
+                                          }}
+                                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/30 text-stone-400 hover:text-red-600 dark:hover:text-red-400 transition-all"
+                                          title="Delete plant"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </button>
                                         <ChevronRight className="h-4 w-4 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
                                       </div>
                                     </div>
@@ -8926,6 +8990,74 @@ export const AdminPage: React.FC = () => {
               {addFromDuplicateSuccess ? 'Close' : 'Cancel'}
             </Button>
           </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Delete Plant Confirmation Dialog */}
+    <Dialog open={deletePlantDialogOpen} onOpenChange={(open) => {
+      if (!deletingPlant) {
+        setDeletePlantDialogOpen(open);
+        if (!open) {
+          setPlantToDelete(null);
+        }
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <AlertTriangle className="h-5 w-5" />
+            Delete Plant
+          </DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete this plant? This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        
+        {plantToDelete && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-stone-100 dark:bg-[#2a2a2d] border border-stone-200 dark:border-[#3e3e42]">
+              <div className="font-medium text-stone-900 dark:text-white">
+                {plantToDelete.name}
+              </div>
+              <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 font-mono">
+                ID: {plantToDelete.id}
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800 dark:text-amber-200">
+                This will permanently delete the plant and all associated data including translations, images, and schedules.
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <DialogFooter className="gap-2 sm:gap-0">
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl" disabled={deletingPlant}>
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            className="rounded-xl"
+            onClick={handleDeletePlant}
+            disabled={deletingPlant}
+          >
+            {deletingPlant ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Plant
+              </>
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
