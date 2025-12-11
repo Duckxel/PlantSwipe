@@ -16876,10 +16876,10 @@ async function generateCrawlerHtml(req, pagePath) {
           'plant_translation_lookup'
         )
         
-        // Fallback to English if no translation found for requested language
-        let finalTranslation = translation
-        if (!translation && ssrLang !== 'en') {
-          const { data: enTranslation } = await ssrQuery(
+        // Also fetch English translation as fallback for empty fields
+        let enTranslation = null
+        if (ssrLang !== 'en') {
+          const { data: enData } = await ssrQuery(
             supabaseServer
               .from('plant_translations')
               .select('name, scientific_name, family, overview, tags, origin, level_sun, maintenance_level, season')
@@ -16888,21 +16888,24 @@ async function generateCrawlerHtml(req, pagePath) {
               .maybeSingle(),
             'plant_translation_en_fallback'
           )
-          finalTranslation = enTranslation
+          enTranslation = enData
         }
         
-        // Merge base plant with translations
+        // Use target language translation, falling back to English for empty fields
+        const finalTranslation = translation || enTranslation
+        
+        // Merge base plant with translations, with field-level fallback to English
         const plant = basePlant ? {
           ...basePlant,
-          name: finalTranslation?.name || basePlant.name,
-          scientific_name: finalTranslation?.scientific_name,
-          family: finalTranslation?.family,
-          overview: finalTranslation?.overview,
-          tags: finalTranslation?.tags,
-          origin: finalTranslation?.origin,
-          level_sun: finalTranslation?.level_sun,
-          maintenance_level: finalTranslation?.maintenance_level,
-          season: finalTranslation?.season,
+          name: translation?.name || enTranslation?.name || basePlant.name,
+          scientific_name: translation?.scientific_name || enTranslation?.scientific_name,
+          family: translation?.family || enTranslation?.family,
+          overview: translation?.overview || enTranslation?.overview,
+          tags: (translation?.tags?.length ? translation.tags : null) || enTranslation?.tags,
+          origin: (translation?.origin?.length ? translation.origin : null) || enTranslation?.origin,
+          level_sun: translation?.level_sun || enTranslation?.level_sun,
+          maintenance_level: translation?.maintenance_level || enTranslation?.maintenance_level,
+          season: (translation?.season?.length ? translation.season : null) || enTranslation?.season,
         } : null
         
         ssrDebug('plant_query_result', { 
@@ -16928,15 +16931,27 @@ async function generateCrawlerHtml(req, pagePath) {
           // Simple, clean title format: "🌱 Lotus - Complete Care Guide | Aphylia"
           title = `🌱 ${plant.name} - ${tr.plantCareGuide} | Aphylia`
           
-          // Use overview cropped to ~100 characters for description
-          // Fallback to a generic description if no overview
+          // Use overview cropped to ~150 characters for description
+          // Fallback to plant-specific info using tags, family, type
           if (plant.overview) {
             const overview = plant.overview.trim()
-            description = overview.length > 100 
-              ? overview.slice(0, 100).trim() + '...'
+            description = overview.length > 150 
+              ? overview.slice(0, 150).trim() + '...'
               : overview
           } else {
-            description = `${tr.plantLearnGrow} ${plant.name}. ${tr.plantExpertTips} 🌱`
+            // Build a plant-specific description from available data
+            const descParts = []
+            if (plant.scientific_name) descParts.push(plant.scientific_name)
+            if (plant.family) descParts.push(`${tr.family}: ${plant.family}`)
+            if (plant.tags?.length) {
+              const tagList = plant.tags.slice(0, 4).join(', ')
+              descParts.push(tagList)
+            }
+            if (descParts.length > 0) {
+              description = `${plant.name} - ${descParts.join(' • ')} 🌱`
+            } else {
+              description = `${tr.plantLearnGrow} ${plant.name}. ${tr.plantExpertTips} 🌱`
+            }
           }
           
           // Keep these for pageContent structured data
