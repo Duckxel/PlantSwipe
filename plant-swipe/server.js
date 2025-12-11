@@ -8547,7 +8547,10 @@ app.get('/api/admin/member-list', async (req, res) => {
     const sort = sortRaw.startsWith('old') ? 'oldest'
       : sortRaw === 'rpm' || sortRaw.startsWith('rpm')
         ? 'rpm'
-        : 'newest'
+        : sortRaw === 'role' || sortRaw.startsWith('role')
+          ? 'role'
+          : 'newest'
+    const filterRole = (req.query.role || '').toString().trim().toLowerCase()
     const fetchSize = limit + 1
     const normalizeRows = (rows) => {
       if (!Array.isArray(rows)) return []
@@ -8559,12 +8562,14 @@ app.get('/api/admin/member-list', async (req, res) => {
             r?.rpm5m !== undefined && r?.rpm5m !== null
               ? Number(r.rpm5m)
               : null
+          const roles = Array.isArray(r?.roles) ? r.roles : []
           return {
             id,
             email: r?.email || null,
             display_name: r?.display_name || null,
             created_at: r?.created_at || null,
             is_admin: r?.is_admin === true,
+            roles,
             rpm5m: Number.isFinite(rpm) ? rpm : null,
           }
         })
@@ -8573,12 +8578,30 @@ app.get('/api/admin/member-list', async (req, res) => {
 
     if (sql) {
       const visitsTableSql = buildVisitsTableIdentifier()
+      // Sort by role: admins first, then editors, then other roles, then no roles
       const orderClause =
         sort === 'rpm'
           ? 'rpm5m desc nulls last, u.created_at desc'
           : sort === 'oldest'
             ? 'u.created_at asc'
-            : 'u.created_at desc'
+            : sort === 'role'
+              ? `case 
+                   when p.is_admin = true or 'admin' = any(coalesce(p.roles, '{}')) then 0
+                   when 'editor' = any(coalesce(p.roles, '{}')) then 1
+                   when 'pro' = any(coalesce(p.roles, '{}')) then 2
+                   when 'vip' = any(coalesce(p.roles, '{}')) then 3
+                   when 'plus' = any(coalesce(p.roles, '{}')) then 4
+                   when 'creator' = any(coalesce(p.roles, '{}')) then 5
+                   when 'merchant' = any(coalesce(p.roles, '{}')) then 6
+                   else 99
+                 end asc, u.created_at desc`
+              : 'u.created_at desc'
+      
+      // Build WHERE clause for role filtering
+      const roleFilterClause = filterRole 
+        ? `where '${filterRole}' = any(coalesce(p.roles, '{}'))` 
+        : ''
+      
       const rows = await sql.unsafe(
         `
         select
@@ -8587,6 +8610,7 @@ app.get('/api/admin/member-list', async (req, res) => {
           u.created_at,
           p.display_name,
           p.is_admin,
+          coalesce(p.roles, '{}') as roles,
           coalesce(rpm.c, 0)::numeric / 5 as rpm5m
         from auth.users u
         left join public.profiles p on p.id = u.id
@@ -8596,6 +8620,7 @@ app.get('/api/admin/member-list', async (req, res) => {
           where v.user_id = u.id
             and v.occurred_at >= now() - interval '5 minutes'
         ) rpm on true
+        ${roleFilterClause}
         order by ${orderClause}
         limit $1
         offset $2
@@ -8646,6 +8671,85 @@ app.get('/api/admin/member-list', async (req, res) => {
     res.status(500).json({ error: 'Database not configured' })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load member list' })
+  }
+})
+
+// Admin: get role statistics (count of users per role)
+app.get('/api/admin/role-stats', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+
+    if (sql) {
+      // Count total members
+      const totalResult = await sql`select count(*)::int as count from auth.users`
+      const totalMembers = totalResult?.[0]?.count || 0
+
+      // Count users by each role (users can have multiple roles)
+      const roleCountsResult = await sql`
+        select
+          role,
+          count(*)::int as count
+        from public.profiles, unnest(coalesce(roles, '{}')) as role
+        group by role
+        order by count desc
+      `
+      
+      // Also count legacy admins who might not have the role in array
+      const legacyAdminResult = await sql`
+        select count(*)::int as count from public.profiles 
+        where is_admin = true and not ('admin' = any(coalesce(roles, '{}')))
+      `
+      const legacyAdminCount = legacyAdminResult?.[0]?.count || 0
+
+      // Build role counts object
+      const roleCounts = {}
+      const validRoles = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip', 'plus']
+      validRoles.forEach(r => { roleCounts[r] = 0 })
+      
+      if (Array.isArray(roleCountsResult)) {
+        roleCountsResult.forEach(row => {
+          if (row?.role && validRoles.includes(row.role)) {
+            roleCounts[row.role] = row.count || 0
+          }
+        })
+      }
+      
+      // Add legacy admin count to admin role
+      roleCounts.admin = (roleCounts.admin || 0) + legacyAdminCount
+
+      res.json({
+        ok: true,
+        totalMembers,
+        roleCounts,
+        via: 'database',
+      })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      // Fallback: just return empty stats if no direct DB access
+      res.json({
+        ok: true,
+        totalMembers: 0,
+        roleCounts: {
+          admin: 0,
+          editor: 0,
+          pro: 0,
+          merchant: 0,
+          creator: 0,
+          vip: 0,
+          plus: 0,
+        },
+        via: 'supabase',
+        note: 'Role stats require direct database access',
+      })
+      return
+    }
+
+    res.status(500).json({ error: 'Database not configured' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load role stats' })
   }
 })
 

@@ -60,6 +60,9 @@ import {
   Sparkles,
   Clock,
   Wifi,
+  Crown,
+  Pencil,
+  Shield,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -115,10 +118,16 @@ type ListedMember = {
   displayName: string | null;
   createdAt: string | null;
   isAdmin: boolean;
+  roles: string[];
   rpm5m: number | null;
 };
 
-type MemberListSort = "newest" | "oldest" | "rpm";
+type MemberListSort = "newest" | "oldest" | "rpm" | "role";
+
+type RoleStats = {
+  totalMembers: number;
+  roleCounts: Record<string, number>;
+};
 
 const MEMBER_LIST_PAGE_SIZE = 20;
 
@@ -547,6 +556,7 @@ export const AdminPage: React.FC = () => {
         { value: "newest", label: "New" },
         { value: "oldest", label: "Oldest" },
         { value: "rpm", label: "RPM (5m)" },
+        { value: "role", label: "Role" },
       ] as Array<{ value: MemberListSort; label: string }>,
     [],
   );
@@ -3277,6 +3287,8 @@ export const AdminPage: React.FC = () => {
     React.useState(false);
   const [memberListSort, setMemberListSort] =
     React.useState<MemberListSort>("newest");
+  const [roleStats, setRoleStats] = React.useState<RoleStats | null>(null);
+  const [roleStatsLoading, setRoleStatsLoading] = React.useState(false);
   const [lookupEmail, setLookupEmail] = React.useState("");
   const [memberLoading, setMemberLoading] = React.useState(false);
   const [memberError, setMemberError] = React.useState<string | null>(null);
@@ -3533,12 +3545,14 @@ export const AdminPage: React.FC = () => {
                   : null;
             const isAdmin =
               m?.is_admin === true || m?.isAdmin === true ? true : false;
+            const roles = Array.isArray(m?.roles) ? m.roles : [];
             return {
               id,
               email,
               displayName,
               createdAt,
               isAdmin,
+              roles,
               rpm5m:
                 typeof m?.rpm5m === "number"
                   ? m.rpm5m
@@ -3572,6 +3586,35 @@ export const AdminPage: React.FC = () => {
     },
     [memberListLoading, memberListOffset, memberListSort, safeJson],
   );
+
+  const loadRoleStats = React.useCallback(async () => {
+    if (roleStatsLoading) return;
+    setRoleStatsLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/role-stats", {
+        headers,
+        credentials: "same-origin",
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      setRoleStats({
+        totalMembers: typeof data?.totalMembers === "number" ? data.totalMembers : 0,
+        roleCounts: typeof data?.roleCounts === "object" ? data.roleCounts : {},
+      });
+    } catch (e) {
+      console.error("[AdminPage] Failed to load role stats:", e);
+    } finally {
+      setRoleStatsLoading(false);
+    }
+  }, [roleStatsLoading, safeJson]);
 
   const lookupMember = React.useCallback(
     async (override?: string) => {
@@ -3890,6 +3933,14 @@ export const AdminPage: React.FC = () => {
     memberListLoading,
     loadMemberList,
   ]);
+
+  // Load role stats when members list tab is active
+  React.useEffect(() => {
+    if (activeTab !== "members") return;
+    if (membersView !== "list") return;
+    if (roleStats !== null || roleStatsLoading) return;
+    loadRoleStats();
+  }, [activeTab, membersView, roleStats, roleStatsLoading, loadRoleStats]);
 
   const performBan = React.useCallback(async () => {
     if (!lookupEmail || banSubmitting) return;
@@ -8327,138 +8378,257 @@ export const AdminPage: React.FC = () => {
                     )}
 
                     {membersView === "list" && (
-                      <Card className="rounded-2xl">
-                        <CardContent className="p-4 space-y-4">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex flex-col gap-1">
-                              <div className="text-sm font-semibold flex items-center gap-2">
-                                <Users className="h-4 w-4" /> Members
+                      <div className="space-y-4">
+                        {/* Role Stats Cards */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-stone-300 dark:hover:border-[#4e4e52]">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-stone-100 dark:bg-stone-800 flex items-center justify-center">
+                                <Users className="h-4 w-4 text-stone-600 dark:text-stone-400" />
                               </div>
-                              <div className="text-xs opacity-60">
-                                Browse members in batches of 20 and load more as
-                                needed.
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-[11px] uppercase tracking-wide opacity-60">
-                                Sort
-                              </span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {memberListSortOptions.map((option) => (
-                                  <Button
-                                    key={option.value}
-                                    size="sm"
-                                    variant={
-                                      memberListSort === option.value
-                                        ? "default"
-                                        : "outline"
-                                    }
-                                    className="rounded-2xl text-xs"
-                                    onClick={() =>
-                                      handleMemberSortChange(option.value)
-                                    }
-                                  >
-                                    {option.label}
-                                  </Button>
-                                ))}
+                              <div>
+                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Total</div>
+                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.totalMembers ?? "-"}</div>
                               </div>
                             </div>
                           </div>
-                          {memberListError && (
-                            <div className="flex flex-wrap items-center gap-3 text-sm text-rose-600">
-                              {memberListError}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-2xl"
-                                onClick={() =>
-                                  loadMemberList({
-                                    reset: memberList.length === 0,
-                                  })
-                                }
-                                disabled={memberListLoading}
-                              >
-                                Retry
-                              </Button>
+                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-purple-300 dark:hover:border-purple-800">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                                <Shield className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Admin</div>
+                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.admin ?? 0}</div>
+                              </div>
                             </div>
-                          )}
-                          {memberList.length === 0 && memberListLoading && (
-                            <div className="space-y-2">
-                              {Array.from({ length: 3 }).map((_, idx) => (
-                                <div
-                                  key={`member-list-skeleton-${idx}`}
-                                  className="h-20 rounded-2xl border border-dashed animate-pulse"
-                                />
-                              ))}
+                          </div>
+                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-blue-300 dark:hover:border-blue-800">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                <Pencil className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Editor</div>
+                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.editor ?? 0}</div>
+                              </div>
                             </div>
-                          )}
-                          {memberList.length === 0 &&
-                            !memberListLoading &&
-                            memberListInitialized &&
-                            !memberListError && (
-                              <div className="text-sm opacity-60">
-                                No members to show yet.
+                          </div>
+                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-emerald-300 dark:hover:border-emerald-800">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                                <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Pro</div>
+                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.pro ?? 0}</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-amber-300 dark:hover:border-amber-800">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                                <Crown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">VIP</div>
+                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.vip ?? 0}</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-slate-300 dark:hover:border-slate-600">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                <Plus className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Plus</div>
+                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.plus ?? 0}</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 transition-all hover:border-pink-300 dark:hover:border-pink-800">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center">
+                                <Sparkles className="h-4 w-4 text-pink-600 dark:text-pink-400" />
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Creator</div>
+                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.creator ?? 0}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Card className="rounded-2xl">
+                          <CardContent className="p-4 space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-col gap-1">
+                                <div className="text-sm font-semibold flex items-center gap-2">
+                                  <Users className="h-4 w-4" /> Members
+                                </div>
+                                <div className="text-xs opacity-60">
+                                  Browse members in batches of 20 and load more as
+                                  needed.
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-[11px] uppercase tracking-wide opacity-60">
+                                  Sort
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {memberListSortOptions.map((option) => (
+                                    <Button
+                                      key={option.value}
+                                      size="sm"
+                                      variant={
+                                        memberListSort === option.value
+                                          ? "default"
+                                          : "outline"
+                                      }
+                                      className="rounded-2xl text-xs"
+                                      onClick={() =>
+                                        handleMemberSortChange(option.value)
+                                      }
+                                    >
+                                      {option.label}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            {memberListError && (
+                              <div className="flex flex-wrap items-center gap-3 text-sm text-rose-600">
+                                {memberListError}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-2xl"
+                                  onClick={() =>
+                                    loadMemberList({
+                                      reset: memberList.length === 0,
+                                    })
+                                  }
+                                  disabled={memberListLoading}
+                                >
+                                  Retry
+                                </Button>
                               </div>
                             )}
-                          {memberList.length > 0 && (
-                            <div className="grid gap-2">
-                              {memberList.map((member) => (
-                                <button
-                                  key={member.id}
-                                  type="button"
-                                  className="text-left rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
-                                  onClick={() => handleMemberCardClick(member)}
-                                >
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                      <div className="font-semibold truncate">
-                                        {member.displayName ||
-                                          member.email ||
-                                          `User ${member.id.slice(0, 8)}`}
+                            {memberList.length === 0 && memberListLoading && (
+                              <div className="space-y-2">
+                                {Array.from({ length: 3 }).map((_, idx) => (
+                                  <div
+                                    key={`member-list-skeleton-${idx}`}
+                                    className="h-20 rounded-2xl border border-dashed animate-pulse"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            {memberList.length === 0 &&
+                              !memberListLoading &&
+                              memberListInitialized &&
+                              !memberListError && (
+                                <div className="text-sm opacity-60">
+                                  No members to show yet.
+                                </div>
+                              )}
+                            {memberList.length > 0 && (
+                              <div className="grid gap-2">
+                                {memberList.map((member) => (
+                                  <button
+                                    key={member.id}
+                                    type="button"
+                                    className="text-left rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
+                                    onClick={() => handleMemberCardClick(member)}
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-semibold truncate">
+                                          {member.displayName ||
+                                            member.email ||
+                                            `User ${member.id.slice(0, 8)}`}
+                                        </div>
+                                        <div className="text-xs opacity-70 truncate">
+                                          {member.email || "No email"}
+                                        </div>
                                       </div>
-                                      <div className="text-xs opacity-70 truncate">
-                                        {member.email || "No email"}
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        {/* Display role badges */}
+                                        {(member.isAdmin || member.roles.includes("admin")) && (
+                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-0">
+                                            Admin
+                                          </Badge>
+                                        )}
+                                        {member.roles.includes("editor") && (
+                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-0">
+                                            Editor
+                                          </Badge>
+                                        )}
+                                        {member.roles.includes("pro") && (
+                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-0">
+                                            Pro
+                                          </Badge>
+                                        )}
+                                        {member.roles.includes("vip") && (
+                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-0">
+                                            VIP
+                                          </Badge>
+                                        )}
+                                        {member.roles.includes("plus") && (
+                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-0">
+                                            Plus
+                                          </Badge>
+                                        )}
+                                        {member.roles.includes("creator") && (
+                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-0">
+                                            Creator
+                                          </Badge>
+                                        )}
+                                        {member.roles.includes("merchant") && (
+                                          <Badge className="rounded-full px-2 py-0.5 text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 border-0">
+                                            Merchant
+                                          </Badge>
+                                        )}
+                                        {/* Show "Member" if no special roles */}
+                                        {!member.isAdmin && member.roles.length === 0 && (
+                                          <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[10px]">
+                                            Member
+                                          </Badge>
+                                        )}
                                       </div>
                                     </div>
-                                    <Badge
-                                      variant={
-                                        member.isAdmin ? "default" : "outline"
-                                      }
-                                      className={`rounded-full px-3 py-0.5 ${member.isAdmin ? "bg-emerald-600 text-white" : ""}`}
-                                    >
-                                      {member.isAdmin ? "Admin" : "Member"}
-                                    </Badge>
-                                  </div>
-                                    <div className="text-xs opacity-60 mt-1 flex flex-wrap items-center gap-2">
-                                      <span>
-                                        Joined {formatMemberJoinDate(member.createdAt)}
-                                      </span>
-                                      <span className="hidden sm:inline">•</span>
-                                      <span className="tabular-nums">
-                                        RPM (5m): {formatRpmValue(member.rpm5m)}
-                                      </span>
-                                    </div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          {memberList.length > 0 && (
-                            <Button
-                              variant="secondary"
-                              className="w-full rounded-2xl"
-                              onClick={() => loadMemberList()}
-                              disabled={memberListLoading || !memberListHasMore}
-                            >
-                              {memberListLoading
-                                ? "Loading..."
-                                : memberListHasMore
-                                  ? "Load 20 more"
-                                  : "No more members"}
+                                      <div className="text-xs opacity-60 mt-1 flex flex-wrap items-center gap-2">
+                                        <span>
+                                          Joined {formatMemberJoinDate(member.createdAt)}
+                                        </span>
+                                        <span className="hidden sm:inline">•</span>
+                                        <span className="tabular-nums">
+                                          RPM (5m): {formatRpmValue(member.rpm5m)}
+                                        </span>
+                                      </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {memberList.length > 0 && (
+                              <Button
+                                variant="secondary"
+                                className="w-full rounded-2xl"
+                                onClick={() => loadMemberList()}
+                                disabled={memberListLoading || !memberListHasMore}
+                              >
+                                {memberListLoading
+                                  ? "Loading..."
+                                  : memberListHasMore
+                                    ? "Load 20 more"
+                                    : "No more members"}
                             </Button>
                           )}
                         </CardContent>
                       </Card>
-                    )}
+                  </div>
+                )}
                   </div>
                 )}
 
