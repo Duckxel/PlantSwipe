@@ -3293,7 +3293,7 @@ export const AdminPage: React.FC = () => {
   // Roles management state
   const [memberRoles, setMemberRoles] = React.useState<UserRole[]>([]);
   const [roleSubmitting, setRoleSubmitting] = React.useState<string | null>(null);
-  const [rolesOpen, setRolesOpen] = React.useState(true); // Default to open for easier access
+  const [rolesOpen, setRolesOpen] = React.useState(false); // Default to collapsed
   const [confirmAdminOpen, setConfirmAdminOpen] = React.useState(false); // Confirmation dialog for admin role
 
   // Container ref for Members tab to run form-field validation logs
@@ -7393,6 +7393,169 @@ export const AdminPage: React.FC = () => {
                               );
                             })()}
 
+                            {/* Roles Management Section - Redesigned */}
+                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e]">
+                              {/* Header */}
+                              <div 
+                                className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
+                                onClick={() => setRolesOpen(!rolesOpen)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                  <span className="text-sm font-medium">User Roles</span>
+                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                                    {memberRoles.length} active
+                                  </span>
+                                </div>
+                                <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${rolesOpen ? "rotate-180" : ""}`} />
+                              </div>
+                              
+                              {/* Role Cards Grid */}
+                              {rolesOpen && (
+                                <div className="p-4 space-y-3">
+                                  {/* Active Roles Summary */}
+                                  {memberRoles.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 pb-3 border-b border-stone-100 dark:border-[#3e3e42]">
+                                      {memberRoles.map((role) => (
+                                        <UserRoleBadge key={role} role={role} size="sm" showLabel />
+                                      ))}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Role Toggle Cards */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {ADMIN_ASSIGNABLE_ROLES.map((role) => {
+                                      const config = ROLE_CONFIG[role];
+                                      const isActive = memberRoles.includes(role);
+                                      const isLoading = roleSubmitting === role;
+                                      
+                                      return (
+                                        <div
+                                          key={role}
+                                          className={`relative rounded-xl border-2 p-3 transition-all ${
+                                            isActive 
+                                              ? `${config.borderColor} ${config.darkBorderColor} ${config.bgColor} ${config.darkBgColor}` 
+                                              : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                                          }`}
+                                        >
+                                          <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-start gap-2 min-w-0">
+                                              <UserRoleBadge role={role} size="md" />
+                                              <div className="min-w-0">
+                                                <div className="text-sm font-medium truncate">{config.label}</div>
+                                                <div className="text-[11px] opacity-60 leading-tight">{config.description}</div>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Toggle Button */}
+                                            <button
+                                              type="button"
+                                              onClick={() => isActive ? removeRole(role) : addRole(role)}
+                                              disabled={isLoading}
+                                              className={`shrink-0 relative w-11 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                                isActive 
+                                                  ? "bg-emerald-500 focus:ring-emerald-500" 
+                                                  : "bg-stone-300 dark:bg-stone-600 focus:ring-stone-400"
+                                              } ${isLoading ? "opacity-50 cursor-wait" : ""}`}
+                                              aria-label={isActive ? `Remove ${config.label} role` : `Add ${config.label} role`}
+                                            >
+                                              <span
+                                                className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${
+                                                  isActive ? "translate-x-5" : "translate-x-0"
+                                                }`}
+                                              >
+                                                {isLoading && (
+                                                  <RefreshCw className="h-3 w-3 animate-spin text-stone-400" />
+                                                )}
+                                              </span>
+                                            </button>
+                                          </div>
+                                          
+                                          {/* Admin Warning Badge */}
+                                          {role === USER_ROLES.ADMIN && (
+                                            <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+                                              <AlertTriangle className="h-3 w-3" />
+                                              <span>Full system access</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {/* Plus Role Notice */}
+                                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-stone-50 dark:bg-[#252526] text-[11px] text-stone-500 dark:text-stone-400">
+                                    <Info className="h-3.5 w-3.5 shrink-0" />
+                                    <span>
+                                      <strong>Plus</strong> role is assigned automatically through paid subscriptions.
+                                      {memberRoles.includes(USER_ROLES.PLUS) && (
+                                        <span className="ml-1 text-emerald-600 dark:text-emerald-400">✓ Active subscriber</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Confirm Admin Role Dialog */}
+                            <Dialog open={confirmAdminOpen} onOpenChange={setConfirmAdminOpen}>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2">
+                                    <ShieldCheck className="h-5 w-5 text-purple-600" />
+                                    Grant Admin Access
+                                  </DialogTitle>
+                                  <DialogDescription className="space-y-3 pt-2">
+                                    <p>
+                                      You are about to grant <strong>full administrative privileges</strong> to{" "}
+                                      <span className="font-medium text-stone-900 dark:text-stone-100">
+                                        {memberData?.profile?.display_name || memberData?.user?.email || "this user"}
+                                      </span>.
+                                    </p>
+                                    <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
+                                      <div className="flex items-start gap-2">
+                                        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                                        <div className="text-xs text-amber-800 dark:text-amber-200">
+                                          <strong>Admin users can:</strong>
+                                          <ul className="mt-1 ml-3 list-disc space-y-0.5">
+                                            <li>Access and modify all user data</li>
+                                            <li>Create, edit, and delete plants</li>
+                                            <li>Manage all system settings</li>
+                                            <li>Grant or revoke roles for other users</li>
+                                            <li>Ban users and manage content</li>
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter className="gap-2 sm:gap-0">
+                                  <DialogClose asChild>
+                                    <Button variant="secondary" className="rounded-xl">
+                                      Cancel
+                                    </Button>
+                                  </DialogClose>
+                                  <Button
+                                    onClick={confirmAddAdmin}
+                                    disabled={roleSubmitting === USER_ROLES.ADMIN}
+                                    className="rounded-xl bg-purple-600 hover:bg-purple-700 text-white"
+                                  >
+                                    {roleSubmitting === USER_ROLES.ADMIN ? (
+                                      <>
+                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        Granting...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ShieldCheck className="h-4 w-4 mr-2" />
+                                        Confirm Grant Admin
+                                      </>
+                                    )}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                               <div className="rounded-xl border p-3 text-center">
                                 <div className="text-[11px] opacity-60">
@@ -7563,169 +7726,6 @@ export const AdminPage: React.FC = () => {
                                 )}
                               </div>
                             </div>
-
-                            {/* Roles Management Section - Redesigned */}
-                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e]">
-                              {/* Header */}
-                              <div 
-                                className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
-                                onClick={() => setRolesOpen(!rolesOpen)}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                                  <span className="text-sm font-medium">User Roles</span>
-                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
-                                    {memberRoles.length} active
-                                  </span>
-                                </div>
-                                <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${rolesOpen ? "rotate-180" : ""}`} />
-                              </div>
-                              
-                              {/* Role Cards Grid */}
-                              {rolesOpen && (
-                                <div className="p-4 space-y-3">
-                                  {/* Active Roles Summary */}
-                                  {memberRoles.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5 pb-3 border-b border-stone-100 dark:border-[#3e3e42]">
-                                      {memberRoles.map((role) => (
-                                        <UserRoleBadge key={role} role={role} size="sm" showLabel />
-                                      ))}
-                                    </div>
-                                  )}
-                                  
-                                  {/* Role Toggle Cards */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {ADMIN_ASSIGNABLE_ROLES.map((role) => {
-                                      const config = ROLE_CONFIG[role];
-                                      const isActive = memberRoles.includes(role);
-                                      const isLoading = roleSubmitting === role;
-                                      
-                                      return (
-                                        <div
-                                          key={role}
-                                          className={`relative rounded-xl border-2 p-3 transition-all ${
-                                            isActive 
-                                              ? `${config.borderColor} ${config.darkBorderColor} ${config.bgColor} ${config.darkBgColor}` 
-                                              : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52]"
-                                          }`}
-                                        >
-                                          <div className="flex items-start justify-between gap-2">
-                                            <div className="flex items-start gap-2 min-w-0">
-                                              <UserRoleBadge role={role} size="md" />
-                                              <div className="min-w-0">
-                                                <div className="text-sm font-medium truncate">{config.label}</div>
-                                                <div className="text-[11px] opacity-60 leading-tight">{config.description}</div>
-                                              </div>
-                                            </div>
-                                            
-                                            {/* Toggle Button */}
-                                            <button
-                                              type="button"
-                                              onClick={() => isActive ? removeRole(role) : addRole(role)}
-                                              disabled={isLoading}
-                                              className={`shrink-0 relative w-11 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                                                isActive 
-                                                  ? "bg-emerald-500 focus:ring-emerald-500" 
-                                                  : "bg-stone-300 dark:bg-stone-600 focus:ring-stone-400"
-                                              } ${isLoading ? "opacity-50 cursor-wait" : ""}`}
-                                              aria-label={isActive ? `Remove ${config.label} role` : `Add ${config.label} role`}
-                                            >
-                                              <span
-                                                className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${
-                                                  isActive ? "translate-x-5" : "translate-x-0"
-                                                }`}
-                                              >
-                                                {isLoading && (
-                                                  <RefreshCw className="h-3 w-3 animate-spin text-stone-400" />
-                                                )}
-                                              </span>
-                                            </button>
-                                          </div>
-                                          
-                                          {/* Admin Warning Badge */}
-                                          {role === USER_ROLES.ADMIN && (
-                                            <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
-                                              <AlertTriangle className="h-3 w-3" />
-                                              <span>Full system access</span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  
-                                  {/* Plus Role Notice */}
-                                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-stone-50 dark:bg-[#252526] text-[11px] text-stone-500 dark:text-stone-400">
-                                    <Info className="h-3.5 w-3.5 shrink-0" />
-                                    <span>
-                                      <strong>Plus</strong> role is assigned automatically through paid subscriptions.
-                                      {memberRoles.includes(USER_ROLES.PLUS) && (
-                                        <span className="ml-1 text-emerald-600 dark:text-emerald-400">✓ Active subscriber</span>
-                                      )}
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            
-                            {/* Confirm Admin Role Dialog */}
-                            <Dialog open={confirmAdminOpen} onOpenChange={setConfirmAdminOpen}>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle className="flex items-center gap-2">
-                                    <ShieldCheck className="h-5 w-5 text-purple-600" />
-                                    Grant Admin Access
-                                  </DialogTitle>
-                                  <DialogDescription className="space-y-3 pt-2">
-                                    <p>
-                                      You are about to grant <strong>full administrative privileges</strong> to{" "}
-                                      <span className="font-medium text-stone-900 dark:text-stone-100">
-                                        {memberData?.profile?.display_name || memberData?.user?.email || "this user"}
-                                      </span>.
-                                    </p>
-                                    <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
-                                      <div className="flex items-start gap-2">
-                                        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                                        <div className="text-xs text-amber-800 dark:text-amber-200">
-                                          <strong>Admin users can:</strong>
-                                          <ul className="mt-1 ml-3 list-disc space-y-0.5">
-                                            <li>Access and modify all user data</li>
-                                            <li>Create, edit, and delete plants</li>
-                                            <li>Manage all system settings</li>
-                                            <li>Grant or revoke roles for other users</li>
-                                            <li>Ban users and manage content</li>
-                                          </ul>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <DialogFooter className="gap-2 sm:gap-0">
-                                  <DialogClose asChild>
-                                    <Button variant="secondary" className="rounded-xl">
-                                      Cancel
-                                    </Button>
-                                  </DialogClose>
-                                  <Button
-                                    onClick={confirmAddAdmin}
-                                    disabled={roleSubmitting === USER_ROLES.ADMIN}
-                                    className="rounded-xl bg-purple-600 hover:bg-purple-700 text-white"
-                                  >
-                                    {roleSubmitting === USER_ROLES.ADMIN ? (
-                                      <>
-                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                        Granting...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <ShieldCheck className="h-4 w-4 mr-2" />
-                                        Confirm Grant Admin
-                                      </>
-                                    )}
-                                  </Button>
-                                </DialogFooter>
-                              </DialogContent>
-                            </Dialog>
 
                             <Card className={glassCardClass}>
                               <CardContent className="p-4">
