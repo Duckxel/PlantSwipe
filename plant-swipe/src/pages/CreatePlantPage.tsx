@@ -1114,34 +1114,40 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             throw { ...insertError, context: 'plant' }
           }
           savedId = data?.id || plantId
-          
-          // Save related non-translatable data
-          const colorIds = await upsertColors(plantToSave.identity?.colors || [])
-          await linkColors(savedId, colorIds)
-          await upsertImages(savedId, plantToSave.images || [])
-          await upsertWateringSchedules(savedId, {
-            ...(plantToSave.plantCare || {}),
-            watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules },
-          })
-          await upsertSources(savedId, sources)
-          await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
         } else {
-          // For non-English: only update meta fields in plants table
-          const metaUpdatePayload = {
+          // For non-English: update meta fields AND non-translatable shared data in plants table
+          const nonEnglishUpdatePayload = {
             status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
+            // Also save non-translatable fields that can be edited in any language
+            pests: plantToSave.danger?.pests || [],
+            diseases: plantToSave.danger?.diseases || [],
+            companions: plantToSave.miscellaneous?.companions || [],
+            spice_mixes: plantToSave.usage?.spiceMixes || [],
           }
           const { error: metaUpdateError } = await supabase
             .from('plants')
-            .update(metaUpdatePayload)
+            .update(nonEnglishUpdatePayload)
             .eq('id', savedId)
           if (metaUpdateError) {
             throw new Error(metaUpdateError.message)
           }
-          payloadUpdatedTime = metaUpdatePayload.updated_time
+          payloadUpdatedTime = nonEnglishUpdatePayload.updated_time
         }
+        
+        // Save related non-translatable shared data (images, colors, schedules, sources)
+        // These should be saved regardless of the current language
+        const colorIds = await upsertColors(plantToSave.identity?.colors || [])
+        await linkColors(savedId, colorIds)
+        await upsertImages(savedId, plantToSave.images || [])
+        await upsertWateringSchedules(savedId, {
+          ...(plantToSave.plantCare || {}),
+          watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules },
+        })
+        await upsertSources(savedId, sources)
+        await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
 
         // STEP 2: Save translatable fields to plant_translations (for ALL languages including English)
         // Note: enum fields (family, life_cycle, season, foliage_persistance, toxicity_*, living_space,
