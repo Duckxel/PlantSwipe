@@ -8405,160 +8405,52 @@ export const AdminPage: React.FC = () => {
 
                     {membersView === "list" && (
                       <div className="space-y-4">
-                        {/* Role Stats Cards */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-                          <button
-                            type="button"
-                            onClick={() => handleRoleFilterChange(null)}
-                            className={`group relative rounded-xl border p-3 transition-all text-left ${
-                              roleFilter === null
-                                ? "border-stone-400 dark:border-stone-500 bg-stone-50 dark:bg-stone-800/50 ring-2 ring-stone-400/30 dark:ring-stone-500/30"
-                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-stone-300 dark:hover:border-[#4e4e52]"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-stone-100 dark:bg-stone-800 flex items-center justify-center">
-                                <Users className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Total</div>
-                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.totalMembers ?? "-"}</div>
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRoleFilterChange("admin")}
-                            className={`group relative rounded-xl border p-3 transition-all text-left ${
-                              roleFilter === "admin"
-                                ? "border-purple-400 dark:border-purple-500 bg-purple-50 dark:bg-purple-900/30 ring-2 ring-purple-400/30 dark:ring-purple-500/30"
-                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-purple-300 dark:hover:border-purple-800"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                                <Shield className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Admin</div>
-                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.admin ?? 0}</div>
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRoleFilterChange("editor")}
-                            className={`group relative rounded-xl border p-3 transition-all text-left ${
-                              roleFilter === "editor"
-                                ? "border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-400/30 dark:ring-blue-500/30"
-                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-blue-300 dark:hover:border-blue-800"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                                <Pencil className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Editor</div>
-                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.editor ?? 0}</div>
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRoleFilterChange("pro")}
-                            className={`group relative rounded-xl border p-3 transition-all text-left ${
-                              roleFilter === "pro"
-                                ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 ring-2 ring-emerald-400/30 dark:ring-emerald-500/30"
-                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                                <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Pro</div>
-                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.pro ?? 0}</div>
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRoleFilterChange("vip")}
-                            className={`group relative rounded-xl border p-3 transition-all text-left ${
-                              roleFilter === "vip"
-                                ? "border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/30 ring-2 ring-amber-400/30 dark:ring-amber-500/30"
-                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-amber-300 dark:hover:border-amber-800"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                                <Crown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">VIP</div>
-                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.vip ?? 0}</div>
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRoleFilterChange("plus")}
-                            className={`group relative rounded-xl border p-3 transition-all text-left ${
-                              roleFilter === "plus"
-                                ? "border-slate-400 dark:border-slate-500 bg-slate-50 dark:bg-slate-800/50 ring-2 ring-slate-400/30 dark:ring-slate-500/30"
-                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-slate-300 dark:hover:border-slate-600"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                                <Plus className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Plus</div>
-                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.plus ?? 0}</div>
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRoleFilterChange("creator")}
-                            className={`group relative rounded-xl border p-3 transition-all text-left ${
-                              roleFilter === "creator"
-                                ? "border-pink-400 dark:border-pink-500 bg-pink-50 dark:bg-pink-900/30 ring-2 ring-pink-400/30 dark:ring-pink-500/30"
-                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-pink-300 dark:hover:border-pink-800"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center">
-                                <Sparkles className="h-4 w-4 text-pink-600 dark:text-pink-400" />
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Creator</div>
-                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.creator ?? 0}</div>
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRoleFilterChange("merchant")}
-                            className={`group relative rounded-xl border p-3 transition-all text-left ${
-                              roleFilter === "merchant"
-                                ? "border-sky-400 dark:border-sky-500 bg-sky-50 dark:bg-sky-900/30 ring-2 ring-sky-400/30 dark:ring-sky-500/30"
-                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-sky-300 dark:hover:border-sky-800"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-                                <Store className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-stone-500 dark:text-stone-400 uppercase tracking-wide">Merchant</div>
-                                <div className="text-lg font-bold text-stone-900 dark:text-white">{roleStats?.roleCounts?.merchant ?? 0}</div>
-                              </div>
-                            </div>
-                          </button>
+                        {/* Role Stats Cards - Compact horizontal scrollable on mobile */}
+                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-600">
+                          {[
+                            { key: null, label: "All", count: roleStats?.totalMembers ?? "-", icon: Users, color: "stone" },
+                            { key: "admin", label: "Admin", count: roleStats?.roleCounts?.admin ?? 0, icon: Shield, color: "purple" },
+                            { key: "editor", label: "Editor", count: roleStats?.roleCounts?.editor ?? 0, icon: Pencil, color: "blue" },
+                            { key: "pro", label: "Pro", count: roleStats?.roleCounts?.pro ?? 0, icon: Check, color: "emerald" },
+                            { key: "vip", label: "VIP", count: roleStats?.roleCounts?.vip ?? 0, icon: Crown, color: "amber" },
+                            { key: "plus", label: "Plus", count: roleStats?.roleCounts?.plus ?? 0, icon: Plus, color: "slate" },
+                            { key: "creator", label: "Creator", count: roleStats?.roleCounts?.creator ?? 0, icon: Sparkles, color: "pink" },
+                            { key: "merchant", label: "Merch", count: roleStats?.roleCounts?.merchant ?? 0, icon: Store, color: "sky" },
+                          ].map((item) => {
+                            const Icon = item.icon;
+                            const isSelected = roleFilter === item.key;
+                            const colorClasses: Record<string, { bg: string; icon: string; border: string; selectedBg: string; selectedBorder: string }> = {
+                              stone: { bg: "bg-stone-100 dark:bg-stone-800", icon: "text-stone-600 dark:text-stone-400", border: "hover:border-stone-300 dark:hover:border-stone-600", selectedBg: "bg-stone-50 dark:bg-stone-800/50", selectedBorder: "border-stone-400 dark:border-stone-500 ring-2 ring-stone-400/30" },
+                              purple: { bg: "bg-purple-100 dark:bg-purple-900/30", icon: "text-purple-600 dark:text-purple-400", border: "hover:border-purple-300 dark:hover:border-purple-700", selectedBg: "bg-purple-50 dark:bg-purple-900/30", selectedBorder: "border-purple-400 dark:border-purple-500 ring-2 ring-purple-400/30" },
+                              blue: { bg: "bg-blue-100 dark:bg-blue-900/30", icon: "text-blue-600 dark:text-blue-400", border: "hover:border-blue-300 dark:hover:border-blue-700", selectedBg: "bg-blue-50 dark:bg-blue-900/30", selectedBorder: "border-blue-400 dark:border-blue-500 ring-2 ring-blue-400/30" },
+                              emerald: { bg: "bg-emerald-100 dark:bg-emerald-900/30", icon: "text-emerald-600 dark:text-emerald-400", border: "hover:border-emerald-300 dark:hover:border-emerald-700", selectedBg: "bg-emerald-50 dark:bg-emerald-900/30", selectedBorder: "border-emerald-400 dark:border-emerald-500 ring-2 ring-emerald-400/30" },
+                              amber: { bg: "bg-amber-100 dark:bg-amber-900/30", icon: "text-amber-600 dark:text-amber-400", border: "hover:border-amber-300 dark:hover:border-amber-700", selectedBg: "bg-amber-50 dark:bg-amber-900/30", selectedBorder: "border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/30" },
+                              slate: { bg: "bg-slate-100 dark:bg-slate-800", icon: "text-slate-600 dark:text-slate-400", border: "hover:border-slate-300 dark:hover:border-slate-600", selectedBg: "bg-slate-50 dark:bg-slate-800/50", selectedBorder: "border-slate-400 dark:border-slate-500 ring-2 ring-slate-400/30" },
+                              pink: { bg: "bg-pink-100 dark:bg-pink-900/30", icon: "text-pink-600 dark:text-pink-400", border: "hover:border-pink-300 dark:hover:border-pink-700", selectedBg: "bg-pink-50 dark:bg-pink-900/30", selectedBorder: "border-pink-400 dark:border-pink-500 ring-2 ring-pink-400/30" },
+                              sky: { bg: "bg-sky-100 dark:bg-sky-900/30", icon: "text-sky-600 dark:text-sky-400", border: "hover:border-sky-300 dark:hover:border-sky-700", selectedBg: "bg-sky-50 dark:bg-sky-900/30", selectedBorder: "border-sky-400 dark:border-sky-500 ring-2 ring-sky-400/30" },
+                            };
+                            const colors = colorClasses[item.color];
+                            return (
+                              <button
+                                key={item.key ?? "all"}
+                                type="button"
+                                onClick={() => handleRoleFilterChange(item.key)}
+                                className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
+                                  isSelected
+                                    ? `${colors.selectedBg} ${colors.selectedBorder}`
+                                    : `bg-white dark:bg-[#1e1e20] border-stone-200 dark:border-[#3e3e42] ${colors.border}`
+                                }`}
+                              >
+                                <div className={`w-7 h-7 rounded-lg ${colors.bg} flex items-center justify-center`}>
+                                  <Icon className={`h-3.5 w-3.5 ${colors.icon}`} />
+                                </div>
+                                <div className="text-left">
+                                  <div className="text-sm font-bold text-stone-900 dark:text-white leading-tight">{item.count}</div>
+                                  <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-tight">{item.label}</div>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
 
                         <Card className="rounded-2xl">
