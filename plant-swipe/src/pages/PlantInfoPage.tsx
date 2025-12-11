@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
+import { checkEditorAccess } from '@/constants/userRoles'
 import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
 import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
 import { supabase } from '@/lib/supabaseClient'
@@ -556,8 +557,8 @@ const PlantInfoPage: React.FC = () => {
             <Plus className="h-5 w-5" />
             <span className="hidden sm:inline ml-1.5">{t('garden.addToGarden', { defaultValue: 'Add to Garden' })}</span>
           </Button>
-          {/* Edit Button (Admin only) */}
-          {profile?.is_admin && plant && (
+          {/* Edit Button (Admin/Editor) */}
+          {checkEditorAccess(profile) && plant && (
             <Button
               type="button"
               variant="outline"

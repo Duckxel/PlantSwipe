@@ -60,6 +60,10 @@ import {
   Sparkles,
   Clock,
   Wifi,
+  Crown,
+  Pencil,
+  Shield,
+  Store,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -115,10 +119,16 @@ type ListedMember = {
   displayName: string | null;
   createdAt: string | null;
   isAdmin: boolean;
+  roles: string[];
   rpm5m: number | null;
 };
 
-type MemberListSort = "newest" | "oldest" | "rpm";
+type MemberListSort = "newest" | "oldest" | "rpm" | "role";
+
+type RoleStats = {
+  totalMembers: number;
+  roleCounts: Record<string, number>;
+};
 
 const MEMBER_LIST_PAGE_SIZE = 20;
 
@@ -146,6 +156,15 @@ import {
   ADMIN_STATUS_COLORS,
   ADMIN_STATUS_BADGE_CLASSES,
 } from "@/constants/plantStatus";
+import {
+  USER_ROLES,
+  ADMIN_ASSIGNABLE_ROLES,
+  ROLE_CONFIG,
+  type UserRole,
+  checkFullAdminAccess,
+  checkEditorAccess,
+} from "@/constants/userRoles";
+import { UserRoleBadge, ProfileNameBadges } from "@/components/profile/UserRoleBadges";
 
 const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_COLORS;
 
@@ -538,6 +557,7 @@ export const AdminPage: React.FC = () => {
         { value: "newest", label: "New" },
         { value: "oldest", label: "Oldest" },
         { value: "rpm", label: "RPM (5m)" },
+        { value: "role", label: "Role" },
       ] as Array<{ value: MemberListSort; label: string }>,
     [],
   );
@@ -3171,21 +3191,32 @@ export const AdminPage: React.FC = () => {
   }, [loadVisitorsStats]);
 
   // ---- Members tab state ----
-  const navItems: Array<{
+  // Check if user has full admin access (not just editor)
+  const isFullAdmin = checkFullAdminAccess(profile);
+  
+  // Define all nav items with admin-only flag
+  const allNavItems: Array<{
     key: AdminTab;
     label: string;
     Icon: React.ComponentType<{ className?: string }>;
     path: string;
+    adminOnly?: boolean;
   }> = [
-    { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin" },
-    { key: "members", label: "Members", Icon: Users, path: "/admin/members" },
+    { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin", adminOnly: true },
+    { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
     { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
-    { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks" },
+    { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
-    { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced" },
+    { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced", adminOnly: true },
   ];
+  
+  // Filter nav items based on user's access level
+  const navItems = React.useMemo(() => {
+    if (isFullAdmin) return allNavItems;
+    return allNavItems.filter(item => !item.adminOnly);
+  }, [isFullAdmin]);
 
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
@@ -3197,6 +3228,16 @@ export const AdminPage: React.FC = () => {
     if (currentPath.includes("/admin/advanced")) return "admin_logs";
     return "overview";
   }, [currentPath]);
+  
+  // Redirect editors away from admin-only tabs
+  React.useEffect(() => {
+    if (isFullAdmin) return; // Admins can access everything
+    const adminOnlyTabs: AdminTab[] = ["overview", "members", "stocks", "admin_logs"];
+    if (adminOnlyTabs.includes(activeTab)) {
+      // Redirect to requests tab (default for editors)
+      navigate("/admin/requests", { replace: true });
+    }
+  }, [activeTab, isFullAdmin, navigate]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const toggleSidebarCollapsed = React.useCallback(
     () => setSidebarCollapsed((prev) => !prev),
@@ -3247,6 +3288,9 @@ export const AdminPage: React.FC = () => {
     React.useState(false);
   const [memberListSort, setMemberListSort] =
     React.useState<MemberListSort>("newest");
+  const [roleFilter, setRoleFilter] = React.useState<string | null>(null);
+  const [roleStats, setRoleStats] = React.useState<RoleStats | null>(null);
+  const [roleStatsLoading, setRoleStatsLoading] = React.useState(false);
   const [lookupEmail, setLookupEmail] = React.useState("");
   const [memberLoading, setMemberLoading] = React.useState(false);
   const [memberError, setMemberError] = React.useState<string | null>(null);
@@ -3282,6 +3326,12 @@ export const AdminPage: React.FC = () => {
   const [promoteSubmitting, setPromoteSubmitting] = React.useState(false);
   const [demoteOpen, setDemoteOpen] = React.useState(false);
   const [demoteSubmitting, setDemoteSubmitting] = React.useState(false);
+
+  // Roles management state
+  const [memberRoles, setMemberRoles] = React.useState<UserRole[]>([]);
+  const [roleSubmitting, setRoleSubmitting] = React.useState<string | null>(null);
+  const [rolesOpen, setRolesOpen] = React.useState(false); // Default to collapsed
+  const [confirmAdminOpen, setConfirmAdminOpen] = React.useState(false); // Confirmation dialog for admin role
 
   // Container ref for Members tab to run form-field validation logs
   const membersContainerRef = React.useRef<HTMLDivElement | null>(null);
@@ -3453,12 +3503,13 @@ export const AdminPage: React.FC = () => {
   );
 
   const loadMemberList = React.useCallback(
-    async (opts?: { reset?: boolean; sort?: MemberListSort }) => {
+    async (opts?: { reset?: boolean; sort?: MemberListSort; role?: string | null }) => {
       if (memberListLoading) return;
       const reset = !!opts?.reset;
       const limit = MEMBER_LIST_PAGE_SIZE;
       const offset = reset ? 0 : memberListOffset;
       const sortParam: MemberListSort = opts?.sort ?? memberListSort;
+      const roleParam: string | null = opts?.role !== undefined ? opts.role : roleFilter;
       setMemberListLoading(true);
       setMemberListError(null);
       try {
@@ -3471,8 +3522,9 @@ export const AdminPage: React.FC = () => {
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
+        const roleQuery = roleParam ? `&role=${encodeURIComponent(roleParam)}` : "";
         const resp = await fetch(
-          `/api/admin/member-list?limit=${limit}&offset=${offset}&sort=${encodeURIComponent(sortParam)}`,
+          `/api/admin/member-list?limit=${limit}&offset=${offset}&sort=${encodeURIComponent(sortParam)}${roleQuery}`,
           { headers, credentials: "same-origin" },
         );
         const data = await safeJson(resp);
@@ -3497,12 +3549,14 @@ export const AdminPage: React.FC = () => {
                   : null;
             const isAdmin =
               m?.is_admin === true || m?.isAdmin === true ? true : false;
+            const roles = Array.isArray(m?.roles) ? m.roles : [];
             return {
               id,
               email,
               displayName,
               createdAt,
               isAdmin,
+              roles,
               rpm5m:
                 typeof m?.rpm5m === "number"
                   ? m.rpm5m
@@ -3534,8 +3588,37 @@ export const AdminPage: React.FC = () => {
         setMemberListInitialized(true);
       }
     },
-    [memberListLoading, memberListOffset, memberListSort, safeJson],
+    [memberListLoading, memberListOffset, memberListSort, roleFilter, safeJson],
   );
+
+  const loadRoleStats = React.useCallback(async () => {
+    if (roleStatsLoading) return;
+    setRoleStatsLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/role-stats", {
+        headers,
+        credentials: "same-origin",
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      setRoleStats({
+        totalMembers: typeof data?.totalMembers === "number" ? data.totalMembers : 0,
+        roleCounts: typeof data?.roleCounts === "object" ? data.roleCounts : {},
+      });
+    } catch (e) {
+      console.error("[AdminPage] Failed to load role stats:", e);
+    } finally {
+      setRoleStatsLoading(false);
+    }
+  }, [roleStatsLoading, safeJson]);
 
   const lookupMember = React.useCallback(
     async (override?: string) => {
@@ -3602,6 +3685,14 @@ export const AdminPage: React.FC = () => {
               }))
             : [],
         });
+        // Extract and set member roles
+        const profileRoles = Array.isArray(data?.profile?.roles) ? data.profile.roles : [];
+        const isAdminRole = data?.profile?.is_admin === true;
+        const effectiveRoles = [...profileRoles] as UserRole[];
+        if (isAdminRole && !effectiveRoles.includes(USER_ROLES.ADMIN)) {
+          effectiveRoles.push(USER_ROLES.ADMIN);
+        }
+        setMemberRoles(effectiveRoles);
         // Log lookup success (UI)
         try {
           const headers2: Record<string, string> = {
@@ -3821,6 +3912,28 @@ export const AdminPage: React.FC = () => {
     ],
   );
 
+  const handleRoleFilterChange = React.useCallback(
+    (nextRole: string | null) => {
+      if (nextRole === roleFilter) {
+        // Toggle off if same role clicked
+        setRoleFilter(null);
+        setMemberList([]);
+        setMemberListOffset(0);
+        setMemberListHasMore(true);
+        setMemberListError(null);
+        loadMemberList({ reset: true, role: null });
+      } else {
+        setRoleFilter(nextRole);
+        setMemberList([]);
+        setMemberListOffset(0);
+        setMemberListHasMore(true);
+        setMemberListError(null);
+        loadMemberList({ reset: true, role: nextRole });
+      }
+    },
+    [roleFilter, loadMemberList],
+  );
+
   // Auto-load visits series when a member is selected
   React.useEffect(() => {
     const uid = memberData?.user?.id;
@@ -3834,17 +3947,30 @@ export const AdminPage: React.FC = () => {
     }
   }, [memberData?.user?.id, loadMemberVisitsSeries]);
 
+  // Refresh member list every time the list view is opened
   React.useEffect(() => {
     if (activeTab !== "members") return;
     if (membersView !== "list") return;
-    if (memberListInitialized || memberListLoading) return;
+    if (memberListLoading) return;
+    // Always refresh when opening the list view
     loadMemberList({ reset: true });
   }, [
     activeTab,
     membersView,
-    memberListInitialized,
-    memberListLoading,
-    loadMemberList,
+    // Intentionally exclude memberListLoading to only trigger on view change
+  ]);
+
+  // Refresh role stats every time the list view is opened
+  React.useEffect(() => {
+    if (activeTab !== "members") return;
+    if (membersView !== "list") return;
+    if (roleStatsLoading) return;
+    // Always refresh when opening the list view
+    loadRoleStats();
+  }, [
+    activeTab,
+    membersView,
+    // Intentionally exclude roleStatsLoading to only trigger on view change
   ]);
 
   const performBan = React.useCallback(async () => {
@@ -3963,6 +4089,105 @@ export const AdminPage: React.FC = () => {
       setDemoteSubmitting(false);
     }
   }, [lookupEmail, demoteSubmitting, safeJson]);
+
+  // Add a role to the user (with confirmation for admin role)
+  const addRole = React.useCallback(async (role: UserRole, skipConfirm = false) => {
+    if (!memberData?.user?.id || roleSubmitting) return;
+    
+    // Show confirmation dialog for admin role
+    if (role === USER_ROLES.ADMIN && !skipConfirm) {
+      setConfirmAdminOpen(true);
+      return;
+    }
+    
+    setRoleSubmitting(role);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__
+          ?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/roles/add", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ userId: memberData.user.id, role }),
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      // Update local state
+      setMemberRoles(data.roles || [...memberRoles, role]);
+      // If admin role was added, update legacy is_admin field
+      if (role === USER_ROLES.ADMIN) {
+        setMemberData((prev) =>
+          prev
+            ? { ...prev, profile: { ...(prev.profile || {}), is_admin: true } }
+            : prev,
+        );
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to add role: ${msg}`);
+    } finally {
+      setRoleSubmitting(null);
+    }
+  }, [memberData?.user?.id, memberRoles, roleSubmitting, safeJson]);
+  
+  // Confirm adding admin role
+  const confirmAddAdmin = React.useCallback(() => {
+    setConfirmAdminOpen(false);
+    addRole(USER_ROLES.ADMIN, true);
+  }, [addRole]);
+
+  // Remove a role from the user
+  const removeRole = React.useCallback(async (role: UserRole) => {
+    if (!memberData?.user?.id || roleSubmitting) return;
+    setRoleSubmitting(role);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__
+          ?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/roles/remove", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ userId: memberData.user.id, role }),
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      // Update local state
+      setMemberRoles(data.roles || memberRoles.filter(r => r !== role));
+      // If admin role was removed, update legacy is_admin field
+      if (role === USER_ROLES.ADMIN) {
+        setMemberData((prev) =>
+          prev
+            ? { ...prev, profile: { ...(prev.profile || {}), is_admin: false } }
+            : prev,
+        );
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to remove role: ${msg}`);
+    } finally {
+      setRoleSubmitting(null);
+    }
+  }, [memberData?.user?.id, memberRoles, roleSubmitting, safeJson]);
 
   // Debounced email/username suggestions fetch
   React.useEffect(() => {
@@ -7028,15 +7253,15 @@ export const AdminPage: React.FC = () => {
                                         ) : null}
                                       </div>
                                       <div className="flex flex-wrap gap-1 mt-1">
-                                        {memberData.profile?.is_admin && (
-                                          <Badge
-                                            variant="outline"
-                                            className="rounded-full px-2 py-0.5 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700 flex items-center gap-1"
-                                          >
-                                            <ShieldCheck className="h-3 w-3" />{" "}
-                                            Admin
-                                          </Badge>
-                                        )}
+                                        {/* Role Badges */}
+                                        {memberRoles.map((role) => (
+                                          <UserRoleBadge
+                                            key={role}
+                                            role={role}
+                                            size="sm"
+                                            showLabel
+                                          />
+                                        ))}
                                         {memberData.isBannedEmail && (
                                           <Badge
                                             variant="destructive"
@@ -7272,6 +7497,169 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               );
                             })()}
+
+                            {/* Roles Management Section - Redesigned */}
+                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e]">
+                              {/* Header */}
+                              <div 
+                                className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
+                                onClick={() => setRolesOpen(!rolesOpen)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                  <span className="text-sm font-medium">User Roles</span>
+                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                                    {memberRoles.length} active
+                                  </span>
+                                </div>
+                                <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${rolesOpen ? "rotate-180" : ""}`} />
+                              </div>
+                              
+                              {/* Role Cards Grid */}
+                              {rolesOpen && (
+                                <div className="p-4 space-y-3">
+                                  {/* Active Roles Summary */}
+                                  {memberRoles.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 pb-3 border-b border-stone-100 dark:border-[#3e3e42]">
+                                      {memberRoles.map((role) => (
+                                        <UserRoleBadge key={role} role={role} size="sm" showLabel />
+                                      ))}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Role Toggle Cards */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {ADMIN_ASSIGNABLE_ROLES.map((role) => {
+                                      const config = ROLE_CONFIG[role];
+                                      const isActive = memberRoles.includes(role);
+                                      const isLoading = roleSubmitting === role;
+                                      
+                                      return (
+                                        <div
+                                          key={role}
+                                          className={`relative rounded-xl border-2 p-3 transition-all ${
+                                            isActive 
+                                              ? `${config.borderColor} ${config.darkBorderColor} ${config.bgColor} ${config.darkBgColor}` 
+                                              : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                                          }`}
+                                        >
+                                          <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-start gap-2 min-w-0">
+                                              <UserRoleBadge role={role} size="md" />
+                                              <div className="min-w-0">
+                                                <div className="text-sm font-medium truncate">{config.label}</div>
+                                                <div className="text-[11px] opacity-60 leading-tight">{config.description}</div>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Toggle Button */}
+                                            <button
+                                              type="button"
+                                              onClick={() => isActive ? removeRole(role) : addRole(role)}
+                                              disabled={isLoading}
+                                              className={`shrink-0 relative w-11 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                                isActive 
+                                                  ? "bg-emerald-500 focus:ring-emerald-500" 
+                                                  : "bg-stone-300 dark:bg-stone-600 focus:ring-stone-400"
+                                              } ${isLoading ? "opacity-50 cursor-wait" : ""}`}
+                                              aria-label={isActive ? `Remove ${config.label} role` : `Add ${config.label} role`}
+                                            >
+                                              <span
+                                                className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${
+                                                  isActive ? "translate-x-5" : "translate-x-0"
+                                                }`}
+                                              >
+                                                {isLoading && (
+                                                  <RefreshCw className="h-3 w-3 animate-spin text-stone-400" />
+                                                )}
+                                              </span>
+                                            </button>
+                                          </div>
+                                          
+                                          {/* Admin Warning Badge */}
+                                          {role === USER_ROLES.ADMIN && (
+                                            <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+                                              <AlertTriangle className="h-3 w-3" />
+                                              <span>Full system access</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {/* Plus Role Notice */}
+                                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-stone-50 dark:bg-[#252526] text-[11px] text-stone-500 dark:text-stone-400">
+                                    <Info className="h-3.5 w-3.5 shrink-0" />
+                                    <span>
+                                      <strong>Plus</strong> role is assigned automatically through paid subscriptions.
+                                      {memberRoles.includes(USER_ROLES.PLUS) && (
+                                        <span className="ml-1 text-emerald-600 dark:text-emerald-400">✓ Active subscriber</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Confirm Admin Role Dialog */}
+                            <Dialog open={confirmAdminOpen} onOpenChange={setConfirmAdminOpen}>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2">
+                                    <ShieldCheck className="h-5 w-5 text-purple-600" />
+                                    Grant Admin Access
+                                  </DialogTitle>
+                                  <DialogDescription className="space-y-3 pt-2">
+                                    <p>
+                                      You are about to grant <strong>full administrative privileges</strong> to{" "}
+                                      <span className="font-medium text-stone-900 dark:text-stone-100">
+                                        {memberData?.profile?.display_name || memberData?.user?.email || "this user"}
+                                      </span>.
+                                    </p>
+                                    <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
+                                      <div className="flex items-start gap-2">
+                                        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                                        <div className="text-xs text-amber-800 dark:text-amber-200">
+                                          <strong>Admin users can:</strong>
+                                          <ul className="mt-1 ml-3 list-disc space-y-0.5">
+                                            <li>Access and modify all user data</li>
+                                            <li>Create, edit, and delete plants</li>
+                                            <li>Manage all system settings</li>
+                                            <li>Grant or revoke roles for other users</li>
+                                            <li>Ban users and manage content</li>
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter className="gap-2 sm:gap-0">
+                                  <DialogClose asChild>
+                                    <Button variant="secondary" className="rounded-xl">
+                                      Cancel
+                                    </Button>
+                                  </DialogClose>
+                                  <Button
+                                    onClick={confirmAddAdmin}
+                                    disabled={roleSubmitting === USER_ROLES.ADMIN}
+                                    className="rounded-xl bg-purple-600 hover:bg-purple-700 text-white"
+                                  >
+                                    {roleSubmitting === USER_ROLES.ADMIN ? (
+                                      <>
+                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        Granting...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ShieldCheck className="h-4 w-4 mr-2" />
+                                        Confirm Grant Admin
+                                      </>
+                                    )}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
 
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                               <div className="rounded-xl border p-3 text-center">
@@ -8021,138 +8409,214 @@ export const AdminPage: React.FC = () => {
                     )}
 
                     {membersView === "list" && (
-                      <Card className="rounded-2xl">
-                        <CardContent className="p-4 space-y-4">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex flex-col gap-1">
-                              <div className="text-sm font-semibold flex items-center gap-2">
-                                <Users className="h-4 w-4" /> Members
-                              </div>
-                              <div className="text-xs opacity-60">
-                                Browse members in batches of 20 and load more as
-                                needed.
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-[11px] uppercase tracking-wide opacity-60">
-                                Sort
-                              </span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {memberListSortOptions.map((option) => (
-                                  <Button
-                                    key={option.value}
-                                    size="sm"
-                                    variant={
-                                      memberListSort === option.value
-                                        ? "default"
-                                        : "outline"
-                                    }
-                                    className="rounded-2xl text-xs"
-                                    onClick={() =>
-                                      handleMemberSortChange(option.value)
-                                    }
-                                  >
-                                    {option.label}
-                                  </Button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                          {memberListError && (
-                            <div className="flex flex-wrap items-center gap-3 text-sm text-rose-600">
-                              {memberListError}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-2xl"
-                                onClick={() =>
-                                  loadMemberList({
-                                    reset: memberList.length === 0,
-                                  })
-                                }
-                                disabled={memberListLoading}
+                      <div className="space-y-4">
+                        {/* Role Stats Cards - Compact horizontal scrollable on mobile */}
+                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-600">
+                          {[
+                            { key: null, label: "All", count: roleStats?.totalMembers ?? "-", icon: Users, color: "stone" },
+                            { key: "admin", label: "Admin", count: roleStats?.roleCounts?.admin ?? 0, icon: Shield, color: "purple" },
+                            { key: "editor", label: "Editor", count: roleStats?.roleCounts?.editor ?? 0, icon: Pencil, color: "blue" },
+                            { key: "pro", label: "Pro", count: roleStats?.roleCounts?.pro ?? 0, icon: Check, color: "emerald" },
+                            { key: "vip", label: "VIP", count: roleStats?.roleCounts?.vip ?? 0, icon: Crown, color: "amber" },
+                            { key: "plus", label: "Plus", count: roleStats?.roleCounts?.plus ?? 0, icon: Plus, color: "slate" },
+                            { key: "creator", label: "Creator", count: roleStats?.roleCounts?.creator ?? 0, icon: Sparkles, color: "pink" },
+                            { key: "merchant", label: "Merch", count: roleStats?.roleCounts?.merchant ?? 0, icon: Store, color: "sky" },
+                          ].map((item) => {
+                            const Icon = item.icon;
+                            const isSelected = roleFilter === item.key;
+                            const colorClasses: Record<string, { bg: string; icon: string; border: string; selectedBg: string; selectedBorder: string }> = {
+                              stone: { bg: "bg-stone-100 dark:bg-stone-800", icon: "text-stone-600 dark:text-stone-400", border: "hover:border-stone-300 dark:hover:border-stone-600", selectedBg: "bg-stone-50 dark:bg-stone-800/50", selectedBorder: "border-stone-400 dark:border-stone-500 ring-2 ring-stone-400/30" },
+                              purple: { bg: "bg-purple-100 dark:bg-purple-900/30", icon: "text-purple-600 dark:text-purple-400", border: "hover:border-purple-300 dark:hover:border-purple-700", selectedBg: "bg-purple-50 dark:bg-purple-900/30", selectedBorder: "border-purple-400 dark:border-purple-500 ring-2 ring-purple-400/30" },
+                              blue: { bg: "bg-blue-100 dark:bg-blue-900/30", icon: "text-blue-600 dark:text-blue-400", border: "hover:border-blue-300 dark:hover:border-blue-700", selectedBg: "bg-blue-50 dark:bg-blue-900/30", selectedBorder: "border-blue-400 dark:border-blue-500 ring-2 ring-blue-400/30" },
+                              emerald: { bg: "bg-emerald-100 dark:bg-emerald-900/30", icon: "text-emerald-600 dark:text-emerald-400", border: "hover:border-emerald-300 dark:hover:border-emerald-700", selectedBg: "bg-emerald-50 dark:bg-emerald-900/30", selectedBorder: "border-emerald-400 dark:border-emerald-500 ring-2 ring-emerald-400/30" },
+                              amber: { bg: "bg-amber-100 dark:bg-amber-900/30", icon: "text-amber-600 dark:text-amber-400", border: "hover:border-amber-300 dark:hover:border-amber-700", selectedBg: "bg-amber-50 dark:bg-amber-900/30", selectedBorder: "border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/30" },
+                              slate: { bg: "bg-slate-100 dark:bg-slate-800", icon: "text-slate-600 dark:text-slate-400", border: "hover:border-slate-300 dark:hover:border-slate-600", selectedBg: "bg-slate-50 dark:bg-slate-800/50", selectedBorder: "border-slate-400 dark:border-slate-500 ring-2 ring-slate-400/30" },
+                              pink: { bg: "bg-pink-100 dark:bg-pink-900/30", icon: "text-pink-600 dark:text-pink-400", border: "hover:border-pink-300 dark:hover:border-pink-700", selectedBg: "bg-pink-50 dark:bg-pink-900/30", selectedBorder: "border-pink-400 dark:border-pink-500 ring-2 ring-pink-400/30" },
+                              sky: { bg: "bg-sky-100 dark:bg-sky-900/30", icon: "text-sky-600 dark:text-sky-400", border: "hover:border-sky-300 dark:hover:border-sky-700", selectedBg: "bg-sky-50 dark:bg-sky-900/30", selectedBorder: "border-sky-400 dark:border-sky-500 ring-2 ring-sky-400/30" },
+                            };
+                            const colors = colorClasses[item.color];
+                            return (
+                              <button
+                                key={item.key ?? "all"}
+                                type="button"
+                                onClick={() => handleRoleFilterChange(item.key)}
+                                className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
+                                  isSelected
+                                    ? `${colors.selectedBg} ${colors.selectedBorder}`
+                                    : `bg-white dark:bg-[#1e1e20] border-stone-200 dark:border-[#3e3e42] ${colors.border}`
+                                }`}
                               >
-                                Retry
-                              </Button>
+                                <div className={`w-7 h-7 rounded-lg ${colors.bg} flex items-center justify-center`}>
+                                  <Icon className={`h-3.5 w-3.5 ${colors.icon}`} />
+                                </div>
+                                <div className="text-left">
+                                  <div className="text-sm font-bold text-stone-900 dark:text-white leading-tight">{item.count}</div>
+                                  <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-tight">{item.label}</div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <Card className="rounded-2xl">
+                          <CardContent className="p-4 space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-col gap-1">
+                                <div className="text-sm font-semibold flex items-center gap-2">
+                                  <Users className="h-4 w-4" /> Members
+                                </div>
+                                <div className="text-xs opacity-60">
+                                  Browse members in batches of 20 and load more as
+                                  needed.
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[11px] uppercase tracking-wide opacity-60">
+                                    Sort
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {memberListSortOptions.map((option) => (
+                                      <Button
+                                        key={option.value}
+                                        size="sm"
+                                        variant={
+                                          memberListSort === option.value
+                                            ? "default"
+                                            : "outline"
+                                        }
+                                        className="rounded-2xl text-xs"
+                                        onClick={() =>
+                                          handleMemberSortChange(option.value)
+                                        }
+                                      >
+                                        {option.label}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+                                {roleFilter && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] uppercase tracking-wide opacity-60">
+                                      Filter
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      className="rounded-2xl text-xs gap-1.5 capitalize"
+                                      onClick={() => handleRoleFilterChange(null)}
+                                    >
+                                      {roleFilter}
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          )}
-                          {memberList.length === 0 && memberListLoading && (
-                            <div className="space-y-2">
-                              {Array.from({ length: 3 }).map((_, idx) => (
-                                <div
-                                  key={`member-list-skeleton-${idx}`}
-                                  className="h-20 rounded-2xl border border-dashed animate-pulse"
-                                />
-                              ))}
-                            </div>
-                          )}
-                          {memberList.length === 0 &&
-                            !memberListLoading &&
-                            memberListInitialized &&
-                            !memberListError && (
-                              <div className="text-sm opacity-60">
-                                No members to show yet.
+                            {memberListError && (
+                              <div className="flex flex-wrap items-center gap-3 text-sm text-rose-600">
+                                {memberListError}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-2xl"
+                                  onClick={() =>
+                                    loadMemberList({
+                                      reset: memberList.length === 0,
+                                    })
+                                  }
+                                  disabled={memberListLoading}
+                                >
+                                  Retry
+                                </Button>
                               </div>
                             )}
-                          {memberList.length > 0 && (
-                            <div className="grid gap-2">
-                              {memberList.map((member) => (
-                                <button
-                                  key={member.id}
-                                  type="button"
-                                  className="text-left rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
-                                  onClick={() => handleMemberCardClick(member)}
-                                >
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                      <div className="font-semibold truncate">
-                                        {member.displayName ||
-                                          member.email ||
-                                          `User ${member.id.slice(0, 8)}`}
+                            {memberList.length === 0 && memberListLoading && (
+                              <div className="space-y-2">
+                                {Array.from({ length: 3 }).map((_, idx) => (
+                                  <div
+                                    key={`member-list-skeleton-${idx}`}
+                                    className="h-20 rounded-2xl border border-dashed animate-pulse"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            {memberList.length === 0 &&
+                              !memberListLoading &&
+                              memberListInitialized &&
+                              !memberListError && (
+                                <div className="text-sm opacity-60">
+                                  No members to show yet.
+                                </div>
+                              )}
+                            {memberList.length > 0 && (
+                              <div className="grid gap-2">
+                                {memberList.map((member) => (
+                                  <button
+                                    key={member.id}
+                                    type="button"
+                                    className="text-left rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
+                                    onClick={() => handleMemberCardClick(member)}
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="font-semibold truncate">
+                                              {member.displayName ||
+                                                member.email ||
+                                                `User ${member.id.slice(0, 8)}`}
+                                            </span>
+                                            {/* Role badges next to name like Profile page */}
+                                            <ProfileNameBadges 
+                                              roles={member.roles as UserRole[]} 
+                                              isAdmin={member.isAdmin} 
+                                              size="sm" 
+                                            />
+                                          </div>
+                                          <div className="text-xs opacity-70 truncate">
+                                            {member.email || "No email"}
+                                          </div>
+                                        </div>
                                       </div>
-                                      <div className="text-xs opacity-70 truncate">
-                                        {member.email || "No email"}
+                                      {/* Show "Member" badge if no special roles */}
+                                      {!member.isAdmin && member.roles.length === 0 && (
+                                        <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[10px] flex-shrink-0">
+                                          Member
+                                        </Badge>
+                                      )}
+                                    </div>
+                                      <div className="text-xs opacity-60 mt-1 flex flex-wrap items-center gap-2">
+                                        <span>
+                                          Joined {formatMemberJoinDate(member.createdAt)}
+                                        </span>
+                                        <span className="hidden sm:inline">•</span>
+                                        <span className="tabular-nums">
+                                          RPM (5m): {formatRpmValue(member.rpm5m)}
+                                        </span>
                                       </div>
-                                    </div>
-                                    <Badge
-                                      variant={
-                                        member.isAdmin ? "default" : "outline"
-                                      }
-                                      className={`rounded-full px-3 py-0.5 ${member.isAdmin ? "bg-emerald-600 text-white" : ""}`}
-                                    >
-                                      {member.isAdmin ? "Admin" : "Member"}
-                                    </Badge>
-                                  </div>
-                                    <div className="text-xs opacity-60 mt-1 flex flex-wrap items-center gap-2">
-                                      <span>
-                                        Joined {formatMemberJoinDate(member.createdAt)}
-                                      </span>
-                                      <span className="hidden sm:inline">•</span>
-                                      <span className="tabular-nums">
-                                        RPM (5m): {formatRpmValue(member.rpm5m)}
-                                      </span>
-                                    </div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          {memberList.length > 0 && (
-                            <Button
-                              variant="secondary"
-                              className="w-full rounded-2xl"
-                              onClick={() => loadMemberList()}
-                              disabled={memberListLoading || !memberListHasMore}
-                            >
-                              {memberListLoading
-                                ? "Loading..."
-                                : memberListHasMore
-                                  ? "Load 20 more"
-                                  : "No more members"}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {memberList.length > 0 && (
+                              <Button
+                                variant="secondary"
+                                className="w-full rounded-2xl"
+                                onClick={() => loadMemberList()}
+                                disabled={memberListLoading || !memberListHasMore}
+                              >
+                                {memberListLoading
+                                  ? "Loading..."
+                                  : memberListHasMore
+                                    ? "Load 20 more"
+                                    : "No more members"}
                             </Button>
                           )}
                         </CardContent>
                       </Card>
-                    )}
+                  </div>
+                )}
                   </div>
                 )}
 

@@ -17,6 +17,7 @@ interface TopBarProps {
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
+import { checkEditorAccess } from "@/constants/userRoles"
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useLanguageNavigate()
@@ -140,7 +141,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                 style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
                 role="menu"
               >
-                {profile?.is_admin && (
+                {checkEditorAccess(profile) && (
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                     <Shield className="h-4 w-4" /> {t('common.admin')}
                   </button>

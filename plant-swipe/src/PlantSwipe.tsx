@@ -20,8 +20,9 @@ import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import type { Plant, PlantSeason } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
-import RequireAdmin from "@/pages/RequireAdmin";
+import { RequireEditor } from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
+import { checkEditorAccess } from "@/constants/userRoles";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
 import { getDiscoveryPageImageUrl } from "@/lib/photos";
@@ -1338,7 +1339,7 @@ export default function PlantSwipe() {
                             <MessageSquarePlus className="h-4 w-4 mr-2" />
                             {t("requestPlant.button") || "Request Plant"}
                           </Button>
-                          {profile?.is_admin && (
+                          {checkEditorAccess(profile) && (
                             <Button
                               variant="default"
                               className="rounded-2xl w-full lg:w-auto"
@@ -1478,21 +1479,21 @@ export default function PlantSwipe() {
             <Route
               path="/blog/create"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <BlogComposerPageLazy />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/blog/:postId/edit"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <BlogComposerPageLazy />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
@@ -1506,37 +1507,37 @@ export default function PlantSwipe() {
             <Route
               path="/admin/emails/templates/create"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <AdminEmailTemplatePageLazy />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/admin/emails/templates/:id"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <AdminEmailTemplatePageLazy />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/admin/*"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
                     <AdminPage />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/create"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <CreatePlantPageLazy
                       onCancel={() => navigate('/')}
@@ -1548,13 +1549,13 @@ export default function PlantSwipe() {
                       }}
                     />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/create/:id"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <CreatePlantPageLazy
                       onCancel={() => navigate('/')}
@@ -1566,13 +1567,13 @@ export default function PlantSwipe() {
                       }}
                     />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/plants/:id/edit"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <CreatePlantPageLazy
                       onCancel={() => navigate('/search')}
@@ -1584,7 +1585,7 @@ export default function PlantSwipe() {
                       }}
                     />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route

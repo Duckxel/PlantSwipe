@@ -1472,6 +1472,96 @@ async function isAdminFromRequest(req) {
   }
 }
 
+// Determine whether a user has editor access (admin OR editor role)
+// This allows editors to access plant creation, blog, notifications, emails, and requests
+async function isEditorFromRequest(req) {
+  try {
+    // Allow explicit public mode for maintenance
+    if (adminPublicMode === true) return true
+    // Static header token support for non-authenticated admin actions (CI/ops)
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return true
+
+    // Bearer token path: resolve user and check admin or editor role
+    const user = await getUserFromRequest(req)
+    if (!user?.id) return false
+    let hasAccess = false
+    // Prefer DB flag
+    if (sql) {
+      try {
+        const exists = await sql`select 1 from information_schema.tables where table_schema='public' and table_name='profiles'`
+        if (exists?.length) {
+          const rows = await sql`select is_admin, roles from public.profiles where id = ${user.id} limit 1`
+          if (rows?.[0]) {
+            // Check is_admin flag
+            if (rows[0].is_admin === true) hasAccess = true
+            // Check roles array for admin or editor
+            const roles = Array.isArray(rows[0].roles) ? rows[0].roles : []
+            if (roles.includes('admin') || roles.includes('editor')) hasAccess = true
+          }
+        }
+      } catch {}
+    }
+    // Supabase REST fallback
+    if (!hasAccess && supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const bearer = getBearerTokenFromRequest(req)
+        if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
+        const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin,roles&limit=1`
+        const resp = await fetch(url, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          if (Array.isArray(arr) && arr[0]) {
+            if (arr[0].is_admin === true) hasAccess = true
+            const roles = Array.isArray(arr[0].roles) ? arr[0].roles : []
+            if (roles.includes('admin') || roles.includes('editor')) hasAccess = true
+          }
+        }
+      } catch {}
+    }
+    // Environment allowlists as fallback (for admin only, not editor)
+    if (!hasAccess) {
+      const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      const allowedUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+      const email = (user.email || '').toLowerCase()
+      if ((email && allowedEmails.includes(email)) || allowedUserIds.includes(user.id)) {
+        hasAccess = true
+      }
+    }
+    return hasAccess
+  } catch {
+    return false
+  }
+}
+
+// Helper function to ensure editor access (admin OR editor role)
+async function ensureEditor(req, res) {
+  try {
+    // Public mode or static token
+    if (adminPublicMode === true) return 'public'
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return 'static-admin'
+
+    // Bearer token path
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return null
+    }
+    
+    const hasAccess = await isEditorFromRequest(req)
+    if (!hasAccess) {
+      res.status(403).json({ error: 'Editor privileges required' })
+      return null
+    }
+    return user.id
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Authorization check failed' })
+    return null
+  }
+}
+
 // Helper: insert admin_activity_logs row via Supabase REST when DB is unavailable
 async function insertAdminActivityViaRest(req, row) {
   try {
@@ -2804,10 +2894,10 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   }
 })
 
-// Admin: AI plant name verification
+// Admin/Editor: AI plant name verification
 app.post('/api/admin/ai/plant-fill/verify-name', async (req, res) => {
   try {
-    const caller = await ensureAdmin(req, res)
+    const caller = await ensureEditor(req, res)
     if (!caller) return
     if (!openaiClient) {
       res.status(503).json({ error: 'AI plant fill is not configured' })
@@ -2834,10 +2924,10 @@ app.options('/api/admin/ai/plant-fill/verify-name', (_req, res) => {
   res.status(204).end()
 })
 
-// Admin: AI-assisted plant data fill
+// Admin/Editor: AI-assisted plant data fill
 app.post('/api/admin/ai/plant-fill', async (req, res) => {
   try {
-    const caller = await ensureAdmin(req, res)
+    const caller = await ensureEditor(req, res)
     if (!caller) return
     if (!openaiClient) {
       res.status(503).json({ error: 'AI plant fill is not configured' })
@@ -2943,7 +3033,7 @@ app.options('/api/admin/ai/plant-fill/field', (_req, res) => {
 
 app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
   try {
-    const caller = await ensureAdmin(req, res)
+    const caller = await ensureEditor(req, res)
     if (!caller) return
     if (!openaiClient) {
       res.status(503).json({ error: 'AI plant fill is not configured' })
@@ -4651,7 +4741,7 @@ app.post('/api/admin/upload-image', async (req, res) => {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
     return
   }
-  const adminPrincipal = await ensureAdmin(req, res)
+  const adminPrincipal = await ensureEditor(req, res)
   if (!adminPrincipal) return
 
   try {
@@ -4687,7 +4777,7 @@ app.post('/api/blog/upload-image', async (req, res) => {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
     return
   }
-  const adminPrincipal = await ensureAdmin(req, res)
+  const adminPrincipal = await ensureEditor(req, res)
   if (!adminPrincipal) return
 
   try {
@@ -4723,7 +4813,7 @@ app.post('/api/blog/summarize', async (req, res) => {
     res.status(503).json({ error: 'OpenAI client not configured' })
     return
   }
-  const adminPrincipal = await ensureAdmin(req, res)
+  const adminPrincipal = await ensureEditor(req, res)
   if (!adminPrincipal) return
 
   const html = typeof req.body?.html === 'string' ? req.body.html : ''
@@ -4770,7 +4860,7 @@ app.post('/api/blog/summarize', async (req, res) => {
 })
 
 app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
-  const caller = await ensureAdmin(req, res)
+  const caller = await ensureEditor(req, res)
   if (!caller) return
   try {
     await ensurePlantTranslationsSchema()
@@ -4787,7 +4877,7 @@ app.options('/api/admin/plant-translations/ensure-schema', (_req, res) => {
 })
 
 app.get('/api/admin/media', async (req, res) => {
-  const admin = await ensureAdmin(req, res)
+  const admin = await ensureEditor(req, res)
   if (!admin) return
 
   const limitParam = Number.parseInt(String(req.query?.limit || ''), 10)
@@ -4872,7 +4962,7 @@ app.delete('/api/admin/media/:id', async (req, res) => {
     res.status(500).json({ error: 'Supabase service role key not configured for media deletion' })
     return
   }
-  const admin = await ensureAdmin(req, res)
+  const admin = await ensureEditor(req, res)
   if (!admin) return
 
   try {
@@ -4948,7 +5038,7 @@ app.options('/api/admin/media/:id', (_req, res) => {
 })
 
 app.get('/api/admin/notifications', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5025,7 +5115,7 @@ app.get('/api/admin/notifications', async (req, res) => {
 })
 
 app.post('/api/admin/notifications', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5174,7 +5264,7 @@ app.post('/api/admin/notifications', async (req, res) => {
 })
 
 app.put('/api/admin/notifications/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5325,7 +5415,7 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
 })
 
 app.delete('/api/admin/notifications/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5361,7 +5451,7 @@ app.delete('/api/admin/notifications/:id', async (req, res) => {
 })
 
 app.post('/api/admin/notifications/:id/trigger', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5398,7 +5488,7 @@ app.post('/api/admin/notifications/:id/trigger', async (req, res) => {
 })
 
 app.post('/api/admin/notifications/:id/state', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5442,7 +5532,7 @@ app.post('/api/admin/notifications/:id/state', async (req, res) => {
 
 // Debug endpoint for notification diagnostics
 app.get('/api/admin/notifications/debug', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5552,7 +5642,7 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
 
 // ---- Recipient Count Endpoint ----
 app.get('/api/admin/notifications/recipient-count', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5622,7 +5712,7 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
 
 // ---- Notification Templates ----
 app.get('/api/admin/notification-templates', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5663,7 +5753,7 @@ app.get('/api/admin/notification-templates', async (req, res) => {
 })
 
 app.post('/api/admin/notification-templates', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5713,7 +5803,7 @@ app.post('/api/admin/notification-templates', async (req, res) => {
 })
 
 app.put('/api/admin/notification-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5765,7 +5855,7 @@ app.put('/api/admin/notification-templates/:id', async (req, res) => {
 })
 
 app.delete('/api/admin/notification-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5809,7 +5899,7 @@ app.delete('/api/admin/notification-templates/:id', async (req, res) => {
 
 // ---- Notification Template Translations ----
 app.get('/api/admin/notification-templates/:id/translations', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5842,7 +5932,7 @@ app.get('/api/admin/notification-templates/:id/translations', async (req, res) =
 })
 
 app.put('/api/admin/notification-templates/:id/translations/:lang', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -5900,7 +5990,7 @@ app.put('/api/admin/notification-templates/:id/translations/:lang', async (req, 
 
 // Batch save all translations for a template
 app.put('/api/admin/notification-templates/:id/translations', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6019,7 +6109,7 @@ async function ensureDefaultAutomations() {
 }
 
 app.get('/api/admin/notification-automations', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6107,7 +6197,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
 })
 
 app.put('/api/admin/notification-automations/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6171,7 +6261,7 @@ app.put('/api/admin/notification-automations/:id', async (req, res) => {
 
 // Trigger automation manually (for testing)
 app.post('/api/admin/notification-automations/:id/trigger', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6337,7 +6427,7 @@ async function runAutomation(automation) {
 
 // ---- Admin email templates ----
 app.get('/api/admin/email-templates', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6367,7 +6457,7 @@ app.get('/api/admin/email-templates', async (req, res) => {
 })
 
 app.get('/api/admin/email-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6404,7 +6494,7 @@ app.get('/api/admin/email-templates/:id', async (req, res) => {
 })
 
 app.post('/api/admin/email-templates', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6455,7 +6545,7 @@ app.post('/api/admin/email-templates', async (req, res) => {
 })
 
 app.put('/api/admin/email-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6517,7 +6607,7 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
 })
 
 app.delete('/api/admin/email-templates/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6559,7 +6649,7 @@ app.delete('/api/admin/email-templates/:id', async (req, res) => {
 
 // ---- Admin email campaigns ----
 app.get('/api/admin/email-campaigns', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6584,7 +6674,7 @@ app.get('/api/admin/email-campaigns', async (req, res) => {
 })
 
 app.get('/api/admin/email-campaigns/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6616,7 +6706,7 @@ app.get('/api/admin/email-campaigns/:id', async (req, res) => {
 })
 
 app.post('/api/admin/email-campaigns', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6718,7 +6808,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
 })
 
 app.put('/api/admin/email-campaigns/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6856,7 +6946,7 @@ app.put('/api/admin/email-campaigns/:id', async (req, res) => {
 })
 
 app.delete('/api/admin/email-campaigns/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6891,7 +6981,7 @@ app.delete('/api/admin/email-campaigns/:id', async (req, res) => {
 })
 
 app.post('/api/admin/email-campaigns/:id/cancel', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6927,7 +7017,7 @@ app.post('/api/admin/email-campaigns/:id/cancel', async (req, res) => {
 })
 
 app.post('/api/admin/email-campaigns/:id/run', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -7067,7 +7157,7 @@ function normalizeEmailTriggerRow(row) {
 }
 
 app.get('/api/admin/email-triggers', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -7089,7 +7179,7 @@ app.get('/api/admin/email-triggers', async (req, res) => {
 })
 
 app.get('/api/admin/email-triggers/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -7121,7 +7211,7 @@ app.get('/api/admin/email-triggers/:id', async (req, res) => {
 })
 
 app.put('/api/admin/email-triggers/:id', async (req, res) => {
-  const adminId = await ensureAdmin(req, res)
+  const adminId = await ensureEditor(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -7505,7 +7595,7 @@ app.get('/api/admin/member', async (req, res) => {
       // Profile (best-effort; may be null without Authorization due to RLS)
       let profile = null
       try {
-        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin`, {
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin,roles`, {
           headers: baseHeaders,
         })
         if (pr.ok) {
@@ -7735,7 +7825,7 @@ app.get('/api/admin/member', async (req, res) => {
     }
     let profile = null
     try {
-      const rows = await sql`select id, display_name, is_admin from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin, roles from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
     } catch {}
     // Load latest admin notes for this profile (DB or REST)
@@ -8457,7 +8547,10 @@ app.get('/api/admin/member-list', async (req, res) => {
     const sort = sortRaw.startsWith('old') ? 'oldest'
       : sortRaw === 'rpm' || sortRaw.startsWith('rpm')
         ? 'rpm'
-        : 'newest'
+        : sortRaw === 'role' || sortRaw.startsWith('role')
+          ? 'role'
+          : 'newest'
+    const filterRole = (req.query.role || '').toString().trim().toLowerCase()
     const fetchSize = limit + 1
     const normalizeRows = (rows) => {
       if (!Array.isArray(rows)) return []
@@ -8469,12 +8562,14 @@ app.get('/api/admin/member-list', async (req, res) => {
             r?.rpm5m !== undefined && r?.rpm5m !== null
               ? Number(r.rpm5m)
               : null
+          const roles = Array.isArray(r?.roles) ? r.roles : []
           return {
             id,
             email: r?.email || null,
             display_name: r?.display_name || null,
             created_at: r?.created_at || null,
             is_admin: r?.is_admin === true,
+            roles,
             rpm5m: Number.isFinite(rpm) ? rpm : null,
           }
         })
@@ -8483,12 +8578,33 @@ app.get('/api/admin/member-list', async (req, res) => {
 
     if (sql) {
       const visitsTableSql = buildVisitsTableIdentifier()
+      // Sort by role: admins first, then editors, then other roles, then no roles
       const orderClause =
         sort === 'rpm'
           ? 'rpm5m desc nulls last, u.created_at desc'
           : sort === 'oldest'
             ? 'u.created_at asc'
-            : 'u.created_at desc'
+            : sort === 'role'
+              ? `case 
+                   when p.is_admin = true or 'admin' = any(coalesce(p.roles, '{}')) then 0
+                   when 'editor' = any(coalesce(p.roles, '{}')) then 1
+                   when 'pro' = any(coalesce(p.roles, '{}')) then 2
+                   when 'vip' = any(coalesce(p.roles, '{}')) then 3
+                   when 'plus' = any(coalesce(p.roles, '{}')) then 4
+                   when 'creator' = any(coalesce(p.roles, '{}')) then 5
+                   when 'merchant' = any(coalesce(p.roles, '{}')) then 6
+                   else 99
+                 end asc, u.created_at desc`
+              : 'u.created_at desc'
+      
+      // Build WHERE clause for role filtering
+      // Special case for admin: also check legacy is_admin field
+      const roleFilterClause = filterRole 
+        ? filterRole === 'admin'
+          ? `where (p.is_admin = true or '${filterRole}' = any(coalesce(p.roles, '{}')))`
+          : `where '${filterRole}' = any(coalesce(p.roles, '{}'))`
+        : ''
+      
       const rows = await sql.unsafe(
         `
         select
@@ -8497,6 +8613,7 @@ app.get('/api/admin/member-list', async (req, res) => {
           u.created_at,
           p.display_name,
           p.is_admin,
+          coalesce(p.roles, '{}') as roles,
           coalesce(rpm.c, 0)::numeric / 5 as rpm5m
         from auth.users u
         left join public.profiles p on p.id = u.id
@@ -8506,6 +8623,7 @@ app.get('/api/admin/member-list', async (req, res) => {
           where v.user_id = u.id
             and v.occurred_at >= now() - interval '5 minutes'
         ) rpm on true
+        ${roleFilterClause}
         order by ${orderClause}
         limit $1
         offset $2
@@ -8556,6 +8674,85 @@ app.get('/api/admin/member-list', async (req, res) => {
     res.status(500).json({ error: 'Database not configured' })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load member list' })
+  }
+})
+
+// Admin: get role statistics (count of users per role)
+app.get('/api/admin/role-stats', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+
+    if (sql) {
+      // Count total members
+      const totalResult = await sql`select count(*)::int as count from auth.users`
+      const totalMembers = totalResult?.[0]?.count || 0
+
+      // Count users by each role (users can have multiple roles)
+      const roleCountsResult = await sql`
+        select
+          role,
+          count(*)::int as count
+        from public.profiles, unnest(coalesce(roles, '{}')) as role
+        group by role
+        order by count desc
+      `
+      
+      // Also count legacy admins who might not have the role in array
+      const legacyAdminResult = await sql`
+        select count(*)::int as count from public.profiles 
+        where is_admin = true and not ('admin' = any(coalesce(roles, '{}')))
+      `
+      const legacyAdminCount = legacyAdminResult?.[0]?.count || 0
+
+      // Build role counts object
+      const roleCounts = {}
+      const validRoles = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip', 'plus']
+      validRoles.forEach(r => { roleCounts[r] = 0 })
+      
+      if (Array.isArray(roleCountsResult)) {
+        roleCountsResult.forEach(row => {
+          if (row?.role && validRoles.includes(row.role)) {
+            roleCounts[row.role] = row.count || 0
+          }
+        })
+      }
+      
+      // Add legacy admin count to admin role
+      roleCounts.admin = (roleCounts.admin || 0) + legacyAdminCount
+
+      res.json({
+        ok: true,
+        totalMembers,
+        roleCounts,
+        via: 'database',
+      })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      // Fallback: just return empty stats if no direct DB access
+      res.json({
+        ok: true,
+        totalMembers: 0,
+        roleCounts: {
+          admin: 0,
+          editor: 0,
+          pro: 0,
+          merchant: 0,
+          creator: 0,
+          vip: 0,
+          plus: 0,
+        },
+        via: 'supabase',
+        note: 'Role stats require direct database access',
+      })
+      return
+    }
+
+    res.status(500).json({ error: 'Database not configured' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load role stats' })
   }
 })
 
@@ -8792,6 +8989,238 @@ app.post('/api/admin/demote-admin', async (req, res) => {
 
 app.options('/api/admin/demote-admin', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Valid user roles (excluding 'plus' which is payment-based)
+const ADMIN_ASSIGNABLE_ROLES = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip']
+const ALL_USER_ROLES = [...ADMIN_ASSIGNABLE_ROLES, 'plus']
+
+// Admin: add a role to a user
+app.post('/api/admin/roles/add', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const roleParam = (rawRole || '').toString().trim().toLowerCase()
+    
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    if (!roleParam) {
+      res.status(400).json({ error: 'Missing role' })
+      return
+    }
+    if (!ADMIN_ASSIGNABLE_ROLES.includes(roleParam)) {
+      res.status(400).json({ error: `Invalid role. Must be one of: ${ADMIN_ASSIGNABLE_ROLES.join(', ')}` })
+      return
+    }
+    
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+    
+    // Get current roles
+    let currentRoles = []
+    try {
+      const profileRows = await sql`select roles from public.profiles where id = ${targetId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0] && Array.isArray(profileRows[0].roles)) {
+        currentRoles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+      }
+    } catch {}
+    
+    // Add role if not already present
+    if (!currentRoles.includes(roleParam)) {
+      currentRoles.push(roleParam)
+    }
+    
+    // Update profile with new roles (profile must already exist)
+    try {
+      // First check if profile exists
+      const profileCheck = await sql`select id from public.profiles where id = ${targetId} limit 1`
+      if (!profileCheck || profileCheck.length === 0) {
+        res.status(404).json({ error: 'User profile not found. The user must have a profile before roles can be assigned.' })
+        return
+      }
+      
+      // Update the roles array
+      await sql`update public.profiles set roles = ${sql.array(currentRoles)} where id = ${targetId}`
+      
+      // If adding admin role, also set is_admin = true for legacy support
+      if (roleParam === 'admin') {
+        await sql`update public.profiles set is_admin = true where id = ${targetId}`
+      }
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to add role' })
+      return
+    }
+    
+    // Log admin action
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'add_role', ${targetId}, ${sql.json({ email: targetEmail, role: roleParam })})`
+    } catch {}
+    
+    res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, addedRole: roleParam })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to add role' })
+  }
+})
+
+app.options('/api/admin/roles/add', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Admin: remove a role from a user
+app.post('/api/admin/roles/remove', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const roleParam = (rawRole || '').toString().trim().toLowerCase()
+    
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    if (!roleParam) {
+      res.status(400).json({ error: 'Missing role' })
+      return
+    }
+    if (!ALL_USER_ROLES.includes(roleParam)) {
+      res.status(400).json({ error: `Invalid role. Must be one of: ${ALL_USER_ROLES.join(', ')}` })
+      return
+    }
+    
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+    
+    // Get current roles
+    let currentRoles = []
+    try {
+      const profileRows = await sql`select roles from public.profiles where id = ${targetId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0] && Array.isArray(profileRows[0].roles)) {
+        currentRoles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+      }
+    } catch {}
+    
+    // Remove role if present
+    currentRoles = currentRoles.filter(r => r !== roleParam)
+    
+    // Update profile with new roles
+    try {
+      await sql`update public.profiles set roles = ${sql.array(currentRoles)} where id = ${targetId}`
+      
+      // If removing admin role, also set is_admin = false for legacy support
+      if (roleParam === 'admin') {
+        await sql`update public.profiles set is_admin = false where id = ${targetId}`
+      }
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to remove role' })
+      return
+    }
+    
+    // Log admin action
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'remove_role', ${targetId}, ${sql.json({ email: targetEmail, role: roleParam })})`
+    } catch {}
+    
+    res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, removedRole: roleParam })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to remove role' })
+  }
+})
+
+app.options('/api/admin/roles/remove', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Admin: get a user's roles
+app.get('/api/admin/roles/:userId', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const userId = (req.params.userId || '').toString().trim()
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId' })
+      return
+    }
+    
+    let roles = []
+    try {
+      const profileRows = await sql`select roles, is_admin from public.profiles where id = ${userId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0]) {
+        if (Array.isArray(profileRows[0].roles)) {
+          roles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+        }
+        // Support legacy is_admin field
+        if (profileRows[0].is_admin === true && !roles.includes('admin')) {
+          roles.push('admin')
+        }
+      }
+    } catch {}
+    
+    res.json({ ok: true, userId, roles })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to get roles' })
+  }
+})
+
+app.options('/api/admin/roles/:userId', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
   res.status(204).end()
 })

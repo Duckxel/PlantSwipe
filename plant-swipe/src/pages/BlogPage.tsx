@@ -9,6 +9,7 @@ import { usePageMetadata } from "@/hooks/usePageMetadata"
 import type { BlogPost } from "@/types/blog"
 import { fetchBlogPosts } from "@/lib/blogs"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { checkEditorAccess } from "@/constants/userRoles"
 
 export default function BlogPage() {
   const { t } = useTranslation("common")
@@ -17,7 +18,7 @@ export default function BlogPage() {
   const [posts, setPosts] = React.useState<BlogPost[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  const isAdmin = Boolean(profile?.is_admin)
+  const isAdmin = checkEditorAccess(profile)
 
   const seoTitle = t("seo.blog.listTitle", { defaultValue: "Aphylia Blog" })
   const seoDescription = t("seo.blog.listDescription", {
@@ -29,7 +30,7 @@ export default function BlogPage() {
     setLoading(true)
     setError(null)
     try {
-      const includeDrafts = Boolean(profile?.is_admin)
+      const includeDrafts = checkEditorAccess(profile)
       const data = await fetchBlogPosts({ includeDrafts })
       setPosts([...data].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)))
     } catch (err) {
@@ -41,7 +42,7 @@ export default function BlogPage() {
     } finally {
       setLoading(false)
     }
-  }, [profile?.is_admin, t])
+  }, [profile, t])
 
   React.useEffect(() => {
     loadPosts().catch(() => {})
