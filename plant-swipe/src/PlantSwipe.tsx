@@ -1300,13 +1300,31 @@ export default function PlantSwipe() {
             onSignup={openSignup}
           />
 
-          {/* Fixed search bar for search view */}
-          {currentView === "search" && (
-            <>
-              {/* Spacer for fixed positioning */}
-              <div className="h-16 lg:h-20" />
-              <div className="fixed top-0 left-0 right-0 z-40 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm px-4 lg:px-8 py-3 shadow-sm">
-                <div className="max-w-6xl mx-auto">
+          {/* Layout: grid with sidebar on desktop */}
+          <div
+            className={`max-w-6xl mx-auto mt-6 ${
+              currentView === "search" && showFilters
+                ? "lg:grid lg:grid-cols-[260px_1fr] lg:gap-10"
+                : ""
+            }`}
+          >
+            {/* Sidebar / Filters - desktop only */}
+            {currentView === "search" && showFilters && (
+              <aside
+                className="hidden lg:block lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain"
+                aria-label="Filters"
+              >
+                <div className="space-y-6 pr-2">
+                  <FilterControls />
+                </div>
+              </aside>
+            )}
+
+            {/* Main content area */}
+            <main className="min-h-[60vh]" aria-live="polite">
+              {/* Sticky search bar for search view */}
+              {currentView === "search" && (
+                <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm lg:static lg:mx-0 lg:px-0 lg:py-0 lg:mb-6 lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-none">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div className="flex-1">
                       <Label htmlFor="plant-search-main" className="sr-only">
@@ -1336,9 +1354,9 @@ export default function PlantSwipe() {
                           <span>{t(showFilters ? "plant.hideFilters" : "plant.showFilters")}</span>
                         </span>
                         {showFilters ? (
-                          <ChevronUp className="h-4 w-4" />
+                          <ChevronUp className="h-4 w-4 lg:hidden" />
                         ) : (
-                          <ChevronDown className="h-4 w-4" />
+                          <ChevronDown className="h-4 w-4 lg:hidden" />
                         )}
                       </Button>
                       {user && (
@@ -1365,18 +1383,12 @@ export default function PlantSwipe() {
                       )}
                     </div>
                   </div>
-                  <div className={`mt-3 ${showFilters ? "max-h-[50vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6 shadow-lg" : "hidden"}`}>
+                  {/* Mobile filter dropdown */}
+                  <div className={`lg:hidden mt-3 ${showFilters ? "max-h-[50vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6" : "hidden"}`}>
                     <FilterControls />
                   </div>
                 </div>
-              </div>
-            </>
-          )}
-
-          {/* Layout container */}
-          <div className="max-w-6xl mx-auto mt-4 lg:mt-6">
-            {/* Main content area */}
-            <main className="min-h-[60vh]" aria-live="polite">
+              )}
 
           <Routes>
             <Route
