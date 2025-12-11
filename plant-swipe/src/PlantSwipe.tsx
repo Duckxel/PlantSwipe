@@ -1322,9 +1322,9 @@ export default function PlantSwipe() {
 
             {/* Main content area */}
             <main className="min-h-[60vh]" aria-live="polite">
-              {/* Sticky search bar for search view */}
+              {/* Sticky search bar for search view - sticks to top when scrolled past */}
               {currentView === "search" && (
-                <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm lg:static lg:mx-0 lg:px-0 lg:py-0 lg:mb-6 lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-none">
+                <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div className="flex-1">
                       <Label htmlFor="plant-search-main" className="sr-only">
