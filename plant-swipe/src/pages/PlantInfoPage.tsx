@@ -1530,7 +1530,12 @@ const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.
 }
 
 const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
-  const label = color.name || 'Palette'
+  const { t } = useTranslation('common')
+  const colorName = color.name || 'Palette'
+  // Try to translate color name using the plant.{colorKey} format
+  const colorKey = colorName.toLowerCase().replace(/[_\s-]/g, '')
+  const translatedLabel = t(`plant.${colorKey}`, { defaultValue: '' })
+  const label = translatedLabel || colorName
   const tone = color.hexCode || '#16a34a'
   const category = 'Palette'
   const gradient = `linear-gradient(135deg, ${tone}, ${tone})`
