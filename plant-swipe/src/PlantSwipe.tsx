@@ -122,7 +122,8 @@ export default function PlantSwipe() {
   const [seasonSectionOpen, setSeasonSectionOpen] = useState(true)
   const [colorSectionOpen, setColorSectionOpen] = useState(true)
   const [advancedColorsOpen, setAdvancedColorsOpen] = useState(false)
-  const [classificationSectionOpen, setClassificationSectionOpen] = useState(true)
+  const [typeSectionOpen, setTypeSectionOpen] = useState(true)
+  const [usageSectionOpen, setUsageSectionOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -986,78 +987,77 @@ export default function PlantSwipe() {
             </select>
           </div>
 
-          {/* Classification */}
+          {/* Type */}
           <div>
             <FilterSectionHeader
-              label={t("plant.classification")}
-              isOpen={classificationSectionOpen}
-              onToggle={() => setClassificationSectionOpen((prev) => !prev)}
+              label={t("plantInfo.classification.type", { defaultValue: "Type" })}
+              isOpen={typeSectionOpen}
+              onToggle={() => setTypeSectionOpen((prev) => !prev)}
             />
-            {classificationSectionOpen && (
-              <div className="mt-3 space-y-4">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                    {t("plantInfo.classification.type", { defaultValue: "Type" })}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {typeOptions.length > 0 ? (
-                      typeOptions.map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => setTypeFilter((current) => (current === option ? null : option))}
-                          className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                            typeFilter === option
-                              ? "bg-black dark:bg-white text-white dark:text-black"
-                              : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                          }`}
-                          aria-pressed={typeFilter === option}
-                        >
-                          {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="text-xs opacity-60">
-                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                    {t("plantInfo.sections.usage", { defaultValue: "Usage" })}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {usageOptions.length > 0 ? (
-                      usageOptions.map((option) => {
-                        const isSelected = usageFilters.includes(option)
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() =>
-                              setUsageFilters((current) =>
-                                isSelected ? current.filter((value) => value !== option) : [...current, option]
-                              )
-                            }
-                            className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                              isSelected
-                                ? "bg-emerald-600 dark:bg-emerald-500 text-white"
-                                : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                            }`}
-                            aria-pressed={isSelected}
-                          >
-                            {t(`plant.utility.${option.toLowerCase()}`, { defaultValue: option })}
-                          </button>
-                        )
-                      })
-                    ) : (
-                      <p className="text-xs opacity-60">
-                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                      </p>
-                    )}
-                  </div>
-                </div>
+            {typeSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {typeOptions.length > 0 ? (
+                  typeOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setTypeFilter((current) => (current === option ? null : option))}
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        typeFilter === option
+                          ? "bg-black dark:bg-white text-white dark:text-black"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={typeFilter === option}
+                    >
+                      {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-xs opacity-60">
+                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Usage */}
+          <div>
+            <FilterSectionHeader
+              label={t("plantInfo.sections.usage", { defaultValue: "Usage" })}
+              isOpen={usageSectionOpen}
+              onToggle={() => setUsageSectionOpen((prev) => !prev)}
+            />
+            {usageSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {usageOptions.length > 0 ? (
+                  usageOptions.map((option) => {
+                    const isSelected = usageFilters.includes(option)
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() =>
+                          setUsageFilters((current) =>
+                            isSelected ? current.filter((value) => value !== option) : [...current, option]
+                          )
+                        }
+                        className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                          isSelected
+                            ? "bg-emerald-600 dark:bg-emerald-500 text-white"
+                            : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        {t(`plant.utility.${option.toLowerCase()}`, { defaultValue: option })}
+                      </button>
+                    )
+                  })
+                ) : (
+                  <p className="text-xs opacity-60">
+                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1362,7 +1362,7 @@ export default function PlantSwipe() {
                     )}
                   </div>
                 </div>
-                <div className={`lg:hidden mt-3 ${showFilters ? "space-y-6" : "hidden"}`}>
+                <div className={`lg:hidden mt-3 ${showFilters ? "max-h-[60vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6" : "hidden"}`}>
                   <FilterControls />
                 </div>
               </div>
@@ -1382,10 +1382,12 @@ export default function PlantSwipe() {
             {/* Sidebar / Filters */}
             {currentView === "search" && showFilters && (
               <aside
-                className="hidden lg:block mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start"
+                className="hidden lg:block mb-8 lg:mb-0 lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain"
                 aria-label="Filters"
               >
-                <FilterControls />
+                <div className="space-y-6 pr-2">
+                  <FilterControls />
+                </div>
               </aside>
             )}
 
