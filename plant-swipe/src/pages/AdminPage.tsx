@@ -1971,8 +1971,8 @@ export const AdminPage: React.FC = () => {
           originalName: plantName,
         });
         
-        // Refresh the plant dashboard if on that tab
-        loadPlantDashboard?.();
+        // Mark plant dashboard as needing refresh so it reloads when user visits it
+        setPlantDashboardInitialized(false);
         
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to duplicate plant';
@@ -1982,7 +1982,7 @@ export const AdminPage: React.FC = () => {
         setAddFromDuplicating(false);
       }
     },
-    [profile?.display_name, loadPlantDashboard],
+    [profile?.display_name],
   );
 
   const loadPlantDashboard = React.useCallback(async () => {
