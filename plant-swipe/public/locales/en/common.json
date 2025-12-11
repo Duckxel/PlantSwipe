@@ -600,6 +600,7 @@
       "active": "Active",
       "showFilters": "Show filters",
       "hideFilters": "Hide filters",
+      "clearAllFilters": "Clear all filters",
       "none": "None",
       "spring": "Spring",
       "summer": "Summer",

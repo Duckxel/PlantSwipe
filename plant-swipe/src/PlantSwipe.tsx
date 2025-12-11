@@ -4,7 +4,7 @@ import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "
 import { Navigate } from "@/components/i18n/Navigate";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -905,6 +905,24 @@ export default function PlantSwipe() {
   )
 
     const FilterControls = () => {
+      // Check if any filters are active
+      const hasActiveFilters = seasonFilter !== null || 
+        colorFilter.length > 0 || 
+        typeFilter !== null || 
+        usageFilters.length > 0 || 
+        onlySeeds || 
+        onlyFavorites
+
+      // Clear all filters function
+      const clearAllFilters = () => {
+        setSeasonFilter(null)
+        setColorFilter([])
+        setTypeFilter(null)
+        setUsageFilters([])
+        setOnlySeeds(false)
+        setOnlyFavorites(false)
+      }
+
       const renderColorOption = (color: ColorOption) => {
         const isActive = colorFilter.includes(color.name)
         // Use translated name if available for the current language, fallback to default name
@@ -940,6 +958,19 @@ export default function PlantSwipe() {
 
       return (
         <div className="space-y-6">
+          {/* Clear all filters button */}
+          {hasActiveFilters && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearAllFilters}
+              className="w-full rounded-2xl text-sm border-dashed hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+            >
+              <X className="h-4 w-4 mr-2" />
+              {t("plant.clearAllFilters", { defaultValue: "Clear all filters" })}
+            </Button>
+          )}
+
           {/* Sort */}
           <div>
             <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
@@ -1295,6 +1326,7 @@ export default function PlantSwipe() {
           <main className="min-h-[60vh]" aria-live="polite">
             {currentView === "search" && (
               <div className="mb-6 space-y-3">
+                <div className="sticky top-0 z-30 bg-stone-50/95 dark:bg-[#1a1a1a]/95 backdrop-blur-sm -mx-4 px-4 py-3 lg:-mx-0 lg:px-0 lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-none lg:static lg:py-0">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                       <div className="flex-1">
                         <Label htmlFor="plant-search-main" className="sr-only">
@@ -1353,6 +1385,7 @@ export default function PlantSwipe() {
                       )}
                     </div>
                   </div>
+                </div>
                   <div className={`lg:hidden ${showFilters ? "space-y-6" : "hidden"}`}>
                     <FilterControls />
                   </div>
