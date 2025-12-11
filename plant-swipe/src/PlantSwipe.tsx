@@ -119,10 +119,10 @@ export default function PlantSwipe() {
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [usageFilters, setUsageFilters] = useState<string[]>([])
-  const [seasonSectionOpen, setSeasonSectionOpen] = useState(true)
-  const [colorSectionOpen, setColorSectionOpen] = useState(true)
+  const [seasonSectionOpen, setSeasonSectionOpen] = useState(false)
+  const [colorSectionOpen, setColorSectionOpen] = useState(false)
   const [advancedColorsOpen, setAdvancedColorsOpen] = useState(false)
-  const [typeSectionOpen, setTypeSectionOpen] = useState(true)
+  const [typeSectionOpen, setTypeSectionOpen] = useState(false)
   const [usageSectionOpen, setUsageSectionOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
@@ -1300,73 +1300,77 @@ export default function PlantSwipe() {
             onSignup={openSignup}
           />
 
-          {/* Sticky search bar for search view - outside grid for proper sticky behavior */}
+          {/* Fixed search bar for search view on mobile, relative on desktop */}
           {currentView === "search" && (
-            <div className="sticky top-0 z-30 bg-stone-50/95 dark:bg-[#1a1a1a]/95 backdrop-blur-sm -mx-4 px-4 py-3 lg:relative lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-none lg:py-0 lg:mx-0">
-              <div className="max-w-6xl mx-auto">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                  <div className="flex-1">
-                    <Label htmlFor="plant-search-main" className="sr-only">
-                      {t("common.search")}
-                    </Label>
-                    <SearchInput
-                      id="plant-search-main"
-                      variant="lg"
-                      className="rounded-2xl"
-                      placeholder={t("plant.searchPlaceholder")}
-                      value={query}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        setQuery(e.target.value)
-                        setIndex(0)
-                      }}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
-                    <Button
-                      variant="outline"
-                      className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
-                      onClick={() => setShowFilters((prev) => !prev)}
-                      aria-expanded={showFilters}
-                    >
-                      <span className="flex items-center gap-2">
-                        <ListFilter className="h-4 w-4" />
-                        <span>{t(showFilters ? "plant.hideFilters" : "plant.showFilters")}</span>
-                      </span>
-                      {showFilters ? (
-                        <ChevronUp className="h-4 w-4 lg:hidden" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 lg:hidden" />
-                      )}
-                    </Button>
-                    {user && (
-                      <>
-                        <Button
-                          variant="secondary"
-                          className="rounded-2xl w-full lg:w-auto"
-                          onClick={() => setRequestPlantDialogOpen(true)}
-                        >
-                          <MessageSquarePlus className="h-4 w-4 mr-2" />
-                          {t("requestPlant.button") || "Request Plant"}
-                        </Button>
-                        {checkEditorAccess(profile) && (
-                          <Button
-                            variant="default"
-                            className="rounded-2xl w-full lg:w-auto"
-                            onClick={() => navigate("/create")}
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            {t("common.addPlant")}
-                          </Button>
+            <>
+              {/* Spacer for fixed positioning on mobile */}
+              <div className="h-16 lg:hidden" />
+              <div className="fixed top-0 left-0 right-0 z-40 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm px-4 py-3 shadow-sm lg:relative lg:shadow-none lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-none lg:py-0 lg:px-0 lg:z-auto">
+                <div className="max-w-6xl mx-auto">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    <div className="flex-1">
+                      <Label htmlFor="plant-search-main" className="sr-only">
+                        {t("common.search")}
+                      </Label>
+                      <SearchInput
+                        id="plant-search-main"
+                        variant="lg"
+                        className="rounded-2xl"
+                        placeholder={t("plant.searchPlaceholder")}
+                        value={query}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          setQuery(e.target.value)
+                          setIndex(0)
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
+                        onClick={() => setShowFilters((prev) => !prev)}
+                        aria-expanded={showFilters}
+                      >
+                        <span className="flex items-center gap-2">
+                          <ListFilter className="h-4 w-4" />
+                          <span>{t(showFilters ? "plant.hideFilters" : "plant.showFilters")}</span>
+                        </span>
+                        {showFilters ? (
+                          <ChevronUp className="h-4 w-4 lg:hidden" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 lg:hidden" />
                         )}
-                      </>
-                    )}
+                      </Button>
+                      {user && (
+                        <>
+                          <Button
+                            variant="secondary"
+                            className="rounded-2xl w-full lg:w-auto"
+                            onClick={() => setRequestPlantDialogOpen(true)}
+                          >
+                            <MessageSquarePlus className="h-4 w-4 mr-2" />
+                            {t("requestPlant.button") || "Request Plant"}
+                          </Button>
+                          {checkEditorAccess(profile) && (
+                            <Button
+                              variant="default"
+                              className="rounded-2xl w-full lg:w-auto"
+                              onClick={() => navigate("/create")}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              {t("common.addPlant")}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className={`lg:hidden mt-3 ${showFilters ? "max-h-[60vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6" : "hidden"}`}>
-                  <FilterControls />
+                  <div className={`lg:hidden mt-3 ${showFilters ? "max-h-[50vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6 shadow-lg" : "hidden"}`}>
+                    <FilterControls />
+                  </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
 
           {/* Layout: grid only when search view (to avoid narrow column in other views) */}
