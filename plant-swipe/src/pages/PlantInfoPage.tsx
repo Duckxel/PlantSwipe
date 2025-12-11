@@ -152,7 +152,29 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
   const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
   const { data: infusionMixRows } = await supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id)
-  const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
+  
+  // Fetch color translations for the target language
+  const colorIds = (colorLinks || []).map((c: any) => c.colors?.id).filter(Boolean)
+  let colorTranslationsMap: Record<string, string> = {}
+  if (colorIds.length > 0) {
+    const { data: colorTranslations } = await supabase
+      .from('color_translations')
+      .select('color_id, name')
+      .eq('language', targetLanguage)
+      .in('color_id', colorIds)
+    if (colorTranslations) {
+      colorTranslationsMap = colorTranslations.reduce((acc: Record<string, string>, t: { color_id: string; name: string }) => {
+        acc[t.color_id] = t.name
+        return acc
+      }, {})
+    }
+  }
+  
+  const colors = (colorLinks || []).map((c: any) => ({
+    id: c.colors?.id,
+    name: colorTranslationsMap[c.colors?.id] || c.colors?.name,
+    hexCode: c.colors?.hex_code
+  }))
   const infusionMix = (infusionMixRows || []).reduce((acc: Record<string, string>, row: any) => {
     if (row?.mix_name) acc[row.mix_name] = row?.benefit || ''
     return acc
@@ -1530,12 +1552,7 @@ const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.
 }
 
 const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
-  const { t } = useTranslation('common')
-  const colorName = color.name || 'Palette'
-  // Try to translate color name using the plant.{colorKey} format
-  const colorKey = colorName.toLowerCase().replace(/[_\s-]/g, '')
-  const translatedLabel = t(`plant.${colorKey}`, { defaultValue: '' })
-  const label = translatedLabel || colorName
+  const label = color.name || 'Palette'
   const tone = color.hexCode || '#16a34a'
   const category = 'Palette'
   const gradient = `linear-gradient(135deg, ${tone}, ${tone})`
