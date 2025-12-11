@@ -8857,13 +8857,17 @@ app.post('/api/admin/roles/add', async (req, res) => {
       currentRoles.push(roleParam)
     }
     
-    // Update profile with new roles
+    // Update profile with new roles (profile must already exist)
     try {
-      await sql`
-        insert into public.profiles (id, roles)
-        values (${targetId}, ${sql.array(currentRoles)})
-        on conflict (id) do update set roles = ${sql.array(currentRoles)}
-      `
+      // First check if profile exists
+      const profileCheck = await sql`select id from public.profiles where id = ${targetId} limit 1`
+      if (!profileCheck || profileCheck.length === 0) {
+        res.status(404).json({ error: 'User profile not found. The user must have a profile before roles can be assigned.' })
+        return
+      }
+      
+      // Update the roles array
+      await sql`update public.profiles set roles = ${sql.array(currentRoles)} where id = ${targetId}`
       
       // If adding admin role, also set is_admin = true for legacy support
       if (roleParam === 'admin') {
