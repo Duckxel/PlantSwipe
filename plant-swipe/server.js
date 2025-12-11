@@ -7505,7 +7505,7 @@ app.get('/api/admin/member', async (req, res) => {
       // Profile (best-effort; may be null without Authorization due to RLS)
       let profile = null
       try {
-        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin`, {
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin,roles`, {
           headers: baseHeaders,
         })
         if (pr.ok) {
@@ -7735,7 +7735,7 @@ app.get('/api/admin/member', async (req, res) => {
     }
     let profile = null
     try {
-      const rows = await sql`select id, display_name, is_admin from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin, roles from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
     } catch {}
     // Load latest admin notes for this profile (DB or REST)
