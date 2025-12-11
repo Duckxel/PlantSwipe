@@ -8598,8 +8598,11 @@ app.get('/api/admin/member-list', async (req, res) => {
               : 'u.created_at desc'
       
       // Build WHERE clause for role filtering
+      // Special case for admin: also check legacy is_admin field
       const roleFilterClause = filterRole 
-        ? `where '${filterRole}' = any(coalesce(p.roles, '{}'))` 
+        ? filterRole === 'admin'
+          ? `where (p.is_admin = true or '${filterRole}' = any(coalesce(p.roles, '{}')))`
+          : `where '${filterRole}' = any(coalesce(p.roles, '{}'))`
         : ''
       
       const rows = await sql.unsafe(
