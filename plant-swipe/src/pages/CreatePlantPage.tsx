@@ -668,6 +668,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const { id } = useParams<{ id?: string }>()
   const [searchParams] = useSearchParams()
   const prefillFromId = searchParams.get('prefillFrom')
+  const duplicatedFromName = searchParams.get('duplicatedFrom')
   const languageNavigate = useLanguageNavigate()
   const { profile } = useAuth()
   const initialLanguage: SupportedLanguage = 'en'
@@ -680,7 +681,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [loadedLanguages, setLoadedLanguages] = React.useState<Set<SupportedLanguage>>(new Set())
   const [loading, setLoading] = React.useState<boolean>(!!id || !!prefillFromId)
   const [saving, setSaving] = React.useState(false)
-  const [prefillSourceName, setPrefillSourceName] = React.useState<string | null>(null)
+  const [prefillSourceName, setPrefillSourceName] = React.useState<string | null>(duplicatedFromName)
   const [error, setError] = React.useState<string | null>(null)
   const [aiWorking, setAiWorking] = React.useState(false)
   const [aiCompleted, setAiCompleted] = React.useState(false)
@@ -1627,7 +1628,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           <CardContent className="flex gap-2 items-center py-3">
             <Copy className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span className="text-sm text-blue-800 dark:text-blue-200">
-              Creating new plant from template: <strong>{prefillSourceName}</strong>
+              {duplicatedFromName 
+                ? <>Duplicated from original plant: <strong>{prefillSourceName}</strong></>
+                : <>Creating new plant from template: <strong>{prefillSourceName}</strong></>
+              }
             </span>
           </CardContent>
         </Card>
