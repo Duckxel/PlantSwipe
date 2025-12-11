@@ -9,6 +9,8 @@ import { EditProfileDialog, type EditProfileValues } from "@/components/profile/
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
 import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2 } from "lucide-react"
+import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
+import type { UserRole } from "@/constants/userRoles"
 import { SearchInput } from "@/components/ui/search-input"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
@@ -27,6 +29,7 @@ type PublicProfile = {
   bio: string | null
   avatar_url: string | null
   is_admin?: boolean | null
+  roles?: UserRole[] | null
   joined_at?: string | null
   last_seen_at?: string | null
   is_online?: boolean | null
@@ -153,7 +156,7 @@ export default function PublicProfilePage() {
           // Look up current user by ID
           const { data: profileData, error: pErr } = await supabase
             .from('profiles')
-            .select('id, display_name, country, bio, avatar_url, is_admin, accent_key, is_private, disable_friend_requests')
+            .select('id, display_name, country, bio, avatar_url, is_admin, roles, accent_key, is_private, disable_friend_requests')
             .eq('id', user.id)
             .maybeSingle()
           if (!pErr && profileData) {
@@ -178,6 +181,26 @@ export default function PublicProfilePage() {
           return
         }
         const userId = String(row.id)
+        
+        // Fetch roles if not already included in the row data
+        let profileRoles: UserRole[] | null = null
+        if (!row.roles) {
+          try {
+            const { data: rolesData } = await supabase
+              .from('profiles')
+              .select('roles')
+              .eq('id', userId)
+              .maybeSingle()
+            if (rolesData && Array.isArray(rolesData.roles)) {
+              profileRoles = rolesData.roles
+            }
+          } catch {}
+        } else if (Array.isArray(row.roles)) {
+          profileRoles = row.roles
+        }
+        // Merge roles into row for use later
+        row = { ...row, roles: profileRoles }
+        
         const profileIsPrivate = Boolean(row.is_private || false)
         const isOwnerViewing = user?.id === userId
         const viewerIsAdmin = Boolean(profile?.is_admin || false)
@@ -264,6 +287,7 @@ export default function PublicProfilePage() {
           bio: row.bio || null,
           avatar_url: row.avatar_url || null,
           is_admin: Boolean(row.is_admin || false),
+          roles: Array.isArray(row.roles) ? row.roles : null,
           joined_at: row.joined_at ? String(row.joined_at) : null,
           last_seen_at: row.last_seen_at ? String(row.last_seen_at) : null,
           is_online: Boolean(row.is_online || false),
@@ -856,14 +880,19 @@ export default function PublicProfilePage() {
                   />
                 </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || t('profile.member')}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center">
+                          <span className="text-2xl font-semibold truncate">{pp.display_name || pp.username || t('profile.member')}</span>
+                          <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
+                        </div>
                         {pp.isAdminViewingPrivateNonFriend && (
                           <div title={t('profile.privateProfileViewedByAdmin')}>
                             <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
                           </div>
                         )}
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? t('profile.admin') : t('profile.member')}</span>
+                        {!pp.roles?.length && !pp.is_admin && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full border bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-600">{t('profile.member')}</span>
+                        )}
                       </div>
                   {canViewProfile && (
                     <>

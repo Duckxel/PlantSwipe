@@ -53,7 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests')
+      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {

@@ -146,6 +146,13 @@ import {
   ADMIN_STATUS_COLORS,
   ADMIN_STATUS_BADGE_CLASSES,
 } from "@/constants/plantStatus";
+import {
+  USER_ROLES,
+  ADMIN_ASSIGNABLE_ROLES,
+  ROLE_CONFIG,
+  type UserRole,
+} from "@/constants/userRoles";
+import { UserRoleBadge } from "@/components/profile/UserRoleBadges";
 
 const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_COLORS;
 
@@ -3283,6 +3290,11 @@ export const AdminPage: React.FC = () => {
   const [demoteOpen, setDemoteOpen] = React.useState(false);
   const [demoteSubmitting, setDemoteSubmitting] = React.useState(false);
 
+  // Roles management state
+  const [memberRoles, setMemberRoles] = React.useState<UserRole[]>([]);
+  const [roleSubmitting, setRoleSubmitting] = React.useState<string | null>(null);
+  const [rolesOpen, setRolesOpen] = React.useState(false);
+
   // Container ref for Members tab to run form-field validation logs
   const membersContainerRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -3602,6 +3614,14 @@ export const AdminPage: React.FC = () => {
               }))
             : [],
         });
+        // Extract and set member roles
+        const profileRoles = Array.isArray(data?.profile?.roles) ? data.profile.roles : [];
+        const isAdminRole = data?.profile?.is_admin === true;
+        const effectiveRoles = [...profileRoles] as UserRole[];
+        if (isAdminRole && !effectiveRoles.includes(USER_ROLES.ADMIN)) {
+          effectiveRoles.push(USER_ROLES.ADMIN);
+        }
+        setMemberRoles(effectiveRoles);
         // Log lookup success (UI)
         try {
           const headers2: Record<string, string> = {
@@ -3963,6 +3983,92 @@ export const AdminPage: React.FC = () => {
       setDemoteSubmitting(false);
     }
   }, [lookupEmail, demoteSubmitting, safeJson]);
+
+  // Add a role to the user
+  const addRole = React.useCallback(async (role: UserRole) => {
+    if (!memberData?.user?.id || roleSubmitting) return;
+    setRoleSubmitting(role);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__
+          ?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/roles/add", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ userId: memberData.user.id, role }),
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      // Update local state
+      setMemberRoles(data.roles || [...memberRoles, role]);
+      // If admin role was added, update legacy is_admin field
+      if (role === USER_ROLES.ADMIN) {
+        setMemberData((prev) =>
+          prev
+            ? { ...prev, profile: { ...(prev.profile || {}), is_admin: true } }
+            : prev,
+        );
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to add role: ${msg}`);
+    } finally {
+      setRoleSubmitting(null);
+    }
+  }, [memberData?.user?.id, memberRoles, roleSubmitting, safeJson]);
+
+  // Remove a role from the user
+  const removeRole = React.useCallback(async (role: UserRole) => {
+    if (!memberData?.user?.id || roleSubmitting) return;
+    setRoleSubmitting(role);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__
+          ?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/roles/remove", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ userId: memberData.user.id, role }),
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      // Update local state
+      setMemberRoles(data.roles || memberRoles.filter(r => r !== role));
+      // If admin role was removed, update legacy is_admin field
+      if (role === USER_ROLES.ADMIN) {
+        setMemberData((prev) =>
+          prev
+            ? { ...prev, profile: { ...(prev.profile || {}), is_admin: false } }
+            : prev,
+        );
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to remove role: ${msg}`);
+    } finally {
+      setRoleSubmitting(null);
+    }
+  }, [memberData?.user?.id, memberRoles, roleSubmitting, safeJson]);
 
   // Debounced email/username suggestions fetch
   React.useEffect(() => {
@@ -7028,15 +7134,15 @@ export const AdminPage: React.FC = () => {
                                         ) : null}
                                       </div>
                                       <div className="flex flex-wrap gap-1 mt-1">
-                                        {memberData.profile?.is_admin && (
-                                          <Badge
-                                            variant="outline"
-                                            className="rounded-full px-2 py-0.5 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700 flex items-center gap-1"
-                                          >
-                                            <ShieldCheck className="h-3 w-3" />{" "}
-                                            Admin
-                                          </Badge>
-                                        )}
+                                        {/* Role Badges */}
+                                        {memberRoles.map((role) => (
+                                          <UserRoleBadge
+                                            key={role}
+                                            role={role}
+                                            size="sm"
+                                            showLabel
+                                          />
+                                        ))}
                                         {memberData.isBannedEmail && (
                                           <Badge
                                             variant="destructive"
@@ -7442,6 +7548,91 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 )}
                               </div>
+                            </div>
+
+                            {/* Roles Management Section */}
+                            <div className="space-y-3 rounded-xl border border-stone-200 dark:border-[#3e3e42] p-4 bg-white/50 dark:bg-[#252526]/50">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-medium uppercase tracking-wide opacity-60">
+                                  User Roles
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-xl h-7 text-xs"
+                                  onClick={() => setRolesOpen(!rolesOpen)}
+                                >
+                                  {rolesOpen ? "Hide" : "Manage"} Roles
+                                </Button>
+                              </div>
+                              
+                              {/* Current Roles Display */}
+                              <div className="flex flex-wrap gap-1.5">
+                                {memberRoles.length === 0 ? (
+                                  <div className="text-xs opacity-60">No roles assigned</div>
+                                ) : (
+                                  memberRoles.map((role) => (
+                                    <div key={role} className="flex items-center gap-1">
+                                      <UserRoleBadge role={role} size="md" showLabel />
+                                      {rolesOpen && role !== USER_ROLES.PLUS && (
+                                        <button
+                                          type="button"
+                                          onClick={() => removeRole(role)}
+                                          disabled={roleSubmitting === role}
+                                          className="h-5 w-5 flex items-center justify-center rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors"
+                                          title={`Remove ${ROLE_CONFIG[role]?.label || role} role`}
+                                          aria-label={`Remove ${ROLE_CONFIG[role]?.label || role} role`}
+                                        >
+                                          {roleSubmitting === role ? (
+                                            <RefreshCw className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <span className="text-xs font-medium">×</span>
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+
+                              {/* Add Roles Section */}
+                              {rolesOpen && (
+                                <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-[#3e3e42]">
+                                  <div className="text-xs opacity-60">Add roles:</div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {ADMIN_ASSIGNABLE_ROLES.filter(
+                                      (role) => !memberRoles.includes(role)
+                                    ).map((role) => {
+                                      const config = ROLE_CONFIG[role];
+                                      return (
+                                        <Button
+                                          key={role}
+                                          variant="outline"
+                                          size="sm"
+                                          className={`rounded-xl h-7 text-xs gap-1 ${config.bgColor} ${config.darkBgColor} ${config.borderColor} ${config.darkBorderColor}`}
+                                          onClick={() => addRole(role)}
+                                          disabled={roleSubmitting === role}
+                                        >
+                                          {roleSubmitting === role ? (
+                                            <RefreshCw className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Plus className="h-3 w-3" />
+                                          )}
+                                          {config.label}
+                                        </Button>
+                                      );
+                                    })}
+                                    {ADMIN_ASSIGNABLE_ROLES.filter(
+                                      (role) => !memberRoles.includes(role)
+                                    ).length === 0 && (
+                                      <div className="text-xs opacity-60">All available roles assigned</div>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] opacity-50 mt-2">
+                                    Note: Plus role is payment-based and cannot be manually assigned.
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
                             <Card className={glassCardClass}>

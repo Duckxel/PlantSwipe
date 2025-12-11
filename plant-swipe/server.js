@@ -8796,6 +8796,234 @@ app.options('/api/admin/demote-admin', (_req, res) => {
   res.status(204).end()
 })
 
+// Valid user roles (excluding 'plus' which is payment-based)
+const ADMIN_ASSIGNABLE_ROLES = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip']
+const ALL_USER_ROLES = [...ADMIN_ASSIGNABLE_ROLES, 'plus']
+
+// Admin: add a role to a user
+app.post('/api/admin/roles/add', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const roleParam = (rawRole || '').toString().trim().toLowerCase()
+    
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    if (!roleParam) {
+      res.status(400).json({ error: 'Missing role' })
+      return
+    }
+    if (!ADMIN_ASSIGNABLE_ROLES.includes(roleParam)) {
+      res.status(400).json({ error: `Invalid role. Must be one of: ${ADMIN_ASSIGNABLE_ROLES.join(', ')}` })
+      return
+    }
+    
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+    
+    // Get current roles
+    let currentRoles = []
+    try {
+      const profileRows = await sql`select roles from public.profiles where id = ${targetId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0] && Array.isArray(profileRows[0].roles)) {
+        currentRoles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+      }
+    } catch {}
+    
+    // Add role if not already present
+    if (!currentRoles.includes(roleParam)) {
+      currentRoles.push(roleParam)
+    }
+    
+    // Update profile with new roles
+    try {
+      await sql`
+        insert into public.profiles (id, roles)
+        values (${targetId}, ${sql.array(currentRoles)})
+        on conflict (id) do update set roles = ${sql.array(currentRoles)}
+      `
+      
+      // If adding admin role, also set is_admin = true for legacy support
+      if (roleParam === 'admin') {
+        await sql`update public.profiles set is_admin = true where id = ${targetId}`
+      }
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to add role' })
+      return
+    }
+    
+    // Log admin action
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'add_role', ${targetId}, ${sql.json({ email: targetEmail, role: roleParam })})`
+    } catch {}
+    
+    res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, addedRole: roleParam })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to add role' })
+  }
+})
+
+app.options('/api/admin/roles/add', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Admin: remove a role from a user
+app.post('/api/admin/roles/remove', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const roleParam = (rawRole || '').toString().trim().toLowerCase()
+    
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    if (!roleParam) {
+      res.status(400).json({ error: 'Missing role' })
+      return
+    }
+    if (!ALL_USER_ROLES.includes(roleParam)) {
+      res.status(400).json({ error: `Invalid role. Must be one of: ${ALL_USER_ROLES.join(', ')}` })
+      return
+    }
+    
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+    
+    // Get current roles
+    let currentRoles = []
+    try {
+      const profileRows = await sql`select roles from public.profiles where id = ${targetId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0] && Array.isArray(profileRows[0].roles)) {
+        currentRoles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+      }
+    } catch {}
+    
+    // Remove role if present
+    currentRoles = currentRoles.filter(r => r !== roleParam)
+    
+    // Update profile with new roles
+    try {
+      await sql`update public.profiles set roles = ${sql.array(currentRoles)} where id = ${targetId}`
+      
+      // If removing admin role, also set is_admin = false for legacy support
+      if (roleParam === 'admin') {
+        await sql`update public.profiles set is_admin = false where id = ${targetId}`
+      }
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to remove role' })
+      return
+    }
+    
+    // Log admin action
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'remove_role', ${targetId}, ${sql.json({ email: targetEmail, role: roleParam })})`
+    } catch {}
+    
+    res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, removedRole: roleParam })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to remove role' })
+  }
+})
+
+app.options('/api/admin/roles/remove', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Admin: get a user's roles
+app.get('/api/admin/roles/:userId', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const userId = (req.params.userId || '').toString().trim()
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId' })
+      return
+    }
+    
+    let roles = []
+    try {
+      const profileRows = await sql`select roles, is_admin from public.profiles where id = ${userId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0]) {
+        if (Array.isArray(profileRows[0].roles)) {
+          roles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+        }
+        // Support legacy is_admin field
+        if (profileRows[0].is_admin === true && !roles.includes('admin')) {
+          roles.push('admin')
+        }
+      }
+    } catch {}
+    
+    res.json({ ok: true, userId, roles })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to get roles' })
+  }
+})
+
+app.options('/api/admin/roles/:userId', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
 // Public: check if an email or current IP is banned
 app.get('/api/banned/check', async (req, res) => {
   try {

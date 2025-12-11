@@ -186,6 +186,10 @@ alter table if exists public.profiles add column if not exists language text def
 -- Notification preferences: push notifications and email campaigns (default to true/enabled)
 alter table if exists public.profiles add column if not exists notify_push boolean default true;
 alter table if exists public.profiles add column if not exists notify_email boolean default true;
+-- User roles: admin, editor, pro, merchant, creator, vip, plus
+alter table if exists public.profiles add column if not exists roles text[] default '{}';
+-- Create GIN index for efficient role queries
+create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin
@@ -2611,6 +2615,7 @@ returns table(
   avatar_url text,
   accent_key text,
   is_admin boolean,
+  roles text[],
   is_private boolean,
   disable_friend_requests boolean,
   joined_at timestamptz,
@@ -2623,7 +2628,7 @@ security definer
 set search_path = public
 as $$
   with base as (
-    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests
+    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.roles, '{}') as roles, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests
     from public.profiles p
     where lower(p.display_name) = lower(_name)
     limit 1
@@ -2646,6 +2651,7 @@ as $$
          b.avatar_url,
          b.accent_key,
          b.is_admin,
+         b.roles,
          b.is_private,
          b.disable_friend_requests,
          a.joined_at,
