@@ -141,7 +141,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                     </div>
                   )}
                 </div>
-                <div className="p-4 space-y-2 flex flex-col h-full">
+                <div className="p-4 space-y-2 flex flex-col h-full min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-xl`}>{p.rarity}</Badge>
                     {(p.seasons ?? []).map((s: PlantSeason) => {
@@ -157,7 +157,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                       <Badge className="rounded-xl bg-rose-600 dark:bg-rose-500 text-white">{t("plant.liked")}</Badge>
                     )}
                   </div>
-                  <div>
+                  <div className="overflow-hidden">
                     <div className="font-semibold truncate text-lg">{p.name}</div>
                     <div className="text-xs italic opacity-60 truncate">{p.scientificName}</div>
                   </div>

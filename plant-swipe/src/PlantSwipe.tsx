@@ -4,7 +4,7 @@ import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "
 import { Navigate } from "@/components/i18n/Navigate";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -119,10 +119,11 @@ export default function PlantSwipe() {
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [usageFilters, setUsageFilters] = useState<string[]>([])
-  const [seasonSectionOpen, setSeasonSectionOpen] = useState(true)
-  const [colorSectionOpen, setColorSectionOpen] = useState(true)
+  const [seasonSectionOpen, setSeasonSectionOpen] = useState(false)
+  const [colorSectionOpen, setColorSectionOpen] = useState(false)
   const [advancedColorsOpen, setAdvancedColorsOpen] = useState(false)
-  const [classificationSectionOpen, setClassificationSectionOpen] = useState(true)
+  const [typeSectionOpen, setTypeSectionOpen] = useState(false)
+  const [usageSectionOpen, setUsageSectionOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -905,6 +906,24 @@ export default function PlantSwipe() {
   )
 
     const FilterControls = () => {
+      // Check if any filters are active
+      const hasActiveFilters = seasonFilter !== null || 
+        colorFilter.length > 0 || 
+        typeFilter !== null || 
+        usageFilters.length > 0 || 
+        onlySeeds || 
+        onlyFavorites
+
+      // Clear all filters function
+      const clearAllFilters = () => {
+        setSeasonFilter(null)
+        setColorFilter([])
+        setTypeFilter(null)
+        setUsageFilters([])
+        setOnlySeeds(false)
+        setOnlyFavorites(false)
+      }
+
       const renderColorOption = (color: ColorOption) => {
         const isActive = colorFilter.includes(color.name)
         // Use translated name if available for the current language, fallback to default name
@@ -940,6 +959,19 @@ export default function PlantSwipe() {
 
       return (
         <div className="space-y-6">
+          {/* Clear all filters button */}
+          {hasActiveFilters && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearAllFilters}
+              className="w-full rounded-2xl text-sm border-dashed hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+            >
+              <X className="h-4 w-4 mr-2" />
+              {t("plant.clearAllFilters", { defaultValue: "Clear all filters" })}
+            </Button>
+          )}
+
           {/* Sort */}
           <div>
             <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
@@ -955,78 +987,77 @@ export default function PlantSwipe() {
             </select>
           </div>
 
-          {/* Classification */}
+          {/* Type */}
           <div>
             <FilterSectionHeader
-              label={t("plant.classification")}
-              isOpen={classificationSectionOpen}
-              onToggle={() => setClassificationSectionOpen((prev) => !prev)}
+              label={t("plantInfo.classification.type", { defaultValue: "Type" })}
+              isOpen={typeSectionOpen}
+              onToggle={() => setTypeSectionOpen((prev) => !prev)}
             />
-            {classificationSectionOpen && (
-              <div className="mt-3 space-y-4">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                    {t("plantInfo.classification.type", { defaultValue: "Type" })}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {typeOptions.length > 0 ? (
-                      typeOptions.map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => setTypeFilter((current) => (current === option ? null : option))}
-                          className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                            typeFilter === option
-                              ? "bg-black dark:bg-white text-white dark:text-black"
-                              : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                          }`}
-                          aria-pressed={typeFilter === option}
-                        >
-                          {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="text-xs opacity-60">
-                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                    {t("plantInfo.sections.usage", { defaultValue: "Usage" })}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {usageOptions.length > 0 ? (
-                      usageOptions.map((option) => {
-                        const isSelected = usageFilters.includes(option)
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() =>
-                              setUsageFilters((current) =>
-                                isSelected ? current.filter((value) => value !== option) : [...current, option]
-                              )
-                            }
-                            className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                              isSelected
-                                ? "bg-emerald-600 dark:bg-emerald-500 text-white"
-                                : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                            }`}
-                            aria-pressed={isSelected}
-                          >
-                            {t(`plant.utility.${option.toLowerCase()}`, { defaultValue: option })}
-                          </button>
-                        )
-                      })
-                    ) : (
-                      <p className="text-xs opacity-60">
-                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                      </p>
-                    )}
-                  </div>
-                </div>
+            {typeSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {typeOptions.length > 0 ? (
+                  typeOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setTypeFilter((current) => (current === option ? null : option))}
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        typeFilter === option
+                          ? "bg-black dark:bg-white text-white dark:text-black"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={typeFilter === option}
+                    >
+                      {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-xs opacity-60">
+                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Usage */}
+          <div>
+            <FilterSectionHeader
+              label={t("plantInfo.sections.usage", { defaultValue: "Usage" })}
+              isOpen={usageSectionOpen}
+              onToggle={() => setUsageSectionOpen((prev) => !prev)}
+            />
+            {usageSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {usageOptions.length > 0 ? (
+                  usageOptions.map((option) => {
+                    const isSelected = usageFilters.includes(option)
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() =>
+                          setUsageFilters((current) =>
+                            isSelected ? current.filter((value) => value !== option) : [...current, option]
+                          )
+                        }
+                        className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                          isSelected
+                            ? "bg-emerald-600 dark:bg-emerald-500 text-white"
+                            : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        {t(`plant.utility.${option.toLowerCase()}`, { defaultValue: option })}
+                      </button>
+                    )
+                  })
+                ) : (
+                  <p className="text-xs opacity-60">
+                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1269,50 +1300,49 @@ export default function PlantSwipe() {
             onSignup={openSignup}
           />
 
-          {/* Layout: grid only when search view (to avoid narrow column in other views) */}
-        <div
-          className={`max-w-6xl mx-auto mt-6 ${
-            currentView === "search"
-              ? showFilters
+          {/* Layout: grid with sidebar on desktop */}
+          <div
+            className={`max-w-6xl mx-auto mt-6 ${
+              currentView === "search" && showFilters
                 ? "lg:grid lg:grid-cols-[260px_1fr] lg:gap-10"
-                : "lg:grid lg:grid-cols-1"
-              : ""
-          }`}
-        >
-        {/* Sidebar / Filters */}
-          {currentView === "search" && showFilters && (
-            <>
+                : ""
+            }`}
+          >
+            {/* Sidebar / Filters - desktop only */}
+            {currentView === "search" && showFilters && (
               <aside
-                className="hidden lg:block mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start"
+                className="hidden lg:block lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain"
                 aria-label="Filters"
               >
-                <FilterControls />
+                <div className="space-y-6 pr-2">
+                  <FilterControls />
+                </div>
               </aside>
-            </>
-          )}
+            )}
 
-          {/* Main content area */}
-          <main className="min-h-[60vh]" aria-live="polite">
-            {currentView === "search" && (
-              <div className="mb-6 space-y-3">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                      <div className="flex-1">
-                        <Label htmlFor="plant-search-main" className="sr-only">
-                          {t("common.search")}
-                        </Label>
-                        <SearchInput
-                          id="plant-search-main"
-                          variant="lg"
-                          className="rounded-2xl"
-                          placeholder={t("plant.searchPlaceholder")}
-                          value={query}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            setQuery(e.target.value)
-                            setIndex(0)
-                          }}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
+            {/* Main content area */}
+            <main className="min-h-[60vh]" aria-live="polite">
+              {/* Sticky search bar for search view - sticks to top when scrolled past */}
+              {currentView === "search" && (
+                <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    <div className="flex-1">
+                      <Label htmlFor="plant-search-main" className="sr-only">
+                        {t("common.search")}
+                      </Label>
+                      <SearchInput
+                        id="plant-search-main"
+                        variant="lg"
+                        className="rounded-2xl"
+                        placeholder={t("plant.searchPlaceholder")}
+                        value={query}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          setQuery(e.target.value)
+                          setIndex(0)
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
                       <Button
                         variant="outline"
                         className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
@@ -1353,11 +1383,12 @@ export default function PlantSwipe() {
                       )}
                     </div>
                   </div>
-                  <div className={`lg:hidden ${showFilters ? "space-y-6" : "hidden"}`}>
+                  {/* Mobile filter dropdown */}
+                  <div className={`lg:hidden mt-3 ${showFilters ? "max-h-[50vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6" : "hidden"}`}>
                     <FilterControls />
                   </div>
-              </div>
-            )}
+                </div>
+              )}
 
           <Routes>
             <Route
