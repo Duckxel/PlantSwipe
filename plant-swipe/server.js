@@ -16941,8 +16941,16 @@ async function generateCrawlerHtml(req, pagePath) {
         }
         
         if (plant) {
-          ssrDebug('plant_found', { name: plant.name, id: plant.id, type: plant.plant_type })
-          console.log(`[ssr] ✓ Found plant: ${plant.name} (${plant.id})`)
+          ssrDebug('plant_found', { 
+            name: plant.name, 
+            id: plant.id, 
+            type: plant.plant_type,
+            hasOverview: !!plant.overview,
+            overviewLength: plant.overview?.length || 0,
+            tagsCount: plant.tags?.length || 0,
+            lang: ssrLang
+          })
+          console.log(`[ssr] ✓ Found plant: ${plant.name} (${plant.id}), overview=${plant.overview?.length || 0}chars, tags=${plant.tags?.length || 0}, lang=${ssrLang}`)
           
           // Simple, clean title format: "🌱 Lotus - Complete Care Guide | Aphylia"
           title = `🌱 ${plant.name} - ${tr.plantCareGuide} | Aphylia`
