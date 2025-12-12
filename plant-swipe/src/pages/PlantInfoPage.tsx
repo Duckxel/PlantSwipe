@@ -1467,7 +1467,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </section>
           )}
           
-          {/* Companion Plants Carousel */}
+          {/* Companion & Related Plants Carousel */}
           {(companionPlants.length > 0 || companionsLoading) && (
             <section
               className="rounded-2xl sm:rounded-3xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 via-white/60 to-emerald-100/40 dark:from-emerald-950/30 dark:via-[#1f1f1f] dark:to-emerald-900/20 p-4 sm:p-6"
@@ -1475,10 +1475,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                   <Sprout className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.companions.title', 'Companion Plants')}</span>
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.companions.title', 'Companion & Related Plants')}</span>
                 </div>
                 <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">
-                  {t('moreInfo.companions.subtitle', 'These plants grow well alongside this one. Click to explore.')}
+                  {t('moreInfo.companions.subtitle', 'Plants that grow well together or are related varieties. Click to explore.')}
                 </p>
                 <CompanionPlantsCarousel 
                   companions={companionPlants} 

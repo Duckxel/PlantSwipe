@@ -144,14 +144,16 @@ const CompanionSelector: React.FC<{
   suggestions?: string[];
   showSuggestions?: boolean;
   onToggleSuggestions?: () => void;
-}> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions }) => {
+  currentPlantId?: string;
+}> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId }) => {
   const { t } = useTranslation('common')
-  const [companions, setCompanions] = React.useState<{ id: string; name: string }[]>([])
+  const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
-  const [results, setResults] = React.useState<{ id: string; name: string }[]>([])
+  const [results, setResults] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
   const [loading, setLoading] = React.useState(false)
   const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
 
   React.useEffect(() => {
     setCompanions((prev) => prev.filter((c) => value.includes(c.id)))
@@ -161,31 +163,97 @@ const CompanionSelector: React.FC<{
     const missing = value.filter((id) => !companions.find((c) => c.id === id))
     if (!missing.length) return
     const loadMissing = async () => {
-      const { data } = await supabase.from('plants').select('id,name').in('id', missing)
-      if (data) {
-        setCompanions((prev) => [...prev, ...data.map((p) => ({ id: p.id as string, name: (p as any).name as string }))])
+      const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', missing)
+      if (plantsData) {
+        // Also fetch images
+        const { data: imagesData } = await supabase
+          .from('plant_images')
+          .select('plant_id, link')
+          .in('plant_id', missing)
+          .eq('use', 'primary')
+        
+        const imageMap = new Map<string, string>()
+        if (imagesData) {
+          imagesData.forEach((img) => {
+            if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+          })
+        }
+        
+        setCompanions((prev) => [...prev, ...plantsData.map((p) => ({ 
+          id: p.id as string, 
+          name: (p as any).name as string,
+          imageUrl: imageMap.get(p.id as string)
+        }))])
       }
     }
     loadMissing()
   }, [companions, value])
 
-  const searchPlants = async () => {
+  const searchPlants = async (searchTerm?: string) => {
     setLoading(true)
-    const query = supabase.from('plants').select('id,name').order('name').limit(20)
-    if (search.trim()) query.ilike('name', `%${search.trim()}%`)
-    const { data } = await query
-    setResults((data || []).map((p) => ({ id: p.id as string, name: (p as any).name as string })))
+    const term = searchTerm ?? search
+    const query = supabase.from('plants').select('id,name').order('name').limit(30)
+    if (term.trim()) query.ilike('name', `%${term.trim()}%`)
+    const { data: plantsData } = await query
+    
+    if (plantsData) {
+      // Fetch images for results
+      const ids = plantsData.map(p => p.id)
+      const { data: imagesData } = await supabase
+        .from('plant_images')
+        .select('plant_id, link')
+        .in('plant_id', ids)
+        .eq('use', 'primary')
+      
+      const imageMap = new Map<string, string>()
+      if (imagesData) {
+        imagesData.forEach((img) => {
+          if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+        })
+      }
+      
+      setResults(plantsData.map((p) => ({ 
+        id: p.id as string, 
+        name: (p as any).name as string,
+        imageUrl: imageMap.get(p.id as string)
+      })))
+    }
     setLoading(false)
   }
 
   React.useEffect(() => {
-    if (open) searchPlants()
+    if (open) {
+      searchPlants()
+      setSelectedIds(new Set())
+    }
   }, [open])
 
-  const addCompanion = (plant: { id: string; name: string }) => {
-    if (value.includes(plant.id)) { setOpen(false); return }
-    onChange([...value, plant.id])
-    setCompanions((prev) => [...prev, plant])
+  const toggleSelect = (id: string) => {
+    // Prevent selecting current plant as its own companion
+    if (id === currentPlantId) return
+    
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const addSelectedCompanions = () => {
+    const newIds = Array.from(selectedIds).filter(id => !value.includes(id) && id !== currentPlantId)
+    if (newIds.length === 0) {
+      setOpen(false)
+      return
+    }
+    
+    const newCompanions = results.filter(r => newIds.includes(r.id))
+    onChange([...value, ...newIds])
+    setCompanions(prev => [...prev, ...newCompanions])
+    setSelectedIds(new Set())
     setOpen(false)
   }
 
@@ -198,11 +266,9 @@ const CompanionSelector: React.FC<{
   const addSuggestedCompanion = async (suggestedName: string) => {
     setSuggestionSearching(suggestedName)
     try {
-      // First try exact match
       let query = supabase.from('plants').select('id,name').ilike('name', suggestedName).limit(1)
       let { data } = await query
       
-      // If no exact match, try partial match
       if (!data?.length) {
         query = supabase.from('plants').select('id,name').ilike('name', `%${suggestedName}%`).limit(1)
         const result = await query
@@ -210,8 +276,24 @@ const CompanionSelector: React.FC<{
       }
       
       if (data?.length) {
-        const plant = { id: data[0].id as string, name: (data[0] as any).name as string }
-        if (!value.includes(plant.id)) {
+        const plantId = data[0].id as string
+        // Prevent adding current plant as its own companion
+        if (plantId === currentPlantId) return
+        
+        if (!value.includes(plantId)) {
+          // Fetch image
+          const { data: imgData } = await supabase
+            .from('plant_images')
+            .select('link')
+            .eq('plant_id', plantId)
+            .eq('use', 'primary')
+            .limit(1)
+          
+          const plant = { 
+            id: plantId, 
+            name: (data[0] as any).name as string,
+            imageUrl: imgData?.[0]?.link
+          }
           onChange([...value, plant.id])
           setCompanions((prev) => [...prev, plant])
         }
@@ -221,16 +303,22 @@ const CompanionSelector: React.FC<{
     }
   }
 
-  // Check if a suggestion is already added (by name match in companions)
   const isSuggestionAdded = (suggestedName: string) => {
     return companions.some(c => c.name.toLowerCase() === suggestedName.toLowerCase())
   }
 
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      searchPlants()
+    }
+  }
+
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-3">
       {/* AI Suggestions Section */}
       {suggestions && suggestions.length > 0 && (
-        <div className="mb-3">
+        <div className="mb-2">
           <button
             type="button"
             className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
@@ -238,39 +326,39 @@ const CompanionSelector: React.FC<{
           >
             <Sparkles className="h-4 w-4" />
             {showSuggestions
-              ? t('plantAdmin.hideCompanionSuggestions', 'Hide AI companion suggestions')
-              : t('plantAdmin.showCompanionSuggestions', 'Show AI companion suggestions')}
+              ? t('plantAdmin.hideCompanionSuggestions', 'Hide AI suggestions')
+              : t('plantAdmin.showCompanionSuggestions', 'Show AI suggestions')}
           </button>
           {showSuggestions && (
             <div className="mt-2 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner space-y-3">
               <div className="text-xs text-muted-foreground">
-                {t('plantAdmin.companionSuggestionsReview', 'Review AI-suggested companions. Click Add to search and link the plant by ID.')}
+                {t('plantAdmin.companionSuggestionsReview', 'Click Add to link suggested plants. Not all may exist in the database.')}
               </div>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-2">
                 {suggestions.map((suggestedName, idx) => {
                   const alreadyAdded = isSuggestionAdded(suggestedName)
                   const isSearching = suggestionSearching === suggestedName
                   return (
-                    <div
+                    <button
                       key={`${suggestedName}-${idx}`}
-                      className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-[#111611] px-3 py-2 shadow-sm border border-emerald-100/60 dark:border-emerald-900/40"
+                      type="button"
+                      disabled={alreadyAdded || isSearching}
+                      onClick={() => addSuggestedCompanion(suggestedName)}
+                      className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
+                        alreadyAdded 
+                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 cursor-default'
+                          : 'bg-white dark:bg-[#1a1a1a] border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200'
+                      }`}
                     >
-                      <span className="h-5 w-5 rounded-full border border-stone-200 dark:border-stone-700 bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
-                        <Leaf className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                      </span>
-                      <span className="text-sm font-medium text-emerald-900 dark:text-emerald-200 min-w-[90px]">
-                        {suggestedName}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={alreadyAdded ? 'secondary' : 'default'}
-                        disabled={alreadyAdded || isSearching}
-                        onClick={() => addSuggestedCompanion(suggestedName)}
-                      >
-                        {isSearching ? t('plantAdmin.searching', 'Searching...') : alreadyAdded ? t('plantAdmin.companionAdded', 'Added') : t('plantAdmin.addCompanion', 'Add')}
-                      </Button>
-                    </div>
+                      {isSearching ? (
+                        <span className="animate-spin h-3 w-3 border-2 border-emerald-500 border-t-transparent rounded-full" />
+                      ) : alreadyAdded ? (
+                        <span className="text-emerald-600">✓</span>
+                      ) : (
+                        <span className="text-emerald-500">+</span>
+                      )}
+                      {suggestedName}
+                    </button>
                   )
                 })}
               </div>
@@ -279,43 +367,149 @@ const CompanionSelector: React.FC<{
         </div>
       )}
       
-      {/* Current Companions */}
-      <div className="flex flex-wrap gap-2">
-        {value.length === 0 && <span className="text-sm text-muted-foreground">{t('plantAdmin.noCompanions', 'No companions added yet.')}</span>}
-        {companions.map((c) => (
-          <span key={c.id} className="px-2 py-1 bg-stone-100 dark:bg-[#2d2d30] rounded text-sm flex items-center gap-1">
-            {c.name || c.id}
-            <button type="button" className="text-red-600" onClick={() => removeCompanion(c.id)}>×</button>
-          </span>
-        ))}
-      </div>
+      {/* Current Companions - Enhanced Grid */}
+      {value.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+          {companions.map((c) => (
+            <div 
+              key={c.id} 
+              className="relative group rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1a1a1a] overflow-hidden"
+            >
+              <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
+                {c.imageUrl ? (
+                  <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-stone-400">
+                    <Leaf className="h-8 w-8" />
+                  </div>
+                )}
+              </div>
+              <div className="p-2">
+                <p className="text-sm font-medium truncate text-stone-900 dark:text-stone-100">{c.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeCompanion(c.id)}
+                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold shadow-md"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground py-4 text-center border border-dashed border-stone-300 dark:border-stone-700 rounded-xl">
+          {t('plantAdmin.noCompanions', 'No companion or related plants added yet.')}
+        </div>
+      )}
+      
+      {/* Add Button */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button type="button" variant="outline">{t('plantAdmin.addCompanionBtn', 'Add Companion')}</Button>
+          <Button type="button" variant="outline" className="w-full">
+            <span className="mr-2">+</span>
+            {t('plantAdmin.addCompanionBtn', 'Add Companion / Related Plants')}
+          </Button>
         </DialogTrigger>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>{t('plantAdmin.selectCompanionTitle', 'Select a companion plant')}</DialogTitle>
+            <DialogTitle>{t('plantAdmin.selectCompanionTitle', 'Select Companion & Related Plants')}</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              {t('plantAdmin.selectCompanionDesc', 'Select multiple plants to add as companions or related varieties.')}
+            </p>
           </DialogHeader>
-          <div className="flex gap-2 items-center">
-            <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('plantAdmin.searchPlantsPlaceholder', 'Search plants by name')} loading={loading} className="flex-1" />
-            <Button type="button" onClick={searchPlants} disabled={loading}>{loading ? t('plantAdmin.searchingBtn', 'Searching...') : t('plantAdmin.searchBtn', 'Search')}</Button>
+          
+          <div className="flex gap-2 items-center py-2">
+            <SearchInput 
+              value={search} 
+              onChange={(e) => setSearch(e.target.value)} 
+              onKeyDown={handleSearchKeyDown}
+              placeholder={t('plantAdmin.searchPlantsPlaceholder', 'Search plants by name...')} 
+              loading={loading} 
+              className="flex-1" 
+            />
+            <Button type="button" onClick={() => searchPlants()} disabled={loading}>
+              {loading ? t('plantAdmin.searchingBtn', 'Searching...') : t('plantAdmin.searchBtn', 'Search')}
+            </Button>
           </div>
-          <div className="max-h-80 overflow-y-auto space-y-2 mt-3">
-            {(results || []).map((plant) => (
-              <button
-                key={plant.id}
-                type="button"
-                className="w-full text-left rounded border px-3 py-2 hover:bg-muted"
-                onClick={() => addCompanion(plant)}
-              >
-                <div className="font-semibold">{plant.name}</div>
-                <div className="text-xs text-muted-foreground">{plant.id}</div>
-              </button>
-            ))}
+          
+          {/* Selection summary */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center justify-between py-2 px-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
+              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                {selectedIds.size} plant{selectedIds.size > 1 ? 's' : ''} selected
+              </span>
+              <Button type="button" size="sm" onClick={addSelectedCompanions}>
+                Add Selected
+              </Button>
+            </div>
+          )}
+          
+          {/* Results Grid */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 py-2">
+              {results.map((plant) => {
+                const isSelected = selectedIds.has(plant.id)
+                const isAlreadyAdded = value.includes(plant.id)
+                const isCurrentPlant = plant.id === currentPlantId
+                const isDisabled = isAlreadyAdded || isCurrentPlant
+                
+                return (
+                  <button
+                    key={plant.id}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => toggleSelect(plant.id)}
+                    className={`relative text-left rounded-xl border overflow-hidden transition-all ${
+                      isDisabled
+                        ? 'opacity-50 cursor-not-allowed border-stone-200 dark:border-stone-700'
+                        : isSelected
+                        ? 'border-emerald-500 ring-2 ring-emerald-500/50 bg-emerald-50 dark:bg-emerald-900/30'
+                        : 'border-stone-200 dark:border-stone-700 hover:border-emerald-300 dark:hover:border-emerald-600'
+                    }`}
+                  >
+                    <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
+                      {plant.imageUrl ? (
+                        <img src={plant.imageUrl} alt={plant.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-stone-400">
+                          <Leaf className="h-6 w-6" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2">
+                      <p className="text-sm font-medium truncate">{plant.name}</p>
+                      {isCurrentPlant && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">Current plant</p>
+                      )}
+                      {isAlreadyAdded && !isCurrentPlant && (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">Already added</p>
+                      )}
+                    </div>
+                    {isSelected && (
+                      <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                        ✓
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
             {!results.length && !loading && (
-              <div className="text-sm text-muted-foreground">{t('plantAdmin.noPlantsFound', 'No plants found.')}</div>
+              <div className="text-sm text-muted-foreground text-center py-8">
+                {t('plantAdmin.noPlantsFound', 'No plants found. Try a different search term.')}
+              </div>
             )}
+          </div>
+          
+          {/* Footer */}
+          <div className="flex justify-end gap-2 pt-3 border-t">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={addSelectedCompanions} disabled={selectedIds.size === 0}>
+              Add {selectedIds.size > 0 ? `(${selectedIds.size})` : ''} Selected
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1928,15 +2122,16 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                       })}
                     {cat === 'miscellaneous' && (
                       <div className="md:col-span-2">
-                        <Label>{t('plantAdmin.fields.miscellaneous.companions.label', 'Companions')}</Label>
+                        <Label>{t('plantAdmin.fields.miscellaneous.companions.label', 'Companion & Related Plants')}</Label>
+                        <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.miscellaneous.companions.description', 'Plants that grow well together or are related varieties (e.g., Rose / Rose Iceberg)')}</p>
                         <CompanionSelector 
                           value={Array.isArray(value.miscellaneous?.companions) ? value.miscellaneous.companions : []} 
                           onChange={(v) => setPath('miscellaneous.companions', v)}
                           suggestions={companionSuggestions}
                           showSuggestions={showCompanionRecommendations}
                           onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
+                          currentPlantId={value.id}
                         />
-                        <p className="text-xs text-muted-foreground mt-1">{t('plantAdmin.fields.miscellaneous.companions.description', 'Companion plants')}</p>
                       </div>
                     )}
                     {cat === 'identity' && (
