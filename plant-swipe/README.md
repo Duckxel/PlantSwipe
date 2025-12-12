@@ -1,10 +1,15 @@
-# 🔬 Aphylia — Technical Overview
+# 🔬 Aphylia — Technical Documentation
 
 <div align="center">
 
+![Build](https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178c6?style=flat-square&logo=typescript)
+![React](https://img.shields.io/badge/React-19.1.1-61dafb?style=flat-square&logo=react)
+![Vite](https://img.shields.io/badge/Vite-7.1.2-646cff?style=flat-square&logo=vite)
+
 **Comprehensive technical documentation for developers and engineers working with Aphylia**
 
-[![Architecture](#architecture)](#architecture) • [![Setup](#setup)](#setup) • [![API](#api-reference)](#api-reference) • [![Database](#database-schema)](#database-schema)
+[**Architecture**](#-architecture) • [**Setup**](#-setup--configuration) • [**API**](#-api-reference) • [**Database**](#-database-schema)
 
 </div>
 
@@ -12,26 +17,29 @@
 
 ## 📋 Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Setup & Configuration](#setup--configuration)
-- [Development Workflow](#development-workflow)
-- [Database Schema](#database-schema)
-- [API Reference](#api-reference)
-- [Internationalization](#internationalization)
-- [Translation System](#translation-system)
-- [Authentication](#authentication)
-- [State Management](#state-management)
-- [Performance](#performance)
-- [Testing](#testing)
-- [Deployment](#deployment)
+- [Overview](#-overview)
+- [Architecture](#-architecture)
+- [Project Structure](#-project-structure)
+- [Setup & Configuration](#-setup--configuration)
+- [Development Workflow](#-development-workflow)
+- [Database Schema](#-database-schema)
+- [API Reference](#-api-reference)
+- [Internationalization](#-internationalization)
+- [Translation System](#-translation-system)
+- [Authentication](#-authentication)
+- [State Management](#-state-management)
+- [Progressive Web App](#-progressive-web-app)
+- [Performance](#-performance)
+- [Testing](#-testing)
+- [Deployment](#-deployment)
+- [Troubleshooting](#-troubleshooting)
+- [Contributing](#-contributing)
 
 ---
 
-## Overview
+## 📖 Overview
 
-Aphylia is a modern web application built with **React 19**, **TypeScript**, **Vite 7**, and **Express.js**, connecting to a **PostgreSQL** database via **Supabase**. It features a swipe-first UI for plant discovery, comprehensive garden management, social features, and multi-language support.
+Aphylia is a modern Progressive Web Application built with **React 19**, **TypeScript**, **Vite 7**, and **Express.js**, connecting to a **PostgreSQL** database via **Supabase**. It features a swipe-first UI for plant discovery, comprehensive garden management, social features, and multi-language support.
 
 ### Key Technologies
 
@@ -45,16 +53,19 @@ Aphylia is a modern web application built with **React 19**, **TypeScript**, **V
 | **Database** | PostgreSQL | Via Supabase |
 | **Auth** | Supabase Auth | 2.57.2 |
 | **i18n** | react-i18next | 16.2.4 |
+| **PWA** | vite-plugin-pwa | 1.1.0 |
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ### System Architecture
 
 ```mermaid
 flowchart TB
     subgraph Client["🌐 Client Browser"]
+        PWA[Progressive Web App]
+        SW[Service Worker]
         React[React App]
         Vite[Vite Dev Server]
     end
@@ -64,15 +75,24 @@ flowchart TB
         StaticServe[Static File Server]
     end
     
+    subgraph AdminServer["🔧 Admin Server"]
+        Flask[Python Flask API]
+    end
+    
     subgraph Database["💾 Database Layer"]
         Supabase[(Supabase/Postgres)]
         Auth[Supabase Auth]
+        Cache[Task Cache Tables]
     end
     
     subgraph External["🌍 External Services"]
         DeepL[DeepL Translation API]
+        Resend[Resend Email API]
+        OpenAI[OpenAI API]
     end
     
+    PWA --> SW
+    SW --> React
     React -->|HTTP Requests| ExpressAPI
     Vite -->|Proxy /api/*| ExpressAPI
     ExpressAPI -->|SQL Queries| Supabase
@@ -80,11 +100,15 @@ flowchart TB
     ExpressAPI -->|Translation| DeepL
     ExpressAPI -->|Static Files| StaticServe
     StaticServe -->|Production Build| React
+    Flask -->|Admin Ops| Supabase
+    Flask -->|Emails| Resend
+    ExpressAPI -->|AI Features| OpenAI
     
     style React fill:#61dafb
     style ExpressAPI fill:#339933
     style Supabase fill:#3ecf8e
     style DeepL fill:#0f2b46
+    style PWA fill:#5a0fc8
 ```
 
 ### Request Flow
@@ -92,74 +116,126 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     participant User
+    participant SW as Service Worker
     participant React
     participant Vite
     participant Express
     participant Supabase
     
     User->>React: Interact with UI
-    React->>Vite: API Request (/api/*)
-    Vite->>Express: Proxy Request
-    Express->>Supabase: SQL Query
-    Supabase-->>Express: Data Response
-    Express-->>Vite: JSON Response
-    Vite-->>React: Proxy Response
+    React->>SW: Check Cache
+    alt Cache Hit
+        SW-->>React: Cached Response
+    else Cache Miss
+        SW->>Vite: API Request (/api/*)
+        Vite->>Express: Proxy Request
+        Express->>Supabase: SQL Query
+        Supabase-->>Express: Data Response
+        Express-->>Vite: JSON Response
+        Vite-->>SW: Response
+        SW->>SW: Cache Response
+        SW-->>React: Fresh Response
+    end
     React->>User: Update UI
 ```
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 plant-swipe/
 ├── src/
-│   ├── components/          # Reusable UI components
-│   │   ├── admin/          # Admin-specific components
-│   │   ├── garden/         # Garden management components
-│   │   ├── i18n/           # i18n routing components
-│   │   ├── layout/         # Layout components (TopBar, BottomBar)
-│   │   ├── plant/          # Plant-related components
-│   │   ├── profile/        # Profile components
-│   │   └── ui/             # shadcn-inspired UI primitives
-│   ├── constants/          # Constants and configuration
-│   ├── context/            # React context providers
-│   ├── lib/                # Utility libraries
-│   │   ├── i18n.ts         # i18n configuration
-│   │   ├── i18nRouting.ts  # Language routing
-│   │   ├── plantTranslations.ts  # Plant translation utilities
-│   │   ├── supabaseClient.ts     # Supabase client
-│   │   └── ...
-│   ├── pages/              # Page components (routes)
-│   ├── types/              # TypeScript type definitions
-│   ├── App.tsx             # Root component
-│   ├── PlantSwipe.tsx     # Main app component
-│   └── main.tsx            # Entry point
+│   ├── components/           # Reusable UI components
+│   │   ├── admin/           # Admin console components
+│   │   ├── blog/            # Blog editor and cards
+│   │   ├── garden/          # Garden management components
+│   │   ├── i18n/            # i18n-aware Link, Navigate, NavLink
+│   │   ├── layout/          # Layout (TopBar, BottomBar, Footer)
+│   │   ├── plant/           # Plant-related components
+│   │   ├── profile/         # Profile and bookmarks
+│   │   ├── pwa/             # PWA components (ServiceWorkerToast)
+│   │   ├── tiptap-*/        # TipTap rich text editor components
+│   │   └── ui/              # shadcn-inspired UI primitives
+│   ├── constants/           # Constants and configuration
+│   │   ├── badges.ts        # Badge definitions
+│   │   ├── classification.ts # Plant classifications
+│   │   ├── plantStatus.ts   # Plant status enums
+│   │   ├── seo.ts           # SEO constants
+│   │   └── userRoles.ts     # User role definitions
+│   ├── context/             # React context providers
+│   │   ├── AuthContext.tsx  # Authentication state
+│   │   ├── AuthActionsContext.tsx # Auth actions
+│   │   └── ThemeContext.tsx # Theme (dark/light) state
+│   ├── hooks/               # Custom React hooks
+│   │   ├── use-*.ts         # Various utility hooks
+│   │   ├── usePageMetadata.ts # Page SEO metadata
+│   │   ├── usePushSubscription.ts # Push notification handling
+│   │   └── useTaskNotification.ts # Task reminder notifications
+│   ├── lib/                 # Utility libraries
+│   │   ├── i18n.ts          # i18n configuration
+│   │   ├── i18nRouting.ts   # Language routing helpers
+│   │   ├── supabaseClient.ts # Supabase client setup
+│   │   ├── gardens.ts       # Garden API functions
+│   │   ├── photos.ts        # Photo handling
+│   │   ├── plantTranslations.ts # Plant translation utilities
+│   │   ├── deepl.ts         # DeepL API integration
+│   │   ├── pushNotifications.ts # Push notification logic
+│   │   ├── realtime.ts      # Realtime subscriptions
+│   │   └── ...              # Other utilities
+│   ├── pages/               # Page components (routes)
+│   ├── styles/              # Global styles and variables
+│   ├── types/               # TypeScript type definitions
+│   ├── App.tsx              # Root component with routing
+│   ├── PlantSwipe.tsx       # Main app wrapper
+│   ├── sw.ts                # Service worker source
+│   └── main.tsx             # Entry point
 ├── public/
-│   ├── locales/            # Translation files
-│   │   ├── en/
-│   │   └── fr/
-│   └── env-loader.js       # Environment loader
-├── supabase/               # Database migrations
-├── server.js               # Express API server
-├── vite.config.ts          # Vite configuration
-├── tailwind.config.js      # Tailwind configuration
-└── package.json            # Dependencies
+│   ├── locales/             # Translation files
+│   │   ├── en/              # English translations
+│   │   └── fr/              # French translations
+│   ├── icons/               # PWA icons
+│   ├── env-loader.js        # Runtime environment loader
+│   ├── env.js               # Environment variables
+│   ├── offline.html         # Offline fallback page
+│   └── robots.txt           # Robots configuration
+├── scripts/
+│   ├── check-translations.js # Validate translation files
+│   ├── generate-sitemap.js  # Generate sitemap.xml
+│   └── refresh-plant-swipe.sh # Deployment helper
+├── supabase/
+│   ├── functions/           # Supabase Edge Functions
+│   │   ├── contact-support/ # Contact form handler
+│   │   └── email-campaign-runner/ # Email campaigns
+│   └── migrations/          # Database migrations
+├── server.js                # Express API server
+├── vite.config.ts           # Vite configuration
+├── tailwind.config.js       # Tailwind configuration
+├── tsconfig.json            # TypeScript configuration
+└── package.json             # Dependencies
 ```
 
 ---
 
-## Setup & Configuration
+## ⚙️ Setup & Configuration
 
 <details>
-<summary><strong>Environment Variables</strong></summary>
+<summary><strong>📦 Environment Variables</strong></summary>
 
 ### Client-Side (`plant-swipe/.env`)
 
 ```bash
-# Supabase Configuration
+# Supabase Configuration (required)
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+
+# App Configuration (optional)
+VITE_APP_BASE_PATH=/               # Base path for sub-path deployments
+VITE_SITE_URL=https://aphylia.app  # Canonical site URL
+
+# PWA Configuration (optional)
+VITE_ENABLE_PWA=false              # Enable PWA in development
+VITE_DISABLE_PWA=false             # Disable PWA completely
 ```
 
 ### Server-Side (`plant-swipe/.env.server`)
@@ -179,63 +255,90 @@ PGDATABASE=your-database
 # Method 3: Supabase Database
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_DB_PASSWORD=your-db-password
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# Optional: DeepL Translation API (Pro)
+# Translation API (optional)
 DEEPL_API_KEY=your-deepl-api-key
 DEEPL_API_URL=https://api.deepl.com/v2/translate
+
+# Email API (optional)
+RESEND_API_KEY=your-resend-api-key
+
+# AI Features (optional)
+OPENAI_API_KEY=your-openai-api-key
+
+# Sitemap Generation (optional)
+PLANTSWIPE_SITE_URL=https://aphylia.app
+SITEMAP_DEFAULT_LANGUAGE=en
+SITEMAP_MAX_PLANT_URLS=1000
 ```
 
 </details>
 
 <details>
-<summary><strong>Development Scripts</strong></summary>
+<summary><strong>🚀 Development Scripts</strong></summary>
 
 | Script | Command | Purpose |
 |--------|---------|---------|
-| **Development** | `npm run dev` | Start Vite dev server (port 5173) |
-| **API Server** | `npm run serve` | Start Express API server (port 3000) |
-| **Build** | `npm run build` | Build production bundle |
-| **Preview** | `npm run preview` | Preview production build |
-| **Lint** | `npm run lint` | Run ESLint |
-| **Check Translations** | `npm run check-translations` | Validate translation files |
+| `dev` | `npm run dev` | Start Vite dev server (port 5173) |
+| `serve` | `npm run serve` | Start Express API server (port 3000) |
+| `build` | `npm run build` | Build production bundle (includes sitemap) |
+| `build:low-mem` | `npm run build:low-mem` | Build with reduced memory usage |
+| `preview` | `npm run preview` | Preview production build |
+| `lint` | `npm run lint` | Run ESLint |
+| `check-translations` | `npm run check-translations` | Validate translation files |
+| `generate:sitemap` | `npm run generate:sitemap` | Generate sitemap.xml |
 
 </details>
 
 ---
 
-## Development Workflow
+## 🔧 Development Workflow
 
 ### Running Locally
 
 1. **Start API Server** (Terminal 1):
-   ```bash
-   npm run serve
-   # Runs on http://localhost:3000
-   ```
+
+```bash
+npm run serve
+# Runs on http://localhost:3000
+```
 
 2. **Start Dev Server** (Terminal 2):
-   ```bash
-   npm run dev
-   # Runs on http://127.0.0.1:5173
-   # Proxies /api/* requests to port 3000
-   ```
+
+```bash
+npm run dev
+# Runs on http://127.0.0.1:5173
+# Proxies /api/* requests to port 3000
+```
 
 ### Building for Production
 
 ```bash
 npm ci                    # Clean install
-npm run build            # TypeScript compilation + Vite build
+npm run build            # TypeScript compilation + sitemap + Vite build
 # Output: dist/
+```
+
+### PWA Development
+
+```bash
+# Enable PWA in development
+VITE_ENABLE_PWA=true npm run dev
+
+# Disable PWA for fast iteration
+VITE_DISABLE_PWA=true npm run build
 ```
 
 ---
 
-## Database Schema
+## 💾 Database Schema
 
 <details>
-<summary><strong>Core Tables</strong></summary>
+<summary><strong>🌱 Core Tables</strong></summary>
 
 ### `plants`
+
 Stores base plant information.
 
 | Column | Type | Description |
@@ -248,9 +351,14 @@ Stores base plant information.
 | `rarity` | TEXT | Rarity classification |
 | `meaning` | TEXT | Symbolic meaning |
 | `description` | TEXT | Plant description |
+| `care_soil` | TEXT | Soil requirements |
+| `care_water` | TEXT | Watering needs |
+| `care_light` | TEXT | Light requirements |
+| `image_url` | TEXT | Primary image URL |
 | `created_at` | TIMESTAMP | Creation timestamp |
 
 ### `plant_translations`
+
 Stores translations for plant data.
 
 | Column | Type | Description |
@@ -262,8 +370,12 @@ Stores translations for plant data.
 | `scientific_name` | TEXT | Translated scientific name |
 | `meaning` | TEXT | Translated meaning |
 | `description` | TEXT | Translated description |
+| `care_soil` | TEXT | Translated soil care |
+| `care_water` | TEXT | Translated water care |
+| `care_light` | TEXT | Translated light care |
 
 ### `profiles`
+
 User profile information.
 
 | Column | Type | Description |
@@ -278,8 +390,16 @@ User profile information.
 | `accent_key` | TEXT | UI accent color preference |
 | `is_private` | BOOLEAN | Privacy setting |
 | `disable_friend_requests` | BOOLEAN | Friend request control |
+| `push_subscription` | JSONB | Push notification subscription |
+| `created_at` | TIMESTAMP | Account creation |
+
+</details>
+
+<details>
+<summary><strong>🌻 Garden Tables</strong></summary>
 
 ### `gardens`
+
 Garden collections.
 
 | Column | Type | Description |
@@ -287,9 +407,13 @@ Garden collections.
 | `id` | UUID | Primary key |
 | `name` | TEXT | Garden name |
 | `owner_id` | UUID | Foreign key to `profiles` |
+| `location` | TEXT | Garden location |
+| `latitude` | DECIMAL | GPS latitude |
+| `longitude` | DECIMAL | GPS longitude |
 | `created_at` | TIMESTAMP | Creation timestamp |
 
 ### `garden_plants`
+
 Plants in gardens.
 
 | Column | Type | Description |
@@ -299,8 +423,41 @@ Plants in gardens.
 | `plant_id` | UUID | Foreign key to `plants` |
 | `user_id` | UUID | Foreign key to `profiles` |
 | `planted_at` | TIMESTAMP | Planting date |
+| `quantity` | INTEGER | Number of plants |
+| `notes` | TEXT | Plant notes |
+
+### `garden_plant_tasks`
+
+Recurring tasks for garden plants.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `garden_plant_id` | UUID | Foreign key to `garden_plants` |
+| `task_type` | TEXT | water, fertilize, harvest, cut, custom |
+| `custom_label` | TEXT | Custom task label |
+| `recurrence` | JSONB | Recurrence pattern |
+| `created_at` | TIMESTAMP | Task creation |
+
+### `garden_plant_task_occurrences`
+
+Individual task occurrences.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `task_id` | UUID | Foreign key to `garden_plant_tasks` |
+| `due_date` | DATE | Due date |
+| `completed_at` | TIMESTAMP | Completion timestamp |
+| `skipped` | BOOLEAN | Whether skipped |
+
+</details>
+
+<details>
+<summary><strong>👥 Social Tables</strong></summary>
 
 ### `friends`
+
 Bidirectional friendship relationships.
 
 | Column | Type | Description |
@@ -311,6 +468,7 @@ Bidirectional friendship relationships.
 | `created_at` | TIMESTAMP | Friendship creation |
 
 ### `friend_requests`
+
 Friend request management.
 
 | Column | Type | Description |
@@ -321,31 +479,111 @@ Friend request management.
 | `status` | TEXT | pending, accepted, rejected |
 | `created_at` | TIMESTAMP | Request creation |
 
+### `bookmarks`
+
+User bookmark collections.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID | Foreign key to `profiles` |
+| `name` | TEXT | Bookmark collection name |
+| `description` | TEXT | Collection description |
+| `is_public` | BOOLEAN | Public visibility |
+| `created_at` | TIMESTAMP | Creation timestamp |
+
+### `bookmark_plants`
+
+Plants in bookmark collections.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `bookmark_id` | UUID | Foreign key to `bookmarks` |
+| `plant_id` | UUID | Foreign key to `plants` |
+| `added_at` | TIMESTAMP | When added |
+
+</details>
+
+<details>
+<summary><strong>📦 Cache Tables</strong></summary>
+
+### `garden_task_daily_cache`
+
+Daily task statistics per garden.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `garden_id` | UUID | Foreign key to `gardens` |
+| `cache_date` | DATE | Cache date |
+| `due_count` | INTEGER | Tasks due |
+| `completed_count` | INTEGER | Tasks completed |
+| `task_count` | INTEGER | Total tasks |
+| `occurrence_count` | INTEGER | Total occurrences |
+
+### `garden_task_weekly_cache`
+
+Weekly task breakdowns.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `garden_id` | UUID | Foreign key to `gardens` |
+| `week_start_date` | DATE | Week start |
+| `mon_count` ... `sun_count` | INTEGER | Daily counts |
+| `water_count` ... `custom_count` | INTEGER | Type counts |
+
 </details>
 
 ---
 
-## API Reference
+## 🔌 API Reference
 
 <details>
-<summary><strong>Express API Routes</strong></summary>
-
-### Plant Endpoints
+<summary><strong>🌱 Plant Endpoints</strong></summary>
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| `GET` | `/api/plants` | Get all plants |
+| `GET` | `/api/plants` | Get all plants (with optional filters) |
+| `GET` | `/api/plants/:id` | Get single plant by ID |
 | `POST` | `/api/plants` | Create new plant |
 | `PUT` | `/api/plants/:id` | Update plant |
 | `DELETE` | `/api/plants/:id` | Delete plant |
+| `GET` | `/api/plants/:id/translations` | Get plant translations |
+| `POST` | `/api/plants/:id/translations` | Create/update translations |
 
-### Translation Endpoints
+</details>
+
+<details>
+<summary><strong>🌐 Translation Endpoints</strong></summary>
 
 | Method | Route | Description |
 |--------|-------|-------------|
 | `POST` | `/api/translate` | Translate text via DeepL |
 
-### Admin Endpoints
+**Request Body:**
+
+```json
+{
+  "text": "Hello world",
+  "source_lang": "EN",
+  "target_lang": "FR"
+}
+```
+
+**Response:**
+
+```json
+{
+  "translatedText": "Bonjour le monde"
+}
+```
+
+</details>
+
+<details>
+<summary><strong>🔧 Admin Endpoints</strong></summary>
 
 | Method | Route | Description |
 |--------|-------|-------------|
@@ -355,37 +593,45 @@ Friend request management.
 | `POST` | `/api/admin/sync-schema` | Sync database schema |
 | `GET` | `/api/admin/member` | Search member by email |
 | `POST` | `/api/admin/log-action` | Log admin action |
+| `POST` | `/api/admin/upload` | Upload media file |
 
 </details>
 
 <details>
-<summary><strong>Supabase RPC Functions</strong></summary>
+<summary><strong>📊 Supabase RPC Functions</strong></summary>
 
 ### User Functions
 
-- `get_user_profile_public_stats(_user_id)` - Get user statistics
-- `get_user_daily_tasks(_user_id, _start, _end)` - Get task completion data
-- `get_user_private_info(_user_id)` - Get private user information
-- `get_friend_count(_user_id)` - Count user's friends
-- `get_friend_email(_friend_id)` - Get friend's email (privacy-aware)
-- `get_friend_request_requester_email(_requester_id)` - Get requester email
+- `get_user_profile_public_stats(_user_id)` — Get user statistics
+- `get_user_daily_tasks(_user_id, _start, _end)` — Get task completion data
+- `get_user_private_info(_user_id)` — Get private user information
+- `get_friend_count(_user_id)` — Count user's friends
+- `get_friend_email(_friend_id)` — Get friend's email (privacy-aware)
+- `get_friend_request_requester_email(_requester_id)` — Get requester email
 
 ### Profile Functions
 
-- `get_profile_public_by_display_name(_name)` - Get public profile by display name
+- `get_profile_public_by_display_name(_name)` — Get public profile by display name
 
 ### Friend Functions
 
-- `accept_friend_request(_request_id)` - Accept friend request and create friendship
+- `accept_friend_request(_request_id)` — Accept friend request and create friendship
+
+### Cache Functions
+
+- `refresh_garden_daily_cache(_garden_id, _date)` — Refresh daily cache
+- `refresh_garden_weekly_cache(_garden_id, _week_start)` — Refresh weekly cache
+- `refresh_garden_task_cache(_garden_id, _date)` — Refresh all caches
+- `cleanup_old_garden_task_cache()` — Clean old cache entries
 
 </details>
 
 ---
 
-## Internationalization
+## 🌍 Internationalization
 
 <details>
-<summary><strong>i18n Configuration</strong></summary>
+<summary><strong>📖 i18n Configuration</strong></summary>
 
 ### Supported Languages
 
@@ -403,19 +649,20 @@ Friend request management.
 
 ### Translation Files
 
-Located in `public/locales/{lang}/common.json`
+Located in `public/locales/{lang}/`:
 
-```json
-{
-  "common": {
-    "welcome": "Welcome",
-    "login": "Login"
-  },
-  "profile": {
-    "title": "Profile",
-    "edit": "Edit Profile"
-  }
-}
+```
+public/locales/
+├── en/
+│   ├── common.json     # Common UI strings
+│   ├── About.json      # About page strings
+│   ├── Landing.json    # Landing page strings
+│   └── email.json      # Email templates
+└── fr/
+    ├── common.json
+    ├── About.json
+    ├── Landing.json
+    └── email.json
 ```
 
 ### Usage in Components
@@ -429,14 +676,25 @@ function MyComponent() {
 }
 ```
 
+### i18n-Aware Routing
+
+Use the custom Link components from `@/components/i18n`:
+
+```typescript
+import { Link, NavLink, Navigate } from '@/components/i18n'
+
+// These automatically include the current language prefix
+<Link to="/gardens">Gardens</Link>  // Renders as /en/gardens or /fr/gardens
+```
+
 </details>
 
 ---
 
-## Translation System
+## 🔄 Translation System
 
 <details>
-<summary><strong>Plant Translations</strong></summary>
+<summary><strong>🌐 Plant Translations</strong></summary>
 
 ### Translation Flow
 
@@ -460,12 +718,14 @@ flowchart LR
 ### DeepL Integration
 
 ```typescript
-// Translate plant fields
+import { translatePlantToAllLanguages } from '@/lib/deepl'
+
+// Translate plant fields to all supported languages
 const translations = await translatePlantToAllLanguages({
   name: "Rose",
   scientificName: "Rosa",
-  meaning: "Love",
-  description: "A beautiful flower",
+  meaning: "Love and beauty",
+  description: "A beautiful flowering plant",
   careSoil: "Well-drained soil"
 }, 'en')
 ```
@@ -474,127 +734,187 @@ const translations = await translatePlantToAllLanguages({
 
 ---
 
-## Authentication
+## 🔐 Authentication
 
 <details>
-<summary><strong>Supabase Auth</strong></summary>
+<summary><strong>🔑 Supabase Auth</strong></summary>
 
 ### Authentication Flow
 
 1. User signs up/signs in via Supabase Auth
-2. Auth token stored in browser
-3. Token included in API requests
+2. Auth token stored in browser (localStorage)
+3. Token included in API requests automatically
 4. Supabase RLS policies enforce access control
 
 ### Auth Context
 
 ```typescript
-const { user, profile, signIn, signUp, signOut } = useAuth()
+import { useAuth } from '@/context/AuthContext'
+
+function MyComponent() {
+  const { user, profile, signIn, signUp, signOut, loading } = useAuth()
+  
+  if (loading) return <Spinner />
+  if (!user) return <LoginPrompt />
+  
+  return <div>Welcome, {profile?.display_name}!</div>
+}
 ```
 
 ### Row Level Security (RLS)
 
-- Profiles are publicly readable but privately writable
-- Gardens are visible to owners and members
-- Friend requests are private to participants
+- **Profiles**: Publicly readable, privately writable
+- **Gardens**: Visible to owners and members
+- **Friend Requests**: Private to participants
+- **Plants**: Publicly readable, admin-writable
 
 </details>
 
 ---
 
-## State Management
+## 📱 Progressive Web App
 
 <details>
-<summary><strong>State Architecture</strong></summary>
+<summary><strong>⚡ PWA Features</strong></summary>
 
-### React Context
+### Configuration
 
-- **AuthContext**: User authentication and profile
-- **No global state library**: Uses React hooks and context
+The PWA is configured via `vite-plugin-pwa` in `vite.config.ts`:
 
-### Data Fetching
+- **Service Worker**: Custom InjectManifest strategy (`src/sw.ts`)
+- **Manifest**: Auto-generated with app metadata
+- **Offline Support**: Pre-cached routes and assets
 
-- **Supabase Client**: Direct queries from components
-- **React Query**: Not used (could be added for caching)
-- **Optimistic Updates**: Manual state updates
+### Cached Assets
 
-### State Flow
+- Static assets (JS, CSS, images, fonts)
+- Translation JSON files
+- Offline fallback page
+- App icons
 
-```mermaid
-graph TD
-    Component[Component] -->|useState| LocalState[Local State]
-    Component -->|useAuth| AuthContext[Auth Context]
-    Component -->|Supabase Client| Database[(Database)]
-    Database -->|Response| Component
-    Component -->|Update| LocalState
+### Caching Strategies
+
+| Resource | Strategy | Description |
+|----------|----------|-------------|
+| Static assets | CacheFirst | Cache first, network fallback |
+| API requests | NetworkFirst | Network first, cache fallback |
+| Translations | StaleWhileRevalidate | Serve cached, update in background |
+
+### Service Worker Toast
+
+The `ServiceWorkerToast` component handles:
+
+- **Install prompt**: "Add to home screen" suggestion
+- **Update notification**: "New version available" with reload button
+- **Offline indicator**: Shows when app is offline
+
+### Development Testing
+
+```bash
+# Enable PWA in development
+VITE_ENABLE_PWA=true npm run dev
+
+# Check PWA in browser DevTools:
+# Application → Manifest (install assets)
+# Application → Service Workers (caching)
+```
+
+### Disabling PWA
+
+For fast iteration during development/QA:
+
+```bash
+# Via environment variable
+VITE_DISABLE_PWA=true npm run build
+
+# Existing clients will auto-unregister on next load
 ```
 
 </details>
 
 ---
 
-## Performance
+## ⚡ Performance
 
 <details>
-<summary><strong>Optimization Strategies</strong></summary>
+<summary><strong>🚀 Optimization Strategies</strong></summary>
 
 ### Code Splitting
 
-- **Lazy Loading**: Admin page loaded on demand
+- **Lazy Loading**: Admin pages and heavy components loaded on demand
 - **Route-based**: Each route is a separate chunk
-- **Component-level**: Heavy components lazy loaded
+- **Manual Chunks**: React, Recharts, Three.js, Supabase in separate bundles
+
+```typescript
+// vite.config.ts
+manualChunks: {
+  'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+  'recharts': ['recharts'],
+  'three': ['three'],
+  'supabase': ['@supabase/supabase-js'],
+}
+```
 
 ### Asset Optimization
 
-- **Vite**: Tree-shaking and minification
-- **Images**: Optimized via build process
-- **Fonts**: Self-hosted or optimized CDN
+- **Vite**: Tree-shaking and esbuild minification
+- **Images**: Processed via Sharp for optimization
+- **Fonts**: Self-hosted with preload hints
 
 ### Database Optimization
 
+- **Task Cache**: Pre-computed daily/weekly statistics
 - **Indexes**: On frequently queried columns
 - **Pagination**: Large datasets paginated
-- **Query Optimization**: Efficient SQL queries
+- **Query Optimization**: Efficient SQL with proper joins
 
-### Bundle Size
+### Bundle Metrics
 
-| Metric | Size |
-|--------|------|
-| **Initial Bundle** | ~200KB (gzipped) |
-| **Total Assets** | ~500KB (gzipped) |
-| **Code Splitting** | Multiple chunks |
+| Metric | Target |
+|--------|--------|
+| Initial Bundle | ~200KB (gzipped) |
+| Total Assets | ~500KB (gzipped) |
+| First Paint | < 1.5s |
+| TTI | < 3s |
 
 </details>
 
 ---
 
-## Testing
+## 🧪 Testing
 
 <details>
-<summary><strong>Testing Strategy</strong></summary>
+<summary><strong>🔬 Testing Strategy</strong></summary>
 
 ### Current Status
 
-- ⚠️ **No tests currently** - Manual testing only
-- 🔄 **Planned**: Jest + React Testing Library
+- ⚠️ **Limited tests** — Manual testing primary
+- 🔄 **Planned**: Comprehensive test suite
 
-### Recommended Testing
+### Recommended Testing Stack
 
 | Type | Tool | Coverage |
 |------|------|----------|
-| **Unit Tests** | Jest | Components, utilities |
+| **Unit Tests** | Vitest | Components, utilities |
 | **Integration Tests** | React Testing Library | User flows |
 | **E2E Tests** | Playwright | Critical paths |
 | **API Tests** | Supertest | Express routes |
 
+### Translation Validation
+
+```bash
+# Check for missing/extra translation keys
+npm run check-translations
+```
+
 </details>
 
 ---
 
-## Deployment
+## 🚀 Deployment
 
 <details>
-<summary><strong>Production Deployment</strong></summary>
+<summary><strong>📦 Production Deployment</strong></summary>
 
 ### Build Process
 
@@ -602,6 +922,7 @@ graph TD
 npm ci
 npm run build
 # Output: dist/
+# Includes: optimized assets, sitemap.xml, service worker
 ```
 
 ### Deployment Steps
@@ -612,10 +933,9 @@ npm run build
 4. **Start**: Run Express server for API
 5. **Environment**: Set production environment variables
 
-### Server Configuration
+### Server Configuration (nginx)
 
 ```nginx
-# Example nginx config
 server {
     listen 80;
     server_name your-domain.com;
@@ -623,117 +943,208 @@ server {
     root /var/www/plant-swipe;
     index index.html;
     
+    # API proxy
     location /api {
         proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
     }
     
+    # SPA fallback
     location / {
         try_files $uri $uri/ /index.html;
+    }
+    
+    # Cache static assets
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
     }
 }
 ```
 
-### Environment Variables
+</details>
 
-Ensure production environment variables are set:
-- `DATABASE_URL` or `PG*` variables
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-- `DEEPL_API_KEY` (optional)
+<details>
+<summary><strong>🔧 Automated Sitemap</strong></summary>
+
+### Generation
+
+```bash
+# Generate sitemap manually
+npm run generate:sitemap
+
+# Automatically runs during build
+npm run build
+```
+
+### Configuration
+
+| Variable | Description |
+|----------|-------------|
+| `PLANTSWIPE_SITE_URL` | Canonical origin (e.g., `https://aphylia.app`) |
+| `SITEMAP_DEFAULT_LANGUAGE` | Default language for URLs |
+| `SITEMAP_MAX_PLANT_URLS` | Max plant URLs to include |
+| `SKIP_SITEMAP_GENERATION` | Set to `1` to skip |
+
+### Features
+
+- Static routes from configuration
+- Dynamic plant pages from database
+- Language variants for all routes
+- Respects `VITE_APP_BASE_PATH` for sub-path deployments
 
 </details>
 
-### Progressive Web App
+<details>
+<summary><strong>🏠 Local/Self-Hosted Deployment</strong></summary>
 
-- **Service worker & manifest** are generated automatically via [`vite-plugin-pwa`](https://vite-pwa-org.netlify.app/). The manifest scope/start URL follow `VITE_APP_BASE_PATH` (defaults to `/`).
-- **Runtime behaviour**: offline caching for routes, i18n JSON bundles, static assets, plus `NetworkFirst` for `/api/*` calls to keep data fresh while providing a fallback when offline.
-- **User prompts**: `ServiceWorkerToast` informs users when the app is installable/offline-ready or when a new version is published (with a “Reload now” action).
-- **Local testing**: run `VITE_ENABLE_PWA=true npm run dev` to test the service worker in development. Use the “Application ▸ Manifest” panel in devtools to inspect install assets.
-- **Disable caching during QA**: add `VITE_DISABLE_PWA=true` to `plant-swipe/.env` (or the deployment env) before running `scripts/refresh-plant-swipe.sh`. The build will skip generating the service worker, and existing clients automatically unregister on next load, so a normal refresh always pulls the latest assets.
+### First-Time Setup
 
-### Automated Sitemap
+```bash
+# Install dependencies and configure services
+sudo ./setup.sh
 
-- `npm run generate:sitemap` (backed by `scripts/generate-sitemap.js`) writes `public/sitemap.xml`, combining hand-picked static routes and `/plants/:id` detail pages fetched from Supabase.
-- The command runs automatically at the start of `npm run build`, so every invocation of `scripts/refresh-plant-swipe.sh` (which already runs `npm run build`) refreshes the sitemap before assets are compiled.
-- **Required env**: set `PLANTSWIPE_SITE_URL` (or `SITE_URL`/`VITE_SITE_URL`) to the canonical origin, e.g. `https://aphylia.app`. Optional knobs include `SITEMAP_DEFAULT_LANGUAGE`, `SITEMAP_MAX_PLANT_URLS`, `SITEMAP_PLANT_BATCH_SIZE`, and `SKIP_SITEMAP_GENERATION=1` (useful for very fast local builds).
-- **Supabase access**: provide `SUPABASE_URL` plus either `SUPABASE_SERVICE_ROLE_KEY` or `VITE_SUPABASE_ANON_KEY`. When credentials are missing the script logs a warning and falls back to static URLs only.
-- **Locales**: language variants are inferred from `public/locales/<lang>` and mirrored for every route, respecting `VITE_APP_BASE_PATH` for sub-path deployments.
-- Run `npm run generate:sitemap` manually any time you need to reissue the sitemap without rebuilding the rest of the bundle.
+# With custom base path
+PWA_BASE_PATH=/custom/ sudo ./setup.sh
+```
 
-### Local Deployments
+### Subsequent Updates
 
-1. **First-time server provisioning**: `sudo ./setup.sh`. This installs system packages, node dependencies, builds the PWA (`npm run build`), provisions nginx/systemd, and links `/var/www/PlantSwipe/plant-swipe` to the repo. Use `PWA_BASE_PATH=/custom/ sudo ./setup.sh` if you serve the UI from a sub-path.
-2. **Subsequent updates**: `sudo bash scripts/refresh-plant-swipe.sh`. The helper pulls the desired branch, re-runs `npm ci && npm run build`, syncs the `/dist` output, runs database migrations (if any), and restarts the `plant-swipe-node`/`admin-api` services. Trigger it manually or wire it to your internal “Refresh” button.
-3. **When to redeploy**: any time you change frontend code, assets, translations, Tailwind styles, or server logic that lives in this repo. Because the PWA precaches the latest build, users will see an in-app “New release available” prompt the moment the refresh script finishes and nginx serves the new `sw.js`.
-4. **Testing multiple versions**: run separate branches or directories on the same host by cloning into `/var/www/PlantSwipe/<branch>` and pointing distinct nginx server blocks (or subdomains) at each clone. Each copy can run `setup.sh`/`refresh-plant-swipe.sh` independently so QA teams can vet builds before promoting them to production.
+```bash
+# Pull, build, and restart services
+sudo bash scripts/refresh-plant-swipe.sh
+```
+
+### What the Scripts Do
+
+1. Pull latest code from git
+2. Run `npm ci && npm run build`
+3. Sync `dist/` to web root
+4. Run database migrations
+5. Restart `plant-swipe-node` and `admin-api` services
+
+</details>
 
 ---
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 <details>
-<summary><strong>Common Issues</strong></summary>
+<summary><strong>❓ Common Issues</strong></summary>
 
 ### Database Connection
 
 **Issue**: Cannot connect to database  
-**Solution**: Check `DATABASE_URL` or `PG*` environment variables
+**Solution**: Verify `DATABASE_URL` or `PG*` environment variables
+
+```bash
+# Test connection
+psql $DATABASE_URL -c "SELECT 1"
+```
 
 ### Auth Errors
 
 **Issue**: Authentication fails  
-**Solution**: Verify `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+**Solution**: Check Supabase credentials
+
+```bash
+# Verify in .env
+VITE_SUPABASE_URL=https://xxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+```
 
 ### Translation Errors
 
-**Issue**: Translations not working  
-**Solution**: Check `DEEPL_API_KEY` is set (optional for manual translations)
+**Issue**: DeepL translations not working  
+**Solution**: Verify API key and check rate limits
+
+```bash
+# Test DeepL API
+curl -X POST https://api.deepl.com/v2/translate \
+  -H "Authorization: DeepL-Auth-Key YOUR_KEY" \
+  -d "text=Hello&target_lang=FR"
+```
 
 ### Build Errors
 
-**Issue**: TypeScript errors during build  
-**Solution**: Run `npm run lint` and fix type errors
+**Issue**: Out of memory during build  
+**Solution**: Use low-memory build script
+
+```bash
+npm run build:low-mem
+```
+
+### PWA Issues
+
+**Issue**: Service worker not updating  
+**Solution**: Clear cache and unregister
+
+```javascript
+// In browser console
+navigator.serviceWorker.getRegistrations().then(r => r.forEach(reg => reg.unregister()))
+caches.keys().then(names => names.forEach(name => caches.delete(name)))
+```
 
 </details>
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 <details>
-<summary><strong>Development Guidelines</strong></summary>
+<summary><strong>📋 Development Guidelines</strong></summary>
 
 ### Code Style
 
 - **TypeScript**: Strict mode enabled
 - **ESLint**: Configured with React rules
-- **Prettier**: Not configured (consider adding)
+- **Imports**: Use `@/` alias for src directory
 
 ### Git Workflow
 
-1. Create feature branch
-2. Make changes
-3. Test locally
-4. Submit PR
+1. Create feature branch from `main`
+2. Make changes with clear commits
+3. Run linting: `npm run lint`
+4. Test locally
+5. Submit PR with description
 
 ### Code Organization
 
-- **Components**: Reusable UI components
-- **Pages**: Route components
-- **Lib**: Utility functions
-- **Types**: TypeScript definitions
+| Directory | Purpose |
+|-----------|---------|
+| `components/` | Reusable UI components |
+| `pages/` | Route page components |
+| `lib/` | Utility functions and API |
+| `hooks/` | Custom React hooks |
+| `context/` | React context providers |
+| `types/` | TypeScript definitions |
+
+### Component Guidelines
+
+- Use functional components with hooks
+- Prefer composition over inheritance
+- Export types alongside components
+- Include JSDoc comments for public APIs
 
 </details>
 
 ---
 
-## Resources
+## 📚 Resources
 
-- [React Documentation](https://react.dev)
-- [Vite Documentation](https://vitejs.dev)
-- [Supabase Documentation](https://supabase.com/docs)
-- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-- [TypeScript Documentation](https://www.typescriptlang.org/docs)
+| Resource | Link |
+|----------|------|
+| React Documentation | [react.dev](https://react.dev) |
+| Vite Documentation | [vitejs.dev](https://vitejs.dev) |
+| Supabase Documentation | [supabase.com/docs](https://supabase.com/docs) |
+| Tailwind CSS Documentation | [tailwindcss.com/docs](https://tailwindcss.com/docs) |
+| TypeScript Documentation | [typescriptlang.org/docs](https://www.typescriptlang.org/docs) |
+| TipTap Documentation | [tiptap.dev](https://tiptap.dev) |
+| Framer Motion Documentation | [framer.com/motion](https://www.framer.com/motion) |
 
 ---
 
@@ -741,6 +1152,6 @@ Ensure production environment variables are set:
 
 **Built with ❤️ by Neolite & Five**
 
-[Main README](../README.md) • [Features](../README.md#feature-overview) • [Quick Start](../README.md#quick-start)
+[**Main README**](../README.md) • [**Features**](../README.md#-feature-overview) • [**Quick Start**](../README.md#-quick-start)
 
 </div>
