@@ -2098,18 +2098,19 @@ const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ name, imageUrl,
     type="button"
     onClick={onClick}
     className="flex-shrink-0 snap-start group relative overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-    style={{ width: 'min(180px, 45vw)', height: '220px' }}
+    style={{ width: 'min(180px, 45vw)' }}
   >
-    <div className="h-[140px] w-full overflow-hidden bg-stone-100 dark:bg-[#2d2d30]">
+    {/* Image container with aspect ratio */}
+    <div className="relative w-full aspect-[4/3] overflow-hidden bg-stone-100 dark:bg-[#2d2d30]">
       {imageUrl ? (
         <img
           src={imageUrl}
           alt={name}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
           loading="lazy"
         />
       ) : (
-        <div className="h-full w-full flex items-center justify-center text-stone-400 dark:text-stone-600">
+        <div className="absolute inset-0 flex items-center justify-center text-stone-400 dark:text-stone-600">
           <Leaf className="h-12 w-12" />
         </div>
       )}
