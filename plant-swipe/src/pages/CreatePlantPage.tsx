@@ -484,6 +484,69 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
   if (error) throw new Error(error.message)
 }
 
+// Sync bidirectional companion relationships
+// When plant A adds plant B as companion, plant B should also have plant A
+// When plant A removes plant B as companion, plant B should also remove plant A
+async function syncBidirectionalCompanions(
+  plantId: string, 
+  newCompanions: string[], 
+  oldCompanions: string[]
+): Promise<void> {
+  // Find added and removed companions
+  const added = newCompanions.filter(id => !oldCompanions.includes(id) && id !== plantId)
+  const removed = oldCompanions.filter(id => !newCompanions.includes(id) && id !== plantId)
+  
+  // For each newly added companion, add this plant to their companions list
+  for (const companionId of added) {
+    try {
+      const { data: companionData } = await supabase
+        .from('plants')
+        .select('companions')
+        .eq('id', companionId)
+        .maybeSingle()
+      
+      if (companionData) {
+        const currentCompanions: string[] = companionData.companions || []
+        if (!currentCompanions.includes(plantId)) {
+          const updatedCompanions = [...currentCompanions, plantId]
+          await supabase
+            .from('plants')
+            .update({ companions: updatedCompanions })
+            .eq('id', companionId)
+          console.log(`[syncBidirectionalCompanions] Added ${plantId} to ${companionId}'s companions`)
+        }
+      }
+    } catch (e) {
+      console.error(`[syncBidirectionalCompanions] Failed to add to companion ${companionId}:`, e)
+    }
+  }
+  
+  // For each removed companion, remove this plant from their companions list
+  for (const companionId of removed) {
+    try {
+      const { data: companionData } = await supabase
+        .from('plants')
+        .select('companions')
+        .eq('id', companionId)
+        .maybeSingle()
+      
+      if (companionData) {
+        const currentCompanions: string[] = companionData.companions || []
+        if (currentCompanions.includes(plantId)) {
+          const updatedCompanions = currentCompanions.filter(id => id !== plantId)
+          await supabase
+            .from('plants')
+            .update({ companions: updatedCompanions })
+            .eq('id', companionId)
+          console.log(`[syncBidirectionalCompanions] Removed ${plantId} from ${companionId}'s companions`)
+        }
+      }
+    } catch (e) {
+      console.error(`[syncBidirectionalCompanions] Failed to remove from companion ${companionId}:`, e)
+    }
+  }
+}
+
 async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   const { data, error } = await supabase.from('plants').select('*').eq('id', id).maybeSingle()
   if (error) throw new Error(error.message)
@@ -981,6 +1044,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       try {
         const plantId = existingPlantId || generateUUIDv4()
         
+        // Get old companions for bidirectional sync (only for existing plants)
+        let oldCompanions: string[] = []
+        if (existingLoaded && existingPlantId) {
+          const { data: oldPlantData } = await supabase
+            .from('plants')
+            .select('companions')
+            .eq('id', existingPlantId)
+            .maybeSingle()
+          oldCompanions = oldPlantData?.companions || []
+        }
+        
         // Debug logging
         console.log('[savePlant] Starting save:', {
           plantId,
@@ -1162,6 +1236,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         })
         await upsertSources(savedId, sources)
         await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
+        
+        // Sync bidirectional companion relationships
+        const newCompanions = plantToSave.miscellaneous?.companions || []
+        await syncBidirectionalCompanions(savedId, newCompanions, oldCompanions)
 
         // STEP 2: Save translatable fields to plant_translations (for ALL languages including English)
         // Note: enum fields (family, life_cycle, season, foliage_persistance, toxicity_*, living_space,
