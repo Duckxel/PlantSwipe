@@ -975,9 +975,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   ].filter(Boolean) as string[]
     const palette = plant.identity?.colors?.length ? plant.identity.colors : []
     const showPalette = palette.length > 0
-    const dimensionColClass = showPalette ? 'col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
+    const gridClass = showPalette 
+      ? 'grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)] items-stretch'
+      : 'grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 items-stretch'
+    const dimensionColClass = showPalette ? 'col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-1'
     const paletteColClass = showPalette ? 'col-span-1' : ''
-    const timelineColClass = showPalette ? 'col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-2'
+    const timelineColClass = showPalette ? 'col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-1'
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return t('moreInfo.values.flexible')
       return schedules
@@ -1243,7 +1246,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         </div>
       
         {/* Dynamic Grid Layout */}
-        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)] items-stretch">
+        <div className={gridClass}>
           {(height !== null || wingspan !== null || spacing !== null) && (
             <section
               className={`${dimensionColClass} rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent`}
