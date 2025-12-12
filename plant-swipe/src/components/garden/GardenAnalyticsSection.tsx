@@ -818,6 +818,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       fillOpacity={0.2}
                       stroke={CHART_COLORS.muted}
                       strokeWidth={2}
+                      animationDuration={300}
                     />
                     <Line
                       type="monotone"
@@ -827,6 +828,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       strokeWidth={3}
                       dot={{ r: 2 }}
                       activeDot={{ r: 4 }}
+                      animationDuration={300}
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -858,6 +860,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                           outerRadius={55}
                           paddingAngle={3}
                           dataKey="value"
+                          animationDuration={300}
                         >
                           {[CHART_COLORS.water, CHART_COLORS.fertilize, CHART_COLORS.harvest, CHART_COLORS.cut, CHART_COLORS.custom].map((color, index) => (
                             <Cell key={`cell-${index}`} fill={color} />
@@ -1611,6 +1614,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     fill={CHART_COLORS.primary}
                     radius={[4, 4, 0, 0]}
                     stackId="stack"
+                    animationDuration={300}
                   />
                   <Bar
                     dataKey="due"
@@ -1618,6 +1622,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     fill={CHART_COLORS.muted}
                     radius={[4, 4, 0, 0]}
                     stackId="stack"
+                    animationDuration={300}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -1730,6 +1735,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       background
                       dataKey="value"
                       cornerRadius={10}
+                      animationDuration={300}
                     />
                     <text
                       x="50%"
@@ -1781,6 +1787,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                               outerRadius={55}
                               paddingAngle={3}
                               dataKey="value"
+                              animationDuration={300}
                             >
                               {analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m, index) => (
                                 <Cell key={`cell-${index}`} fill={m.color} />
