@@ -16866,22 +16866,23 @@ async function generateCrawlerHtml(req, pagePath) {
       if (!supabaseServer) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
       } else {
-        // Query base plant data (non-translatable fields)
+        // Query base plant data (non-translatable fields now include scientific_name, family, level_sun, maintenance_level, season)
         const { data: basePlant, error: plantError } = await ssrQuery(
           supabaseServer
             .from('plants')
-            .select('id, name, plant_type, utility, watering_type, flowering_month')
+            .select('id, name, plant_type, utility, watering_type, flowering_month, scientific_name, family, level_sun, maintenance_level, season')
             .eq('id', plantId)
             .maybeSingle(),
           'plant_lookup'
         )
         
         // Query translated fields from plant_translations for the detected language
+        // Note: scientific_name, family, level_sun, maintenance_level, season were migrated to plants table
         const ssrLang = detectedLang || 'en'
         const { data: translation } = await ssrQuery(
           supabaseServer
             .from('plant_translations')
-            .select('name, scientific_name, family, overview, tags, origin, level_sun, maintenance_level, season')
+            .select('name, overview, tags, origin')
             .eq('plant_id', plantId)
             .eq('language', ssrLang)
             .maybeSingle(),
@@ -16894,7 +16895,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: enData } = await ssrQuery(
             supabaseServer
               .from('plant_translations')
-              .select('name, scientific_name, family, overview, tags, origin, level_sun, maintenance_level, season')
+              .select('name, overview, tags, origin')
               .eq('plant_id', plantId)
               .eq('language', 'en')
               .maybeSingle(),
@@ -16907,17 +16908,20 @@ async function generateCrawlerHtml(req, pagePath) {
         const finalTranslation = translation || enTranslation
         
         // Merge base plant with translations, with field-level fallback to English
+        // Non-translatable fields (scientific_name, family, level_sun, maintenance_level, season) come from basePlant
         const plant = basePlant ? {
           ...basePlant,
           name: translation?.name || enTranslation?.name || basePlant.name,
-          scientific_name: translation?.scientific_name || enTranslation?.scientific_name,
-          family: translation?.family || enTranslation?.family,
+          // Non-translatable fields come from plants table
+          scientific_name: basePlant.scientific_name,
+          family: basePlant.family,
+          level_sun: basePlant.level_sun,
+          maintenance_level: basePlant.maintenance_level,
+          season: basePlant.season,
+          // Translatable fields come from plant_translations with fallback
           overview: translation?.overview || enTranslation?.overview,
           tags: (translation?.tags?.length ? translation.tags : null) || enTranslation?.tags,
           origin: (translation?.origin?.length ? translation.origin : null) || enTranslation?.origin,
-          level_sun: translation?.level_sun || enTranslation?.level_sun,
-          maintenance_level: translation?.maintenance_level || enTranslation?.maintenance_level,
-          season: (translation?.season?.length ? translation.season : null) || enTranslation?.season,
         } : null
         
         ssrDebug('plant_query_result', { 
