@@ -4221,32 +4221,44 @@ const notificationInputSchema = z.object({
     .string()
     .max(2000)
     .optional()
+    .nullable()
     .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   deliveryMode: z.enum(notificationModeValues),
   audience: z.enum(notificationAudienceValues),
   messageVariants: z.array(z.string().min(1).max(400)).min(1),
   randomize: z.boolean().optional(),
+  templateId: z
+    .string()
+    .uuid()
+    .optional()
+    .nullable()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   timezone: z
     .string()
     .max(64)
     .optional()
+    .nullable()
     .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   plannedFor: z
     .string()
     .optional()
+    .nullable()
     .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   scheduleStartAt: z
     .string()
     .optional()
+    .nullable()
     .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   scheduleInterval: z
     .enum(notificationIntervalValues)
     .optional()
+    .nullable()
     .transform((value) => (value && value.trim().length > 0 ? value : null)),
   ctaUrl: z
     .string()
     .url()
     .optional()
+    .nullable()
     .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   customUserIds: z.array(z.string().uuid()).optional(),
 })
@@ -5074,9 +5086,8 @@ app.get('/api/admin/notifications', async (req, res) => {
             select count(distinct p.id)::bigint
             from public.profiles p
             join public.garden_members gm on gm.user_id = p.id
-            join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
-              select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
-            )
+            join public.garden_plant_tasks t on t.garden_id = gm.garden_id
+            join public.garden_plant_task_occurrences occ on occ.task_id = t.id
             where (p.notify_push is null or p.notify_push = true)
               and occ.due_at::date = current_date
               and (occ.completed_count < occ.required_count or occ.completed_count = 0)
@@ -5086,7 +5097,7 @@ app.get('/api/admin/notifications', async (req, res) => {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
           )
           when n.audience = 'admins' then (
             select count(*)::bigint from public.profiles p 
@@ -5664,9 +5675,8 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
         select count(distinct p.id)::bigint as count
         from public.profiles p
         join public.garden_members gm on gm.user_id = p.id
-        join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
-          select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
-        )
+        join public.garden_plant_tasks t on t.garden_id = gm.garden_id
+        join public.garden_plant_task_occurrences occ on occ.task_id = t.id
         where (p.notify_push is null or p.notify_push = true)
           and occ.due_at::date = current_date
           and (occ.completed_count < occ.required_count or occ.completed_count = 0)
@@ -5679,7 +5689,7 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
         from public.profiles p
         left join auth.users u on u.id = p.id
         where (p.notify_push is null or p.notify_push = true)
-          and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+          and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
       `
       count = Number(rows?.[0]?.count || 0)
     } else if (audience === 'admins') {
@@ -5691,15 +5701,15 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
       `
       count = Number(rows?.[0]?.count || 0)
     } else if (audience === 'journal_yesterday') {
-      // Users who wrote in journal yesterday (for journal continue automation)
+      // Users who wrote in journal/note yesterday (for journal continue automation)
       const rows = await sql`
         select count(distinct p.id)::bigint as count
         from public.profiles p
         join public.garden_members gm on gm.user_id = p.id
         join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
         where (p.notify_push is null or p.notify_push = true)
-          and gal.action_type = 'journal_entry'
-          and gal.created_at::date = current_date - interval '1 day'
+          and gal.kind = 'note'
+          and gal.occurred_at::date = current_date - interval '1 day'
       `
       count = Number(rows?.[0]?.count || 0)
     }
@@ -6143,7 +6153,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
           `
           recipientCount = Number(countResult?.[0]?.cnt || 0)
         } else if (row.trigger_type === 'daily_task_reminder') {
@@ -6152,9 +6162,8 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               select count(distinct p.id)::bigint as cnt
               from public.profiles p
               join public.garden_members gm on gm.user_id = p.id
-              join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
-                select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
-              )
+              join public.garden_plant_tasks t on t.garden_id = gm.garden_id
+              join public.garden_plant_task_occurrences occ on occ.task_id = t.id
               where (p.notify_push is null or p.notify_push = true)
                 and occ.due_at::date = current_date
                 and (occ.completed_count < occ.required_count or occ.completed_count = 0)
@@ -6172,8 +6181,8 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_members gm on gm.user_id = p.id
               join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
               where (p.notify_push is null or p.notify_push = true)
-                and gal.action_type = 'journal_entry'
-                and gal.created_at::date = current_date - interval '1 day'
+                and gal.kind = 'note'
+                and gal.occurred_at::date = current_date - interval '1 day'
             `
             recipientCount = Number(countResult?.[0]?.cnt || 0)
           } catch (e) {
@@ -6274,7 +6283,7 @@ app.post('/api/admin/notification-automations/:id/trigger', async (req, res) => 
   }
   try {
     const rows = await sql`
-      select a.*, t.message_variants, t.randomize
+      select a.*, t.message_variants, t.randomize, t.title as template_title
       from public.notification_automations a
       left join public.notification_templates t on t.id = a.template_id
       where a.id = ${automationId}
@@ -6311,6 +6320,9 @@ async function runAutomation(automation) {
   const defaultVariants = toStringArray(automation.message_variants)
   if (!defaultVariants.length) return { error: 'No message variants' }
   
+  // Get the notification title from template (fallback to automation display_name)
+  const notificationTitle = automation.template_title || automation.display_name || 'Reminder'
+  
   // Load translations for the template
   let translations = {}
   if (automation.template_id) {
@@ -6337,17 +6349,18 @@ async function runAutomation(automation) {
       from public.profiles p
       left join auth.users u on u.id = p.id
       where (p.notify_push is null or p.notify_push = true)
-        and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+        and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
       limit 5000
     `
   } else if (triggerType === 'daily_task_reminder') {
+    // Find users with incomplete tasks for today
+    // Join through garden_plant_tasks to get the correct garden association
     recipientQuery = sql`
       select distinct p.id as user_id, p.display_name, p.language
       from public.profiles p
       join public.garden_members gm on gm.user_id = p.id
-      join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
-        select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
-      )
+      join public.garden_plant_tasks t on t.garden_id = gm.garden_id
+      join public.garden_plant_task_occurrences occ on occ.task_id = t.id
       where (p.notify_push is null or p.notify_push = true)
         and occ.due_at::date = current_date
         and (occ.completed_count < occ.required_count or occ.completed_count = 0)
@@ -6360,8 +6373,8 @@ async function runAutomation(automation) {
       join public.garden_members gm on gm.user_id = p.id
       join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
       where (p.notify_push is null or p.notify_push = true)
-        and gal.action_type = 'journal_entry'
-        and gal.created_at::date = current_date - interval '1 day'
+        and gal.kind = 'note'
+        and gal.occurred_at::date = current_date - interval '1 day'
       limit 5000
     `
   } else {
@@ -6409,7 +6422,7 @@ async function runAutomation(automation) {
         values (
           ${automation.id},
           ${recipient.user_id},
-          ${automation.display_name || 'Reminder'},
+          ${notificationTitle},
           ${message},
           ${automation.cta_url || null},
           now(),
@@ -15823,7 +15836,7 @@ async function processDueAutomations() {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, p.updated_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
@@ -15838,9 +15851,8 @@ async function processDueAutomations() {
             select distinct p.id as user_id, p.display_name, p.language, p.timezone
             from public.profiles p
             join public.garden_members gm on gm.user_id = p.id
-            join public.garden_plant_task_occurrences occ on occ.garden_plant_id in (
-              select gp.id from public.garden_plants gp where gp.garden_id = gm.garden_id
-            )
+            join public.garden_plant_tasks t on t.garden_id = gm.garden_id
+            join public.garden_plant_task_occurrences occ on occ.task_id = t.id
             where (p.notify_push is null or p.notify_push = true)
               and occ.due_at::date = current_date
               and (occ.completed_count < occ.required_count or occ.completed_count = 0)
@@ -15860,8 +15872,8 @@ async function processDueAutomations() {
             join public.garden_members gm on gm.user_id = p.id
             join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
             where (p.notify_push is null or p.notify_push = true)
-              and gal.action_type = 'journal_entry'
-              and gal.created_at::date = current_date - interval '1 day'
+              and gal.kind = 'note'
+              and gal.occurred_at::date = current_date - interval '1 day'
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
