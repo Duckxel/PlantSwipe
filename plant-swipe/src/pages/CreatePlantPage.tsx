@@ -153,8 +153,13 @@ function parseSupabaseError(error: any, context?: string): string {
     return 'Unable to save translations because the plant does not exist yet. Please try saving again.'
   }
   
-  if (message.includes('plant_images_link_key') || (message.includes('duplicate key') && message.includes('link'))) {
-    return 'An image with this URL already exists. Please use a different image or remove duplicates.'
+  if (message.includes('plant_images_link_key')) {
+    // This is the OLD global constraint - means the database schema hasn't been migrated
+    return 'Database schema needs migration. The image URL constraint is outdated. Please contact support or run database migrations.'
+  }
+  
+  if (message.includes('plant_images_plant_link_unique') || (message.includes('duplicate key') && message.includes('link') && message.includes('plant_images'))) {
+    return 'An image with this URL already exists for this plant. Each image URL must be unique within a plant. Please check for duplicate image URLs.'
   }
   
   if (message.includes('plant_images_use_unique')) {
@@ -339,12 +344,15 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   // Build final insert list with strict enforcement of 1 primary, 1 discovery, unlimited other
   const seenLinks = new Set<string>()
   
-  // First pass: filter and deduplicate
+  // First pass: filter and deduplicate by normalized link (case-insensitive, trimmed)
   const filtered = list.filter((img) => {
     const link = img.link?.trim()
     if (!link) return false
     const linkLower = link.toLowerCase()
-    if (seenLinks.has(linkLower)) return false
+    if (seenLinks.has(linkLower)) {
+      console.log('[upsertImages] Skipping duplicate link:', link.slice(0, 50))
+      return false
+    }
     seenLinks.add(linkLower)
     return true
   })
@@ -389,19 +397,7 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
     hasPrimary = true
   }
   
-  console.log('[upsertImages] Normalized for insert:', normalized.map(img => ({ link: img.link?.slice(0, 50), use: img.use })))
-  
-  // Delete all existing images for this plant
-  const { error: deleteError } = await supabase.from('plant_images').delete().eq('plant_id', plantId)
-  if (deleteError) {
-    console.error('[upsertImages] Failed to delete existing images:', deleteError)
-    throw { ...deleteError, context: 'images' }
-  }
-  
-  if (!normalized?.length) {
-    console.log('[upsertImages] No images to insert')
-    return
-  }
+  console.log('[upsertImages] Normalized for save:', normalized.map(img => ({ link: img.link?.slice(0, 50), use: img.use })))
   
   // Final verification: ensure only 1 primary and 1 discovery
   const primaryCount = normalized.filter(i => i.use === 'primary').length
@@ -412,13 +408,64 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
     console.error('[upsertImages] ERROR: Multiple primary or discovery images detected after normalization!')
   }
   
-  const { error } = await supabase.from('plant_images').insert(normalized)
-  if (error) {
-    console.error('[upsertImages] Insert error:', error)
-    throw { ...error, context: 'images' }
+  // Delete ALL existing images for this plant first, then insert fresh
+  // This is more reliable than upsert when dealing with use changes
+  const { error: deleteError } = await supabase
+    .from('plant_images')
+    .delete()
+    .eq('plant_id', plantId)
+  
+  if (deleteError) {
+    console.error('[upsertImages] Delete error:', deleteError)
+    throw { ...deleteError, context: 'images' }
   }
   
-  console.log('[upsertImages] Successfully inserted', normalized.length, 'images')
+  // If no images to insert, we're done (just deleted all)
+  if (!normalized.length) {
+    console.log('[upsertImages] No images to save, deleted all existing')
+    return
+  }
+  
+  console.log('[upsertImages] Deleted existing images, now inserting', normalized.length, 'images')
+  
+  // Insert all images fresh
+  const { error: insertError } = await supabase
+    .from('plant_images')
+    .insert(normalized)
+  
+  if (insertError) {
+    console.error('[upsertImages] Insert error:', insertError)
+    console.error('[upsertImages] Attempted to insert:', JSON.stringify(normalized, null, 2))
+    
+    // Check if it's a duplicate key error - provide more context
+    if (insertError.message?.includes('duplicate') || insertError.code === '23505') {
+      // Find which URL(s) are causing the conflict
+      const duplicateUrls: string[] = []
+      for (const img of normalized) {
+        const { data: existing } = await supabase
+          .from('plant_images')
+          .select('plant_id, link')
+          .eq('link', img.link)
+          .neq('plant_id', plantId)
+          .limit(1)
+        if (existing && existing.length > 0) {
+          duplicateUrls.push(img.link.slice(0, 80))
+        }
+      }
+      if (duplicateUrls.length > 0) {
+        console.error('[upsertImages] URLs that exist on other plants:', duplicateUrls)
+        throw {
+          ...insertError,
+          context: 'images',
+          message: `Image URL(s) already used by another plant: ${duplicateUrls.join(', ')}. This may indicate a database schema issue - please contact support.`
+        }
+      }
+    }
+    
+    throw { ...insertError, context: 'images' }
+  }
+  
+  console.log('[upsertImages] Successfully saved', normalized.length, 'images')
 }
 
 async function upsertWateringSchedules(plantId: string, schedules: Plant["plantCare"] | undefined) {
