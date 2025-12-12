@@ -338,8 +338,6 @@ const PlantInfoPage: React.FC = () => {
   const [gardenOpen, setGardenOpen] = React.useState(false)
   const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'shared' | 'error'>('idle')
   const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [companionPlants, setCompanionPlants] = React.useState<Array<{ id: string; name: string; imageUrl?: string }>>([])
-  const [companionsLoading, setCompanionsLoading] = React.useState(false)
 
   React.useEffect(() => {
     return () => {
@@ -449,88 +447,6 @@ const PlantInfoPage: React.FC = () => {
     load()
     return () => { ignore = true }
   }, [id, currentLang])
-
-  // Fetch companion plant details when plant data is loaded
-  React.useEffect(() => {
-    let ignore = false
-    const loadCompanions = async () => {
-      const companionIds = plant?.miscellaneous?.companions
-      if (!companionIds || companionIds.length === 0) {
-        setCompanionPlants([])
-        return
-      }
-      
-      setCompanionsLoading(true)
-      try {
-        // Fetch plant basic info
-        const { data: plantsData } = await supabase
-          .from('plants')
-          .select('id, name')
-          .in('id', companionIds)
-        
-        if (ignore) return
-        
-        if (!plantsData?.length) {
-          setCompanionPlants([])
-          setCompanionsLoading(false)
-          return
-        }
-        
-        // Fetch primary images for companion plants
-        const { data: imagesData } = await supabase
-          .from('plant_images')
-          .select('plant_id, link')
-          .in('plant_id', companionIds)
-          .eq('use', 'primary')
-        
-        if (ignore) return
-        
-        const imageMap = new Map<string, string>()
-        if (imagesData) {
-          imagesData.forEach((img) => {
-            if (img.plant_id && img.link) {
-              imageMap.set(img.plant_id, img.link)
-            }
-          })
-        }
-        
-        // Fetch translated names if not English
-        let nameTranslations: Record<string, string> = {}
-        if (currentLang !== 'en') {
-          const { data: translationsData } = await supabase
-            .from('plant_translations')
-            .select('plant_id, name')
-            .in('plant_id', companionIds)
-            .eq('language', currentLang)
-          
-          if (!ignore && translationsData) {
-            translationsData.forEach((t) => {
-              if (t.plant_id && t.name) {
-                nameTranslations[t.plant_id] = t.name
-              }
-            })
-          }
-        }
-        
-        if (ignore) return
-        
-        const companions = plantsData.map((p) => ({
-          id: p.id,
-          name: nameTranslations[p.id] || p.name,
-          imageUrl: imageMap.get(p.id),
-        }))
-        
-        setCompanionPlants(companions)
-      } catch (e) {
-        console.error('Failed to load companion plants:', e)
-        setCompanionPlants([])
-      } finally {
-        if (!ignore) setCompanionsLoading(false)
-      }
-    }
-    loadCompanions()
-    return () => { ignore = true }
-  }, [plant?.miscellaneous?.companions, currentLang])
 
   const toggleLiked = async () => {
     if (!user?.id || !id) return
@@ -875,6 +791,93 @@ const PlantInfoSkeleton: React.FC<{ label?: string }> = ({ label = 'Loading...' 
 
 const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   const { t } = useTranslation('common')
+  const currentLang = useLanguage()
+  const navigate = useLanguageNavigate()
+  
+  // Companion plants state and fetching
+  const [companionPlants, setCompanionPlants] = React.useState<Array<{ id: string; name: string; imageUrl?: string }>>([])
+  const [companionsLoading, setCompanionsLoading] = React.useState(false)
+  
+  React.useEffect(() => {
+    let ignore = false
+    const loadCompanions = async () => {
+      const companionIds = plant?.miscellaneous?.companions
+      if (!companionIds || companionIds.length === 0) {
+        setCompanionPlants([])
+        return
+      }
+      
+      setCompanionsLoading(true)
+      try {
+        // Fetch plant basic info
+        const { data: plantsData } = await supabase
+          .from('plants')
+          .select('id, name')
+          .in('id', companionIds)
+        
+        if (ignore) return
+        
+        if (!plantsData?.length) {
+          setCompanionPlants([])
+          setCompanionsLoading(false)
+          return
+        }
+        
+        // Fetch primary images for companion plants
+        const { data: imagesData } = await supabase
+          .from('plant_images')
+          .select('plant_id, link')
+          .in('plant_id', companionIds)
+          .eq('use', 'primary')
+        
+        if (ignore) return
+        
+        const imageMap = new Map<string, string>()
+        if (imagesData) {
+          imagesData.forEach((img) => {
+            if (img.plant_id && img.link) {
+              imageMap.set(img.plant_id, img.link)
+            }
+          })
+        }
+        
+        // Fetch translated names if not English
+        let nameTranslations: Record<string, string> = {}
+        if (currentLang !== 'en') {
+          const { data: translationsData } = await supabase
+            .from('plant_translations')
+            .select('plant_id, name')
+            .in('plant_id', companionIds)
+            .eq('language', currentLang)
+          
+          if (!ignore && translationsData) {
+            translationsData.forEach((trans) => {
+              if (trans.plant_id && trans.name) {
+                nameTranslations[trans.plant_id] = trans.name
+              }
+            })
+          }
+        }
+        
+        if (ignore) return
+        
+        const companions = plantsData.map((p) => ({
+          id: p.id,
+          name: nameTranslations[p.id] || p.name,
+          imageUrl: imageMap.get(p.id),
+        }))
+        
+        setCompanionPlants(companions)
+      } catch (e) {
+        console.error('Failed to load companion plants:', e)
+        setCompanionPlants([])
+      } finally {
+        if (!ignore) setCompanionsLoading(false)
+      }
+    }
+    loadCompanions()
+    return () => { ignore = true }
+  }, [plant?.miscellaneous?.companions, currentLang])
   
   // Comprehensive enum value translator
   const translateEnum = React.useCallback((value: string | null | undefined): string => {
@@ -1479,9 +1482,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </p>
                 <CompanionPlantsCarousel 
                   companions={companionPlants} 
-                  onPlantClick={(id) => navigate(`/plants/${id}`)}
+                  onPlantClick={(plantId) => navigate(`/plants/${plantId}`)}
                   loading={companionsLoading}
-                  t={t}
                 />
               </div>
             </section>
@@ -2086,13 +2088,12 @@ const formatTimestampDetailed = (value?: string | null) => {
 }
 
 type CompanionPlantCardProps = {
-  id: string
   name: string
   imageUrl?: string
   onClick: () => void
 }
 
-const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ id, name, imageUrl, onClick }) => (
+const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ name, imageUrl, onClick }) => (
   <button
     type="button"
     onClick={onClick}
@@ -2128,10 +2129,9 @@ type CompanionPlantsCarouselProps = {
   companions: Array<{ id: string; name: string; imageUrl?: string }>
   onPlantClick: (id: string) => void
   loading?: boolean
-  t: (key: string, options?: any) => string
 }
 
-const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ companions, onPlantClick, loading, t }) => {
+const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ companions, onPlantClick, loading }) => {
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = React.useState(false)
   const [canScrollRight, setCanScrollRight] = React.useState(false)
@@ -2212,7 +2212,6 @@ const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ compa
         {companions.map((companion) => (
           <CompanionPlantCard
             key={companion.id}
-            id={companion.id}
             name={companion.name}
             imageUrl={companion.imageUrl}
             onClick={() => onPlantClick(companion.id)}
