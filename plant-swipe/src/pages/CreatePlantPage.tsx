@@ -690,6 +690,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
+  const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
   const targetFields = React.useMemo(
     () =>
       [
@@ -900,6 +901,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       })
     }
     if (parsed.length) setColorSuggestions(parsed)
+  }
+
+  const captureCompanionSuggestions = (data: unknown) => {
+    if (!data) return
+    const parsed: string[] = []
+    if (Array.isArray(data)) {
+      data.forEach((entry) => {
+        if (typeof entry === 'string' && entry.trim()) {
+          parsed.push(entry.trim())
+        }
+      })
+    }
+    if (parsed.length) setCompanionSuggestions(parsed)
   }
   const normalizePlantWatering = (candidate: Plant): Plant => ({
     ...candidate,
@@ -1324,6 +1338,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               if (field === 'complete') return
               if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
               if (field === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
+              if (field === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
               setPlant((prev) => {
                 const applied = applyAiFieldToPlant(prev, field, data)
                 const normalized = normalizePlantWatering(applied)
@@ -1355,6 +1370,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           for (const [fieldKey, data] of Object.entries(aiData as Record<string, unknown>)) {
             if (fieldKey.toLowerCase().includes('color')) captureColorSuggestions(data)
             if (fieldKey === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
+            if (fieldKey === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
             updated = applyAiFieldToPlant(updated, fieldKey, data)
             markFieldComplete(fieldKey)
           }
@@ -1752,6 +1768,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             value={plant}
             onChange={setPlant}
             colorSuggestions={colorSuggestions}
+            companionSuggestions={companionSuggestions}
             categoryProgress={hasAiProgress ? aiProgress : undefined}
           />
         )}

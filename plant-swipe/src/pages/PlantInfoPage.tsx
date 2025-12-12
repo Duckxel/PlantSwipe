@@ -338,6 +338,8 @@ const PlantInfoPage: React.FC = () => {
   const [gardenOpen, setGardenOpen] = React.useState(false)
   const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'shared' | 'error'>('idle')
   const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [companionPlants, setCompanionPlants] = React.useState<Array<{ id: string; name: string; imageUrl?: string }>>([])
+  const [companionsLoading, setCompanionsLoading] = React.useState(false)
 
   React.useEffect(() => {
     return () => {
@@ -447,6 +449,88 @@ const PlantInfoPage: React.FC = () => {
     load()
     return () => { ignore = true }
   }, [id, currentLang])
+
+  // Fetch companion plant details when plant data is loaded
+  React.useEffect(() => {
+    let ignore = false
+    const loadCompanions = async () => {
+      const companionIds = plant?.miscellaneous?.companions
+      if (!companionIds || companionIds.length === 0) {
+        setCompanionPlants([])
+        return
+      }
+      
+      setCompanionsLoading(true)
+      try {
+        // Fetch plant basic info
+        const { data: plantsData } = await supabase
+          .from('plants')
+          .select('id, name')
+          .in('id', companionIds)
+        
+        if (ignore) return
+        
+        if (!plantsData?.length) {
+          setCompanionPlants([])
+          setCompanionsLoading(false)
+          return
+        }
+        
+        // Fetch primary images for companion plants
+        const { data: imagesData } = await supabase
+          .from('plant_images')
+          .select('plant_id, link')
+          .in('plant_id', companionIds)
+          .eq('use', 'primary')
+        
+        if (ignore) return
+        
+        const imageMap = new Map<string, string>()
+        if (imagesData) {
+          imagesData.forEach((img) => {
+            if (img.plant_id && img.link) {
+              imageMap.set(img.plant_id, img.link)
+            }
+          })
+        }
+        
+        // Fetch translated names if not English
+        let nameTranslations: Record<string, string> = {}
+        if (currentLang !== 'en') {
+          const { data: translationsData } = await supabase
+            .from('plant_translations')
+            .select('plant_id, name')
+            .in('plant_id', companionIds)
+            .eq('language', currentLang)
+          
+          if (!ignore && translationsData) {
+            translationsData.forEach((t) => {
+              if (t.plant_id && t.name) {
+                nameTranslations[t.plant_id] = t.name
+              }
+            })
+          }
+        }
+        
+        if (ignore) return
+        
+        const companions = plantsData.map((p) => ({
+          id: p.id,
+          name: nameTranslations[p.id] || p.name,
+          imageUrl: imageMap.get(p.id),
+        }))
+        
+        setCompanionPlants(companions)
+      } catch (e) {
+        console.error('Failed to load companion plants:', e)
+        setCompanionPlants([])
+      } finally {
+        if (!ignore) setCompanionsLoading(false)
+      }
+    }
+    loadCompanions()
+    return () => { ignore = true }
+  }, [plant?.miscellaneous?.companions, currentLang])
 
   const toggleLiked = async () => {
     if (!user?.id || !id) return
@@ -1380,6 +1464,29 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </section>
           )}
           
+          {/* Companion Plants Carousel */}
+          {(companionPlants.length > 0 || companionsLoading) && (
+            <section
+              className="rounded-2xl sm:rounded-3xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 via-white/60 to-emerald-100/40 dark:from-emerald-950/30 dark:via-[#1f1f1f] dark:to-emerald-900/20 p-4 sm:p-6"
+            >
+              <div className="space-y-3 sm:space-y-4">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                  <Sprout className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.companions.title', 'Companion Plants')}</span>
+                </div>
+                <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">
+                  {t('moreInfo.companions.subtitle', 'These plants grow well alongside this one. Click to explore.')}
+                </p>
+                <CompanionPlantsCarousel 
+                  companions={companionPlants} 
+                  onPlantClick={(id) => navigate(`/plants/${id}`)}
+                  loading={companionsLoading}
+                  t={t}
+                />
+              </div>
+            </section>
+          )}
+          
           {(createdTimestamp || updatedTimestamp || createdByLabel || updatedByLabel || sourcesValue) && (
             <div className="rounded-2xl border border-stone-200/70 bg-white/90 p-4 sm:p-5 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]">
               <div className="flex flex-col gap-3 text-xs sm:text-sm text-stone-600 dark:text-stone-300">
@@ -1976,6 +2083,154 @@ const formatTimestampDetailed = (value?: string | null) => {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+type CompanionPlantCardProps = {
+  id: string
+  name: string
+  imageUrl?: string
+  onClick: () => void
+}
+
+const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ id, name, imageUrl, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="flex-shrink-0 snap-start group relative overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+    style={{ width: 'min(180px, 45vw)', height: '220px' }}
+  >
+    <div className="h-[140px] w-full overflow-hidden bg-stone-100 dark:bg-[#2d2d30]">
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={name}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+          loading="lazy"
+        />
+      ) : (
+        <div className="h-full w-full flex items-center justify-center text-stone-400 dark:text-stone-600">
+          <Leaf className="h-12 w-12" />
+        </div>
+      )}
+    </div>
+    <div className="p-3 text-left">
+      <h4 className="text-sm font-semibold text-stone-900 dark:text-stone-100 line-clamp-2 leading-tight">
+        {name}
+      </h4>
+      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wide">
+        View Plant →
+      </p>
+    </div>
+  </button>
+)
+
+type CompanionPlantsCarouselProps = {
+  companions: Array<{ id: string; name: string; imageUrl?: string }>
+  onPlantClick: (id: string) => void
+  loading?: boolean
+  t: (key: string, options?: any) => string
+}
+
+const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ companions, onPlantClick, loading, t }) => {
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = React.useState(false)
+  const [canScrollRight, setCanScrollRight] = React.useState(false)
+  const [needsScrolling, setNeedsScrolling] = React.useState(true)
+
+  const checkScrollability = React.useCallback(() => {
+    if (!scrollContainerRef.current) return
+    const container = scrollContainerRef.current
+    const canScroll = container.scrollWidth > container.clientWidth
+    setNeedsScrolling(canScroll)
+    setCanScrollLeft(container.scrollLeft > 0)
+    setCanScrollRight(container.scrollLeft < container.scrollWidth - container.clientWidth - 1)
+  }, [])
+
+  React.useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      checkScrollability()
+    }, 100)
+    
+    const container = scrollContainerRef.current
+    if (container) {
+      container.addEventListener('scroll', checkScrollability)
+      window.addEventListener('resize', checkScrollability)
+      return () => {
+        clearTimeout(timeoutId)
+        container.removeEventListener('scroll', checkScrollability)
+        window.removeEventListener('resize', checkScrollability)
+      }
+    }
+    return () => clearTimeout(timeoutId)
+  }, [checkScrollability, companions.length])
+
+  const scroll = React.useCallback((direction: 'left' | 'right') => {
+    if (!scrollContainerRef.current) return
+    const container = scrollContainerRef.current
+    const scrollAmount = container.clientWidth * 0.8
+    const targetScroll = direction === 'left' 
+      ? container.scrollLeft - scrollAmount 
+      : container.scrollLeft + scrollAmount
+    container.scrollTo({ left: targetScroll, behavior: 'smooth' })
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex gap-3 overflow-hidden">
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="flex-shrink-0 animate-pulse rounded-xl bg-stone-200 dark:bg-[#2d2d30]"
+            style={{ width: 'min(180px, 45vw)', height: '220px' }}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  if (companions.length === 0) return null
+
+  return (
+    <div className="relative">
+      {needsScrolling && canScrollLeft && (
+        <button
+          type="button"
+          onClick={() => scroll('left')}
+          className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
+          aria-label="Scroll left"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+      )}
+      <div
+        ref={scrollContainerRef}
+        className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] py-2"
+        style={{
+          justifyContent: needsScrolling ? 'flex-start' : 'center',
+        }}
+      >
+        {companions.map((companion) => (
+          <CompanionPlantCard
+            key={companion.id}
+            id={companion.id}
+            name={companion.name}
+            imageUrl={companion.imageUrl}
+            onClick={() => onPlantClick(companion.id)}
+          />
+        ))}
+      </div>
+      {needsScrolling && canScrollRight && (
+        <button
+          type="button"
+          onClick={() => scroll('right')}
+          className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
+          aria-label="Scroll right"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      )}
+    </div>
+  )
 }
 
 const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }> = ({ images, plantName }) => {

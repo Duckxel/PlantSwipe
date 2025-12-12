@@ -56,7 +56,8 @@
   ],
   "miscellaneous": [
     "Provide supporting relational data for {{plantName}}.",
-    "Fill `companions` with names of plants that grow well alongside it, `tags` with short categorical labels users might search for, and `sources` with an array of citation objects shaped like {\"name\":\"Royal Horticultural Society\",\"url\":\"https://www.rhs.org.uk/\"}.",
+    "Fill `companions` with an array of COMMON NAMES of plants that grow well alongside it (these will be shown as suggestions for the user to select from - e.g. [\"Basil\", \"Marigold\", \"Tomato\"]), `tags` with short categorical labels users might search for, and `sources` with an array of citation objects shaped like {\"name\":\"Royal Horticultural Society\",\"url\":\"https://www.rhs.org.uk/\"}.",
+    "For companions, focus on well-known companion planting relationships. Use standard common names so they can be matched to plant entries in the database.",
     "Prefer high-quality references and avoid duplicates."
   ],
   "meta": [
