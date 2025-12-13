@@ -1260,6 +1260,28 @@ export const GardenListPage: React.FC = () => {
               taskName: taskTypeLabel,
               actorColor: null,
             }).catch(() => {});
+            // Send notification to other garden members when task is completed
+            if (done) {
+              (async () => {
+                try {
+                  const session = (await supabase.auth.getSession()).data.session;
+                  if (session?.access_token) {
+                    fetch("/api/notifications/task-completed", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session.access_token}`,
+                      },
+                      credentials: "same-origin",
+                      body: JSON.stringify({
+                        gardenId: broadcastGardenId,
+                        taskDescription: `${taskTypeLabel} - ${plantName || t("garden.activity.plant")}`,
+                      }),
+                    }).catch(() => {});
+                  }
+                } catch {}
+              })();
+            }
             // Broadcast update BEFORE reload to ensure other clients receive it
             broadcastGardenUpdate({
               gardenId: broadcastGardenId,
@@ -1408,6 +1430,26 @@ export const GardenListPage: React.FC = () => {
             plantName,
             actorColor: null,
           }).catch(() => {});
+          // Send notification to other garden members
+          (async () => {
+            try {
+              const session = (await supabase.auth.getSession()).data.session;
+              if (session?.access_token) {
+                fetch("/api/notifications/task-completed", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                  },
+                  credentials: "same-origin",
+                  body: JSON.stringify({
+                    gardenId,
+                    taskDescription: t("garden.activity.completedAllTasks", { plantName }),
+                  }),
+                }).catch(() => {});
+              }
+            } catch {}
+          })();
           broadcastGardenUpdate({
             gardenId,
             kind: "tasks",
@@ -1544,6 +1586,26 @@ export const GardenListPage: React.FC = () => {
           message: t("garden.activity.completedAllGardenTasks", { gardenName }),
           actorColor: null,
         }).catch(() => {});
+        // Send notification to other garden members
+        (async () => {
+          try {
+            const session = (await supabase.auth.getSession()).data.session;
+            if (session?.access_token) {
+              fetch("/api/notifications/task-completed", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${session.access_token}`,
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({
+                  gardenId,
+                  taskDescription: t("garden.activity.completedAllGardenTasks", { gardenName }),
+                }),
+              }).catch(() => {});
+            }
+          } catch {}
+        })();
         broadcastGardenUpdate({
           gardenId,
           kind: "tasks",
@@ -1664,6 +1726,25 @@ export const GardenListPage: React.FC = () => {
               }),
               actorColor: null,
             });
+          } catch {}
+          // Send notification to other garden members
+          try {
+            const session = (await supabase.auth.getSession()).data.session;
+            if (session?.access_token) {
+              const gardenName = gardens.find((g) => g.id === gid)?.name || t("garden.garden");
+              fetch("/api/notifications/task-completed", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${session.access_token}`,
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({
+                  gardenId: gid,
+                  taskDescription: t("garden.activity.completedAllGardenTasks", { gardenName }),
+                }),
+              }).catch(() => {});
+            }
           } catch {}
           // Broadcast task update
           broadcastGardenUpdate({

@@ -53,9 +53,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests')
+      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, is_suspended, flag_level')
       .eq('id', currentId)
       .maybeSingle()
+    
+    // Check if user account is suspended (Level 3 ban)
+    if (!error && data && (data as any).is_suspended === true) {
+      // Sign out the suspended user
+      try {
+        await supabase.auth.signOut()
+        setUser(null)
+        setProfile(null)
+        try { localStorage.removeItem('plantswipe.profile') } catch {}
+        // Redirect to a suspended account page or show message
+        alert('Your account has been suspended. Please contact support for more information.')
+        window.location.href = '/'
+        return
+      } catch {
+        // Continue with sign out even if something fails
+      }
+    }
+    
     if (!error) {
       setProfile(data as any)
       
@@ -261,8 +279,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!rpcErr && data) loginEmail = String(data)
       } catch {}
     }
-    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
     if (error) return { error: error.message }
+    
+    // Check if the user's account is suspended (Level 3 ban)
+    if (signInData?.user?.id) {
+      try {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('is_suspended')
+          .eq('id', signInData.user.id)
+          .maybeSingle()
+        
+        if (profileData?.is_suspended === true) {
+          // Sign out the suspended user immediately
+          await supabase.auth.signOut()
+          return { error: 'Your account has been suspended. Please contact support for more information.' }
+        }
+      } catch {
+        // Continue if suspension check fails
+      }
+    }
+    
     // Fetch profile in background; do not block sign-in completion
     refreshProfile().catch(() => {})
     return {}

@@ -6118,6 +6118,800 @@ async function ensureDefaultAutomations() {
   }
 }
 
+// ============================================================================
+// Admin Report Management Endpoints
+// ============================================================================
+
+// Get flagged users count (for badge)
+app.get('/api/admin/reports/flagged-count', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    const result = await sql`
+      select 
+        count(distinct subject_user_id)::integer as flagged_users,
+        count(*)::integer as open_files
+      from public.report_files
+      where status = 'open'
+    `
+    res.json({
+      flaggedUsers: result[0]?.flagged_users || 0,
+      openFiles: result[0]?.open_files || 0
+    })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get flagged count:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get flagged count' })
+  }
+})
+
+// Get all flagged users with their report files
+app.get('/api/admin/reports/flagged-users', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    const { status = 'all', limit = 50, offset = 0 } = req.query
+    
+    let users
+    if (status === 'open') {
+      users = await sql`
+        select 
+          p.id,
+          p.display_name,
+          p.email,
+          p.avatar_url,
+          p.flag_level,
+          p.is_suspended,
+          p.suspended_at,
+          p.is_private,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as open_files_count,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id) as total_files_count,
+          (select max(rf.priority) from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as max_priority,
+          (select count(*)::integer from public.user_reports ur where ur.reported_id = p.id) as user_reports_count,
+          (select count(*)::integer from public.message_reports mr join public.messages m on m.id = mr.message_id where m.sender_id = p.id) as message_reports_count
+        from public.profiles p
+        where p.flag_level is not null
+          or exists (select 1 from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open')
+        order by 
+          p.is_suspended desc,
+          coalesce(p.flag_level, 0) desc,
+          open_files_count desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    } else {
+      users = await sql`
+        select 
+          p.id,
+          p.display_name,
+          u.email,
+          p.avatar_url,
+          p.flag_level,
+          p.is_suspended,
+          p.suspended_at,
+          p.is_private,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as open_files_count,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id) as total_files_count,
+          (select max(rf.priority) from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as max_priority,
+          (select count(*)::integer from public.user_reports ur where ur.reported_id = p.id) as user_reports_count,
+          (select count(*)::integer from public.message_reports mr join public.messages m on m.id = mr.message_id where m.sender_id = p.id) as message_reports_count
+        from public.profiles p
+        left join auth.users u on u.id = p.id
+        where p.flag_level is not null
+          or exists (select 1 from public.report_files rf where rf.subject_user_id = p.id)
+        order by 
+          p.is_suspended desc,
+          coalesce(p.flag_level, 0) desc,
+          open_files_count desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    }
+    
+    res.json({ users: users || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get flagged users:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get flagged users' })
+  }
+})
+
+// Get report files for a specific user
+app.get('/api/admin/reports/files/:userId', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const { userId } = req.params
+  const { status = 'all' } = req.query
+  
+  try {
+    let files
+    if (status === 'open') {
+      files = await sql`
+        select 
+          rf.*,
+          p.display_name as created_by_name,
+          cp.display_name as closed_by_name
+        from public.report_files rf
+        left join public.profiles p on p.id = rf.created_by
+        left join public.profiles cp on cp.id = rf.closed_by
+        where rf.subject_user_id = ${userId}
+          and rf.status = 'open'
+        order by rf.priority desc, rf.created_at desc
+      `
+    } else if (status === 'closed') {
+      files = await sql`
+        select 
+          rf.*,
+          p.display_name as created_by_name,
+          cp.display_name as closed_by_name
+        from public.report_files rf
+        left join public.profiles p on p.id = rf.created_by
+        left join public.profiles cp on cp.id = rf.closed_by
+        where rf.subject_user_id = ${userId}
+          and rf.status = 'closed'
+        order by rf.closed_at desc
+      `
+    } else {
+      files = await sql`
+        select 
+          rf.*,
+          p.display_name as created_by_name,
+          cp.display_name as closed_by_name
+        from public.report_files rf
+        left join public.profiles p on p.id = rf.created_by
+        left join public.profiles cp on cp.id = rf.closed_by
+        where rf.subject_user_id = ${userId}
+        order by rf.status asc, rf.priority desc, rf.created_at desc
+      `
+    }
+    
+    res.json({ files: files || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get report files:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get report files' })
+  }
+})
+
+// Get a single report file with its linked reports
+app.get('/api/admin/reports/file/:fileId', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const { fileId } = req.params
+  
+  try {
+    const fileResult = await sql`
+      select 
+        rf.*,
+        p.display_name as created_by_name,
+        cp.display_name as closed_by_name,
+        sp.display_name as subject_display_name,
+        sp.avatar_url as subject_avatar_url,
+        sp.flag_level as subject_flag_level,
+        sp.is_suspended as subject_is_suspended
+      from public.report_files rf
+      left join public.profiles p on p.id = rf.created_by
+      left join public.profiles cp on cp.id = rf.closed_by
+      left join public.profiles sp on sp.id = rf.subject_user_id
+      where rf.id = ${fileId}
+    `
+    
+    if (!fileResult?.length) {
+      res.status(404).json({ error: 'Report file not found' })
+      return
+    }
+    
+    // Get linked user reports
+    const userReports = await sql`
+      select 
+        ur.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar
+      from public.user_reports ur
+      join public.profiles rp on rp.id = ur.reporter_id
+      where ur.report_file_id = ${fileId}
+      order by ur.created_at desc
+    `
+    
+    // Get linked message reports
+    const messageReports = await sql`
+      select 
+        mr.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar,
+        m.content as message_content,
+        m.created_at as message_created_at,
+        c.id as conversation_id
+      from public.message_reports mr
+      join public.profiles rp on rp.id = mr.reporter_id
+      join public.messages m on m.id = mr.message_id
+      join public.conversations c on c.id = m.conversation_id
+      where mr.report_file_id = ${fileId}
+      order by mr.created_at desc
+    `
+    
+    res.json({
+      file: fileResult[0],
+      userReports: userReports || [],
+      messageReports: messageReports || []
+    })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get report file' })
+  }
+})
+
+// Create a new report file
+app.post('/api/admin/reports/files', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { subjectUserId, category, title, notes, priority = 1 } = req.body
+  
+  if (!subjectUserId || !category || !title) {
+    res.status(400).json({ error: 'Missing required fields: subjectUserId, category, title' })
+    return
+  }
+  
+  try {
+    const result = await sql`
+      insert into public.report_files (subject_user_id, category, title, notes, priority, created_by)
+      values (${subjectUserId}, ${category}, ${title}, ${notes || null}, ${priority}, ${adminId})
+      returning *
+    `
+    
+    // Update user's flag level if this is their first report file
+    await sql`
+      update public.profiles
+      set flag_level = coalesce(flag_level, 1)
+      where id = ${subjectUserId} and flag_level is null
+    `
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to create report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to create report file' })
+  }
+})
+
+// Update a report file
+app.put('/api/admin/reports/file/:fileId', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  const { title, notes, priority } = req.body
+  
+  try {
+    const result = await sql`
+      update public.report_files
+      set 
+        title = coalesce(${title || null}, title),
+        notes = coalesce(${notes}, notes),
+        priority = coalesce(${priority || null}, priority),
+        updated_at = now()
+      where id = ${fileId}
+      returning *
+    `
+    
+    if (!result?.length) {
+      res.status(404).json({ error: 'Report file not found' })
+      return
+    }
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to update report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update report file' })
+  }
+})
+
+// Close a report file
+app.post('/api/admin/reports/file/:fileId/close', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  const { resolution, actionTaken } = req.body
+  
+  try {
+    const result = await sql`
+      update public.report_files
+      set 
+        status = 'closed',
+        closed_by = ${adminId},
+        closed_at = now(),
+        resolution = ${resolution || null},
+        action_taken = ${actionTaken || null},
+        updated_at = now()
+      where id = ${fileId} and status = 'open'
+      returning *
+    `
+    
+    if (!result?.length) {
+      res.status(404).json({ error: 'Report file not found or already closed' })
+      return
+    }
+    
+    // Update linked reports to 'reviewed' status
+    await sql`
+      update public.user_reports
+      set status = 'reviewed', reviewed_by = ${adminId}, reviewed_at = now()
+      where report_file_id = ${fileId} and status = 'pending'
+    `
+    
+    await sql`
+      update public.message_reports
+      set status = 'reviewed', reviewed_by = ${adminId}, reviewed_at = now()
+      where report_file_id = ${fileId} and status = 'pending'
+    `
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to close report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to close report file' })
+  }
+})
+
+// Reopen a report file
+app.post('/api/admin/reports/file/:fileId/reopen', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  
+  try {
+    const result = await sql`
+      update public.report_files
+      set 
+        status = 'open',
+        closed_by = null,
+        closed_at = null,
+        resolution = null,
+        action_taken = null,
+        updated_at = now()
+      where id = ${fileId} and status = 'closed'
+      returning *
+    `
+    
+    if (!result?.length) {
+      res.status(404).json({ error: 'Report file not found or already open' })
+      return
+    }
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to reopen report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to reopen report file' })
+  }
+})
+
+// Link existing reports to a file
+app.post('/api/admin/reports/file/:fileId/link', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  const { userReportIds = [], messageReportIds = [] } = req.body
+  
+  try {
+    if (userReportIds.length > 0) {
+      await sql`
+        update public.user_reports
+        set report_file_id = ${fileId}
+        where id = any(${userReportIds}::uuid[])
+      `
+    }
+    
+    if (messageReportIds.length > 0) {
+      await sql`
+        update public.message_reports
+        set report_file_id = ${fileId}
+        where id = any(${messageReportIds}::uuid[])
+      `
+    }
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[admin/reports] Failed to link reports:', err)
+    res.status(500).json({ error: err?.message || 'Failed to link reports' })
+  }
+})
+
+// Update user flag level (escalate/de-escalate)
+app.put('/api/admin/reports/user/:userId/flag-level', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { flagLevel } = req.body
+  
+  if (flagLevel !== null && (flagLevel < 1 || flagLevel > 3)) {
+    res.status(400).json({ error: 'Flag level must be between 1 and 3, or null to clear' })
+    return
+  }
+  
+  try {
+    // If escalating to level 3, suspend the account
+    if (flagLevel === 3) {
+      await sql`
+        update public.profiles
+        set 
+          flag_level = 3,
+          is_suspended = true,
+          suspended_at = now(),
+          suspended_by = ${adminId},
+          is_private = true
+        where id = ${userId}
+      `
+      
+      // Send suspension email
+      try {
+        const userInfo = await sql`
+          select u.email, p.display_name, p.language
+          from auth.users u
+          join public.profiles p on p.id = u.id
+          where u.id = ${userId}
+        `
+        if (userInfo?.length && userInfo[0].email) {
+          // Trigger account_suspended notification
+          await sendSuspensionEmail(userInfo[0].email, userInfo[0].display_name, userInfo[0].language)
+        }
+      } catch (emailErr) {
+        console.error('[admin/reports] Failed to send suspension email:', emailErr)
+      }
+    } else {
+      await sql`
+        update public.profiles
+        set flag_level = ${flagLevel}
+        where id = ${userId}
+      `
+    }
+    
+    res.json({ ok: true, flagLevel })
+  } catch (err) {
+    console.error('[admin/reports] Failed to update flag level:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update flag level' })
+  }
+})
+
+// Suspend a user account (Level 3)
+app.post('/api/admin/reports/user/:userId/suspend', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { reason } = req.body
+  
+  try {
+    await sql`
+      update public.profiles
+      set 
+        flag_level = 3,
+        is_suspended = true,
+        suspended_at = now(),
+        suspended_by = ${adminId},
+        is_private = true
+      where id = ${userId}
+    `
+    
+    // Create a report file for the suspension
+    await sql`
+      insert into public.report_files (subject_user_id, category, title, notes, priority, created_by, status, action_taken)
+      values (
+        ${userId}, 
+        'system_abuse', 
+        'Account Suspended', 
+        ${reason || 'Account suspended by administrator'},
+        3,
+        ${adminId},
+        'closed',
+        'suspended'
+      )
+    `
+    
+    // Send suspension email
+    try {
+      const userInfo = await sql`
+        select u.email, p.display_name, p.language
+        from auth.users u
+        join public.profiles p on p.id = u.id
+        where u.id = ${userId}
+      `
+      if (userInfo?.length && userInfo[0].email) {
+        await sendSuspensionEmail(userInfo[0].email, userInfo[0].display_name, userInfo[0].language)
+      }
+    } catch (emailErr) {
+      console.error('[admin/reports] Failed to send suspension email:', emailErr)
+    }
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[admin/reports] Failed to suspend user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to suspend user' })
+  }
+})
+
+// Unsuspend a user account
+app.post('/api/admin/reports/user/:userId/unsuspend', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { flagLevel = 2 } = req.body // Default to level 2 (under watch)
+  
+  try {
+    await sql`
+      update public.profiles
+      set 
+        flag_level = ${flagLevel},
+        is_suspended = false,
+        suspended_at = null,
+        suspended_by = null
+      where id = ${userId}
+    `
+    
+    res.json({ ok: true, flagLevel })
+  } catch (err) {
+    console.error('[admin/reports] Failed to unsuspend user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to unsuspend user' })
+  }
+})
+
+// Get unassigned reports (not linked to any file)
+app.get('/api/admin/reports/unassigned', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  try {
+    const userReports = await sql`
+      select 
+        ur.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar,
+        sp.display_name as reported_name,
+        sp.avatar_url as reported_avatar,
+        sp.flag_level as reported_flag_level
+      from public.user_reports ur
+      join public.profiles rp on rp.id = ur.reporter_id
+      join public.profiles sp on sp.id = ur.reported_id
+      where ur.report_file_id is null
+        and ur.status = 'pending'
+      order by ur.created_at desc
+      limit 50
+    `
+    
+    const messageReports = await sql`
+      select 
+        mr.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar,
+        sp.display_name as sender_name,
+        sp.avatar_url as sender_avatar,
+        sp.flag_level as sender_flag_level,
+        m.content as message_content,
+        m.created_at as message_created_at,
+        m.sender_id
+      from public.message_reports mr
+      join public.profiles rp on rp.id = mr.reporter_id
+      join public.messages m on m.id = mr.message_id
+      join public.profiles sp on sp.id = m.sender_id
+      where mr.report_file_id is null
+        and mr.status = 'pending'
+      order by mr.created_at desc
+      limit 50
+    `
+    
+    res.json({
+      userReports: userReports || [],
+      messageReports: messageReports || []
+    })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get unassigned reports:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get unassigned reports' })
+  }
+})
+
+// Get user stats (friends, messages, conversations) for admin
+app.get('/api/admin/reports/user/:userId/stats', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  
+  try {
+    const statsResult = await sql`
+      select
+        (select count(*)::integer from public.friends where user_id = ${userId} or friend_id = ${userId}) as friends_count,
+        (select count(*)::integer from public.messages where sender_id = ${userId}) as messages_sent_count,
+        (select count(*)::integer from public.conversation_participants where user_id = ${userId} and left_at is null) as conversations_count,
+        (select count(*)::integer from public.user_reports where reported_id = ${userId}) as reports_received_count,
+        (select count(*)::integer from public.user_reports where reporter_id = ${userId}) as reports_made_count
+    `
+    
+    res.json({ stats: statsResult[0] || {} })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get user stats:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get user stats' })
+  }
+})
+
+// Get user's messages for admin review
+app.get('/api/admin/reports/user/:userId/messages', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { limit = 100, offset = 0, conversationId } = req.query
+  
+  try {
+    let messages
+    if (conversationId) {
+      messages = await sql`
+        select 
+          m.*,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar,
+          (select exists(select 1 from public.message_reports mr where mr.message_id = m.id)) as is_reported
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.conversation_id = ${conversationId}
+        order by m.created_at desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    } else {
+      messages = await sql`
+        select 
+          m.*,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar,
+          (select exists(select 1 from public.message_reports mr where mr.message_id = m.id)) as is_reported
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.sender_id = ${userId}
+        order by m.created_at desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    }
+    
+    res.json({ messages: messages || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get user messages:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get user messages' })
+  }
+})
+
+// Get user's conversations for admin review
+app.get('/api/admin/reports/user/:userId/conversations', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  
+  try {
+    const conversations = await sql`
+      select 
+        c.*,
+        (
+          select jsonb_agg(jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url
+          ))
+          from public.conversation_participants cp2
+          join public.profiles p on p.id = cp2.user_id
+          where cp2.conversation_id = c.id
+        ) as participants,
+        (select count(*)::integer from public.messages m where m.conversation_id = c.id) as message_count,
+        (select count(*)::integer from public.messages m where m.conversation_id = c.id and m.sender_id = ${userId}) as user_message_count
+      from public.conversations c
+      join public.conversation_participants cp on cp.conversation_id = c.id and cp.user_id = ${userId}
+      where cp.left_at is null
+      order by c.last_message_at desc nulls last
+      limit 50
+    `
+    
+    res.json({ conversations: conversations || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get user conversations:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get user conversations' })
+  }
+})
+
+// Helper function to send suspension email
+async function sendSuspensionEmail(email, displayName, language) {
+  if (!sql) return
+  
+  try {
+    // Get the account_suspended automation
+    const automation = await sql`
+      select na.*, nt.message_variants, nt.title as template_title
+      from public.notification_automations na
+      left join public.notification_templates nt on nt.id = na.template_id
+      where na.trigger_type = 'account_suspended'
+        and na.is_enabled = true
+      limit 1
+    `
+    
+    if (!automation?.length) {
+      console.log('[suspension-email] account_suspended automation not configured')
+      return
+    }
+    
+    // For now, just log - the actual email sending would be handled by the email system
+    console.log(`[suspension-email] Would send suspension email to ${email} (${displayName})`)
+    
+    // You could also create a user_notification entry here if you want it delivered via push
+    // Or trigger an email campaign send
+    
+  } catch (err) {
+    console.error('[suspension-email] Failed to send:', err)
+  }
+}
+
 app.get('/api/admin/notification-automations', async (req, res) => {
   const adminId = await ensureEditor(req, res)
   if (!adminId) return
@@ -7785,10 +8579,24 @@ app.get('/api/admin/member', async (req, res) => {
         const adminName = null
         if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
       } catch {}
+      // Get social stats via REST (best effort)
+      let socialStats = null
+      try {
+        const statsRpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/admin_get_user_social_stats`, {
+          method: 'POST',
+          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _user_id: targetId }),
+        })
+        if (statsRpc.ok) {
+          socialStats = await statsRpc.json().catch(() => null)
+        }
+      } catch {}
+      
       res.json({
         ok: true,
         user: { id: targetId, email: resolvedEmail || emailParam || null, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
         profile,
+        socialStats,
         ips,
         lastOnlineAt,
         lastIp,
@@ -7838,8 +8646,22 @@ app.get('/api/admin/member', async (req, res) => {
     }
     let profile = null
     try {
-      const rows = await sql`select id, display_name, is_admin, roles from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin, roles, flag_level, is_suspended, suspended_at, is_private from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
+    } catch {}
+    // Get social stats for admin (friends, messages, conversations, reports)
+    let socialStats = null
+    try {
+      const statsRows = await sql`
+        select
+          (select count(*)::integer from public.friends where user_id = ${user.id} or friend_id = ${user.id}) as friends_count,
+          (select count(*)::integer from public.messages where sender_id = ${user.id}) as messages_sent_count,
+          (select count(*)::integer from public.conversation_participants where user_id = ${user.id} and left_at is null) as conversations_count,
+          (select count(*)::integer from public.user_reports where reported_id = ${user.id}) as reports_received_count,
+          (select count(*)::integer from public.report_files where subject_user_id = ${user.id}) as report_files_count,
+          (select count(*)::integer from public.report_files where subject_user_id = ${user.id} and status = 'open') as open_report_files_count
+      `
+      socialStats = statsRows?.[0] || null
     } catch {}
     // Load latest admin notes for this profile (DB or REST)
     let adminNotes = []
@@ -8011,6 +8833,7 @@ app.get('/api/admin/member', async (req, res) => {
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at, email_confirmed_at: user.email_confirmed_at || null, last_sign_in_at: user.last_sign_in_at || null },
       profile,
+      socialStats,
       ips,
       lastOnlineAt,
       lastIp,
@@ -14765,6 +15588,1215 @@ app.delete('/api/push/subscribe', async (req, res) => {
     res.status(500).json({ error: err?.message || 'Failed to remove subscription' })
   }
 })
+
+// ============================================================================
+// Messaging API Endpoints
+// ============================================================================
+
+// Helper function to send instant notification for specific trigger types
+// payload can include senderId to check for mutes
+async function sendInstantNotification(triggerType, userId, payload) {
+  if (!sql) return
+  try {
+    // Check if recipient has muted the sender (if senderId provided)
+    if (payload?.senderId && payload.senderId !== userId) {
+      const muteCheck = await sql`
+        select exists (
+          select 1 from public.user_mutes
+          where muter_id = ${userId} and muted_id = ${payload.senderId}
+        ) as is_muted
+      `
+      if (muteCheck?.[0]?.is_muted) {
+        console.log(`[notifications] Notification suppressed - user ${userId} has muted ${payload.senderId}`)
+        return
+      }
+    }
+    
+    // Get automation settings for this trigger type
+    const automations = await sql`
+      select na.*, 
+             coalesce(nt.message_variants, '{}') as message_variants,
+             nt.title as template_title
+      from public.notification_automations na
+      left join public.notification_templates nt on nt.id = na.template_id
+      where na.trigger_type = ${triggerType}
+        and na.is_enabled = true
+      limit 1
+    `
+    
+    if (!automations || !automations.length) {
+      console.log(`[notifications] Automation ${triggerType} not enabled or not found`)
+      return
+    }
+    
+    const automation = automations[0]
+    const messageVariants = toStringArray(automation.message_variants)
+    if (!messageVariants.length) {
+      console.log(`[notifications] No message variants for ${triggerType}`)
+      return
+    }
+    
+    // Get recipient profile
+    const profiles = await sql`
+      select id, display_name, language, timezone, notify_push
+      from public.profiles
+      where id = ${userId}
+      limit 1
+    `
+    
+    if (!profiles || !profiles.length) return
+    const recipient = profiles[0]
+    
+    // Check if user has push notifications enabled
+    if (recipient.notify_push === false) return
+    
+    // Get translations for user's language
+    const userLang = (recipient.language || 'en').toLowerCase()
+    let variants = messageVariants
+    
+    if (userLang !== 'en' && automation.template_id) {
+      const translations = await sql`
+        select message_variants
+        from public.notification_template_translations
+        where template_id = ${automation.template_id}
+          and language = ${userLang}
+        limit 1
+      `
+      if (translations?.length && translations[0].message_variants?.length) {
+        variants = translations[0].message_variants
+      }
+    }
+    
+    // Select random variant
+    const messageIndex = Math.floor(Math.random() * variants.length)
+    let message = variants[messageIndex]
+    
+    // Replace template variables
+    message = message
+      .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+      .replace(/\{\{sender\}\}/gi, payload?.senderName || 'Someone')
+      .replace(/\{\{sender_name\}\}/gi, payload?.senderName || 'Someone')
+      .replace(/\{\{garden\}\}/gi, payload?.gardenName || 'your garden')
+      .replace(/\{\{garden_name\}\}/gi, payload?.gardenName || 'your garden')
+      .replace(/\{\{task\}\}/gi, payload?.taskName || 'a task')
+      .replace(/\{\{task_name\}\}/gi, payload?.taskName || 'a task')
+    
+    // Create notification
+    await sql`
+      insert into public.user_notifications (
+        automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status, payload
+      )
+      values (
+        ${automation.id},
+        ${userId},
+        ${automation.template_title || automation.display_name || 'Notification'},
+        ${message},
+        ${payload?.ctaUrl || automation.cta_url || null},
+        now(),
+        'pending',
+        ${sql.json(payload || {})}
+      )
+    `
+    
+    console.log(`[notifications] Created instant notification ${triggerType} for user ${userId}`)
+  } catch (err) {
+    console.error(`[notifications] Failed to send instant notification ${triggerType}:`, err)
+  }
+}
+
+// Get user's conversations list
+app.get('/api/messages/conversations', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  try {
+    const conversations = await sql`
+      select 
+        c.id,
+        c.type,
+        c.status,
+        c.initiated_by,
+        c.title,
+        c.last_message_at,
+        c.last_message_preview,
+        c.created_at,
+        cp.unread_count,
+        cp.is_muted,
+        cp.last_read_at,
+        -- Get the other participant's info for direct chats
+        (
+          select jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url
+          )
+          from public.conversation_participants cp2
+          join public.profiles p on p.id = cp2.user_id
+          where cp2.conversation_id = c.id
+            and cp2.user_id <> ${user.id}
+            and cp2.left_at is null
+          limit 1
+        ) as other_participant
+      from public.conversations c
+      join public.conversation_participants cp on cp.conversation_id = c.id
+      where cp.user_id = ${user.id}
+        and cp.left_at is null
+      order by 
+        case when c.status = 'pending' and c.initiated_by <> ${user.id} then 0 else 1 end,
+        c.last_message_at desc nulls last,
+        c.created_at desc
+    `
+    
+    res.json({ 
+      conversations: conversations.map(c => ({
+        id: c.id,
+        type: c.type,
+        status: c.status,
+        initiatedBy: c.initiated_by,
+        title: c.title,
+        lastMessageAt: c.last_message_at,
+        lastMessagePreview: c.last_message_preview,
+        createdAt: c.created_at,
+        unreadCount: c.unread_count || 0,
+        isMuted: c.is_muted || false,
+        lastReadAt: c.last_read_at,
+        otherParticipant: c.other_participant,
+        isPendingForMe: c.status === 'pending' && c.initiated_by !== user.id
+      }))
+    })
+  } catch (err) {
+    console.error('[messages] Failed to get conversations:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get conversations' })
+  }
+})
+
+// Get messages in a conversation
+app.get('/api/messages/conversations/:conversationId/messages', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100)
+  const before = req.query.before // message ID to paginate before
+  
+  try {
+    // Verify user is participant
+    const participant = await sql`
+      select cp.id, c.status
+      from public.conversation_participants cp
+      join public.conversations c on c.id = cp.conversation_id
+      where cp.conversation_id = ${conversationId}
+        and cp.user_id = ${user.id}
+        and cp.left_at is null
+      limit 1
+    `
+    
+    if (!participant?.length) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+    
+    let messagesQuery
+    if (before) {
+      messagesQuery = sql`
+        select 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.type,
+          m.reply_to_id,
+          m.metadata,
+          m.deleted_at,
+          m.edited_at,
+          m.created_at,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.conversation_id = ${conversationId}
+          and m.id < ${before}
+        order by m.created_at desc
+        limit ${limit}
+      `
+    } else {
+      messagesQuery = sql`
+        select 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.type,
+          m.reply_to_id,
+          m.metadata,
+          m.deleted_at,
+          m.edited_at,
+          m.created_at,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.conversation_id = ${conversationId}
+        order by m.created_at desc
+        limit ${limit}
+      `
+    }
+    
+    const messages = await messagesQuery
+    
+    res.json({
+      messages: messages.reverse().map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name,
+        senderAvatar: m.sender_avatar,
+        content: m.deleted_at ? null : m.content,
+        type: m.type,
+        replyToId: m.reply_to_id,
+        metadata: m.metadata || {},
+        isDeleted: !!m.deleted_at,
+        editedAt: m.edited_at,
+        createdAt: m.created_at,
+        isOwn: m.sender_id === user.id
+      })),
+      hasMore: messages.length === limit
+    })
+  } catch (err) {
+    console.error('[messages] Failed to get messages:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get messages' })
+  }
+})
+
+// Send a message
+// Rate limiting configuration for messages
+const MESSAGE_RATE_LIMIT = {
+  windowMinutes: 1,           // Time window in minutes
+  maxMessages: 30,            // Max messages per window for normal users
+  maxMessagesNewAccount: 10,  // Max messages for accounts < 24h old
+  newAccountHours: 24,        // Account age threshold
+  cooldownSeconds: 5,         // Minimum seconds between messages
+  maxContentLength: 5000,     // Max message length
+  minContentLength: 1,        // Min message length
+}
+
+// In-memory cooldown tracker (per user, last message timestamp)
+const messageCooldowns = new Map()
+
+app.post('/api/messages/conversations/:conversationId/messages', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  const { content, replyToId } = req.body
+  
+  if (!content || typeof content !== 'string' || !content.trim()) {
+    return res.status(400).json({ error: 'Message content is required' })
+  }
+  
+  const trimmedContent = content.trim()
+  
+  // Content length validation
+  if (trimmedContent.length < MESSAGE_RATE_LIMIT.minContentLength) {
+    return res.status(400).json({ error: 'Message is too short' })
+  }
+  
+  if (trimmedContent.length > MESSAGE_RATE_LIMIT.maxContentLength) {
+    return res.status(400).json({ error: 'Message is too long' })
+  }
+  
+  // Cooldown check (in-memory, fast)
+  const lastMessageTime = messageCooldowns.get(user.id)
+  const now = Date.now()
+  if (lastMessageTime && (now - lastMessageTime) < MESSAGE_RATE_LIMIT.cooldownSeconds * 1000) {
+    const waitSeconds = Math.ceil((MESSAGE_RATE_LIMIT.cooldownSeconds * 1000 - (now - lastMessageTime)) / 1000)
+    return res.status(429).json({ error: `Please wait ${waitSeconds} seconds before sending another message` })
+  }
+  
+  try {
+    // Get user account age for anti-spam
+    const userInfo = await sql`
+      select u.created_at
+      from auth.users u
+      where u.id = ${user.id}
+    `
+    const accountCreatedAt = userInfo?.[0]?.created_at ? new Date(userInfo[0].created_at) : new Date(0)
+    const accountAgeHours = (Date.now() - accountCreatedAt.getTime()) / (1000 * 60 * 60)
+    const isNewAccount = accountAgeHours < MESSAGE_RATE_LIMIT.newAccountHours
+    
+    // Rate limiting check (database-backed)
+    const windowStart = new Date(Date.now() - MESSAGE_RATE_LIMIT.windowMinutes * 60 * 1000)
+    const recentMessages = await sql`
+      select count(*)::integer as count
+      from public.messages
+      where sender_id = ${user.id}
+        and created_at >= ${windowStart.toISOString()}
+    `
+    const messageCount = recentMessages?.[0]?.count || 0
+    const maxAllowed = isNewAccount ? MESSAGE_RATE_LIMIT.maxMessagesNewAccount : MESSAGE_RATE_LIMIT.maxMessages
+    
+    if (messageCount >= maxAllowed) {
+      const errorMsg = isNewAccount 
+        ? 'New accounts have limited messaging. Please wait before sending more messages.'
+        : 'You are sending messages too quickly. Please slow down.'
+      return res.status(429).json({ error: errorMsg })
+    }
+    
+    // Verify user is participant and conversation is accepted
+    const participant = await sql`
+      select cp.id, c.status, c.initiated_by
+      from public.conversation_participants cp
+      join public.conversations c on c.id = cp.conversation_id
+      where cp.conversation_id = ${conversationId}
+        and cp.user_id = ${user.id}
+        and cp.left_at is null
+      limit 1
+    `
+    
+    if (!participant?.length) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+    
+    if (participant[0].status !== 'accepted') {
+      return res.status(403).json({ error: 'Conversation must be accepted before sending messages' })
+    }
+    
+    // Check if blocked by any other participant
+    const blockedCheck = await sql`
+      select exists (
+        select 1 from public.conversation_participants cp
+        join public.user_blocks ub on ub.blocker_id = cp.user_id and ub.blocked_id = ${user.id}
+        where cp.conversation_id = ${conversationId}
+          and cp.user_id <> ${user.id}
+          and cp.left_at is null
+      ) as is_blocked
+    `
+    
+    if (blockedCheck?.[0]?.is_blocked) {
+      return res.status(403).json({ error: 'Cannot send messages in this conversation' })
+    }
+    
+    // Duplicate message detection (anti-spam)
+    const duplicateCheck = await sql`
+      select exists (
+        select 1 from public.messages
+        where sender_id = ${user.id}
+          and conversation_id = ${conversationId}
+          and content = ${trimmedContent}
+          and created_at > now() - interval '30 seconds'
+      ) as is_duplicate
+    `
+    
+    if (duplicateCheck?.[0]?.is_duplicate) {
+      return res.status(429).json({ error: 'Duplicate message detected' })
+    }
+    
+    // Insert message
+    const messages = await sql`
+      insert into public.messages (conversation_id, sender_id, content, reply_to_id)
+      values (${conversationId}, ${user.id}, ${trimmedContent}, ${replyToId || null})
+      returning *
+    `
+    
+    const message = messages[0]
+    
+    // Update cooldown tracker
+    messageCooldowns.set(user.id, Date.now())
+    
+    // Clean up old cooldown entries periodically (every ~100 requests)
+    if (Math.random() < 0.01) {
+      const expiryTime = Date.now() - MESSAGE_RATE_LIMIT.cooldownSeconds * 1000 * 2
+      for (const [uid, time] of messageCooldowns.entries()) {
+        if (time < expiryTime) messageCooldowns.delete(uid)
+      }
+    }
+    
+    // Get sender profile
+    const profiles = await sql`
+      select display_name, avatar_url from public.profiles where id = ${user.id}
+    `
+    const senderProfile = profiles?.[0] || {}
+    
+    // Send notification to other participants (respecting mutes at user level too)
+    const otherParticipants = await sql`
+      select cp.user_id 
+      from public.conversation_participants cp
+      where cp.conversation_id = ${conversationId}
+        and cp.user_id <> ${user.id}
+        and cp.left_at is null
+        and cp.is_muted = false
+        and not exists (
+          select 1 from public.user_mutes um
+          where um.muter_id = cp.user_id and um.muted_id = ${user.id}
+        )
+    `
+    
+    for (const p of otherParticipants || []) {
+      sendInstantNotification('message_received', p.user_id, {
+        senderName: senderProfile.display_name || 'Someone',
+        senderId: user.id,
+        ctaUrl: `/messages/${conversationId}`
+      }).catch(() => {})
+    }
+    
+    res.json({
+      message: {
+        id: message.id,
+        conversationId: message.conversation_id,
+        senderId: message.sender_id,
+        senderName: senderProfile.display_name,
+        senderAvatar: senderProfile.avatar_url,
+        content: message.content,
+        type: message.type,
+        replyToId: message.reply_to_id,
+        metadata: message.metadata || {},
+        isDeleted: false,
+        editedAt: null,
+        createdAt: message.created_at,
+        isOwn: true
+      }
+    })
+  } catch (err) {
+    console.error('[messages] Failed to send message:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send message' })
+  }
+})
+
+// Start or get direct conversation
+app.post('/api/messages/start', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { userId: otherUserId } = req.body
+  
+  if (!otherUserId) {
+    return res.status(400).json({ error: 'User ID is required' })
+  }
+  
+  if (otherUserId === user.id) {
+    return res.status(400).json({ error: 'Cannot start conversation with yourself' })
+  }
+  
+  try {
+    // Use the RPC function to get or create conversation
+    const result = await sql`
+      select public.get_or_create_direct_conversation(${otherUserId}::uuid) as conversation_id
+    `
+    
+    const conversationId = result?.[0]?.conversation_id
+    
+    if (!conversationId) {
+      return res.status(500).json({ error: 'Failed to create conversation' })
+    }
+    
+    // Get conversation details
+    const conversations = await sql`
+      select 
+        c.*,
+        cp.unread_count,
+        cp.is_muted,
+        (
+          select jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url
+          )
+          from public.conversation_participants cp2
+          join public.profiles p on p.id = cp2.user_id
+          where cp2.conversation_id = c.id
+            and cp2.user_id <> ${user.id}
+            and cp2.left_at is null
+          limit 1
+        ) as other_participant
+      from public.conversations c
+      join public.conversation_participants cp on cp.conversation_id = c.id
+      where c.id = ${conversationId}
+        and cp.user_id = ${user.id}
+    `
+    
+    const conv = conversations?.[0]
+    
+    // If this is a new pending conversation, send notification to recipient
+    if (conv?.status === 'pending' && conv?.initiated_by === user.id) {
+      // Get sender's name for notification
+      const senderProfiles = await sql`
+        select display_name from public.profiles where id = ${user.id}
+      `
+      const senderName = senderProfiles?.[0]?.display_name || 'Someone'
+      
+      // Notify the other user about the chat request
+      sendInstantNotification('message_received', otherUserId, {
+        senderName,
+        senderId: user.id,
+        ctaUrl: '/messages'
+      }).catch(() => {})
+    }
+    
+    res.json({
+      conversationId,
+      conversation: conv ? {
+        id: conv.id,
+        type: conv.type,
+        status: conv.status,
+        initiatedBy: conv.initiated_by,
+        otherParticipant: conv.other_participant,
+        unreadCount: conv.unread_count || 0,
+        isMuted: conv.is_muted || false,
+        isPendingForMe: conv.status === 'pending' && conv.initiated_by !== user.id
+      } : null
+    })
+  } catch (err) {
+    console.error('[messages] Failed to start conversation:', err)
+    res.status(500).json({ error: err?.message || 'Failed to start conversation' })
+  }
+})
+
+// Accept chat request
+app.post('/api/messages/conversations/:conversationId/accept', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  
+  try {
+    await sql`select public.accept_chat_request(${conversationId}::uuid)`
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[messages] Failed to accept chat request:', err)
+    res.status(500).json({ error: err?.message || 'Failed to accept chat request' })
+  }
+})
+
+// Reject chat request
+app.post('/api/messages/conversations/:conversationId/reject', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  
+  try {
+    await sql`select public.reject_chat_request(${conversationId}::uuid)`
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[messages] Failed to reject chat request:', err)
+    res.status(500).json({ error: err?.message || 'Failed to reject chat request' })
+  }
+})
+
+// Mark conversation as read
+app.post('/api/messages/conversations/:conversationId/read', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  
+  try {
+    await sql`select public.mark_conversation_read(${conversationId}::uuid)`
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[messages] Failed to mark as read:', err)
+    res.status(500).json({ error: err?.message || 'Failed to mark as read' })
+  }
+})
+
+// Get total unread count
+app.get('/api/messages/unread-count', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  try {
+    const result = await sql`select public.get_total_unread_messages() as count`
+    res.json({ count: result?.[0]?.count || 0 })
+  } catch (err) {
+    console.error('[messages] Failed to get unread count:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get unread count' })
+  }
+})
+
+// ============================================================================
+// Friend Request & Task Notification Triggers
+// ============================================================================
+
+// Send notification when friend request is sent
+app.post('/api/notifications/friend-request-sent', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { recipientId } = req.body
+  
+  if (!recipientId) {
+    return res.status(400).json({ error: 'Recipient ID is required' })
+  }
+  
+  try {
+    // Get sender's name
+    const senderProfiles = await sql`
+      select display_name from public.profiles where id = ${user.id}
+    `
+    const senderName = senderProfiles?.[0]?.display_name || 'Someone'
+    
+    // Send notification to recipient
+    await sendInstantNotification('friend_request_sent', recipientId, {
+      senderName,
+      senderId: user.id,
+      ctaUrl: '/friends'
+    })
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] Failed to send friend request notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// Send notification when friend request is accepted
+app.post('/api/notifications/friend-request-accepted', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { requesterId } = req.body
+  
+  if (!requesterId) {
+    return res.status(400).json({ error: 'Requester ID is required' })
+  }
+  
+  try {
+    // Get accepter's name (current user)
+    const accepterProfiles = await sql`
+      select display_name from public.profiles where id = ${user.id}
+    `
+    const accepterName = accepterProfiles?.[0]?.display_name || 'Someone'
+    
+    // Send notification to the original requester
+    await sendInstantNotification('friend_request_accepted', requesterId, {
+      senderName: accepterName,
+      senderId: user.id,
+      ctaUrl: '/friends'
+    })
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] Failed to send friend accepted notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// Send notification when task is completed by another user
+app.post('/api/notifications/task-completed', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { gardenId, taskName } = req.body
+  
+  if (!gardenId) {
+    return res.status(400).json({ error: 'Garden ID is required' })
+  }
+  
+  try {
+    // Get completer's name
+    const completerProfiles = await sql`
+      select display_name from public.profiles where id = ${user.id}
+    `
+    const completerName = completerProfiles?.[0]?.display_name || 'Someone'
+    
+    // Get garden name
+    const gardens = await sql`
+      select name from public.gardens where id = ${gardenId}
+    `
+    const gardenName = gardens?.[0]?.name || 'your garden'
+    
+    // Get all other garden members
+    const members = await sql`
+      select gm.user_id 
+      from public.garden_members gm
+      where gm.garden_id = ${gardenId}
+        and gm.user_id <> ${user.id}
+    `
+    
+    // Send notification to each member
+    for (const member of members || []) {
+      await sendInstantNotification('task_completed_by_other', member.user_id, {
+        senderName: completerName,
+        senderId: user.id,
+        gardenName,
+        taskName: taskName || 'a task',
+        ctaUrl: `/garden/${gardenId}`
+      })
+    }
+    
+    res.json({ ok: true, notified: members?.length || 0 })
+  } catch (err) {
+    console.error('[notifications] Failed to send task completed notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// ============================================================================
+// User Safety API (Block, Mute, Report)
+// ============================================================================
+
+// Block a user
+app.post('/api/users/:userId/block', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: blockedId } = req.params
+  const { reason } = req.body || {}
+  
+  if (!blockedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  if (user.id === blockedId) {
+    return res.status(400).json({ error: 'Cannot block yourself' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.block_user(${blockedId}::uuid, ${reason || null}::text)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('block_user', {
+        _blocked_id: blockedId,
+        _reason: reason || null
+      })
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[block] Failed to block user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to block user' })
+  }
+})
+
+// Unblock a user
+app.delete('/api/users/:userId/block', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: blockedId } = req.params
+  
+  if (!blockedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.unblock_user(${blockedId}::uuid)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('unblock_user', { _blocked_id: blockedId })
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[unblock] Failed to unblock user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to unblock user' })
+  }
+})
+
+// Get blocked users list
+app.get('/api/users/blocked', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  try {
+    let blockedUsers = []
+    if (sql) {
+      blockedUsers = await sql`
+        select 
+          b.id,
+          b.blocked_id,
+          p.display_name,
+          p.avatar_url,
+          b.created_at as blocked_at
+        from public.user_blocks b
+        join public.profiles p on p.id = b.blocked_id
+        where b.blocker_id = ${user.id}
+        order by b.created_at desc
+      `
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('get_blocked_users')
+      if (error) throw error
+      blockedUsers = data || []
+    }
+    res.json({ blockedUsers })
+  } catch (err) {
+    console.error('[blocked] Failed to get blocked users:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get blocked users' })
+  }
+})
+
+// Mute a user (suppress notifications)
+app.post('/api/users/:userId/mute', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: mutedId } = req.params
+  
+  if (!mutedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  if (user.id === mutedId) {
+    return res.status(400).json({ error: 'Cannot mute yourself' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.mute_user(${mutedId}::uuid)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('mute_user', { _muted_id: mutedId })
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[mute] Failed to mute user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to mute user' })
+  }
+})
+
+// Unmute a user
+app.delete('/api/users/:userId/mute', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: mutedId } = req.params
+  
+  if (!mutedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.unmute_user(${mutedId}::uuid)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('unmute_user', { _muted_id: mutedId })
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[unmute] Failed to unmute user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to unmute user' })
+  }
+})
+
+// Get muted users list
+app.get('/api/users/muted', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  try {
+    let mutedUsers = []
+    if (sql) {
+      mutedUsers = await sql`
+        select 
+          m.id,
+          m.muted_id,
+          p.display_name,
+          p.avatar_url,
+          m.created_at as muted_at
+        from public.user_mutes m
+        join public.profiles p on p.id = m.muted_id
+        where m.muter_id = ${user.id}
+        order by m.created_at desc
+      `
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('get_muted_users')
+      if (error) throw error
+      mutedUsers = data || []
+    }
+    res.json({ mutedUsers })
+  } catch (err) {
+    console.error('[muted] Failed to get muted users:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get muted users' })
+  }
+})
+
+// Report a user
+app.post('/api/users/:userId/report', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: reportedId } = req.params
+  const { reason, description } = req.body || {}
+  
+  if (!reportedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  if (!reason) {
+    return res.status(400).json({ error: 'Reason required' })
+  }
+  
+  const validReasons = ['spam', 'harassment', 'inappropriate_content', 'fake_profile', 'other']
+  if (!validReasons.includes(reason)) {
+    return res.status(400).json({ error: 'Invalid reason' })
+  }
+  
+  if (user.id === reportedId) {
+    return res.status(400).json({ error: 'Cannot report yourself' })
+  }
+  
+  try {
+    let reportId
+    if (sql) {
+      const result = await sql`select public.report_user(${reportedId}::uuid, ${reason}::text, ${description || null}::text) as id`
+      reportId = result[0]?.id
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('report_user', {
+        _reported_id: reportedId,
+        _reason: reason,
+        _description: description || null
+      })
+      if (error) throw error
+      reportId = data
+    }
+    res.json({ ok: true, reportId })
+  } catch (err) {
+    console.error('[report] Failed to report user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to report user' })
+  }
+})
+
+// Report a message
+app.post('/api/messages/:messageId/report', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { messageId } = req.params
+  const { reason, description } = req.body || {}
+  
+  if (!messageId) {
+    return res.status(400).json({ error: 'Message ID required' })
+  }
+  
+  if (!reason) {
+    return res.status(400).json({ error: 'Reason required' })
+  }
+  
+  const validReasons = ['spam', 'harassment', 'inappropriate_content', 'scam', 'other']
+  if (!validReasons.includes(reason)) {
+    return res.status(400).json({ error: 'Invalid reason' })
+  }
+  
+  try {
+    let reportId
+    if (sql) {
+      const result = await sql`select public.report_message(${messageId}::uuid, ${reason}::text, ${description || null}::text) as id`
+      reportId = result[0]?.id
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('report_message', {
+        _message_id: messageId,
+        _reason: reason,
+        _description: description || null
+      })
+      if (error) throw error
+      reportId = data
+    }
+    res.json({ ok: true, reportId })
+  } catch (err) {
+    console.error('[report] Failed to report message:', err)
+    res.status(500).json({ error: err?.message || 'Failed to report message' })
+  }
+})
+
+// Check block/mute status for a user
+app.get('/api/users/:userId/safety-status', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: targetId } = req.params
+  
+  if (!targetId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  try {
+    let status = { isBlocked: false, isMuted: false, isBlockedBy: false }
+    if (sql) {
+      const result = await sql`
+        select 
+          exists(select 1 from public.user_blocks where blocker_id = ${user.id} and blocked_id = ${targetId}) as is_blocked,
+          exists(select 1 from public.user_mutes where muter_id = ${user.id} and muted_id = ${targetId}) as is_muted,
+          exists(select 1 from public.user_blocks where blocker_id = ${targetId} and blocked_id = ${user.id}) as is_blocked_by
+      `
+      status = {
+        isBlocked: result[0]?.is_blocked || false,
+        isMuted: result[0]?.is_muted || false,
+        isBlockedBy: result[0]?.is_blocked_by || false
+      }
+    } else {
+      const { data: blocked } = await supabaseAdmin
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', user.id)
+        .eq('blocked_id', targetId)
+        .maybeSingle()
+      const { data: muted } = await supabaseAdmin
+        .from('user_mutes')
+        .select('id')
+        .eq('muter_id', user.id)
+        .eq('muted_id', targetId)
+        .maybeSingle()
+      const { data: blockedBy } = await supabaseAdmin
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', targetId)
+        .eq('blocked_id', user.id)
+        .maybeSingle()
+      status = {
+        isBlocked: !!blocked,
+        isMuted: !!muted,
+        isBlockedBy: !!blockedBy
+      }
+    }
+    res.json(status)
+  } catch (err) {
+    console.error('[safety-status] Failed to get safety status:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get safety status' })
+  }
+})
+
+// Update messaging privacy preference
+app.put('/api/users/privacy/messaging', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { allowMessagesFromNonFriends } = req.body || {}
+  
+  if (typeof allowMessagesFromNonFriends !== 'boolean') {
+    return res.status(400).json({ error: 'allowMessagesFromNonFriends must be a boolean' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`
+        update public.profiles
+        set allow_messages_from_non_friends = ${allowMessagesFromNonFriends}
+        where id = ${user.id}
+      `
+    } else {
+      const { error } = await supabaseAdmin
+        .from('profiles')
+        .update({ allow_messages_from_non_friends: allowMessagesFromNonFriends })
+        .eq('id', user.id)
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[privacy] Failed to update messaging privacy:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update privacy settings' })
+  }
+})
+
+// Get messaging privacy preference
+app.get('/api/users/privacy/messaging', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  try {
+    let allowMessagesFromNonFriends = true
+    if (sql) {
+      const result = await sql`
+        select coalesce(allow_messages_from_non_friends, true) as allow_messages_from_non_friends
+        from public.profiles
+        where id = ${user.id}
+      `
+      allowMessagesFromNonFriends = result[0]?.allow_messages_from_non_friends ?? true
+    } else {
+      const { data, error } = await supabaseAdmin
+        .from('profiles')
+        .select('allow_messages_from_non_friends')
+        .eq('id', user.id)
+        .single()
+      if (error) throw error
+      allowMessagesFromNonFriends = data?.allow_messages_from_non_friends ?? true
+    }
+    res.json({ allowMessagesFromNonFriends })
+  } catch (err) {
+    console.error('[privacy] Failed to get messaging privacy:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get privacy settings' })
+  }
+})
+
+// ============================================================================
+// Notification Worker
+// ============================================================================
 
 const notificationWorkerIntervalMs = Math.max(15000, Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS || 60000))
 const notificationDeliveryBatchSize = Math.min(

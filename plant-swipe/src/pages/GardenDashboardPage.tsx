@@ -2451,6 +2451,26 @@ export const GardenDashboardPage: React.FC = () => {
             plantName,
             actorColor: actorColorCss || null,
           });
+          // Send notification to other garden members
+          (async () => {
+            try {
+              const session = (await supabase.auth.getSession()).data.session;
+              if (session?.access_token) {
+                fetch("/api/notifications/task-completed", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                  },
+                  credentials: "same-origin",
+                  body: JSON.stringify({
+                    gardenId: id,
+                    taskDescription: t("garden.activity.completedAllTasks", { plantName }),
+                  }),
+                }).catch(() => {});
+              }
+            } catch {}
+          })();
           setActivityRev((r) => r + 1);
           // Broadcast update BEFORE reload to ensure other clients receive it
           await broadcastGardenUpdate({
@@ -2552,6 +2572,28 @@ export const GardenDashboardPage: React.FC = () => {
             taskName: taskTypeLabel,
             actorColor: actorColorCss || null,
           });
+          // Send notification to other garden members when task is completed
+          if (done) {
+            (async () => {
+              try {
+                const session = (await supabase.auth.getSession()).data.session;
+                if (session?.access_token) {
+                  fetch("/api/notifications/task-completed", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${session.access_token}`,
+                    },
+                    credentials: "same-origin",
+                    body: JSON.stringify({
+                      gardenId: id,
+                      taskDescription: `${taskTypeLabel} - ${plantName || t("garden.activity.plant")}`,
+                    }),
+                  }).catch(() => {});
+                }
+              } catch {}
+            })();
+          }
           setActivityRev((r) => r + 1);
           // Broadcast update BEFORE reload to ensure other clients receive it
           await broadcastGardenUpdate({
