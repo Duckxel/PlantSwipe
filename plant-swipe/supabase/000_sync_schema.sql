@@ -5542,8 +5542,8 @@ as $$
       -- Can always message if they are friends
       exists (
         select 1 from public.friends
-        where (user1_id = _sender_id and user2_id = _recipient_id)
-           or (user1_id = _recipient_id and user2_id = _sender_id)
+        where (user_id = _sender_id and friend_id = _recipient_id)
+           or (user_id = _recipient_id and friend_id = _sender_id)
       )
       -- Or if recipient allows messages from non-friends and is not private
       or (
@@ -5579,8 +5579,8 @@ begin
   
   -- Also remove any existing friendship
   delete from public.friends
-  where (user1_id = _blocker_id and user2_id = _blocked_id)
-     or (user1_id = _blocked_id and user2_id = _blocker_id);
+  where (user_id = _blocker_id and friend_id = _blocked_id)
+     or (user_id = _blocked_id and friend_id = _blocker_id);
   
   -- Cancel any pending friend requests
   delete from public.friend_requests
