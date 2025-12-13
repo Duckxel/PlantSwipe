@@ -14,7 +14,6 @@ import {
   Clock,
   AlertCircle,
   Loader2,
-  Search,
   MessageCircle,
   ChevronRight,
   MoreVertical,
