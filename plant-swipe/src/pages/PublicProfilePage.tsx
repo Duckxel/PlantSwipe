@@ -1253,7 +1253,6 @@ export default function PublicProfilePage() {
                               </div>
                             )}
                           </div>
-                          </Button>
                         </div>
                       )}
                       {friendStatus === 'request_sent' && (
