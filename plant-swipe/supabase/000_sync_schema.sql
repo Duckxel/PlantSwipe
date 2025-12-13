@@ -4802,6 +4802,445 @@ $$;
 
 grant execute on function public.search_user_profiles(text, integer) to authenticated;
 
+-- ========== Messaging System ==========
+-- Conversations table - supports both friend chats and chat requests from non-friends
+create table if not exists public.conversations (
+  id uuid primary key default gen_random_uuid(),
+  -- 'direct' for 1-on-1 chats, 'group' for future group chat support
+  type text not null default 'direct' check (type in ('direct', 'group')),
+  -- For non-friend chats: 'pending' requires acceptance, 'accepted' is active, 'rejected' is declined
+  status text not null default 'accepted' check (status in ('pending', 'accepted', 'rejected', 'blocked')),
+  -- The user who initiated the conversation (used for chat requests)
+  initiated_by uuid references public.profiles(id) on delete set null,
+  -- Title for group chats (optional)
+  title text,
+  -- Last message timestamp for sorting
+  last_message_at timestamptz,
+  -- Last message preview (first 100 chars)
+  last_message_preview text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Conversation participants table
+create table if not exists public.conversation_participants (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  -- Role in conversation: 'owner' (creator), 'admin', 'member'
+  role text not null default 'member' check (role in ('owner', 'admin', 'member')),
+  -- Number of unread messages for this user
+  unread_count integer not null default 0,
+  -- Last time user read the conversation
+  last_read_at timestamptz,
+  -- User can mute notifications for this conversation
+  is_muted boolean not null default false,
+  -- Soft delete - user left or was removed from conversation
+  left_at timestamptz,
+  joined_at timestamptz not null default now(),
+  unique(conversation_id, user_id)
+);
+
+-- Messages table
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  sender_id uuid not null references public.profiles(id) on delete cascade,
+  -- Message content
+  content text not null,
+  -- Message type: 'text', 'image', 'system' (for system messages like "user joined")
+  type text not null default 'text' check (type in ('text', 'image', 'system')),
+  -- For replies to other messages
+  reply_to_id uuid references public.messages(id) on delete set null,
+  -- Metadata (attachments, etc.)
+  metadata jsonb not null default '{}'::jsonb,
+  -- Soft delete
+  deleted_at timestamptz,
+  -- Edit tracking
+  edited_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+-- Indexes for efficient messaging queries
+create index if not exists conversations_updated_idx on public.conversations (updated_at desc);
+create index if not exists conversations_last_msg_idx on public.conversations (last_message_at desc nulls last);
+create index if not exists conv_participants_user_idx on public.conversation_participants (user_id);
+create index if not exists conv_participants_conv_idx on public.conversation_participants (conversation_id);
+create index if not exists conv_participants_unread_idx on public.conversation_participants (user_id, unread_count) where unread_count > 0;
+create index if not exists messages_conv_idx on public.messages (conversation_id, created_at desc);
+create index if not exists messages_sender_idx on public.messages (sender_id);
+
+-- Enable RLS
+alter table public.conversations enable row level security;
+alter table public.conversation_participants enable row level security;
+alter table public.messages enable row level security;
+
+-- RLS policies for conversations - users can only see conversations they're part of
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversations' and policyname='conversations_select_participant') then
+    drop policy conversations_select_participant on public.conversations;
+  end if;
+  create policy conversations_select_participant on public.conversations for select to authenticated
+    using (
+      exists (
+        select 1 from public.conversation_participants cp
+        where cp.conversation_id = conversations.id
+        and cp.user_id = (select auth.uid())
+        and cp.left_at is null
+      )
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversations' and policyname='conversations_insert') then
+    drop policy conversations_insert on public.conversations;
+  end if;
+  create policy conversations_insert on public.conversations for insert to authenticated
+    with check (initiated_by = (select auth.uid()));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversations' and policyname='conversations_update') then
+    drop policy conversations_update on public.conversations;
+  end if;
+  create policy conversations_update on public.conversations for update to authenticated
+    using (
+      exists (
+        select 1 from public.conversation_participants cp
+        where cp.conversation_id = conversations.id
+        and cp.user_id = (select auth.uid())
+        and cp.left_at is null
+      )
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+-- RLS policies for conversation_participants
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversation_participants' and policyname='conv_participants_select') then
+    drop policy conv_participants_select on public.conversation_participants;
+  end if;
+  create policy conv_participants_select on public.conversation_participants for select to authenticated
+    using (
+      user_id = (select auth.uid())
+      or exists (
+        select 1 from public.conversation_participants cp2
+        where cp2.conversation_id = conversation_participants.conversation_id
+        and cp2.user_id = (select auth.uid())
+        and cp2.left_at is null
+      )
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversation_participants' and policyname='conv_participants_insert') then
+    drop policy conv_participants_insert on public.conversation_participants;
+  end if;
+  create policy conv_participants_insert on public.conversation_participants for insert to authenticated
+    with check (
+      user_id = (select auth.uid())
+      or exists (
+        select 1 from public.conversation_participants cp
+        where cp.conversation_id = conversation_participants.conversation_id
+        and cp.user_id = (select auth.uid())
+        and cp.role in ('owner', 'admin')
+        and cp.left_at is null
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversation_participants' and policyname='conv_participants_update') then
+    drop policy conv_participants_update on public.conversation_participants;
+  end if;
+  create policy conv_participants_update on public.conversation_participants for update to authenticated
+    using (
+      user_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    )
+    with check (
+      user_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+-- RLS policies for messages
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='messages' and policyname='messages_select') then
+    drop policy messages_select on public.messages;
+  end if;
+  create policy messages_select on public.messages for select to authenticated
+    using (
+      exists (
+        select 1 from public.conversation_participants cp
+        where cp.conversation_id = messages.conversation_id
+        and cp.user_id = (select auth.uid())
+        and cp.left_at is null
+      )
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='messages' and policyname='messages_insert') then
+    drop policy messages_insert on public.messages;
+  end if;
+  create policy messages_insert on public.messages for insert to authenticated
+    with check (
+      sender_id = (select auth.uid())
+      and exists (
+        select 1 from public.conversation_participants cp
+        join public.conversations c on c.id = cp.conversation_id
+        where cp.conversation_id = messages.conversation_id
+        and cp.user_id = (select auth.uid())
+        and cp.left_at is null
+        and c.status = 'accepted'
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='messages' and policyname='messages_update') then
+    drop policy messages_update on public.messages;
+  end if;
+  create policy messages_update on public.messages for update to authenticated
+    using (sender_id = (select auth.uid()) or public.is_admin_user((select auth.uid())))
+    with check (sender_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
+end $$;
+
+-- Function to start or get existing direct conversation between two users
+create or replace function public.get_or_create_direct_conversation(_other_user_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid;
+  v_conv_id uuid;
+  v_are_friends boolean;
+  v_status text;
+  v_is_blocked boolean;
+  v_can_message boolean;
+begin
+  v_caller := auth.uid();
+  if v_caller is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  if v_caller = _other_user_id then
+    raise exception 'Cannot start conversation with yourself';
+  end if;
+  
+  -- Check if caller is blocked by the other user
+  select exists (
+    select 1 from public.user_blocks
+    where blocker_id = _other_user_id and blocked_id = v_caller
+  ) into v_is_blocked;
+  
+  if v_is_blocked then
+    raise exception 'Cannot message this user';
+  end if;
+  
+  -- Check if conversation already exists between these users
+  select c.id into v_conv_id
+  from public.conversations c
+  join public.conversation_participants cp1 on cp1.conversation_id = c.id and cp1.user_id = v_caller
+  join public.conversation_participants cp2 on cp2.conversation_id = c.id and cp2.user_id = _other_user_id
+  where c.type = 'direct'
+  limit 1;
+  
+  if v_conv_id is not null then
+    return v_conv_id;
+  end if;
+  
+  -- Check if users are friends
+  select exists (
+    select 1 from public.friends
+    where (user_id = v_caller and friend_id = _other_user_id)
+    or (user_id = _other_user_id and friend_id = v_caller)
+  ) into v_are_friends;
+  
+  -- If not friends, check privacy settings
+  if not v_are_friends then
+    select 
+      coalesce(p.allow_messages_from_non_friends, true) and not coalesce(p.is_private, false)
+    into v_can_message
+    from public.profiles p
+    where p.id = _other_user_id;
+    
+    if not coalesce(v_can_message, true) then
+      raise exception 'This user does not accept messages from non-friends';
+    end if;
+  end if;
+  
+  -- If friends, auto-accept; otherwise pending
+  v_status := case when v_are_friends then 'accepted' else 'pending' end;
+  
+  -- Create new conversation
+  insert into public.conversations (type, status, initiated_by)
+  values ('direct', v_status, v_caller)
+  returning id into v_conv_id;
+  
+  -- Add both participants
+  insert into public.conversation_participants (conversation_id, user_id, role)
+  values 
+    (v_conv_id, v_caller, 'owner'),
+    (v_conv_id, _other_user_id, 'member');
+  
+  return v_conv_id;
+end;
+$$;
+
+grant execute on function public.get_or_create_direct_conversation(uuid) to authenticated;
+
+-- Function to accept a chat request
+create or replace function public.accept_chat_request(_conversation_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid;
+begin
+  v_caller := auth.uid();
+  if v_caller is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  -- Verify caller is a participant and conversation is pending
+  if not exists (
+    select 1 from public.conversation_participants cp
+    join public.conversations c on c.id = cp.conversation_id
+    where cp.conversation_id = _conversation_id
+    and cp.user_id = v_caller
+    and cp.left_at is null
+    and c.status = 'pending'
+    and c.initiated_by <> v_caller -- Only non-initiator can accept
+  ) then
+    raise exception 'Chat request not found or not authorized';
+  end if;
+  
+  update public.conversations
+  set status = 'accepted', updated_at = now()
+  where id = _conversation_id;
+end;
+$$;
+
+grant execute on function public.accept_chat_request(uuid) to authenticated;
+
+-- Function to reject a chat request
+create or replace function public.reject_chat_request(_conversation_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid;
+begin
+  v_caller := auth.uid();
+  if v_caller is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  -- Verify caller is a participant and conversation is pending
+  if not exists (
+    select 1 from public.conversation_participants cp
+    join public.conversations c on c.id = cp.conversation_id
+    where cp.conversation_id = _conversation_id
+    and cp.user_id = v_caller
+    and cp.left_at is null
+    and c.status = 'pending'
+    and c.initiated_by <> v_caller -- Only non-initiator can reject
+  ) then
+    raise exception 'Chat request not found or not authorized';
+  end if;
+  
+  update public.conversations
+  set status = 'rejected', updated_at = now()
+  where id = _conversation_id;
+end;
+$$;
+
+grant execute on function public.reject_chat_request(uuid) to authenticated;
+
+-- Function to mark messages as read
+create or replace function public.mark_conversation_read(_conversation_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid;
+begin
+  v_caller := auth.uid();
+  if v_caller is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  update public.conversation_participants
+  set unread_count = 0, last_read_at = now()
+  where conversation_id = _conversation_id
+  and user_id = v_caller;
+end;
+$$;
+
+grant execute on function public.mark_conversation_read(uuid) to authenticated;
+
+-- Function to get total unread message count for a user
+create or replace function public.get_total_unread_messages()
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  select coalesce(sum(unread_count), 0)::integer
+  from public.conversation_participants
+  where user_id = (select auth.uid())
+  and left_at is null;
+$$;
+
+grant execute on function public.get_total_unread_messages() to authenticated;
+
+-- Trigger to update conversation metadata when message is sent
+create or replace function public.update_conversation_on_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Update conversation's last message info
+  update public.conversations
+  set 
+    last_message_at = NEW.created_at,
+    last_message_preview = left(NEW.content, 100),
+    updated_at = now()
+  where id = NEW.conversation_id;
+  
+  -- Increment unread count for all other participants
+  update public.conversation_participants
+  set unread_count = unread_count + 1
+  where conversation_id = NEW.conversation_id
+  and user_id <> NEW.sender_id
+  and left_at is null;
+  
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trigger_update_conversation_on_message on public.messages;
+create trigger trigger_update_conversation_on_message
+  after insert on public.messages
+  for each row
+  execute function public.update_conversation_on_message();
+
+
 -- ========== User Safety System (Blocks, Mutes, Reports) ==========
 
 -- User blocks table - blocked users cannot send messages or friend requests
@@ -5346,444 +5785,6 @@ as $$
 $$;
 
 grant execute on function public.get_muted_users() to authenticated;
-
--- ========== Messaging System ==========
--- Conversations table - supports both friend chats and chat requests from non-friends
-create table if not exists public.conversations (
-  id uuid primary key default gen_random_uuid(),
-  -- 'direct' for 1-on-1 chats, 'group' for future group chat support
-  type text not null default 'direct' check (type in ('direct', 'group')),
-  -- For non-friend chats: 'pending' requires acceptance, 'accepted' is active, 'rejected' is declined
-  status text not null default 'accepted' check (status in ('pending', 'accepted', 'rejected', 'blocked')),
-  -- The user who initiated the conversation (used for chat requests)
-  initiated_by uuid references public.profiles(id) on delete set null,
-  -- Title for group chats (optional)
-  title text,
-  -- Last message timestamp for sorting
-  last_message_at timestamptz,
-  -- Last message preview (first 100 chars)
-  last_message_preview text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
--- Conversation participants table
-create table if not exists public.conversation_participants (
-  id uuid primary key default gen_random_uuid(),
-  conversation_id uuid not null references public.conversations(id) on delete cascade,
-  user_id uuid not null references public.profiles(id) on delete cascade,
-  -- Role in conversation: 'owner' (creator), 'admin', 'member'
-  role text not null default 'member' check (role in ('owner', 'admin', 'member')),
-  -- Number of unread messages for this user
-  unread_count integer not null default 0,
-  -- Last time user read the conversation
-  last_read_at timestamptz,
-  -- User can mute notifications for this conversation
-  is_muted boolean not null default false,
-  -- Soft delete - user left or was removed from conversation
-  left_at timestamptz,
-  joined_at timestamptz not null default now(),
-  unique(conversation_id, user_id)
-);
-
--- Messages table
-create table if not exists public.messages (
-  id uuid primary key default gen_random_uuid(),
-  conversation_id uuid not null references public.conversations(id) on delete cascade,
-  sender_id uuid not null references public.profiles(id) on delete cascade,
-  -- Message content
-  content text not null,
-  -- Message type: 'text', 'image', 'system' (for system messages like "user joined")
-  type text not null default 'text' check (type in ('text', 'image', 'system')),
-  -- For replies to other messages
-  reply_to_id uuid references public.messages(id) on delete set null,
-  -- Metadata (attachments, etc.)
-  metadata jsonb not null default '{}'::jsonb,
-  -- Soft delete
-  deleted_at timestamptz,
-  -- Edit tracking
-  edited_at timestamptz,
-  created_at timestamptz not null default now()
-);
-
--- Indexes for efficient messaging queries
-create index if not exists conversations_updated_idx on public.conversations (updated_at desc);
-create index if not exists conversations_last_msg_idx on public.conversations (last_message_at desc nulls last);
-create index if not exists conv_participants_user_idx on public.conversation_participants (user_id);
-create index if not exists conv_participants_conv_idx on public.conversation_participants (conversation_id);
-create index if not exists conv_participants_unread_idx on public.conversation_participants (user_id, unread_count) where unread_count > 0;
-create index if not exists messages_conv_idx on public.messages (conversation_id, created_at desc);
-create index if not exists messages_sender_idx on public.messages (sender_id);
-
--- Enable RLS
-alter table public.conversations enable row level security;
-alter table public.conversation_participants enable row level security;
-alter table public.messages enable row level security;
-
--- RLS policies for conversations - users can only see conversations they're part of
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversations' and policyname='conversations_select_participant') then
-    drop policy conversations_select_participant on public.conversations;
-  end if;
-  create policy conversations_select_participant on public.conversations for select to authenticated
-    using (
-      exists (
-        select 1 from public.conversation_participants cp
-        where cp.conversation_id = conversations.id
-        and cp.user_id = (select auth.uid())
-        and cp.left_at is null
-      )
-      or public.is_admin_user((select auth.uid()))
-    );
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversations' and policyname='conversations_insert') then
-    drop policy conversations_insert on public.conversations;
-  end if;
-  create policy conversations_insert on public.conversations for insert to authenticated
-    with check (initiated_by = (select auth.uid()));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversations' and policyname='conversations_update') then
-    drop policy conversations_update on public.conversations;
-  end if;
-  create policy conversations_update on public.conversations for update to authenticated
-    using (
-      exists (
-        select 1 from public.conversation_participants cp
-        where cp.conversation_id = conversations.id
-        and cp.user_id = (select auth.uid())
-        and cp.left_at is null
-      )
-      or public.is_admin_user((select auth.uid()))
-    );
-end $$;
-
--- RLS policies for conversation_participants
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversation_participants' and policyname='conv_participants_select') then
-    drop policy conv_participants_select on public.conversation_participants;
-  end if;
-  create policy conv_participants_select on public.conversation_participants for select to authenticated
-    using (
-      user_id = (select auth.uid())
-      or exists (
-        select 1 from public.conversation_participants cp2
-        where cp2.conversation_id = conversation_participants.conversation_id
-        and cp2.user_id = (select auth.uid())
-        and cp2.left_at is null
-      )
-      or public.is_admin_user((select auth.uid()))
-    );
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversation_participants' and policyname='conv_participants_insert') then
-    drop policy conv_participants_insert on public.conversation_participants;
-  end if;
-  create policy conv_participants_insert on public.conversation_participants for insert to authenticated
-    with check (
-      user_id = (select auth.uid())
-      or exists (
-        select 1 from public.conversation_participants cp
-        where cp.conversation_id = conversation_participants.conversation_id
-        and cp.user_id = (select auth.uid())
-        and cp.role in ('owner', 'admin')
-        and cp.left_at is null
-      )
-    );
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='conversation_participants' and policyname='conv_participants_update') then
-    drop policy conv_participants_update on public.conversation_participants;
-  end if;
-  create policy conv_participants_update on public.conversation_participants for update to authenticated
-    using (
-      user_id = (select auth.uid())
-      or public.is_admin_user((select auth.uid()))
-    )
-    with check (
-      user_id = (select auth.uid())
-      or public.is_admin_user((select auth.uid()))
-    );
-end $$;
-
--- RLS policies for messages
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='messages' and policyname='messages_select') then
-    drop policy messages_select on public.messages;
-  end if;
-  create policy messages_select on public.messages for select to authenticated
-    using (
-      exists (
-        select 1 from public.conversation_participants cp
-        where cp.conversation_id = messages.conversation_id
-        and cp.user_id = (select auth.uid())
-        and cp.left_at is null
-      )
-      or public.is_admin_user((select auth.uid()))
-    );
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='messages' and policyname='messages_insert') then
-    drop policy messages_insert on public.messages;
-  end if;
-  create policy messages_insert on public.messages for insert to authenticated
-    with check (
-      sender_id = (select auth.uid())
-      and exists (
-        select 1 from public.conversation_participants cp
-        join public.conversations c on c.id = cp.conversation_id
-        where cp.conversation_id = messages.conversation_id
-        and cp.user_id = (select auth.uid())
-        and cp.left_at is null
-        and c.status = 'accepted'
-      )
-    );
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='messages' and policyname='messages_update') then
-    drop policy messages_update on public.messages;
-  end if;
-  create policy messages_update on public.messages for update to authenticated
-    using (sender_id = (select auth.uid()) or public.is_admin_user((select auth.uid())))
-    with check (sender_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
-end $$;
-
--- Function to start or get existing direct conversation between two users
-create or replace function public.get_or_create_direct_conversation(_other_user_id uuid)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_caller uuid;
-  v_conv_id uuid;
-  v_are_friends boolean;
-  v_status text;
-  v_is_blocked boolean;
-  v_can_message boolean;
-begin
-  v_caller := auth.uid();
-  if v_caller is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  if v_caller = _other_user_id then
-    raise exception 'Cannot start conversation with yourself';
-  end if;
-  
-  -- Check if caller is blocked by the other user
-  select exists (
-    select 1 from public.user_blocks
-    where blocker_id = _other_user_id and blocked_id = v_caller
-  ) into v_is_blocked;
-  
-  if v_is_blocked then
-    raise exception 'Cannot message this user';
-  end if;
-  
-  -- Check if conversation already exists between these users
-  select c.id into v_conv_id
-  from public.conversations c
-  join public.conversation_participants cp1 on cp1.conversation_id = c.id and cp1.user_id = v_caller
-  join public.conversation_participants cp2 on cp2.conversation_id = c.id and cp2.user_id = _other_user_id
-  where c.type = 'direct'
-  limit 1;
-  
-  if v_conv_id is not null then
-    return v_conv_id;
-  end if;
-  
-  -- Check if users are friends
-  select exists (
-    select 1 from public.friends
-    where (user_id = v_caller and friend_id = _other_user_id)
-    or (user_id = _other_user_id and friend_id = v_caller)
-  ) into v_are_friends;
-  
-  -- If not friends, check privacy settings
-  if not v_are_friends then
-    select 
-      coalesce(p.allow_messages_from_non_friends, true) and not coalesce(p.is_private, false)
-    into v_can_message
-    from public.profiles p
-    where p.id = _other_user_id;
-    
-    if not coalesce(v_can_message, true) then
-      raise exception 'This user does not accept messages from non-friends';
-    end if;
-  end if;
-  
-  -- If friends, auto-accept; otherwise pending
-  v_status := case when v_are_friends then 'accepted' else 'pending' end;
-  
-  -- Create new conversation
-  insert into public.conversations (type, status, initiated_by)
-  values ('direct', v_status, v_caller)
-  returning id into v_conv_id;
-  
-  -- Add both participants
-  insert into public.conversation_participants (conversation_id, user_id, role)
-  values 
-    (v_conv_id, v_caller, 'owner'),
-    (v_conv_id, _other_user_id, 'member');
-  
-  return v_conv_id;
-end;
-$$;
-
-grant execute on function public.get_or_create_direct_conversation(uuid) to authenticated;
-
--- Function to accept a chat request
-create or replace function public.accept_chat_request(_conversation_id uuid)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_caller uuid;
-begin
-  v_caller := auth.uid();
-  if v_caller is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  -- Verify caller is a participant and conversation is pending
-  if not exists (
-    select 1 from public.conversation_participants cp
-    join public.conversations c on c.id = cp.conversation_id
-    where cp.conversation_id = _conversation_id
-    and cp.user_id = v_caller
-    and cp.left_at is null
-    and c.status = 'pending'
-    and c.initiated_by <> v_caller -- Only non-initiator can accept
-  ) then
-    raise exception 'Chat request not found or not authorized';
-  end if;
-  
-  update public.conversations
-  set status = 'accepted', updated_at = now()
-  where id = _conversation_id;
-end;
-$$;
-
-grant execute on function public.accept_chat_request(uuid) to authenticated;
-
--- Function to reject a chat request
-create or replace function public.reject_chat_request(_conversation_id uuid)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_caller uuid;
-begin
-  v_caller := auth.uid();
-  if v_caller is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  -- Verify caller is a participant and conversation is pending
-  if not exists (
-    select 1 from public.conversation_participants cp
-    join public.conversations c on c.id = cp.conversation_id
-    where cp.conversation_id = _conversation_id
-    and cp.user_id = v_caller
-    and cp.left_at is null
-    and c.status = 'pending'
-    and c.initiated_by <> v_caller -- Only non-initiator can reject
-  ) then
-    raise exception 'Chat request not found or not authorized';
-  end if;
-  
-  update public.conversations
-  set status = 'rejected', updated_at = now()
-  where id = _conversation_id;
-end;
-$$;
-
-grant execute on function public.reject_chat_request(uuid) to authenticated;
-
--- Function to mark messages as read
-create or replace function public.mark_conversation_read(_conversation_id uuid)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_caller uuid;
-begin
-  v_caller := auth.uid();
-  if v_caller is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  update public.conversation_participants
-  set unread_count = 0, last_read_at = now()
-  where conversation_id = _conversation_id
-  and user_id = v_caller;
-end;
-$$;
-
-grant execute on function public.mark_conversation_read(uuid) to authenticated;
-
--- Function to get total unread message count for a user
-create or replace function public.get_total_unread_messages()
-returns integer
-language sql
-security definer
-set search_path = public
-as $$
-  select coalesce(sum(unread_count), 0)::integer
-  from public.conversation_participants
-  where user_id = (select auth.uid())
-  and left_at is null;
-$$;
-
-grant execute on function public.get_total_unread_messages() to authenticated;
-
--- Trigger to update conversation metadata when message is sent
-create or replace function public.update_conversation_on_message()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  -- Update conversation's last message info
-  update public.conversations
-  set 
-    last_message_at = NEW.created_at,
-    last_message_preview = left(NEW.content, 100),
-    updated_at = now()
-  where id = NEW.conversation_id;
-  
-  -- Increment unread count for all other participants
-  update public.conversation_participants
-  set unread_count = unread_count + 1
-  where conversation_id = NEW.conversation_id
-  and user_id <> NEW.sender_id
-  and left_at is null;
-  
-  return NEW;
-end;
-$$;
-
-drop trigger if exists trigger_update_conversation_on_message on public.messages;
-create trigger trigger_update_conversation_on_message
-  after insert on public.messages
-  for each row
-  execute function public.update_conversation_on_message();
 
 -- ========== Garden Task Cache System ==========
 -- Pre-computed task data tables to avoid expensive recalculations
