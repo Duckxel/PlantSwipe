@@ -49,6 +49,7 @@ export default function SettingsPage() {
   const [showPasswordForm, setShowPasswordForm] = React.useState(false)
   const [isPrivate, setIsPrivate] = React.useState(false)
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
+  const [allowMessagesFromNonFriends, setAllowMessagesFromNonFriends] = React.useState(true)
   const [notifyPush, setNotifyPush] = React.useState(true)
   const [notifyEmail, setNotifyEmail] = React.useState(true)
   const [timezone, setTimezone] = React.useState<string>("")
@@ -164,18 +165,20 @@ export default function SettingsPage() {
         if (profile) {
           setIsPrivate(Boolean((profile as any).is_private || false))
           setDisableFriendRequests(Boolean((profile as any).disable_friend_requests || false))
+          setAllowMessagesFromNonFriends((profile as any).allow_messages_from_non_friends !== false)
           const savedTimezone = (profile as any).timezone
           setTimezone(savedTimezone || detectedTimezone)
         } else {
           // Fetch profile if not loaded
           const { data } = await supabase
             .from('profiles')
-            .select('is_private, disable_friend_requests, timezone')
+            .select('is_private, disable_friend_requests, allow_messages_from_non_friends, timezone')
             .eq('id', user.id)
             .maybeSingle()
           if (data) {
             setIsPrivate(Boolean(data.is_private || false))
             setDisableFriendRequests(Boolean(data.disable_friend_requests || false))
+            setAllowMessagesFromNonFriends((data as any).allow_messages_from_non_friends !== false)
             setTimezone(data.timezone || detectedTimezone)
           } else {
             setTimezone(detectedTimezone)
@@ -339,6 +342,47 @@ export default function SettingsPage() {
     } catch (e: any) {
       setError(e?.message || t('settings.friendRequests.failedToUpdate'))
       setDisableFriendRequests(!newValue)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleToggleMessagingPrivacy = async () => {
+    if (!user?.id) return
+
+    const newValue = !allowMessagesFromNonFriends
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session?.access_token) throw new Error('Not authenticated')
+      
+      const response = await fetch('/api/users/privacy/messaging', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ allowMessagesFromNonFriends: newValue }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to update setting')
+      }
+
+      setAllowMessagesFromNonFriends(newValue)
+      setSuccess(newValue 
+        ? t('settings.messaging.nonFriendsAllowed', { defaultValue: 'Non-friends can now message you' })
+        : t('settings.messaging.nonFriendsBlocked', { defaultValue: 'Only friends can message you now' })
+      )
+      await refreshProfile()
+    } catch (e: any) {
+      setError(e?.message || t('settings.messaging.failedToUpdate', { defaultValue: 'Failed to update messaging privacy' }))
+      setAllowMessagesFromNonFriends(!newValue)
     } finally {
       setSaving(false)
     }
@@ -953,6 +997,30 @@ export default function SettingsPage() {
                   <p className="text-sm opacity-70 mt-1">
                     {t('settings.friendRequests.disableDescription')}
                   </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <input
+                  type="checkbox"
+                  id="allow-messages-non-friends"
+                  checked={allowMessagesFromNonFriends}
+                  onChange={handleToggleMessagingPrivacy}
+                  disabled={saving || isPrivate}
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="allow-messages-non-friends" className="font-semibold cursor-pointer text-base">
+                    {t('settings.messaging.allowNonFriends', { defaultValue: 'Allow messages from non-friends' })}
+                  </Label>
+                  <p className="text-sm opacity-70 mt-1">
+                    {t('settings.messaging.allowNonFriendsDescription', { defaultValue: 'When enabled, anyone can start a chat with you. When disabled, only friends can message you.' })}
+                  </p>
+                  {isPrivate && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                      {t('settings.messaging.privateProfileNote', { defaultValue: 'Note: Your profile is private, so only friends can message you regardless of this setting.' })}
+                    </p>
+                  )}
                 </div>
               </div>
             </CardContent>

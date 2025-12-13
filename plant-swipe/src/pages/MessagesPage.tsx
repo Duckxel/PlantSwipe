@@ -17,6 +17,12 @@ import {
   Search,
   MessageCircle,
   ChevronRight,
+  MoreVertical,
+  Shield,
+  ShieldOff,
+  BellOff,
+  Bell,
+  Flag,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
@@ -90,9 +96,25 @@ export const MessagesPage: React.FC = () => {
   const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
+  
+  // Safety status state
+  const [safetyStatus, setSafetyStatus] = React.useState<{
+    isBlocked: boolean;
+    isMuted: boolean;
+    isBlockedBy: boolean;
+  }>({ isBlocked: false, isMuted: false, isBlockedBy: false });
+  const [showActionsMenu, setShowActionsMenu] = React.useState(false);
+  const [showReportDialog, setShowReportDialog] = React.useState(false);
+  const [reportType, setReportType] = React.useState<"user" | "message">("user");
+  const [reportMessageId, setReportMessageId] = React.useState<string | null>(null);
+  const [reportReason, setReportReason] = React.useState("");
+  const [reportDescription, setReportDescription] = React.useState("");
+  const [submittingReport, setSubmittingReport] = React.useState(false);
+  const [actionLoading, setActionLoading] = React.useState(false);
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const actionsMenuRef = React.useRef<HTMLDivElement>(null);
 
   // Glass card styling
   const glassCard =
@@ -281,6 +303,233 @@ export const MessagesPage: React.FC = () => {
     } catch (e) {
       console.error("Failed to reject chat request:", e);
     }
+  };
+
+  // Load safety status for selected user
+  const loadSafetyStatus = React.useCallback(
+    async (userId: string) => {
+      if (!user?.id) return;
+      try {
+        const headers = await buildAuthHeaders();
+        const response = await fetch(`/api/users/${userId}/safety-status`, {
+          headers,
+          credentials: "same-origin",
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setSafetyStatus(data);
+        }
+      } catch (e) {
+        console.error("Failed to load safety status:", e);
+      }
+    },
+    [user?.id]
+  );
+
+  // Load safety status when conversation changes
+  React.useEffect(() => {
+    if (selectedConversation?.otherParticipant?.id) {
+      loadSafetyStatus(selectedConversation.otherParticipant.id);
+    }
+  }, [selectedConversation?.otherParticipant?.id, loadSafetyStatus]);
+
+  // Close actions menu when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        actionsMenuRef.current &&
+        !actionsMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowActionsMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Block user
+  const handleBlockUser = async () => {
+    const userId = selectedConversation?.otherParticipant?.id;
+    if (!userId) return;
+    setActionLoading(true);
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch(`/api/users/${userId}/block`, {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        setSafetyStatus((prev) => ({ ...prev, isBlocked: true }));
+        setShowActionsMenu(false);
+        // Remove from conversations list
+        setConversations((prev) =>
+          prev.filter((c) => c.otherParticipant?.id !== userId)
+        );
+        setSelectedConversation(null);
+        setMessages([]);
+        navigate("/messages");
+      } else {
+        const data = await response.json();
+        setError(data.error || "Failed to block user");
+      }
+    } catch (e) {
+      setError("Failed to block user");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Unblock user
+  const handleUnblockUser = async () => {
+    const userId = selectedConversation?.otherParticipant?.id;
+    if (!userId) return;
+    setActionLoading(true);
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch(`/api/users/${userId}/block`, {
+        method: "DELETE",
+        headers,
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        setSafetyStatus((prev) => ({ ...prev, isBlocked: false }));
+        setShowActionsMenu(false);
+      } else {
+        const data = await response.json();
+        setError(data.error || "Failed to unblock user");
+      }
+    } catch (e) {
+      setError("Failed to unblock user");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Mute user
+  const handleMuteUser = async () => {
+    const userId = selectedConversation?.otherParticipant?.id;
+    if (!userId) return;
+    setActionLoading(true);
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch(`/api/users/${userId}/mute`, {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        setSafetyStatus((prev) => ({ ...prev, isMuted: true }));
+        setShowActionsMenu(false);
+      } else {
+        const data = await response.json();
+        setError(data.error || "Failed to mute user");
+      }
+    } catch (e) {
+      setError("Failed to mute user");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Unmute user
+  const handleUnmuteUser = async () => {
+    const userId = selectedConversation?.otherParticipant?.id;
+    if (!userId) return;
+    setActionLoading(true);
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch(`/api/users/${userId}/mute`, {
+        method: "DELETE",
+        headers,
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        setSafetyStatus((prev) => ({ ...prev, isMuted: false }));
+        setShowActionsMenu(false);
+      } else {
+        const data = await response.json();
+        setError(data.error || "Failed to unmute user");
+      }
+    } catch (e) {
+      setError("Failed to unmute user");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Submit report
+  const handleSubmitReport = async () => {
+    if (!reportReason) {
+      setError("Please select a reason for your report");
+      return;
+    }
+    setSubmittingReport(true);
+    try {
+      const headers = await buildAuthHeaders();
+      let response;
+      if (reportType === "message" && reportMessageId) {
+        response = await fetch(`/api/messages/${reportMessageId}/report`, {
+          method: "POST",
+          headers,
+          credentials: "same-origin",
+          body: JSON.stringify({
+            reason: reportReason,
+            description: reportDescription || null,
+          }),
+        });
+      } else {
+        const userId = selectedConversation?.otherParticipant?.id;
+        if (!userId) {
+          setError("No user selected");
+          return;
+        }
+        response = await fetch(`/api/users/${userId}/report`, {
+          method: "POST",
+          headers,
+          credentials: "same-origin",
+          body: JSON.stringify({
+            reason: reportReason,
+            description: reportDescription || null,
+          }),
+        });
+      }
+      if (response.ok) {
+        setShowReportDialog(false);
+        setReportReason("");
+        setReportDescription("");
+        setReportMessageId(null);
+        // Show success message
+        setError(null);
+        alert(t("messages.reportSubmitted", "Report submitted. Thank you for helping keep our community safe."));
+      } else {
+        const data = await response.json();
+        setError(data.error || "Failed to submit report");
+      }
+    } catch (e) {
+      setError("Failed to submit report");
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
+  // Open report dialog for user
+  const openReportUserDialog = () => {
+    setReportType("user");
+    setReportMessageId(null);
+    setReportReason("");
+    setReportDescription("");
+    setShowActionsMenu(false);
+    setShowReportDialog(true);
+  };
+
+  // Open report dialog for message
+  const openReportMessageDialog = (messageId: string) => {
+    setReportType("message");
+    setReportMessageId(messageId);
+    setReportReason("");
+    setReportDescription("");
+    setShowReportDialog(true);
   };
 
   // Format timestamp
@@ -539,6 +788,72 @@ export const MessagesPage: React.FC = () => {
                       {t("messages.viewProfile", "View Profile")}
                     </Button>
                   )}
+
+                  {/* Actions Menu */}
+                  <div className="relative" ref={actionsMenuRef}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-lg h-9 w-9 p-0"
+                      onClick={() => setShowActionsMenu(!showActionsMenu)}
+                    >
+                      <MoreVertical className="h-5 w-5" />
+                    </Button>
+
+                    {showActionsMenu && (
+                      <div className="absolute right-0 top-full mt-1 w-48 py-1 bg-white dark:bg-[#2a2a2d] rounded-xl shadow-lg border border-stone-200 dark:border-[#3e3e42] z-50">
+                        {safetyStatus.isMuted ? (
+                          <button
+                            onClick={handleUnmuteUser}
+                            disabled={actionLoading}
+                            className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] disabled:opacity-50"
+                          >
+                            <Bell className="h-4 w-4" />
+                            {t("messages.unmute", "Unmute notifications")}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleMuteUser}
+                            disabled={actionLoading}
+                            className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] disabled:opacity-50"
+                          >
+                            <BellOff className="h-4 w-4" />
+                            {t("messages.mute", "Mute notifications")}
+                          </button>
+                        )}
+
+                        {safetyStatus.isBlocked ? (
+                          <button
+                            onClick={handleUnblockUser}
+                            disabled={actionLoading}
+                            className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] disabled:opacity-50"
+                          >
+                            <ShieldOff className="h-4 w-4" />
+                            {t("messages.unblock", "Unblock user")}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleBlockUser}
+                            disabled={actionLoading}
+                            className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] text-red-600 dark:text-red-400 disabled:opacity-50"
+                          >
+                            <Shield className="h-4 w-4" />
+                            {t("messages.block", "Block user")}
+                          </button>
+                        )}
+
+                        <div className="h-px bg-stone-200 dark:bg-[#3e3e42] my-1" />
+
+                        <button
+                          onClick={openReportUserDialog}
+                          className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] text-red-600 dark:text-red-400"
+                        >
+                          <Flag className="h-4 w-4" />
+                          {t("messages.reportUser", "Report user")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Chat Request Banner */}
@@ -618,50 +933,44 @@ export const MessagesPage: React.FC = () => {
 
                           <div
                             className={cn(
-                              "flex",
+                              "flex group",
                               msg.isOwn ? "justify-end" : "justify-start"
                             )}
                           >
-                            <div
-                              className={cn(
-                                "max-w-[80%] md:max-w-[70%] rounded-2xl px-4 py-2",
-                                msg.isOwn
-                                  ? "bg-emerald-600 text-white rounded-br-sm"
-                                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-900 dark:text-white rounded-bl-sm"
-                              )}
-                            >
-                              {msg.isDeleted ? (
-                                <p className="text-sm italic opacity-60">
-                                  {t("messages.deleted", "Message deleted")}
-                                </p>
-                              ) : (
-                                <p className="text-sm whitespace-pre-wrap break-words">
-                                  {msg.content}
-                                </p>
+                            <div className="relative flex items-start gap-1">
+                              {/* Report button (for received messages only) */}
+                              {!msg.isOwn && !msg.isDeleted && (
+                                <button
+                                  onClick={() => openReportMessageDialog(msg.id)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-stone-200 dark:hover:bg-[#3a3a3d] rounded-lg self-center"
+                                  title={t("messages.reportMessage", "Report message")}
+                                >
+                                  <Flag className="h-3 w-3 text-stone-400" />
+                                </button>
                               )}
                               <div
                                 className={cn(
-                                  "flex items-center gap-1 mt-1",
-                                  msg.isOwn ? "justify-end" : "justify-start"
+                                  "max-w-[80%] md:max-w-[70%] rounded-2xl px-4 py-2",
+                                  msg.isOwn
+                                    ? "bg-emerald-600 text-white rounded-br-sm"
+                                    : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-900 dark:text-white rounded-bl-sm"
                                 )}
                               >
-                                <span
+                                {msg.isDeleted ? (
+                                  <p className="text-sm italic opacity-60">
+                                    {t("messages.deleted", "Message deleted")}
+                                  </p>
+                                ) : (
+                                  <p className="text-sm whitespace-pre-wrap break-words">
+                                    {msg.content}
+                                  </p>
+                                )}
+                                <div
                                   className={cn(
-                                    "text-xs",
-                                    msg.isOwn
-                                      ? "text-emerald-200"
-                                      : "text-stone-400 dark:text-stone-500"
+                                    "flex items-center gap-1 mt-1",
+                                    msg.isOwn ? "justify-end" : "justify-start"
                                   )}
                                 >
-                                  {new Date(msg.createdAt).toLocaleTimeString(
-                                    undefined,
-                                    {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    }
-                                  )}
-                                </span>
-                                {msg.editedAt && (
                                   <span
                                     className={cn(
                                       "text-xs",
@@ -670,9 +979,27 @@ export const MessagesPage: React.FC = () => {
                                         : "text-stone-400 dark:text-stone-500"
                                     )}
                                   >
-                                    · {t("messages.edited", "edited")}
+                                    {new Date(msg.createdAt).toLocaleTimeString(
+                                      undefined,
+                                      {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      }
+                                    )}
                                   </span>
-                                )}
+                                  {msg.editedAt && (
+                                    <span
+                                      className={cn(
+                                        "text-xs",
+                                        msg.isOwn
+                                          ? "text-emerald-200"
+                                          : "text-stone-400 dark:text-stone-500"
+                                      )}
+                                    >
+                                      · {t("messages.edited", "edited")}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -750,6 +1077,99 @@ export const MessagesPage: React.FC = () => {
           >
             <X className="h-4 w-4 text-red-600 dark:text-red-400" />
           </button>
+        </div>
+      )}
+
+      {/* Report Dialog */}
+      {showReportDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-[#1f1f1f] rounded-2xl max-w-md w-full shadow-xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                  <Flag className="h-5 w-5 text-red-500" />
+                  {reportType === "message"
+                    ? t("messages.reportMessage", "Report Message")
+                    : t("messages.reportUser", "Report User")}
+                </h3>
+                <button
+                  onClick={() => setShowReportDialog(false)}
+                  className="p-1 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] rounded-lg"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
+                {t(
+                  "messages.reportHint",
+                  "Please select a reason for your report. Our team will review it and take appropriate action."
+                )}
+              </p>
+
+              <div className="space-y-2 mb-4">
+                <label className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                  {t("messages.reportReason", "Reason")}
+                </label>
+                <select
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2a2a2d] text-stone-900 dark:text-white text-sm"
+                >
+                  <option value="">{t("messages.selectReason", "Select a reason...")}</option>
+                  <option value="spam">{t("messages.reasonSpam", "Spam")}</option>
+                  <option value="harassment">{t("messages.reasonHarassment", "Harassment")}</option>
+                  <option value="inappropriate_content">
+                    {t("messages.reasonInappropriate", "Inappropriate content")}
+                  </option>
+                  {reportType === "message" && (
+                    <option value="scam">{t("messages.reasonScam", "Scam")}</option>
+                  )}
+                  {reportType === "user" && (
+                    <option value="fake_profile">{t("messages.reasonFakeProfile", "Fake profile")}</option>
+                  )}
+                  <option value="other">{t("messages.reasonOther", "Other")}</option>
+                </select>
+              </div>
+
+              <div className="space-y-2 mb-6">
+                <label className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                  {t("messages.reportDescription", "Additional details (optional)")}
+                </label>
+                <textarea
+                  value={reportDescription}
+                  onChange={(e) => setReportDescription(e.target.value)}
+                  placeholder={t(
+                    "messages.reportDescriptionPlaceholder",
+                    "Provide any additional context..."
+                  )}
+                  className="w-full px-3 py-2 rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2a2a2d] text-stone-900 dark:text-white text-sm resize-none"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl"
+                  onClick={() => setShowReportDialog(false)}
+                >
+                  {t("common.cancel", "Cancel")}
+                </Button>
+                <Button
+                  className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                  onClick={handleSubmitReport}
+                  disabled={submittingReport || !reportReason}
+                >
+                  {submittingReport ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    t("messages.submitReport", "Submit Report")
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

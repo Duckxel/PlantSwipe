@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MessageSquare } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MessageSquare, MoreVertical, Shield, ShieldOff, BellOff, Bell, Flag, X, Loader2 } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
 import type { UserRole } from "@/constants/userRoles"
 import { SearchInput } from "@/components/ui/search-input"
@@ -497,6 +497,16 @@ export default function PublicProfilePage() {
   const [friendRequestLoading, setFriendRequestLoading] = React.useState(false)
   const [friendsSince, setFriendsSince] = React.useState<string | null>(null)
 
+  // Safety state (block, mute, report)
+  const [safetyStatus, setSafetyStatus] = React.useState<{ isBlocked: boolean; isMuted: boolean }>({ isBlocked: false, isMuted: false })
+  const [showSafetyMenu, setShowSafetyMenu] = React.useState(false)
+  const [safetyLoading, setSafetyLoading] = React.useState(false)
+  const [showReportDialog, setShowReportDialog] = React.useState(false)
+  const [reportReason, setReportReason] = React.useState('')
+  const [reportDescription, setReportDescription] = React.useState('')
+  const [submittingReport, setSubmittingReport] = React.useState(false)
+  const safetyMenuRef = React.useRef<HTMLDivElement>(null)
+
   // Check friend status
   React.useEffect(() => {
     if (!user?.id || !pp?.id || isOwner) {
@@ -685,6 +695,189 @@ export default function PublicProfilePage() {
       setFriendRequestLoading(false)
     }
   }, [friendRequestId, user?.id, pp?.id])
+
+  // Load safety status
+  React.useEffect(() => {
+    if (!user?.id || !pp?.id || isOwner) {
+      setSafetyStatus({ isBlocked: false, isMuted: false })
+      return
+    }
+    const loadStatus = async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        if (!session?.access_token) return
+        const response = await fetch(`/api/users/${pp.id}/safety-status`, {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          credentials: 'same-origin',
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setSafetyStatus({ isBlocked: data.isBlocked || false, isMuted: data.isMuted || false })
+        }
+      } catch {}
+    }
+    loadStatus()
+  }, [user?.id, pp?.id, isOwner])
+
+  // Close safety menu on outside click
+  React.useEffect(() => {
+    if (!showSafetyMenu) return
+    const handleClick = (e: MouseEvent) => {
+      if (safetyMenuRef.current && !safetyMenuRef.current.contains(e.target as Node)) {
+        setShowSafetyMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showSafetyMenu])
+
+  // Safety actions
+  const handleBlockUser = async () => {
+    if (!pp?.id) return
+    setSafetyLoading(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session?.access_token) throw new Error('Not authenticated')
+      const response = await fetch(`/api/users/${pp.id}/block`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        credentials: 'same-origin',
+      })
+      if (response.ok) {
+        setSafetyStatus(prev => ({ ...prev, isBlocked: true }))
+        setShowSafetyMenu(false)
+        // Navigate away since the user is blocked
+        navigate('/')
+      } else {
+        const data = await response.json()
+        setEditError(data.error || 'Failed to block user')
+      }
+    } catch (e: any) {
+      setEditError(e?.message || 'Failed to block user')
+    } finally {
+      setSafetyLoading(false)
+    }
+  }
+
+  const handleUnblockUser = async () => {
+    if (!pp?.id) return
+    setSafetyLoading(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session?.access_token) throw new Error('Not authenticated')
+      const response = await fetch(`/api/users/${pp.id}/block`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        credentials: 'same-origin',
+      })
+      if (response.ok) {
+        setSafetyStatus(prev => ({ ...prev, isBlocked: false }))
+        setShowSafetyMenu(false)
+      } else {
+        const data = await response.json()
+        setEditError(data.error || 'Failed to unblock user')
+      }
+    } catch (e: any) {
+      setEditError(e?.message || 'Failed to unblock user')
+    } finally {
+      setSafetyLoading(false)
+    }
+  }
+
+  const handleMuteUser = async () => {
+    if (!pp?.id) return
+    setSafetyLoading(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session?.access_token) throw new Error('Not authenticated')
+      const response = await fetch(`/api/users/${pp.id}/mute`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        credentials: 'same-origin',
+      })
+      if (response.ok) {
+        setSafetyStatus(prev => ({ ...prev, isMuted: true }))
+        setShowSafetyMenu(false)
+      } else {
+        const data = await response.json()
+        setEditError(data.error || 'Failed to mute user')
+      }
+    } catch (e: any) {
+      setEditError(e?.message || 'Failed to mute user')
+    } finally {
+      setSafetyLoading(false)
+    }
+  }
+
+  const handleUnmuteUser = async () => {
+    if (!pp?.id) return
+    setSafetyLoading(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session?.access_token) throw new Error('Not authenticated')
+      const response = await fetch(`/api/users/${pp.id}/mute`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        credentials: 'same-origin',
+      })
+      if (response.ok) {
+        setSafetyStatus(prev => ({ ...prev, isMuted: false }))
+        setShowSafetyMenu(false)
+      } else {
+        const data = await response.json()
+        setEditError(data.error || 'Failed to unmute user')
+      }
+    } catch (e: any) {
+      setEditError(e?.message || 'Failed to unmute user')
+    } finally {
+      setSafetyLoading(false)
+    }
+  }
+
+  const handleSubmitReport = async () => {
+    if (!pp?.id || !reportReason) return
+    setSubmittingReport(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session?.access_token) throw new Error('Not authenticated')
+      const response = await fetch(`/api/users/${pp.id}/report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          reason: reportReason,
+          description: reportDescription || null,
+        }),
+      })
+      if (response.ok) {
+        setShowReportDialog(false)
+        setReportReason('')
+        setReportDescription('')
+        alert(t('profile.reportSubmitted', 'Report submitted. Thank you for helping keep our community safe.'))
+      } else {
+        const data = await response.json()
+        setEditError(data.error || 'Failed to submit report')
+      }
+    } catch (e: any) {
+      setEditError(e?.message || 'Failed to submit report')
+    } finally {
+      setSubmittingReport(false)
+    }
+  }
 
   React.useEffect(() => {
     if (!menuOpen) return
@@ -999,6 +1192,68 @@ export default function PublicProfilePage() {
                           >
                             <UserPlus className="h-4 w-4 mr-2" /> {t('profile.friendRequest')}
                           </Button>
+                          {/* Safety Menu */}
+                          <div className="relative" ref={safetyMenuRef}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="rounded-2xl h-10 w-10"
+                              onClick={() => setShowSafetyMenu(!showSafetyMenu)}
+                            >
+                              <MoreVertical className="h-5 w-5" />
+                            </Button>
+                            {showSafetyMenu && (
+                              <div className="absolute right-0 top-full mt-1 w-48 py-1 bg-white dark:bg-[#2a2a2d] rounded-xl shadow-lg border border-stone-200 dark:border-[#3e3e42] z-50">
+                                {safetyStatus.isMuted ? (
+                                  <button
+                                    onClick={handleUnmuteUser}
+                                    disabled={safetyLoading}
+                                    className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] disabled:opacity-50"
+                                  >
+                                    <Bell className="h-4 w-4" />
+                                    {t('profile.unmute', 'Unmute notifications')}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={handleMuteUser}
+                                    disabled={safetyLoading}
+                                    className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] disabled:opacity-50"
+                                  >
+                                    <BellOff className="h-4 w-4" />
+                                    {t('profile.mute', 'Mute notifications')}
+                                  </button>
+                                )}
+                                {safetyStatus.isBlocked ? (
+                                  <button
+                                    onClick={handleUnblockUser}
+                                    disabled={safetyLoading}
+                                    className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] disabled:opacity-50"
+                                  >
+                                    <ShieldOff className="h-4 w-4" />
+                                    {t('profile.unblock', 'Unblock user')}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={handleBlockUser}
+                                    disabled={safetyLoading}
+                                    className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] text-red-600 dark:text-red-400 disabled:opacity-50"
+                                  >
+                                    <Shield className="h-4 w-4" />
+                                    {t('profile.block', 'Block user')}
+                                  </button>
+                                )}
+                                <div className="h-px bg-stone-200 dark:bg-[#3e3e42] my-1" />
+                                <button
+                                  onClick={() => { setShowSafetyMenu(false); setShowReportDialog(true) }}
+                                  className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] text-red-600 dark:text-red-400"
+                                >
+                                  <Flag className="h-4 w-4" />
+                                  {t('profile.reportUser', 'Report user')}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          </Button>
                         </div>
                       )}
                       {friendStatus === 'request_sent' && (
@@ -1029,6 +1284,67 @@ export default function PublicProfilePage() {
                             <Button className="rounded-2xl" variant="secondary" disabled>
                               {t('profile.friends')}
                             </Button>
+                            {/* Safety Menu */}
+                            <div className="relative" ref={safetyMenuRef}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="rounded-2xl h-10 w-10"
+                                onClick={() => setShowSafetyMenu(!showSafetyMenu)}
+                              >
+                                <MoreVertical className="h-5 w-5" />
+                              </Button>
+                              {showSafetyMenu && (
+                                <div className="absolute right-0 top-full mt-1 w-48 py-1 bg-white dark:bg-[#2a2a2d] rounded-xl shadow-lg border border-stone-200 dark:border-[#3e3e42] z-50">
+                                  {safetyStatus.isMuted ? (
+                                    <button
+                                      onClick={handleUnmuteUser}
+                                      disabled={safetyLoading}
+                                      className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] disabled:opacity-50"
+                                    >
+                                      <Bell className="h-4 w-4" />
+                                      {t('profile.unmute', 'Unmute notifications')}
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={handleMuteUser}
+                                      disabled={safetyLoading}
+                                      className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] disabled:opacity-50"
+                                    >
+                                      <BellOff className="h-4 w-4" />
+                                      {t('profile.mute', 'Mute notifications')}
+                                    </button>
+                                  )}
+                                  {safetyStatus.isBlocked ? (
+                                    <button
+                                      onClick={handleUnblockUser}
+                                      disabled={safetyLoading}
+                                      className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] disabled:opacity-50"
+                                    >
+                                      <ShieldOff className="h-4 w-4" />
+                                      {t('profile.unblock', 'Unblock user')}
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={handleBlockUser}
+                                      disabled={safetyLoading}
+                                      className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] text-red-600 dark:text-red-400 disabled:opacity-50"
+                                    >
+                                      <Shield className="h-4 w-4" />
+                                      {t('profile.block', 'Block user')}
+                                    </button>
+                                  )}
+                                  <div className="h-px bg-stone-200 dark:bg-[#3e3e42] my-1" />
+                                  <button
+                                    onClick={() => { setShowSafetyMenu(false); setShowReportDialog(true) }}
+                                    className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] text-red-600 dark:text-red-400"
+                                  >
+                                    <Flag className="h-4 w-4" />
+                                    {t('profile.reportUser', 'Report user')}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                           {friendsSince && (
                             <div className="text-[10px] opacity-60">
@@ -1146,6 +1462,85 @@ export default function PublicProfilePage() {
           )}
 
 
+
+          {/* Report Dialog */}
+          {showReportDialog && !isOwner && createPortal(
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+              <div className="bg-white dark:bg-[#1f1f1f] rounded-2xl max-w-md w-full shadow-xl">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                      <Flag className="h-5 w-5 text-red-500" />
+                      {t('profile.reportUser', 'Report User')}
+                    </h3>
+                    <button
+                      onClick={() => setShowReportDialog(false)}
+                      className="p-1 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] rounded-lg"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">
+                    {t('profile.reportHint', 'Please select a reason for your report. Our team will review it and take appropriate action.')}
+                  </p>
+
+                  <div className="space-y-2 mb-4">
+                    <label className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                      {t('profile.reportReason', 'Reason')}
+                    </label>
+                    <select
+                      value={reportReason}
+                      onChange={(e) => setReportReason(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2a2a2d] text-stone-900 dark:text-white text-sm"
+                    >
+                      <option value="">{t('profile.selectReason', 'Select a reason...')}</option>
+                      <option value="spam">{t('profile.reasonSpam', 'Spam')}</option>
+                      <option value="harassment">{t('profile.reasonHarassment', 'Harassment')}</option>
+                      <option value="inappropriate_content">{t('profile.reasonInappropriate', 'Inappropriate content')}</option>
+                      <option value="fake_profile">{t('profile.reasonFakeProfile', 'Fake profile')}</option>
+                      <option value="other">{t('profile.reasonOther', 'Other')}</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2 mb-6">
+                    <label className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                      {t('profile.reportDescription', 'Additional details (optional)')}
+                    </label>
+                    <textarea
+                      value={reportDescription}
+                      onChange={(e) => setReportDescription(e.target.value)}
+                      placeholder={t('profile.reportDescriptionPlaceholder', 'Provide any additional context...')}
+                      className="w-full px-3 py-2 rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2a2a2d] text-stone-900 dark:text-white text-sm resize-none"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1 rounded-xl"
+                      onClick={() => setShowReportDialog(false)}
+                    >
+                      {t('common.cancel', 'Cancel')}
+                    </Button>
+                    <Button
+                      className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                      onClick={handleSubmitReport}
+                      disabled={submittingReport || !reportReason}
+                    >
+                      {submittingReport ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        t('profile.submitReport', 'Submit Report')
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
 
           {isOwner && (
             <EditProfileDialog

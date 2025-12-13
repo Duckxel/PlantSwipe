@@ -14771,9 +14771,24 @@ app.delete('/api/push/subscribe', async (req, res) => {
 // ============================================================================
 
 // Helper function to send instant notification for specific trigger types
+// payload can include senderId to check for mutes
 async function sendInstantNotification(triggerType, userId, payload) {
   if (!sql) return
   try {
+    // Check if recipient has muted the sender (if senderId provided)
+    if (payload?.senderId && payload.senderId !== userId) {
+      const muteCheck = await sql`
+        select exists (
+          select 1 from public.user_mutes
+          where muter_id = ${userId} and muted_id = ${payload.senderId}
+        ) as is_muted
+      `
+      if (muteCheck?.[0]?.is_muted) {
+        console.log(`[notifications] Notification suppressed - user ${userId} has muted ${payload.senderId}`)
+        return
+      }
+    }
+    
     // Get automation settings for this trigger type
     const automations = await sql`
       select na.*, 
@@ -15040,6 +15055,20 @@ app.get('/api/messages/conversations/:conversationId/messages', async (req, res)
 })
 
 // Send a message
+// Rate limiting configuration for messages
+const MESSAGE_RATE_LIMIT = {
+  windowMinutes: 1,           // Time window in minutes
+  maxMessages: 30,            // Max messages per window for normal users
+  maxMessagesNewAccount: 10,  // Max messages for accounts < 24h old
+  newAccountHours: 24,        // Account age threshold
+  cooldownSeconds: 5,         // Minimum seconds between messages
+  maxContentLength: 5000,     // Max message length
+  minContentLength: 1,        // Min message length
+}
+
+// In-memory cooldown tracker (per user, last message timestamp)
+const messageCooldowns = new Map()
+
 app.post('/api/messages/conversations/:conversationId/messages', async (req, res) => {
   const user = await getUserFromRequestOrToken(req)
   if (!user?.id) {
@@ -15056,7 +15085,54 @@ app.post('/api/messages/conversations/:conversationId/messages', async (req, res
     return res.status(400).json({ error: 'Message content is required' })
   }
   
+  const trimmedContent = content.trim()
+  
+  // Content length validation
+  if (trimmedContent.length < MESSAGE_RATE_LIMIT.minContentLength) {
+    return res.status(400).json({ error: 'Message is too short' })
+  }
+  
+  if (trimmedContent.length > MESSAGE_RATE_LIMIT.maxContentLength) {
+    return res.status(400).json({ error: 'Message is too long' })
+  }
+  
+  // Cooldown check (in-memory, fast)
+  const lastMessageTime = messageCooldowns.get(user.id)
+  const now = Date.now()
+  if (lastMessageTime && (now - lastMessageTime) < MESSAGE_RATE_LIMIT.cooldownSeconds * 1000) {
+    const waitSeconds = Math.ceil((MESSAGE_RATE_LIMIT.cooldownSeconds * 1000 - (now - lastMessageTime)) / 1000)
+    return res.status(429).json({ error: `Please wait ${waitSeconds} seconds before sending another message` })
+  }
+  
   try {
+    // Get user account age for anti-spam
+    const userInfo = await sql`
+      select u.created_at
+      from auth.users u
+      where u.id = ${user.id}
+    `
+    const accountCreatedAt = userInfo?.[0]?.created_at ? new Date(userInfo[0].created_at) : new Date(0)
+    const accountAgeHours = (Date.now() - accountCreatedAt.getTime()) / (1000 * 60 * 60)
+    const isNewAccount = accountAgeHours < MESSAGE_RATE_LIMIT.newAccountHours
+    
+    // Rate limiting check (database-backed)
+    const windowStart = new Date(Date.now() - MESSAGE_RATE_LIMIT.windowMinutes * 60 * 1000)
+    const recentMessages = await sql`
+      select count(*)::integer as count
+      from public.messages
+      where sender_id = ${user.id}
+        and created_at >= ${windowStart.toISOString()}
+    `
+    const messageCount = recentMessages?.[0]?.count || 0
+    const maxAllowed = isNewAccount ? MESSAGE_RATE_LIMIT.maxMessagesNewAccount : MESSAGE_RATE_LIMIT.maxMessages
+    
+    if (messageCount >= maxAllowed) {
+      const errorMsg = isNewAccount 
+        ? 'New accounts have limited messaging. Please wait before sending more messages.'
+        : 'You are sending messages too quickly. Please slow down.'
+      return res.status(429).json({ error: errorMsg })
+    }
+    
     // Verify user is participant and conversation is accepted
     const participant = await sql`
       select cp.id, c.status, c.initiated_by
@@ -15076,14 +15152,55 @@ app.post('/api/messages/conversations/:conversationId/messages', async (req, res
       return res.status(403).json({ error: 'Conversation must be accepted before sending messages' })
     }
     
+    // Check if blocked by any other participant
+    const blockedCheck = await sql`
+      select exists (
+        select 1 from public.conversation_participants cp
+        join public.user_blocks ub on ub.blocker_id = cp.user_id and ub.blocked_id = ${user.id}
+        where cp.conversation_id = ${conversationId}
+          and cp.user_id <> ${user.id}
+          and cp.left_at is null
+      ) as is_blocked
+    `
+    
+    if (blockedCheck?.[0]?.is_blocked) {
+      return res.status(403).json({ error: 'Cannot send messages in this conversation' })
+    }
+    
+    // Duplicate message detection (anti-spam)
+    const duplicateCheck = await sql`
+      select exists (
+        select 1 from public.messages
+        where sender_id = ${user.id}
+          and conversation_id = ${conversationId}
+          and content = ${trimmedContent}
+          and created_at > now() - interval '30 seconds'
+      ) as is_duplicate
+    `
+    
+    if (duplicateCheck?.[0]?.is_duplicate) {
+      return res.status(429).json({ error: 'Duplicate message detected' })
+    }
+    
     // Insert message
     const messages = await sql`
       insert into public.messages (conversation_id, sender_id, content, reply_to_id)
-      values (${conversationId}, ${user.id}, ${content.trim()}, ${replyToId || null})
+      values (${conversationId}, ${user.id}, ${trimmedContent}, ${replyToId || null})
       returning *
     `
     
     const message = messages[0]
+    
+    // Update cooldown tracker
+    messageCooldowns.set(user.id, Date.now())
+    
+    // Clean up old cooldown entries periodically (every ~100 requests)
+    if (Math.random() < 0.01) {
+      const expiryTime = Date.now() - MESSAGE_RATE_LIMIT.cooldownSeconds * 1000 * 2
+      for (const [uid, time] of messageCooldowns.entries()) {
+        if (time < expiryTime) messageCooldowns.delete(uid)
+      }
+    }
     
     // Get sender profile
     const profiles = await sql`
@@ -15091,18 +15208,24 @@ app.post('/api/messages/conversations/:conversationId/messages', async (req, res
     `
     const senderProfile = profiles?.[0] || {}
     
-    // Send notification to other participants
+    // Send notification to other participants (respecting mutes at user level too)
     const otherParticipants = await sql`
-      select user_id from public.conversation_participants
-      where conversation_id = ${conversationId}
-        and user_id <> ${user.id}
-        and left_at is null
-        and is_muted = false
+      select cp.user_id 
+      from public.conversation_participants cp
+      where cp.conversation_id = ${conversationId}
+        and cp.user_id <> ${user.id}
+        and cp.left_at is null
+        and cp.is_muted = false
+        and not exists (
+          select 1 from public.user_mutes um
+          where um.muter_id = cp.user_id and um.muted_id = ${user.id}
+        )
     `
     
     for (const p of otherParticipants || []) {
       sendInstantNotification('message_received', p.user_id, {
         senderName: senderProfile.display_name || 'Someone',
+        senderId: user.id,
         ctaUrl: `/messages/${conversationId}`
       }).catch(() => {})
     }
@@ -15200,6 +15323,7 @@ app.post('/api/messages/start', async (req, res) => {
       // Notify the other user about the chat request
       sendInstantNotification('message_received', otherUserId, {
         senderName,
+        senderId: user.id,
         ctaUrl: '/messages'
       }).catch(() => {})
     }
@@ -15424,6 +15548,7 @@ app.post('/api/notifications/task-completed', async (req, res) => {
     for (const member of members || []) {
       await sendInstantNotification('task_completed_by_other', member.user_id, {
         senderName: completerName,
+        senderId: user.id,
         gardenName,
         taskName: taskName || 'a task',
         ctaUrl: `/garden/${gardenId}`
@@ -15434,6 +15559,415 @@ app.post('/api/notifications/task-completed', async (req, res) => {
   } catch (err) {
     console.error('[notifications] Failed to send task completed notification:', err)
     res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// ============================================================================
+// User Safety API (Block, Mute, Report)
+// ============================================================================
+
+// Block a user
+app.post('/api/users/:userId/block', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: blockedId } = req.params
+  const { reason } = req.body || {}
+  
+  if (!blockedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  if (user.id === blockedId) {
+    return res.status(400).json({ error: 'Cannot block yourself' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.block_user(${blockedId}::uuid, ${reason || null}::text)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('block_user', {
+        _blocked_id: blockedId,
+        _reason: reason || null
+      })
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[block] Failed to block user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to block user' })
+  }
+})
+
+// Unblock a user
+app.delete('/api/users/:userId/block', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: blockedId } = req.params
+  
+  if (!blockedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.unblock_user(${blockedId}::uuid)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('unblock_user', { _blocked_id: blockedId })
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[unblock] Failed to unblock user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to unblock user' })
+  }
+})
+
+// Get blocked users list
+app.get('/api/users/blocked', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  try {
+    let blockedUsers = []
+    if (sql) {
+      blockedUsers = await sql`
+        select 
+          b.id,
+          b.blocked_id,
+          p.display_name,
+          p.avatar_url,
+          b.created_at as blocked_at
+        from public.user_blocks b
+        join public.profiles p on p.id = b.blocked_id
+        where b.blocker_id = ${user.id}
+        order by b.created_at desc
+      `
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('get_blocked_users')
+      if (error) throw error
+      blockedUsers = data || []
+    }
+    res.json({ blockedUsers })
+  } catch (err) {
+    console.error('[blocked] Failed to get blocked users:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get blocked users' })
+  }
+})
+
+// Mute a user (suppress notifications)
+app.post('/api/users/:userId/mute', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: mutedId } = req.params
+  
+  if (!mutedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  if (user.id === mutedId) {
+    return res.status(400).json({ error: 'Cannot mute yourself' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.mute_user(${mutedId}::uuid)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('mute_user', { _muted_id: mutedId })
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[mute] Failed to mute user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to mute user' })
+  }
+})
+
+// Unmute a user
+app.delete('/api/users/:userId/mute', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: mutedId } = req.params
+  
+  if (!mutedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.unmute_user(${mutedId}::uuid)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('unmute_user', { _muted_id: mutedId })
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[unmute] Failed to unmute user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to unmute user' })
+  }
+})
+
+// Get muted users list
+app.get('/api/users/muted', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  try {
+    let mutedUsers = []
+    if (sql) {
+      mutedUsers = await sql`
+        select 
+          m.id,
+          m.muted_id,
+          p.display_name,
+          p.avatar_url,
+          m.created_at as muted_at
+        from public.user_mutes m
+        join public.profiles p on p.id = m.muted_id
+        where m.muter_id = ${user.id}
+        order by m.created_at desc
+      `
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('get_muted_users')
+      if (error) throw error
+      mutedUsers = data || []
+    }
+    res.json({ mutedUsers })
+  } catch (err) {
+    console.error('[muted] Failed to get muted users:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get muted users' })
+  }
+})
+
+// Report a user
+app.post('/api/users/:userId/report', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: reportedId } = req.params
+  const { reason, description } = req.body || {}
+  
+  if (!reportedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  if (!reason) {
+    return res.status(400).json({ error: 'Reason required' })
+  }
+  
+  const validReasons = ['spam', 'harassment', 'inappropriate_content', 'fake_profile', 'other']
+  if (!validReasons.includes(reason)) {
+    return res.status(400).json({ error: 'Invalid reason' })
+  }
+  
+  if (user.id === reportedId) {
+    return res.status(400).json({ error: 'Cannot report yourself' })
+  }
+  
+  try {
+    let reportId
+    if (sql) {
+      const result = await sql`select public.report_user(${reportedId}::uuid, ${reason}::text, ${description || null}::text) as id`
+      reportId = result[0]?.id
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('report_user', {
+        _reported_id: reportedId,
+        _reason: reason,
+        _description: description || null
+      })
+      if (error) throw error
+      reportId = data
+    }
+    res.json({ ok: true, reportId })
+  } catch (err) {
+    console.error('[report] Failed to report user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to report user' })
+  }
+})
+
+// Report a message
+app.post('/api/messages/:messageId/report', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { messageId } = req.params
+  const { reason, description } = req.body || {}
+  
+  if (!messageId) {
+    return res.status(400).json({ error: 'Message ID required' })
+  }
+  
+  if (!reason) {
+    return res.status(400).json({ error: 'Reason required' })
+  }
+  
+  const validReasons = ['spam', 'harassment', 'inappropriate_content', 'scam', 'other']
+  if (!validReasons.includes(reason)) {
+    return res.status(400).json({ error: 'Invalid reason' })
+  }
+  
+  try {
+    let reportId
+    if (sql) {
+      const result = await sql`select public.report_message(${messageId}::uuid, ${reason}::text, ${description || null}::text) as id`
+      reportId = result[0]?.id
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('report_message', {
+        _message_id: messageId,
+        _reason: reason,
+        _description: description || null
+      })
+      if (error) throw error
+      reportId = data
+    }
+    res.json({ ok: true, reportId })
+  } catch (err) {
+    console.error('[report] Failed to report message:', err)
+    res.status(500).json({ error: err?.message || 'Failed to report message' })
+  }
+})
+
+// Check block/mute status for a user
+app.get('/api/users/:userId/safety-status', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: targetId } = req.params
+  
+  if (!targetId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  try {
+    let status = { isBlocked: false, isMuted: false, isBlockedBy: false }
+    if (sql) {
+      const result = await sql`
+        select 
+          exists(select 1 from public.user_blocks where blocker_id = ${user.id} and blocked_id = ${targetId}) as is_blocked,
+          exists(select 1 from public.user_mutes where muter_id = ${user.id} and muted_id = ${targetId}) as is_muted,
+          exists(select 1 from public.user_blocks where blocker_id = ${targetId} and blocked_id = ${user.id}) as is_blocked_by
+      `
+      status = {
+        isBlocked: result[0]?.is_blocked || false,
+        isMuted: result[0]?.is_muted || false,
+        isBlockedBy: result[0]?.is_blocked_by || false
+      }
+    } else {
+      const { data: blocked } = await supabaseAdmin
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', user.id)
+        .eq('blocked_id', targetId)
+        .maybeSingle()
+      const { data: muted } = await supabaseAdmin
+        .from('user_mutes')
+        .select('id')
+        .eq('muter_id', user.id)
+        .eq('muted_id', targetId)
+        .maybeSingle()
+      const { data: blockedBy } = await supabaseAdmin
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', targetId)
+        .eq('blocked_id', user.id)
+        .maybeSingle()
+      status = {
+        isBlocked: !!blocked,
+        isMuted: !!muted,
+        isBlockedBy: !!blockedBy
+      }
+    }
+    res.json(status)
+  } catch (err) {
+    console.error('[safety-status] Failed to get safety status:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get safety status' })
+  }
+})
+
+// Update messaging privacy preference
+app.put('/api/users/privacy/messaging', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { allowMessagesFromNonFriends } = req.body || {}
+  
+  if (typeof allowMessagesFromNonFriends !== 'boolean') {
+    return res.status(400).json({ error: 'allowMessagesFromNonFriends must be a boolean' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`
+        update public.profiles
+        set allow_messages_from_non_friends = ${allowMessagesFromNonFriends}
+        where id = ${user.id}
+      `
+    } else {
+      const { error } = await supabaseAdmin
+        .from('profiles')
+        .update({ allow_messages_from_non_friends: allowMessagesFromNonFriends })
+        .eq('id', user.id)
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[privacy] Failed to update messaging privacy:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update privacy settings' })
+  }
+})
+
+// Get messaging privacy preference
+app.get('/api/users/privacy/messaging', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  try {
+    let allowMessagesFromNonFriends = true
+    if (sql) {
+      const result = await sql`
+        select coalesce(allow_messages_from_non_friends, true) as allow_messages_from_non_friends
+        from public.profiles
+        where id = ${user.id}
+      `
+      allowMessagesFromNonFriends = result[0]?.allow_messages_from_non_friends ?? true
+    } else {
+      const { data, error } = await supabaseAdmin
+        .from('profiles')
+        .select('allow_messages_from_non_friends')
+        .eq('id', user.id)
+        .single()
+      if (error) throw error
+      allowMessagesFromNonFriends = data?.allow_messages_from_non_friends ?? true
+    }
+    res.json({ allowMessagesFromNonFriends })
+  } catch (err) {
+    console.error('[privacy] Failed to get messaging privacy:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get privacy settings' })
   }
 })
 
