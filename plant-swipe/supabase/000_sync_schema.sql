@@ -4802,551 +4802,6 @@ $$;
 
 grant execute on function public.search_user_profiles(text, integer) to authenticated;
 
--- ========== User Safety System (Blocks, Mutes, Reports) ==========
-
--- User blocks table - blocked users cannot send messages or friend requests
-create table if not exists public.user_blocks (
-  id uuid primary key default gen_random_uuid(),
-  blocker_id uuid not null references public.profiles(id) on delete cascade,
-  blocked_id uuid not null references public.profiles(id) on delete cascade,
-  reason text,
-  created_at timestamptz not null default now(),
-  unique(blocker_id, blocked_id)
-);
-
--- User mutes table - muted users' notifications are suppressed
-create table if not exists public.user_mutes (
-  id uuid primary key default gen_random_uuid(),
-  muter_id uuid not null references public.profiles(id) on delete cascade,
-  muted_id uuid not null references public.profiles(id) on delete cascade,
-  created_at timestamptz not null default now(),
-  unique(muter_id, muted_id)
-);
-
--- User reports table - report users for inappropriate behavior
-create table if not exists public.user_reports (
-  id uuid primary key default gen_random_uuid(),
-  reporter_id uuid not null references public.profiles(id) on delete cascade,
-  reported_id uuid not null references public.profiles(id) on delete cascade,
-  reason text not null check (reason in ('spam', 'harassment', 'inappropriate_content', 'fake_profile', 'other')),
-  description text,
-  status text not null default 'pending' check (status in ('pending', 'reviewed', 'actioned', 'dismissed')),
-  reviewed_by uuid references public.profiles(id) on delete set null,
-  reviewed_at timestamptz,
-  admin_notes text,
-  created_at timestamptz not null default now()
-);
-
--- Message reports table - report specific messages
-create table if not exists public.message_reports (
-  id uuid primary key default gen_random_uuid(),
-  reporter_id uuid not null references public.profiles(id) on delete cascade,
-  message_id uuid not null references public.messages(id) on delete cascade,
-  reason text not null check (reason in ('spam', 'harassment', 'inappropriate_content', 'scam', 'other')),
-  description text,
-  status text not null default 'pending' check (status in ('pending', 'reviewed', 'actioned', 'dismissed')),
-  reviewed_by uuid references public.profiles(id) on delete set null,
-  reviewed_at timestamptz,
-  admin_notes text,
-  created_at timestamptz not null default now()
-);
-
--- Message rate limits table - track message sending for anti-spam
-create table if not exists public.message_rate_limits (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.profiles(id) on delete cascade,
-  window_start timestamptz not null default now(),
-  message_count integer not null default 1,
-  unique(user_id, window_start)
-);
-
--- Report files table - case files for reported users
-create table if not exists public.report_files (
-  id uuid primary key default gen_random_uuid(),
-  -- The user being reported (the subject of the file)
-  subject_user_id uuid not null references public.profiles(id) on delete cascade,
-  -- File status: 'open' = active investigation, 'closed' = resolved (never delete)
-  status text not null default 'open' check (status in ('open', 'closed')),
-  -- Category of the report file
-  category text not null check (category in ('user_report', 'message_report', 'spam_abuse', 'system_abuse', 'rate_limit_violation', 'other')),
-  -- Summary/title of the case
-  title text not null,
-  -- Detailed notes about the case
-  notes text,
-  -- Priority level (1-3, mirrors flag_level)
-  priority integer not null default 1 check (priority between 1 and 3),
-  -- Admin who created the file
-  created_by uuid references public.profiles(id) on delete set null,
-  -- Admin who closed the file
-  closed_by uuid references public.profiles(id) on delete set null,
-  closed_at timestamptz,
-  -- Resolution notes when closing
-  resolution text,
-  -- Action taken: 'none', 'warning', 'escalated', 'suspended', 'banned'
-  action_taken text check (action_taken is null or action_taken in ('none', 'warning', 'escalated', 'suspended', 'banned')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
--- Link user_reports to report_files
-alter table if exists public.user_reports add column if not exists report_file_id uuid references public.report_files(id) on delete set null;
-
--- Link message_reports to report_files
-alter table if exists public.message_reports add column if not exists report_file_id uuid references public.report_files(id) on delete set null;
-
--- Indexes for report files
-create index if not exists report_files_subject_idx on public.report_files (subject_user_id);
-create index if not exists report_files_status_idx on public.report_files (status) where status = 'open';
-create index if not exists report_files_priority_idx on public.report_files (priority desc, created_at desc);
-create index if not exists user_reports_file_idx on public.user_reports (report_file_id) where report_file_id is not null;
-create index if not exists message_reports_file_idx on public.message_reports (report_file_id) where report_file_id is not null;
-
--- Indexes for efficient lookups
-create index if not exists user_blocks_blocker_idx on public.user_blocks (blocker_id);
-create index if not exists user_blocks_blocked_idx on public.user_blocks (blocked_id);
-create index if not exists user_mutes_muter_idx on public.user_mutes (muter_id);
-create index if not exists user_mutes_muted_idx on public.user_mutes (muted_id);
-create index if not exists user_reports_reporter_idx on public.user_reports (reporter_id);
-create index if not exists user_reports_reported_idx on public.user_reports (reported_id);
-create index if not exists user_reports_status_idx on public.user_reports (status) where status = 'pending';
-create index if not exists message_reports_status_idx on public.message_reports (status) where status = 'pending';
-create index if not exists message_rate_limits_user_window_idx on public.message_rate_limits (user_id, window_start);
-
--- Enable RLS
-alter table public.user_blocks enable row level security;
-alter table public.user_mutes enable row level security;
-alter table public.user_reports enable row level security;
-alter table public.message_reports enable row level security;
-alter table public.message_rate_limits enable row level security;
-alter table public.report_files enable row level security;
-
--- RLS for report_files - admin only
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='report_files' and policyname='report_files_admin_select') then
-    drop policy report_files_admin_select on public.report_files;
-  end if;
-  create policy report_files_admin_select on public.report_files for select to authenticated
-    using (public.is_admin_user((select auth.uid())));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='report_files' and policyname='report_files_admin_insert') then
-    drop policy report_files_admin_insert on public.report_files;
-  end if;
-  create policy report_files_admin_insert on public.report_files for insert to authenticated
-    with check (public.is_admin_user((select auth.uid())));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='report_files' and policyname='report_files_admin_update') then
-    drop policy report_files_admin_update on public.report_files;
-  end if;
-  create policy report_files_admin_update on public.report_files for update to authenticated
-    using (public.is_admin_user((select auth.uid())));
-end $$;
-
--- RLS for user_blocks - users can see their own blocks
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_blocks' and policyname='user_blocks_select') then
-    drop policy user_blocks_select on public.user_blocks;
-  end if;
-  create policy user_blocks_select on public.user_blocks for select to authenticated
-    using (blocker_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_blocks' and policyname='user_blocks_insert') then
-    drop policy user_blocks_insert on public.user_blocks;
-  end if;
-  create policy user_blocks_insert on public.user_blocks for insert to authenticated
-    with check (blocker_id = (select auth.uid()));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_blocks' and policyname='user_blocks_delete') then
-    drop policy user_blocks_delete on public.user_blocks;
-  end if;
-  create policy user_blocks_delete on public.user_blocks for delete to authenticated
-    using (blocker_id = (select auth.uid()));
-end $$;
-
--- RLS for user_mutes - users can see their own mutes
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_mutes' and policyname='user_mutes_select') then
-    drop policy user_mutes_select on public.user_mutes;
-  end if;
-  create policy user_mutes_select on public.user_mutes for select to authenticated
-    using (muter_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_mutes' and policyname='user_mutes_insert') then
-    drop policy user_mutes_insert on public.user_mutes;
-  end if;
-  create policy user_mutes_insert on public.user_mutes for insert to authenticated
-    with check (muter_id = (select auth.uid()));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_mutes' and policyname='user_mutes_delete') then
-    drop policy user_mutes_delete on public.user_mutes;
-  end if;
-  create policy user_mutes_delete on public.user_mutes for delete to authenticated
-    using (muter_id = (select auth.uid()));
-end $$;
-
--- RLS for user_reports - users can see their own reports
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_select') then
-    drop policy user_reports_select on public.user_reports;
-  end if;
-  create policy user_reports_select on public.user_reports for select to authenticated
-    using (reporter_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_insert') then
-    drop policy user_reports_insert on public.user_reports;
-  end if;
-  create policy user_reports_insert on public.user_reports for insert to authenticated
-    with check (reporter_id = (select auth.uid()));
-end $$;
-
--- RLS for message_reports - users can see their own reports
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_reports' and policyname='message_reports_select') then
-    drop policy message_reports_select on public.message_reports;
-  end if;
-  create policy message_reports_select on public.message_reports for select to authenticated
-    using (reporter_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_reports' and policyname='message_reports_insert') then
-    drop policy message_reports_insert on public.message_reports;
-  end if;
-  create policy message_reports_insert on public.message_reports for insert to authenticated
-    with check (reporter_id = (select auth.uid()));
-end $$;
-
--- RLS for message_rate_limits - users can only see their own rate limits
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_rate_limits' and policyname='message_rate_limits_select') then
-    drop policy message_rate_limits_select on public.message_rate_limits;
-  end if;
-  create policy message_rate_limits_select on public.message_rate_limits for select to authenticated
-    using (user_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_rate_limits' and policyname='message_rate_limits_insert') then
-    drop policy message_rate_limits_insert on public.message_rate_limits;
-  end if;
-  create policy message_rate_limits_insert on public.message_rate_limits for insert to authenticated
-    with check (user_id = (select auth.uid()));
-end $$;
-
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_rate_limits' and policyname='message_rate_limits_update') then
-    drop policy message_rate_limits_update on public.message_rate_limits;
-  end if;
-  create policy message_rate_limits_update on public.message_rate_limits for update to authenticated
-    using (user_id = (select auth.uid()));
-end $$;
-
--- Helper function to check if a user is blocked by another user
-create or replace function public.is_blocked_by(_user_id uuid, _by_user_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.user_blocks
-    where blocker_id = _by_user_id and blocked_id = _user_id
-  );
-$$;
-
--- Helper function to check if a user is muted by another user
-create or replace function public.is_muted_by(_user_id uuid, _by_user_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.user_mutes
-    where muter_id = _by_user_id and muted_id = _user_id
-  );
-$$;
-
--- Helper function to check if messaging is allowed from one user to another
--- Returns true if:
--- 1. Target hasn't blocked the sender
--- 2. Target allows messages from non-friends OR they are friends OR target is not private
-create or replace function public.can_message_user(_sender_id uuid, _recipient_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select 
-    -- Cannot message if blocked
-    not exists (
-      select 1 from public.user_blocks
-      where blocker_id = _recipient_id and blocked_id = _sender_id
-    )
-    and (
-      -- Can always message if they are friends
-      exists (
-        select 1 from public.friends
-        where (user1_id = _sender_id and user2_id = _recipient_id)
-           or (user1_id = _recipient_id and user2_id = _sender_id)
-      )
-      -- Or if recipient allows messages from non-friends and is not private
-      or (
-        select coalesce(p.allow_messages_from_non_friends, true) and not coalesce(p.is_private, false)
-        from public.profiles p
-        where p.id = _recipient_id
-      )
-    );
-$$;
-
--- Function to block a user
-create or replace function public.block_user(_blocked_id uuid, _reason text default null)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  _blocker_id uuid := auth.uid();
-begin
-  if _blocker_id is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  if _blocker_id = _blocked_id then
-    raise exception 'Cannot block yourself';
-  end if;
-  
-  -- Insert block record
-  insert into public.user_blocks (blocker_id, blocked_id, reason)
-  values (_blocker_id, _blocked_id, _reason)
-  on conflict (blocker_id, blocked_id) do nothing;
-  
-  -- Also remove any existing friendship
-  delete from public.friends
-  where (user1_id = _blocker_id and user2_id = _blocked_id)
-     or (user1_id = _blocked_id and user2_id = _blocker_id);
-  
-  -- Cancel any pending friend requests
-  delete from public.friend_requests
-  where (requester_id = _blocker_id and recipient_id = _blocked_id)
-     or (requester_id = _blocked_id and recipient_id = _blocker_id);
-  
-  return true;
-end;
-$$;
-
-grant execute on function public.block_user(uuid, text) to authenticated;
-
--- Function to unblock a user
-create or replace function public.unblock_user(_blocked_id uuid)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  _blocker_id uuid := auth.uid();
-begin
-  if _blocker_id is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  delete from public.user_blocks
-  where blocker_id = _blocker_id and blocked_id = _blocked_id;
-  
-  return true;
-end;
-$$;
-
-grant execute on function public.unblock_user(uuid) to authenticated;
-
--- Function to mute a user (suppress notifications)
-create or replace function public.mute_user(_muted_id uuid)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  _muter_id uuid := auth.uid();
-begin
-  if _muter_id is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  if _muter_id = _muted_id then
-    raise exception 'Cannot mute yourself';
-  end if;
-  
-  insert into public.user_mutes (muter_id, muted_id)
-  values (_muter_id, _muted_id)
-  on conflict (muter_id, muted_id) do nothing;
-  
-  return true;
-end;
-$$;
-
-grant execute on function public.mute_user(uuid) to authenticated;
-
--- Function to unmute a user
-create or replace function public.unmute_user(_muted_id uuid)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  _muter_id uuid := auth.uid();
-begin
-  if _muter_id is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  delete from public.user_mutes
-  where muter_id = _muter_id and muted_id = _muted_id;
-  
-  return true;
-end;
-$$;
-
-grant execute on function public.unmute_user(uuid) to authenticated;
-
--- Function to report a user
-create or replace function public.report_user(_reported_id uuid, _reason text, _description text default null)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  _reporter_id uuid := auth.uid();
-  _report_id uuid;
-begin
-  if _reporter_id is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  if _reporter_id = _reported_id then
-    raise exception 'Cannot report yourself';
-  end if;
-  
-  insert into public.user_reports (reporter_id, reported_id, reason, description)
-  values (_reporter_id, _reported_id, _reason, _description)
-  returning id into _report_id;
-  
-  return _report_id;
-end;
-$$;
-
-grant execute on function public.report_user(uuid, text, text) to authenticated;
-
--- Function to report a message
-create or replace function public.report_message(_message_id uuid, _reason text, _description text default null)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  _reporter_id uuid := auth.uid();
-  _report_id uuid;
-begin
-  if _reporter_id is null then
-    raise exception 'Not authenticated';
-  end if;
-  
-  -- Verify the reporter can see this message (is a participant in the conversation)
-  if not exists (
-    select 1 from public.messages m
-    join public.conversation_participants cp on cp.conversation_id = m.conversation_id
-    where m.id = _message_id and cp.user_id = _reporter_id and cp.left_at is null
-  ) then
-    raise exception 'Message not found or access denied';
-  end if;
-  
-  insert into public.message_reports (reporter_id, message_id, reason, description)
-  values (_reporter_id, _message_id, _reason, _description)
-  returning id into _report_id;
-  
-  return _report_id;
-end;
-$$;
-
-grant execute on function public.report_message(uuid, text, text) to authenticated;
-
--- Function to get blocked users list
-create or replace function public.get_blocked_users()
-returns table (
-  id uuid,
-  blocked_id uuid,
-  display_name text,
-  avatar_url text,
-  blocked_at timestamptz
-)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select 
-    b.id,
-    b.blocked_id,
-    p.display_name,
-    p.avatar_url,
-    b.created_at as blocked_at
-  from public.user_blocks b
-  join public.profiles p on p.id = b.blocked_id
-  where b.blocker_id = auth.uid()
-  order by b.created_at desc;
-$$;
-
-grant execute on function public.get_blocked_users() to authenticated;
-
--- Function to get muted users list
-create or replace function public.get_muted_users()
-returns table (
-  id uuid,
-  muted_id uuid,
-  display_name text,
-  avatar_url text,
-  muted_at timestamptz
-)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select 
-    m.id,
-    m.muted_id,
-    p.display_name,
-    p.avatar_url,
-    m.created_at as muted_at
-  from public.user_mutes m
-  join public.profiles p on p.id = m.muted_id
-  where m.muter_id = auth.uid()
-  order by m.created_at desc;
-$$;
-
-grant execute on function public.get_muted_users() to authenticated;
-
 -- ========== Messaging System ==========
 -- Conversations table - supports both friend chats and chat requests from non-friends
 create table if not exists public.conversations (
@@ -5784,6 +5239,552 @@ create trigger trigger_update_conversation_on_message
   after insert on public.messages
   for each row
   execute function public.update_conversation_on_message();
+
+
+-- ========== User Safety System (Blocks, Mutes, Reports) ==========
+
+-- User blocks table - blocked users cannot send messages or friend requests
+create table if not exists public.user_blocks (
+  id uuid primary key default gen_random_uuid(),
+  blocker_id uuid not null references public.profiles(id) on delete cascade,
+  blocked_id uuid not null references public.profiles(id) on delete cascade,
+  reason text,
+  created_at timestamptz not null default now(),
+  unique(blocker_id, blocked_id)
+);
+
+-- User mutes table - muted users' notifications are suppressed
+create table if not exists public.user_mutes (
+  id uuid primary key default gen_random_uuid(),
+  muter_id uuid not null references public.profiles(id) on delete cascade,
+  muted_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(muter_id, muted_id)
+);
+
+-- User reports table - report users for inappropriate behavior
+create table if not exists public.user_reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  reported_id uuid not null references public.profiles(id) on delete cascade,
+  reason text not null check (reason in ('spam', 'harassment', 'inappropriate_content', 'fake_profile', 'other')),
+  description text,
+  status text not null default 'pending' check (status in ('pending', 'reviewed', 'actioned', 'dismissed')),
+  reviewed_by uuid references public.profiles(id) on delete set null,
+  reviewed_at timestamptz,
+  admin_notes text,
+  created_at timestamptz not null default now()
+);
+
+-- Message reports table - report specific messages
+create table if not exists public.message_reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  message_id uuid not null references public.messages(id) on delete cascade,
+  reason text not null check (reason in ('spam', 'harassment', 'inappropriate_content', 'scam', 'other')),
+  description text,
+  status text not null default 'pending' check (status in ('pending', 'reviewed', 'actioned', 'dismissed')),
+  reviewed_by uuid references public.profiles(id) on delete set null,
+  reviewed_at timestamptz,
+  admin_notes text,
+  created_at timestamptz not null default now()
+);
+
+-- Message rate limits table - track message sending for anti-spam
+create table if not exists public.message_rate_limits (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  window_start timestamptz not null default now(),
+  message_count integer not null default 1,
+  unique(user_id, window_start)
+);
+
+-- Report files table - case files for reported users
+create table if not exists public.report_files (
+  id uuid primary key default gen_random_uuid(),
+  -- The user being reported (the subject of the file)
+  subject_user_id uuid not null references public.profiles(id) on delete cascade,
+  -- File status: 'open' = active investigation, 'closed' = resolved (never delete)
+  status text not null default 'open' check (status in ('open', 'closed')),
+  -- Category of the report file
+  category text not null check (category in ('user_report', 'message_report', 'spam_abuse', 'system_abuse', 'rate_limit_violation', 'other')),
+  -- Summary/title of the case
+  title text not null,
+  -- Detailed notes about the case
+  notes text,
+  -- Priority level (1-3, mirrors flag_level)
+  priority integer not null default 1 check (priority between 1 and 3),
+  -- Admin who created the file
+  created_by uuid references public.profiles(id) on delete set null,
+  -- Admin who closed the file
+  closed_by uuid references public.profiles(id) on delete set null,
+  closed_at timestamptz,
+  -- Resolution notes when closing
+  resolution text,
+  -- Action taken: 'none', 'warning', 'escalated', 'suspended', 'banned'
+  action_taken text check (action_taken is null or action_taken in ('none', 'warning', 'escalated', 'suspended', 'banned')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Link user_reports to report_files
+alter table if exists public.user_reports add column if not exists report_file_id uuid references public.report_files(id) on delete set null;
+
+-- Link message_reports to report_files
+alter table if exists public.message_reports add column if not exists report_file_id uuid references public.report_files(id) on delete set null;
+
+-- Indexes for report files
+create index if not exists report_files_subject_idx on public.report_files (subject_user_id);
+create index if not exists report_files_status_idx on public.report_files (status) where status = 'open';
+create index if not exists report_files_priority_idx on public.report_files (priority desc, created_at desc);
+create index if not exists user_reports_file_idx on public.user_reports (report_file_id) where report_file_id is not null;
+create index if not exists message_reports_file_idx on public.message_reports (report_file_id) where report_file_id is not null;
+
+-- Indexes for efficient lookups
+create index if not exists user_blocks_blocker_idx on public.user_blocks (blocker_id);
+create index if not exists user_blocks_blocked_idx on public.user_blocks (blocked_id);
+create index if not exists user_mutes_muter_idx on public.user_mutes (muter_id);
+create index if not exists user_mutes_muted_idx on public.user_mutes (muted_id);
+create index if not exists user_reports_reporter_idx on public.user_reports (reporter_id);
+create index if not exists user_reports_reported_idx on public.user_reports (reported_id);
+create index if not exists user_reports_status_idx on public.user_reports (status) where status = 'pending';
+create index if not exists message_reports_status_idx on public.message_reports (status) where status = 'pending';
+create index if not exists message_rate_limits_user_window_idx on public.message_rate_limits (user_id, window_start);
+
+-- Enable RLS
+alter table public.user_blocks enable row level security;
+alter table public.user_mutes enable row level security;
+alter table public.user_reports enable row level security;
+alter table public.message_reports enable row level security;
+alter table public.message_rate_limits enable row level security;
+alter table public.report_files enable row level security;
+
+-- RLS for report_files - admin only
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='report_files' and policyname='report_files_admin_select') then
+    drop policy report_files_admin_select on public.report_files;
+  end if;
+  create policy report_files_admin_select on public.report_files for select to authenticated
+    using (public.is_admin_user((select auth.uid())));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='report_files' and policyname='report_files_admin_insert') then
+    drop policy report_files_admin_insert on public.report_files;
+  end if;
+  create policy report_files_admin_insert on public.report_files for insert to authenticated
+    with check (public.is_admin_user((select auth.uid())));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='report_files' and policyname='report_files_admin_update') then
+    drop policy report_files_admin_update on public.report_files;
+  end if;
+  create policy report_files_admin_update on public.report_files for update to authenticated
+    using (public.is_admin_user((select auth.uid())));
+end $$;
+
+-- RLS for user_blocks - users can see their own blocks
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_blocks' and policyname='user_blocks_select') then
+    drop policy user_blocks_select on public.user_blocks;
+  end if;
+  create policy user_blocks_select on public.user_blocks for select to authenticated
+    using (blocker_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_blocks' and policyname='user_blocks_insert') then
+    drop policy user_blocks_insert on public.user_blocks;
+  end if;
+  create policy user_blocks_insert on public.user_blocks for insert to authenticated
+    with check (blocker_id = (select auth.uid()));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_blocks' and policyname='user_blocks_delete') then
+    drop policy user_blocks_delete on public.user_blocks;
+  end if;
+  create policy user_blocks_delete on public.user_blocks for delete to authenticated
+    using (blocker_id = (select auth.uid()));
+end $$;
+
+-- RLS for user_mutes - users can see their own mutes
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_mutes' and policyname='user_mutes_select') then
+    drop policy user_mutes_select on public.user_mutes;
+  end if;
+  create policy user_mutes_select on public.user_mutes for select to authenticated
+    using (muter_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_mutes' and policyname='user_mutes_insert') then
+    drop policy user_mutes_insert on public.user_mutes;
+  end if;
+  create policy user_mutes_insert on public.user_mutes for insert to authenticated
+    with check (muter_id = (select auth.uid()));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_mutes' and policyname='user_mutes_delete') then
+    drop policy user_mutes_delete on public.user_mutes;
+  end if;
+  create policy user_mutes_delete on public.user_mutes for delete to authenticated
+    using (muter_id = (select auth.uid()));
+end $$;
+
+-- RLS for user_reports - users can see their own reports
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_select') then
+    drop policy user_reports_select on public.user_reports;
+  end if;
+  create policy user_reports_select on public.user_reports for select to authenticated
+    using (reporter_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_insert') then
+    drop policy user_reports_insert on public.user_reports;
+  end if;
+  create policy user_reports_insert on public.user_reports for insert to authenticated
+    with check (reporter_id = (select auth.uid()));
+end $$;
+
+-- RLS for message_reports - users can see their own reports
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_reports' and policyname='message_reports_select') then
+    drop policy message_reports_select on public.message_reports;
+  end if;
+  create policy message_reports_select on public.message_reports for select to authenticated
+    using (reporter_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_reports' and policyname='message_reports_insert') then
+    drop policy message_reports_insert on public.message_reports;
+  end if;
+  create policy message_reports_insert on public.message_reports for insert to authenticated
+    with check (reporter_id = (select auth.uid()));
+end $$;
+
+-- RLS for message_rate_limits - users can only see their own rate limits
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_rate_limits' and policyname='message_rate_limits_select') then
+    drop policy message_rate_limits_select on public.message_rate_limits;
+  end if;
+  create policy message_rate_limits_select on public.message_rate_limits for select to authenticated
+    using (user_id = (select auth.uid()) or public.is_admin_user((select auth.uid())));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_rate_limits' and policyname='message_rate_limits_insert') then
+    drop policy message_rate_limits_insert on public.message_rate_limits;
+  end if;
+  create policy message_rate_limits_insert on public.message_rate_limits for insert to authenticated
+    with check (user_id = (select auth.uid()));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='message_rate_limits' and policyname='message_rate_limits_update') then
+    drop policy message_rate_limits_update on public.message_rate_limits;
+  end if;
+  create policy message_rate_limits_update on public.message_rate_limits for update to authenticated
+    using (user_id = (select auth.uid()));
+end $$;
+
+-- Helper function to check if a user is blocked by another user
+create or replace function public.is_blocked_by(_user_id uuid, _by_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_blocks
+    where blocker_id = _by_user_id and blocked_id = _user_id
+  );
+$$;
+
+-- Helper function to check if a user is muted by another user
+create or replace function public.is_muted_by(_user_id uuid, _by_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_mutes
+    where muter_id = _by_user_id and muted_id = _user_id
+  );
+$$;
+
+-- Helper function to check if messaging is allowed from one user to another
+-- Returns true if:
+-- 1. Target hasn't blocked the sender
+-- 2. Target allows messages from non-friends OR they are friends OR target is not private
+create or replace function public.can_message_user(_sender_id uuid, _recipient_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select 
+    -- Cannot message if blocked
+    not exists (
+      select 1 from public.user_blocks
+      where blocker_id = _recipient_id and blocked_id = _sender_id
+    )
+    and (
+      -- Can always message if they are friends
+      exists (
+        select 1 from public.friends
+        where (user_id = _sender_id and friend_id = _recipient_id)
+           or (user_id = _recipient_id and friend_id = _sender_id)
+      )
+      -- Or if recipient allows messages from non-friends and is not private
+      or (
+        select coalesce(p.allow_messages_from_non_friends, true) and not coalesce(p.is_private, false)
+        from public.profiles p
+        where p.id = _recipient_id
+      )
+    );
+$$;
+
+-- Function to block a user
+create or replace function public.block_user(_blocked_id uuid, _reason text default null)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _blocker_id uuid := auth.uid();
+begin
+  if _blocker_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  if _blocker_id = _blocked_id then
+    raise exception 'Cannot block yourself';
+  end if;
+  
+  -- Insert block record
+  insert into public.user_blocks (blocker_id, blocked_id, reason)
+  values (_blocker_id, _blocked_id, _reason)
+  on conflict (blocker_id, blocked_id) do nothing;
+  
+  -- Also remove any existing friendship
+  delete from public.friends
+  where (user_id = _blocker_id and friend_id = _blocked_id)
+     or (user_id = _blocked_id and friend_id = _blocker_id);
+  
+  -- Cancel any pending friend requests
+  delete from public.friend_requests
+  where (requester_id = _blocker_id and recipient_id = _blocked_id)
+     or (requester_id = _blocked_id and recipient_id = _blocker_id);
+  
+  return true;
+end;
+$$;
+
+grant execute on function public.block_user(uuid, text) to authenticated;
+
+-- Function to unblock a user
+create or replace function public.unblock_user(_blocked_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _blocker_id uuid := auth.uid();
+begin
+  if _blocker_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  delete from public.user_blocks
+  where blocker_id = _blocker_id and blocked_id = _blocked_id;
+  
+  return true;
+end;
+$$;
+
+grant execute on function public.unblock_user(uuid) to authenticated;
+
+-- Function to mute a user (suppress notifications)
+create or replace function public.mute_user(_muted_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _muter_id uuid := auth.uid();
+begin
+  if _muter_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  if _muter_id = _muted_id then
+    raise exception 'Cannot mute yourself';
+  end if;
+  
+  insert into public.user_mutes (muter_id, muted_id)
+  values (_muter_id, _muted_id)
+  on conflict (muter_id, muted_id) do nothing;
+  
+  return true;
+end;
+$$;
+
+grant execute on function public.mute_user(uuid) to authenticated;
+
+-- Function to unmute a user
+create or replace function public.unmute_user(_muted_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _muter_id uuid := auth.uid();
+begin
+  if _muter_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  delete from public.user_mutes
+  where muter_id = _muter_id and muted_id = _muted_id;
+  
+  return true;
+end;
+$$;
+
+grant execute on function public.unmute_user(uuid) to authenticated;
+
+-- Function to report a user
+create or replace function public.report_user(_reported_id uuid, _reason text, _description text default null)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _reporter_id uuid := auth.uid();
+  _report_id uuid;
+begin
+  if _reporter_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  if _reporter_id = _reported_id then
+    raise exception 'Cannot report yourself';
+  end if;
+  
+  insert into public.user_reports (reporter_id, reported_id, reason, description)
+  values (_reporter_id, _reported_id, _reason, _description)
+  returning id into _report_id;
+  
+  return _report_id;
+end;
+$$;
+
+grant execute on function public.report_user(uuid, text, text) to authenticated;
+
+-- Function to report a message
+create or replace function public.report_message(_message_id uuid, _reason text, _description text default null)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _reporter_id uuid := auth.uid();
+  _report_id uuid;
+begin
+  if _reporter_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  -- Verify the reporter can see this message (is a participant in the conversation)
+  if not exists (
+    select 1 from public.messages m
+    join public.conversation_participants cp on cp.conversation_id = m.conversation_id
+    where m.id = _message_id and cp.user_id = _reporter_id and cp.left_at is null
+  ) then
+    raise exception 'Message not found or access denied';
+  end if;
+  
+  insert into public.message_reports (reporter_id, message_id, reason, description)
+  values (_reporter_id, _message_id, _reason, _description)
+  returning id into _report_id;
+  
+  return _report_id;
+end;
+$$;
+
+grant execute on function public.report_message(uuid, text, text) to authenticated;
+
+-- Function to get blocked users list
+create or replace function public.get_blocked_users()
+returns table (
+  id uuid,
+  blocked_id uuid,
+  display_name text,
+  avatar_url text,
+  blocked_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select 
+    b.id,
+    b.blocked_id,
+    p.display_name,
+    p.avatar_url,
+    b.created_at as blocked_at
+  from public.user_blocks b
+  join public.profiles p on p.id = b.blocked_id
+  where b.blocker_id = auth.uid()
+  order by b.created_at desc;
+$$;
+
+grant execute on function public.get_blocked_users() to authenticated;
+
+-- Function to get muted users list
+create or replace function public.get_muted_users()
+returns table (
+  id uuid,
+  muted_id uuid,
+  display_name text,
+  avatar_url text,
+  muted_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select 
+    m.id,
+    m.muted_id,
+    p.display_name,
+    p.avatar_url,
+    m.created_at as muted_at
+  from public.user_mutes m
+  join public.profiles p on p.id = m.muted_id
+  where m.muter_id = auth.uid()
+  order by m.created_at desc;
+$$;
+
+grant execute on function public.get_muted_users() to authenticated;
 
 -- ========== Garden Task Cache System ==========
 -- Pre-computed task data tables to avoid expensive recalculations
