@@ -6118,6 +6118,800 @@ async function ensureDefaultAutomations() {
   }
 }
 
+// ============================================================================
+// Admin Report Management Endpoints
+// ============================================================================
+
+// Get flagged users count (for badge)
+app.get('/api/admin/reports/flagged-count', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    const result = await sql`
+      select 
+        count(distinct subject_user_id)::integer as flagged_users,
+        count(*)::integer as open_files
+      from public.report_files
+      where status = 'open'
+    `
+    res.json({
+      flaggedUsers: result[0]?.flagged_users || 0,
+      openFiles: result[0]?.open_files || 0
+    })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get flagged count:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get flagged count' })
+  }
+})
+
+// Get all flagged users with their report files
+app.get('/api/admin/reports/flagged-users', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    const { status = 'all', limit = 50, offset = 0 } = req.query
+    
+    let users
+    if (status === 'open') {
+      users = await sql`
+        select 
+          p.id,
+          p.display_name,
+          p.email,
+          p.avatar_url,
+          p.flag_level,
+          p.is_suspended,
+          p.suspended_at,
+          p.is_private,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as open_files_count,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id) as total_files_count,
+          (select max(rf.priority) from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as max_priority,
+          (select count(*)::integer from public.user_reports ur where ur.reported_id = p.id) as user_reports_count,
+          (select count(*)::integer from public.message_reports mr join public.messages m on m.id = mr.message_id where m.sender_id = p.id) as message_reports_count
+        from public.profiles p
+        where p.flag_level is not null
+          or exists (select 1 from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open')
+        order by 
+          p.is_suspended desc,
+          coalesce(p.flag_level, 0) desc,
+          open_files_count desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    } else {
+      users = await sql`
+        select 
+          p.id,
+          p.display_name,
+          u.email,
+          p.avatar_url,
+          p.flag_level,
+          p.is_suspended,
+          p.suspended_at,
+          p.is_private,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as open_files_count,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id) as total_files_count,
+          (select max(rf.priority) from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as max_priority,
+          (select count(*)::integer from public.user_reports ur where ur.reported_id = p.id) as user_reports_count,
+          (select count(*)::integer from public.message_reports mr join public.messages m on m.id = mr.message_id where m.sender_id = p.id) as message_reports_count
+        from public.profiles p
+        left join auth.users u on u.id = p.id
+        where p.flag_level is not null
+          or exists (select 1 from public.report_files rf where rf.subject_user_id = p.id)
+        order by 
+          p.is_suspended desc,
+          coalesce(p.flag_level, 0) desc,
+          open_files_count desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    }
+    
+    res.json({ users: users || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get flagged users:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get flagged users' })
+  }
+})
+
+// Get report files for a specific user
+app.get('/api/admin/reports/files/:userId', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const { userId } = req.params
+  const { status = 'all' } = req.query
+  
+  try {
+    let files
+    if (status === 'open') {
+      files = await sql`
+        select 
+          rf.*,
+          p.display_name as created_by_name,
+          cp.display_name as closed_by_name
+        from public.report_files rf
+        left join public.profiles p on p.id = rf.created_by
+        left join public.profiles cp on cp.id = rf.closed_by
+        where rf.subject_user_id = ${userId}
+          and rf.status = 'open'
+        order by rf.priority desc, rf.created_at desc
+      `
+    } else if (status === 'closed') {
+      files = await sql`
+        select 
+          rf.*,
+          p.display_name as created_by_name,
+          cp.display_name as closed_by_name
+        from public.report_files rf
+        left join public.profiles p on p.id = rf.created_by
+        left join public.profiles cp on cp.id = rf.closed_by
+        where rf.subject_user_id = ${userId}
+          and rf.status = 'closed'
+        order by rf.closed_at desc
+      `
+    } else {
+      files = await sql`
+        select 
+          rf.*,
+          p.display_name as created_by_name,
+          cp.display_name as closed_by_name
+        from public.report_files rf
+        left join public.profiles p on p.id = rf.created_by
+        left join public.profiles cp on cp.id = rf.closed_by
+        where rf.subject_user_id = ${userId}
+        order by rf.status asc, rf.priority desc, rf.created_at desc
+      `
+    }
+    
+    res.json({ files: files || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get report files:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get report files' })
+  }
+})
+
+// Get a single report file with its linked reports
+app.get('/api/admin/reports/file/:fileId', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const { fileId } = req.params
+  
+  try {
+    const fileResult = await sql`
+      select 
+        rf.*,
+        p.display_name as created_by_name,
+        cp.display_name as closed_by_name,
+        sp.display_name as subject_display_name,
+        sp.avatar_url as subject_avatar_url,
+        sp.flag_level as subject_flag_level,
+        sp.is_suspended as subject_is_suspended
+      from public.report_files rf
+      left join public.profiles p on p.id = rf.created_by
+      left join public.profiles cp on cp.id = rf.closed_by
+      left join public.profiles sp on sp.id = rf.subject_user_id
+      where rf.id = ${fileId}
+    `
+    
+    if (!fileResult?.length) {
+      res.status(404).json({ error: 'Report file not found' })
+      return
+    }
+    
+    // Get linked user reports
+    const userReports = await sql`
+      select 
+        ur.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar
+      from public.user_reports ur
+      join public.profiles rp on rp.id = ur.reporter_id
+      where ur.report_file_id = ${fileId}
+      order by ur.created_at desc
+    `
+    
+    // Get linked message reports
+    const messageReports = await sql`
+      select 
+        mr.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar,
+        m.content as message_content,
+        m.created_at as message_created_at,
+        c.id as conversation_id
+      from public.message_reports mr
+      join public.profiles rp on rp.id = mr.reporter_id
+      join public.messages m on m.id = mr.message_id
+      join public.conversations c on c.id = m.conversation_id
+      where mr.report_file_id = ${fileId}
+      order by mr.created_at desc
+    `
+    
+    res.json({
+      file: fileResult[0],
+      userReports: userReports || [],
+      messageReports: messageReports || []
+    })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get report file' })
+  }
+})
+
+// Create a new report file
+app.post('/api/admin/reports/files', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { subjectUserId, category, title, notes, priority = 1 } = req.body
+  
+  if (!subjectUserId || !category || !title) {
+    res.status(400).json({ error: 'Missing required fields: subjectUserId, category, title' })
+    return
+  }
+  
+  try {
+    const result = await sql`
+      insert into public.report_files (subject_user_id, category, title, notes, priority, created_by)
+      values (${subjectUserId}, ${category}, ${title}, ${notes || null}, ${priority}, ${adminId})
+      returning *
+    `
+    
+    // Update user's flag level if this is their first report file
+    await sql`
+      update public.profiles
+      set flag_level = coalesce(flag_level, 1)
+      where id = ${subjectUserId} and flag_level is null
+    `
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to create report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to create report file' })
+  }
+})
+
+// Update a report file
+app.put('/api/admin/reports/file/:fileId', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  const { title, notes, priority } = req.body
+  
+  try {
+    const result = await sql`
+      update public.report_files
+      set 
+        title = coalesce(${title || null}, title),
+        notes = coalesce(${notes}, notes),
+        priority = coalesce(${priority || null}, priority),
+        updated_at = now()
+      where id = ${fileId}
+      returning *
+    `
+    
+    if (!result?.length) {
+      res.status(404).json({ error: 'Report file not found' })
+      return
+    }
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to update report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update report file' })
+  }
+})
+
+// Close a report file
+app.post('/api/admin/reports/file/:fileId/close', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  const { resolution, actionTaken } = req.body
+  
+  try {
+    const result = await sql`
+      update public.report_files
+      set 
+        status = 'closed',
+        closed_by = ${adminId},
+        closed_at = now(),
+        resolution = ${resolution || null},
+        action_taken = ${actionTaken || null},
+        updated_at = now()
+      where id = ${fileId} and status = 'open'
+      returning *
+    `
+    
+    if (!result?.length) {
+      res.status(404).json({ error: 'Report file not found or already closed' })
+      return
+    }
+    
+    // Update linked reports to 'reviewed' status
+    await sql`
+      update public.user_reports
+      set status = 'reviewed', reviewed_by = ${adminId}, reviewed_at = now()
+      where report_file_id = ${fileId} and status = 'pending'
+    `
+    
+    await sql`
+      update public.message_reports
+      set status = 'reviewed', reviewed_by = ${adminId}, reviewed_at = now()
+      where report_file_id = ${fileId} and status = 'pending'
+    `
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to close report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to close report file' })
+  }
+})
+
+// Reopen a report file
+app.post('/api/admin/reports/file/:fileId/reopen', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  
+  try {
+    const result = await sql`
+      update public.report_files
+      set 
+        status = 'open',
+        closed_by = null,
+        closed_at = null,
+        resolution = null,
+        action_taken = null,
+        updated_at = now()
+      where id = ${fileId} and status = 'closed'
+      returning *
+    `
+    
+    if (!result?.length) {
+      res.status(404).json({ error: 'Report file not found or already open' })
+      return
+    }
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to reopen report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to reopen report file' })
+  }
+})
+
+// Link existing reports to a file
+app.post('/api/admin/reports/file/:fileId/link', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  const { userReportIds = [], messageReportIds = [] } = req.body
+  
+  try {
+    if (userReportIds.length > 0) {
+      await sql`
+        update public.user_reports
+        set report_file_id = ${fileId}
+        where id = any(${userReportIds}::uuid[])
+      `
+    }
+    
+    if (messageReportIds.length > 0) {
+      await sql`
+        update public.message_reports
+        set report_file_id = ${fileId}
+        where id = any(${messageReportIds}::uuid[])
+      `
+    }
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[admin/reports] Failed to link reports:', err)
+    res.status(500).json({ error: err?.message || 'Failed to link reports' })
+  }
+})
+
+// Update user flag level (escalate/de-escalate)
+app.put('/api/admin/reports/user/:userId/flag-level', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { flagLevel } = req.body
+  
+  if (flagLevel !== null && (flagLevel < 1 || flagLevel > 3)) {
+    res.status(400).json({ error: 'Flag level must be between 1 and 3, or null to clear' })
+    return
+  }
+  
+  try {
+    // If escalating to level 3, suspend the account
+    if (flagLevel === 3) {
+      await sql`
+        update public.profiles
+        set 
+          flag_level = 3,
+          is_suspended = true,
+          suspended_at = now(),
+          suspended_by = ${adminId},
+          is_private = true
+        where id = ${userId}
+      `
+      
+      // Send suspension email
+      try {
+        const userInfo = await sql`
+          select u.email, p.display_name, p.language
+          from auth.users u
+          join public.profiles p on p.id = u.id
+          where u.id = ${userId}
+        `
+        if (userInfo?.length && userInfo[0].email) {
+          // Trigger account_suspended notification
+          await sendSuspensionEmail(userInfo[0].email, userInfo[0].display_name, userInfo[0].language)
+        }
+      } catch (emailErr) {
+        console.error('[admin/reports] Failed to send suspension email:', emailErr)
+      }
+    } else {
+      await sql`
+        update public.profiles
+        set flag_level = ${flagLevel}
+        where id = ${userId}
+      `
+    }
+    
+    res.json({ ok: true, flagLevel })
+  } catch (err) {
+    console.error('[admin/reports] Failed to update flag level:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update flag level' })
+  }
+})
+
+// Suspend a user account (Level 3)
+app.post('/api/admin/reports/user/:userId/suspend', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { reason } = req.body
+  
+  try {
+    await sql`
+      update public.profiles
+      set 
+        flag_level = 3,
+        is_suspended = true,
+        suspended_at = now(),
+        suspended_by = ${adminId},
+        is_private = true
+      where id = ${userId}
+    `
+    
+    // Create a report file for the suspension
+    await sql`
+      insert into public.report_files (subject_user_id, category, title, notes, priority, created_by, status, action_taken)
+      values (
+        ${userId}, 
+        'system_abuse', 
+        'Account Suspended', 
+        ${reason || 'Account suspended by administrator'},
+        3,
+        ${adminId},
+        'closed',
+        'suspended'
+      )
+    `
+    
+    // Send suspension email
+    try {
+      const userInfo = await sql`
+        select u.email, p.display_name, p.language
+        from auth.users u
+        join public.profiles p on p.id = u.id
+        where u.id = ${userId}
+      `
+      if (userInfo?.length && userInfo[0].email) {
+        await sendSuspensionEmail(userInfo[0].email, userInfo[0].display_name, userInfo[0].language)
+      }
+    } catch (emailErr) {
+      console.error('[admin/reports] Failed to send suspension email:', emailErr)
+    }
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[admin/reports] Failed to suspend user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to suspend user' })
+  }
+})
+
+// Unsuspend a user account
+app.post('/api/admin/reports/user/:userId/unsuspend', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { flagLevel = 2 } = req.body // Default to level 2 (under watch)
+  
+  try {
+    await sql`
+      update public.profiles
+      set 
+        flag_level = ${flagLevel},
+        is_suspended = false,
+        suspended_at = null,
+        suspended_by = null
+      where id = ${userId}
+    `
+    
+    res.json({ ok: true, flagLevel })
+  } catch (err) {
+    console.error('[admin/reports] Failed to unsuspend user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to unsuspend user' })
+  }
+})
+
+// Get unassigned reports (not linked to any file)
+app.get('/api/admin/reports/unassigned', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  try {
+    const userReports = await sql`
+      select 
+        ur.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar,
+        sp.display_name as reported_name,
+        sp.avatar_url as reported_avatar,
+        sp.flag_level as reported_flag_level
+      from public.user_reports ur
+      join public.profiles rp on rp.id = ur.reporter_id
+      join public.profiles sp on sp.id = ur.reported_id
+      where ur.report_file_id is null
+        and ur.status = 'pending'
+      order by ur.created_at desc
+      limit 50
+    `
+    
+    const messageReports = await sql`
+      select 
+        mr.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar,
+        sp.display_name as sender_name,
+        sp.avatar_url as sender_avatar,
+        sp.flag_level as sender_flag_level,
+        m.content as message_content,
+        m.created_at as message_created_at,
+        m.sender_id
+      from public.message_reports mr
+      join public.profiles rp on rp.id = mr.reporter_id
+      join public.messages m on m.id = mr.message_id
+      join public.profiles sp on sp.id = m.sender_id
+      where mr.report_file_id is null
+        and mr.status = 'pending'
+      order by mr.created_at desc
+      limit 50
+    `
+    
+    res.json({
+      userReports: userReports || [],
+      messageReports: messageReports || []
+    })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get unassigned reports:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get unassigned reports' })
+  }
+})
+
+// Get user stats (friends, messages, conversations) for admin
+app.get('/api/admin/reports/user/:userId/stats', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  
+  try {
+    const statsResult = await sql`
+      select
+        (select count(*)::integer from public.friends where user_id = ${userId} or friend_id = ${userId}) as friends_count,
+        (select count(*)::integer from public.messages where sender_id = ${userId}) as messages_sent_count,
+        (select count(*)::integer from public.conversation_participants where user_id = ${userId} and left_at is null) as conversations_count,
+        (select count(*)::integer from public.user_reports where reported_id = ${userId}) as reports_received_count,
+        (select count(*)::integer from public.user_reports where reporter_id = ${userId}) as reports_made_count
+    `
+    
+    res.json({ stats: statsResult[0] || {} })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get user stats:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get user stats' })
+  }
+})
+
+// Get user's messages for admin review
+app.get('/api/admin/reports/user/:userId/messages', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { limit = 100, offset = 0, conversationId } = req.query
+  
+  try {
+    let messages
+    if (conversationId) {
+      messages = await sql`
+        select 
+          m.*,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar,
+          (select exists(select 1 from public.message_reports mr where mr.message_id = m.id)) as is_reported
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.conversation_id = ${conversationId}
+        order by m.created_at desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    } else {
+      messages = await sql`
+        select 
+          m.*,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar,
+          (select exists(select 1 from public.message_reports mr where mr.message_id = m.id)) as is_reported
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.sender_id = ${userId}
+        order by m.created_at desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    }
+    
+    res.json({ messages: messages || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get user messages:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get user messages' })
+  }
+})
+
+// Get user's conversations for admin review
+app.get('/api/admin/reports/user/:userId/conversations', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  
+  try {
+    const conversations = await sql`
+      select 
+        c.*,
+        (
+          select jsonb_agg(jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url
+          ))
+          from public.conversation_participants cp2
+          join public.profiles p on p.id = cp2.user_id
+          where cp2.conversation_id = c.id
+        ) as participants,
+        (select count(*)::integer from public.messages m where m.conversation_id = c.id) as message_count,
+        (select count(*)::integer from public.messages m where m.conversation_id = c.id and m.sender_id = ${userId}) as user_message_count
+      from public.conversations c
+      join public.conversation_participants cp on cp.conversation_id = c.id and cp.user_id = ${userId}
+      where cp.left_at is null
+      order by c.last_message_at desc nulls last
+      limit 50
+    `
+    
+    res.json({ conversations: conversations || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get user conversations:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get user conversations' })
+  }
+})
+
+// Helper function to send suspension email
+async function sendSuspensionEmail(email, displayName, language) {
+  if (!sql) return
+  
+  try {
+    // Get the account_suspended automation
+    const automation = await sql`
+      select na.*, nt.message_variants, nt.title as template_title
+      from public.notification_automations na
+      left join public.notification_templates nt on nt.id = na.template_id
+      where na.trigger_type = 'account_suspended'
+        and na.is_enabled = true
+      limit 1
+    `
+    
+    if (!automation?.length) {
+      console.log('[suspension-email] account_suspended automation not configured')
+      return
+    }
+    
+    // For now, just log - the actual email sending would be handled by the email system
+    console.log(`[suspension-email] Would send suspension email to ${email} (${displayName})`)
+    
+    // You could also create a user_notification entry here if you want it delivered via push
+    // Or trigger an email campaign send
+    
+  } catch (err) {
+    console.error('[suspension-email] Failed to send:', err)
+  }
+}
+
 app.get('/api/admin/notification-automations', async (req, res) => {
   const adminId = await ensureEditor(req, res)
   if (!adminId) return
@@ -7785,10 +8579,24 @@ app.get('/api/admin/member', async (req, res) => {
         const adminName = null
         if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
       } catch {}
+      // Get social stats via REST (best effort)
+      let socialStats = null
+      try {
+        const statsRpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/admin_get_user_social_stats`, {
+          method: 'POST',
+          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _user_id: targetId }),
+        })
+        if (statsRpc.ok) {
+          socialStats = await statsRpc.json().catch(() => null)
+        }
+      } catch {}
+      
       res.json({
         ok: true,
         user: { id: targetId, email: resolvedEmail || emailParam || null, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
         profile,
+        socialStats,
         ips,
         lastOnlineAt,
         lastIp,
@@ -7838,8 +8646,22 @@ app.get('/api/admin/member', async (req, res) => {
     }
     let profile = null
     try {
-      const rows = await sql`select id, display_name, is_admin, roles from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin, roles, flag_level, is_suspended, suspended_at, is_private from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
+    } catch {}
+    // Get social stats for admin (friends, messages, conversations, reports)
+    let socialStats = null
+    try {
+      const statsRows = await sql`
+        select
+          (select count(*)::integer from public.friends where user_id = ${user.id} or friend_id = ${user.id}) as friends_count,
+          (select count(*)::integer from public.messages where sender_id = ${user.id}) as messages_sent_count,
+          (select count(*)::integer from public.conversation_participants where user_id = ${user.id} and left_at is null) as conversations_count,
+          (select count(*)::integer from public.user_reports where reported_id = ${user.id}) as reports_received_count,
+          (select count(*)::integer from public.report_files where subject_user_id = ${user.id}) as report_files_count,
+          (select count(*)::integer from public.report_files where subject_user_id = ${user.id} and status = 'open') as open_report_files_count
+      `
+      socialStats = statsRows?.[0] || null
     } catch {}
     // Load latest admin notes for this profile (DB or REST)
     let adminNotes = []
@@ -8011,6 +8833,7 @@ app.get('/api/admin/member', async (req, res) => {
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at, email_confirmed_at: user.email_confirmed_at || null, last_sign_in_at: user.last_sign_in_at || null },
       profile,
+      socialStats,
       ips,
       lastOnlineAt,
       lastIp,

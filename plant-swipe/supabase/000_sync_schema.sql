@@ -126,6 +126,7 @@ do $$ declare
     'user_reports',
     'message_reports',
     'message_rate_limits',
+    'report_files',
     -- Messaging
     'conversations',
     'conversation_participants',
@@ -202,6 +203,14 @@ alter table if exists public.profiles add column if not exists roles text[] defa
 create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
 -- Messaging privacy: when false, only friends can send messages (default true = allow all)
 alter table if exists public.profiles add column if not exists allow_messages_from_non_friends boolean not null default true;
+-- Flag level for reported users (1=first report, 2=under watch, 3=suspended/banned)
+alter table if exists public.profiles add column if not exists flag_level integer check (flag_level is null or flag_level between 1 and 3);
+-- Account suspension status
+alter table if exists public.profiles add column if not exists is_suspended boolean not null default false;
+-- Timestamp when account was suspended
+alter table if exists public.profiles add column if not exists suspended_at timestamptz;
+-- Admin who suspended the account
+alter table if exists public.profiles add column if not exists suspended_by uuid references public.profiles(id) on delete set null;
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin
@@ -4851,6 +4860,47 @@ create table if not exists public.message_rate_limits (
   unique(user_id, window_start)
 );
 
+-- Report files table - case files for reported users
+create table if not exists public.report_files (
+  id uuid primary key default gen_random_uuid(),
+  -- The user being reported (the subject of the file)
+  subject_user_id uuid not null references public.profiles(id) on delete cascade,
+  -- File status: 'open' = active investigation, 'closed' = resolved (never delete)
+  status text not null default 'open' check (status in ('open', 'closed')),
+  -- Category of the report file
+  category text not null check (category in ('user_report', 'message_report', 'spam_abuse', 'system_abuse', 'rate_limit_violation', 'other')),
+  -- Summary/title of the case
+  title text not null,
+  -- Detailed notes about the case
+  notes text,
+  -- Priority level (1-3, mirrors flag_level)
+  priority integer not null default 1 check (priority between 1 and 3),
+  -- Admin who created the file
+  created_by uuid references public.profiles(id) on delete set null,
+  -- Admin who closed the file
+  closed_by uuid references public.profiles(id) on delete set null,
+  closed_at timestamptz,
+  -- Resolution notes when closing
+  resolution text,
+  -- Action taken: 'none', 'warning', 'escalated', 'suspended', 'banned'
+  action_taken text check (action_taken is null or action_taken in ('none', 'warning', 'escalated', 'suspended', 'banned')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Link user_reports to report_files
+alter table if exists public.user_reports add column if not exists report_file_id uuid references public.report_files(id) on delete set null;
+
+-- Link message_reports to report_files
+alter table if exists public.message_reports add column if not exists report_file_id uuid references public.report_files(id) on delete set null;
+
+-- Indexes for report files
+create index if not exists report_files_subject_idx on public.report_files (subject_user_id);
+create index if not exists report_files_status_idx on public.report_files (status) where status = 'open';
+create index if not exists report_files_priority_idx on public.report_files (priority desc, created_at desc);
+create index if not exists user_reports_file_idx on public.user_reports (report_file_id) where report_file_id is not null;
+create index if not exists message_reports_file_idx on public.message_reports (report_file_id) where report_file_id is not null;
+
 -- Indexes for efficient lookups
 create index if not exists user_blocks_blocker_idx on public.user_blocks (blocker_id);
 create index if not exists user_blocks_blocked_idx on public.user_blocks (blocked_id);
@@ -4868,6 +4918,32 @@ alter table public.user_mutes enable row level security;
 alter table public.user_reports enable row level security;
 alter table public.message_reports enable row level security;
 alter table public.message_rate_limits enable row level security;
+alter table public.report_files enable row level security;
+
+-- RLS for report_files - admin only
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='report_files' and policyname='report_files_admin_select') then
+    drop policy report_files_admin_select on public.report_files;
+  end if;
+  create policy report_files_admin_select on public.report_files for select to authenticated
+    using (public.is_admin_user((select auth.uid())));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='report_files' and policyname='report_files_admin_insert') then
+    drop policy report_files_admin_insert on public.report_files;
+  end if;
+  create policy report_files_admin_insert on public.report_files for insert to authenticated
+    with check (public.is_admin_user((select auth.uid())));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='report_files' and policyname='report_files_admin_update') then
+    drop policy report_files_admin_update on public.report_files;
+  end if;
+  create policy report_files_admin_update on public.report_files for update to authenticated
+    using (public.is_admin_user((select auth.uid())));
+end $$;
 
 -- RLS for user_blocks - users can see their own blocks
 do $$ begin
@@ -7052,7 +7128,8 @@ create table if not exists public.notification_automations (
     'message_received',
     'friend_request_sent',
     'friend_request_accepted',
-    'task_completed_by_other'
+    'task_completed_by_other',
+    'account_suspended'
   )),
   display_name text not null,
   description text,
@@ -7078,7 +7155,8 @@ alter table public.notification_automations add constraint notification_automati
     'message_received',
     'friend_request_sent',
     'friend_request_accepted',
-    'task_completed_by_other'
+    'task_completed_by_other',
+    'account_suspended'
   ));
 create index if not exists notification_automations_enabled_idx
   on public.notification_automations (is_enabled)
@@ -7133,6 +7211,11 @@ begin
   -- Task Completed by Other User in Garden
   insert into public.notification_automations (trigger_type, display_name, description, send_hour, is_enabled)
   values ('task_completed_by_other', 'Garden Task Completed', 'Notifies garden members when another user completes a task', 0, true)
+  on conflict (trigger_type) do nothing;
+  
+  -- Account Suspended (Level 3 Ban)
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour, is_enabled)
+  values ('account_suspended', 'Account Suspended', 'Email sent to users when their account is suspended (Level 3)', 0, true)
   on conflict (trigger_type) do nothing;
 end $$;
 
