@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -151,6 +151,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                   <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
+                </button>
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/messages') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                  <MessageSquare className="h-4 w-4" /> {t('common.messages', { defaultValue: 'Messages' })}
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                   <Settings className="h-4 w-4" /> {t('common.settings')}

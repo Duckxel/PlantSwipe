@@ -14766,6 +14766,681 @@ app.delete('/api/push/subscribe', async (req, res) => {
   }
 })
 
+// ============================================================================
+// Messaging API Endpoints
+// ============================================================================
+
+// Helper function to send instant notification for specific trigger types
+async function sendInstantNotification(triggerType, userId, payload) {
+  if (!sql) return
+  try {
+    // Get automation settings for this trigger type
+    const automations = await sql`
+      select na.*, 
+             coalesce(nt.message_variants, '{}') as message_variants,
+             nt.title as template_title
+      from public.notification_automations na
+      left join public.notification_templates nt on nt.id = na.template_id
+      where na.trigger_type = ${triggerType}
+        and na.is_enabled = true
+      limit 1
+    `
+    
+    if (!automations || !automations.length) {
+      console.log(`[notifications] Automation ${triggerType} not enabled or not found`)
+      return
+    }
+    
+    const automation = automations[0]
+    const messageVariants = toStringArray(automation.message_variants)
+    if (!messageVariants.length) {
+      console.log(`[notifications] No message variants for ${triggerType}`)
+      return
+    }
+    
+    // Get recipient profile
+    const profiles = await sql`
+      select id, display_name, language, timezone, notify_push
+      from public.profiles
+      where id = ${userId}
+      limit 1
+    `
+    
+    if (!profiles || !profiles.length) return
+    const recipient = profiles[0]
+    
+    // Check if user has push notifications enabled
+    if (recipient.notify_push === false) return
+    
+    // Get translations for user's language
+    const userLang = (recipient.language || 'en').toLowerCase()
+    let variants = messageVariants
+    
+    if (userLang !== 'en' && automation.template_id) {
+      const translations = await sql`
+        select message_variants
+        from public.notification_template_translations
+        where template_id = ${automation.template_id}
+          and language = ${userLang}
+        limit 1
+      `
+      if (translations?.length && translations[0].message_variants?.length) {
+        variants = translations[0].message_variants
+      }
+    }
+    
+    // Select random variant
+    const messageIndex = Math.floor(Math.random() * variants.length)
+    let message = variants[messageIndex]
+    
+    // Replace template variables
+    message = message
+      .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+      .replace(/\{\{sender\}\}/gi, payload?.senderName || 'Someone')
+      .replace(/\{\{sender_name\}\}/gi, payload?.senderName || 'Someone')
+      .replace(/\{\{garden\}\}/gi, payload?.gardenName || 'your garden')
+      .replace(/\{\{garden_name\}\}/gi, payload?.gardenName || 'your garden')
+      .replace(/\{\{task\}\}/gi, payload?.taskName || 'a task')
+      .replace(/\{\{task_name\}\}/gi, payload?.taskName || 'a task')
+    
+    // Create notification
+    await sql`
+      insert into public.user_notifications (
+        automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status, payload
+      )
+      values (
+        ${automation.id},
+        ${userId},
+        ${automation.template_title || automation.display_name || 'Notification'},
+        ${message},
+        ${payload?.ctaUrl || automation.cta_url || null},
+        now(),
+        'pending',
+        ${sql.json(payload || {})}
+      )
+    `
+    
+    console.log(`[notifications] Created instant notification ${triggerType} for user ${userId}`)
+  } catch (err) {
+    console.error(`[notifications] Failed to send instant notification ${triggerType}:`, err)
+  }
+}
+
+// Get user's conversations list
+app.get('/api/messages/conversations', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  try {
+    const conversations = await sql`
+      select 
+        c.id,
+        c.type,
+        c.status,
+        c.initiated_by,
+        c.title,
+        c.last_message_at,
+        c.last_message_preview,
+        c.created_at,
+        cp.unread_count,
+        cp.is_muted,
+        cp.last_read_at,
+        -- Get the other participant's info for direct chats
+        (
+          select jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url
+          )
+          from public.conversation_participants cp2
+          join public.profiles p on p.id = cp2.user_id
+          where cp2.conversation_id = c.id
+            and cp2.user_id <> ${user.id}
+            and cp2.left_at is null
+          limit 1
+        ) as other_participant
+      from public.conversations c
+      join public.conversation_participants cp on cp.conversation_id = c.id
+      where cp.user_id = ${user.id}
+        and cp.left_at is null
+      order by 
+        case when c.status = 'pending' and c.initiated_by <> ${user.id} then 0 else 1 end,
+        c.last_message_at desc nulls last,
+        c.created_at desc
+    `
+    
+    res.json({ 
+      conversations: conversations.map(c => ({
+        id: c.id,
+        type: c.type,
+        status: c.status,
+        initiatedBy: c.initiated_by,
+        title: c.title,
+        lastMessageAt: c.last_message_at,
+        lastMessagePreview: c.last_message_preview,
+        createdAt: c.created_at,
+        unreadCount: c.unread_count || 0,
+        isMuted: c.is_muted || false,
+        lastReadAt: c.last_read_at,
+        otherParticipant: c.other_participant,
+        isPendingForMe: c.status === 'pending' && c.initiated_by !== user.id
+      }))
+    })
+  } catch (err) {
+    console.error('[messages] Failed to get conversations:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get conversations' })
+  }
+})
+
+// Get messages in a conversation
+app.get('/api/messages/conversations/:conversationId/messages', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100)
+  const before = req.query.before // message ID to paginate before
+  
+  try {
+    // Verify user is participant
+    const participant = await sql`
+      select cp.id, c.status
+      from public.conversation_participants cp
+      join public.conversations c on c.id = cp.conversation_id
+      where cp.conversation_id = ${conversationId}
+        and cp.user_id = ${user.id}
+        and cp.left_at is null
+      limit 1
+    `
+    
+    if (!participant?.length) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+    
+    let messagesQuery
+    if (before) {
+      messagesQuery = sql`
+        select 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.type,
+          m.reply_to_id,
+          m.metadata,
+          m.deleted_at,
+          m.edited_at,
+          m.created_at,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.conversation_id = ${conversationId}
+          and m.id < ${before}
+        order by m.created_at desc
+        limit ${limit}
+      `
+    } else {
+      messagesQuery = sql`
+        select 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.type,
+          m.reply_to_id,
+          m.metadata,
+          m.deleted_at,
+          m.edited_at,
+          m.created_at,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.conversation_id = ${conversationId}
+        order by m.created_at desc
+        limit ${limit}
+      `
+    }
+    
+    const messages = await messagesQuery
+    
+    res.json({
+      messages: messages.reverse().map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name,
+        senderAvatar: m.sender_avatar,
+        content: m.deleted_at ? null : m.content,
+        type: m.type,
+        replyToId: m.reply_to_id,
+        metadata: m.metadata || {},
+        isDeleted: !!m.deleted_at,
+        editedAt: m.edited_at,
+        createdAt: m.created_at,
+        isOwn: m.sender_id === user.id
+      })),
+      hasMore: messages.length === limit
+    })
+  } catch (err) {
+    console.error('[messages] Failed to get messages:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get messages' })
+  }
+})
+
+// Send a message
+app.post('/api/messages/conversations/:conversationId/messages', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  const { content, replyToId } = req.body
+  
+  if (!content || typeof content !== 'string' || !content.trim()) {
+    return res.status(400).json({ error: 'Message content is required' })
+  }
+  
+  try {
+    // Verify user is participant and conversation is accepted
+    const participant = await sql`
+      select cp.id, c.status, c.initiated_by
+      from public.conversation_participants cp
+      join public.conversations c on c.id = cp.conversation_id
+      where cp.conversation_id = ${conversationId}
+        and cp.user_id = ${user.id}
+        and cp.left_at is null
+      limit 1
+    `
+    
+    if (!participant?.length) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+    
+    if (participant[0].status !== 'accepted') {
+      return res.status(403).json({ error: 'Conversation must be accepted before sending messages' })
+    }
+    
+    // Insert message
+    const messages = await sql`
+      insert into public.messages (conversation_id, sender_id, content, reply_to_id)
+      values (${conversationId}, ${user.id}, ${content.trim()}, ${replyToId || null})
+      returning *
+    `
+    
+    const message = messages[0]
+    
+    // Get sender profile
+    const profiles = await sql`
+      select display_name, avatar_url from public.profiles where id = ${user.id}
+    `
+    const senderProfile = profiles?.[0] || {}
+    
+    // Send notification to other participants
+    const otherParticipants = await sql`
+      select user_id from public.conversation_participants
+      where conversation_id = ${conversationId}
+        and user_id <> ${user.id}
+        and left_at is null
+        and is_muted = false
+    `
+    
+    for (const p of otherParticipants || []) {
+      sendInstantNotification('message_received', p.user_id, {
+        senderName: senderProfile.display_name || 'Someone',
+        ctaUrl: `/messages/${conversationId}`
+      }).catch(() => {})
+    }
+    
+    res.json({
+      message: {
+        id: message.id,
+        conversationId: message.conversation_id,
+        senderId: message.sender_id,
+        senderName: senderProfile.display_name,
+        senderAvatar: senderProfile.avatar_url,
+        content: message.content,
+        type: message.type,
+        replyToId: message.reply_to_id,
+        metadata: message.metadata || {},
+        isDeleted: false,
+        editedAt: null,
+        createdAt: message.created_at,
+        isOwn: true
+      }
+    })
+  } catch (err) {
+    console.error('[messages] Failed to send message:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send message' })
+  }
+})
+
+// Start or get direct conversation
+app.post('/api/messages/start', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { userId: otherUserId } = req.body
+  
+  if (!otherUserId) {
+    return res.status(400).json({ error: 'User ID is required' })
+  }
+  
+  if (otherUserId === user.id) {
+    return res.status(400).json({ error: 'Cannot start conversation with yourself' })
+  }
+  
+  try {
+    // Use the RPC function to get or create conversation
+    const result = await sql`
+      select public.get_or_create_direct_conversation(${otherUserId}::uuid) as conversation_id
+    `
+    
+    const conversationId = result?.[0]?.conversation_id
+    
+    if (!conversationId) {
+      return res.status(500).json({ error: 'Failed to create conversation' })
+    }
+    
+    // Get conversation details
+    const conversations = await sql`
+      select 
+        c.*,
+        cp.unread_count,
+        cp.is_muted,
+        (
+          select jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url
+          )
+          from public.conversation_participants cp2
+          join public.profiles p on p.id = cp2.user_id
+          where cp2.conversation_id = c.id
+            and cp2.user_id <> ${user.id}
+            and cp2.left_at is null
+          limit 1
+        ) as other_participant
+      from public.conversations c
+      join public.conversation_participants cp on cp.conversation_id = c.id
+      where c.id = ${conversationId}
+        and cp.user_id = ${user.id}
+    `
+    
+    const conv = conversations?.[0]
+    
+    // If this is a new pending conversation, send notification to recipient
+    if (conv?.status === 'pending' && conv?.initiated_by === user.id) {
+      // Get sender's name for notification
+      const senderProfiles = await sql`
+        select display_name from public.profiles where id = ${user.id}
+      `
+      const senderName = senderProfiles?.[0]?.display_name || 'Someone'
+      
+      // Notify the other user about the chat request
+      sendInstantNotification('message_received', otherUserId, {
+        senderName,
+        ctaUrl: '/messages'
+      }).catch(() => {})
+    }
+    
+    res.json({
+      conversationId,
+      conversation: conv ? {
+        id: conv.id,
+        type: conv.type,
+        status: conv.status,
+        initiatedBy: conv.initiated_by,
+        otherParticipant: conv.other_participant,
+        unreadCount: conv.unread_count || 0,
+        isMuted: conv.is_muted || false,
+        isPendingForMe: conv.status === 'pending' && conv.initiated_by !== user.id
+      } : null
+    })
+  } catch (err) {
+    console.error('[messages] Failed to start conversation:', err)
+    res.status(500).json({ error: err?.message || 'Failed to start conversation' })
+  }
+})
+
+// Accept chat request
+app.post('/api/messages/conversations/:conversationId/accept', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  
+  try {
+    await sql`select public.accept_chat_request(${conversationId}::uuid)`
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[messages] Failed to accept chat request:', err)
+    res.status(500).json({ error: err?.message || 'Failed to accept chat request' })
+  }
+})
+
+// Reject chat request
+app.post('/api/messages/conversations/:conversationId/reject', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  
+  try {
+    await sql`select public.reject_chat_request(${conversationId}::uuid)`
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[messages] Failed to reject chat request:', err)
+    res.status(500).json({ error: err?.message || 'Failed to reject chat request' })
+  }
+})
+
+// Mark conversation as read
+app.post('/api/messages/conversations/:conversationId/read', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  
+  try {
+    await sql`select public.mark_conversation_read(${conversationId}::uuid)`
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[messages] Failed to mark as read:', err)
+    res.status(500).json({ error: err?.message || 'Failed to mark as read' })
+  }
+})
+
+// Get total unread count
+app.get('/api/messages/unread-count', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  try {
+    const result = await sql`select public.get_total_unread_messages() as count`
+    res.json({ count: result?.[0]?.count || 0 })
+  } catch (err) {
+    console.error('[messages] Failed to get unread count:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get unread count' })
+  }
+})
+
+// ============================================================================
+// Friend Request & Task Notification Triggers
+// ============================================================================
+
+// Send notification when friend request is sent
+app.post('/api/notifications/friend-request-sent', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { recipientId } = req.body
+  
+  if (!recipientId) {
+    return res.status(400).json({ error: 'Recipient ID is required' })
+  }
+  
+  try {
+    // Get sender's name
+    const senderProfiles = await sql`
+      select display_name from public.profiles where id = ${user.id}
+    `
+    const senderName = senderProfiles?.[0]?.display_name || 'Someone'
+    
+    // Send notification to recipient
+    await sendInstantNotification('friend_request_sent', recipientId, {
+      senderName,
+      senderId: user.id,
+      ctaUrl: '/friends'
+    })
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] Failed to send friend request notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// Send notification when friend request is accepted
+app.post('/api/notifications/friend-request-accepted', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { requesterId } = req.body
+  
+  if (!requesterId) {
+    return res.status(400).json({ error: 'Requester ID is required' })
+  }
+  
+  try {
+    // Get accepter's name (current user)
+    const accepterProfiles = await sql`
+      select display_name from public.profiles where id = ${user.id}
+    `
+    const accepterName = accepterProfiles?.[0]?.display_name || 'Someone'
+    
+    // Send notification to the original requester
+    await sendInstantNotification('friend_request_accepted', requesterId, {
+      senderName: accepterName,
+      senderId: user.id,
+      ctaUrl: '/friends'
+    })
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] Failed to send friend accepted notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// Send notification when task is completed by another user
+app.post('/api/notifications/task-completed', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { gardenId, taskName } = req.body
+  
+  if (!gardenId) {
+    return res.status(400).json({ error: 'Garden ID is required' })
+  }
+  
+  try {
+    // Get completer's name
+    const completerProfiles = await sql`
+      select display_name from public.profiles where id = ${user.id}
+    `
+    const completerName = completerProfiles?.[0]?.display_name || 'Someone'
+    
+    // Get garden name
+    const gardens = await sql`
+      select name from public.gardens where id = ${gardenId}
+    `
+    const gardenName = gardens?.[0]?.name || 'your garden'
+    
+    // Get all other garden members
+    const members = await sql`
+      select gm.user_id 
+      from public.garden_members gm
+      where gm.garden_id = ${gardenId}
+        and gm.user_id <> ${user.id}
+    `
+    
+    // Send notification to each member
+    for (const member of members || []) {
+      await sendInstantNotification('task_completed_by_other', member.user_id, {
+        senderName: completerName,
+        gardenName,
+        taskName: taskName || 'a task',
+        ctaUrl: `/garden/${gardenId}`
+      })
+    }
+    
+    res.json({ ok: true, notified: members?.length || 0 })
+  } catch (err) {
+    console.error('[notifications] Failed to send task completed notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// ============================================================================
+// Notification Worker
+// ============================================================================
+
 const notificationWorkerIntervalMs = Math.max(15000, Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS || 60000))
 const notificationDeliveryBatchSize = Math.min(
   Math.max(Number(process.env.NOTIFICATION_DELIVERY_BATCH_SIZE || 200), 25),

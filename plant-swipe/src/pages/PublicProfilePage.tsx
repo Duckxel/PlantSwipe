@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2 } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MessageSquare } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
 import type { UserRole } from "@/constants/userRoles"
 import { SearchInput } from "@/components/ui/search-input"
@@ -612,6 +612,24 @@ export default function PublicProfilePage() {
       if (err) throw err
       setFriendStatus('request_sent')
       setFriendRequestId(data.id)
+
+      // Send notification to recipient
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        if (session?.access_token) {
+          fetch("/api/notifications/friend-request-sent", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({ recipientId: pp.id }),
+          }).catch(() => {})
+        }
+      } catch {
+        // Ignore notification errors
+      }
     } catch (e: any) {
       setEditError(e?.message || t('profile.editProfile.failedToSendFriendRequest'))
     } finally {
@@ -628,6 +646,24 @@ export default function PublicProfilePage() {
       })
       
       if (err) throw err
+      
+      // Send notification to the original requester (pp.id is the one who sent the request)
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        if (session?.access_token) {
+          fetch("/api/notifications/friend-request-accepted", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({ requesterId: pp.id }),
+          }).catch(() => {})
+        }
+      } catch {
+        // Ignore notification errors
+      }
       
       // Fetch the friendship record to get the created_at date
       const { data: friendship } = await supabase
@@ -947,14 +983,23 @@ export default function PublicProfilePage() {
                   ) : user?.id && !pp.disable_friend_requests ? (
                     <>
                       {friendStatus === 'none' && (
-                        <Button 
-                          className="rounded-2xl" 
-                          variant="default" 
-                          onClick={sendFriendRequest}
-                          disabled={friendRequestLoading}
-                        >
-                          <UserPlus className="h-4 w-4 mr-2" /> {t('profile.friendRequest')}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            className="rounded-2xl" 
+                            variant="secondary"
+                            onClick={() => navigate(`/messages?user=${pp.id}`)}
+                          >
+                            <MessageSquare className="h-4 w-4 mr-2" /> {t('profile.message', { defaultValue: 'Message' })}
+                          </Button>
+                          <Button 
+                            className="rounded-2xl" 
+                            variant="default" 
+                            onClick={sendFriendRequest}
+                            disabled={friendRequestLoading}
+                          >
+                            <UserPlus className="h-4 w-4 mr-2" /> {t('profile.friendRequest')}
+                          </Button>
+                        </div>
                       )}
                       {friendStatus === 'request_sent' && (
                         <Button className="rounded-2xl" variant="secondary" disabled>
@@ -973,9 +1018,18 @@ export default function PublicProfilePage() {
                       )}
                       {friendStatus === 'friends' && (
                         <div className="flex flex-col items-end gap-1">
-                          <Button className="rounded-2xl" variant="secondary" disabled>
-                            {t('profile.friends')}
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button 
+                              className="rounded-2xl" 
+                              variant="default"
+                              onClick={() => navigate(`/messages?user=${pp.id}`)}
+                            >
+                              <MessageSquare className="h-4 w-4 mr-2" /> {t('profile.message', { defaultValue: 'Message' })}
+                            </Button>
+                            <Button className="rounded-2xl" variant="secondary" disabled>
+                              {t('profile.friends')}
+                            </Button>
+                          </div>
                           {friendsSince && (
                             <div className="text-[10px] opacity-60">
                               {t('profile.since')} {new Date(friendsSince).toLocaleDateString(i18n.language)}
