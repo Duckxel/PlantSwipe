@@ -31,8 +31,8 @@ import { VariableHighlighter } from "@/components/tiptap-extensions/variable-hig
 import type { JSONContent } from "@tiptap/core"
 import { supabase } from "@/lib/supabaseClient"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
-import { 
-  saveEmailTemplateTranslation, 
+import {
+  saveEmailTemplateTranslation,
   getEmailTemplateTranslations,
 } from "@/lib/emailTranslations"
 import { translateEmailToAllLanguages } from "@/lib/deepl"
@@ -99,13 +99,13 @@ async function buildAdminHeaders() {
 export const AdminEmailTemplatePage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useLanguageNavigate()
-  const isNew = !id || id === "new"
+  const isNew = !id || id === "new" || id === "create"
 
   const [loading, setLoading] = React.useState(!isNew)
-  
+
   // Separate state for initial content to prevent editor re-renders loop
   const [initialBody, setInitialBody] = React.useState<{ html: string; doc: JSONContent | null }>({ html: "", doc: null })
-  
+
   const [templateForm, setTemplateForm] = React.useState<{
     title: string
     subject: string
@@ -127,7 +127,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
   const [previewOpen, setPreviewOpen] = React.useState(false)
   const previewBodyRef = React.useRef<HTMLDivElement>(null)
   const [copyNotification, setCopyNotification] = React.useState<{ text: string; x: number; y: number } | null>(null)
-  
+
   // Language/Translation state
   const [currentLanguage, setCurrentLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
   const [translationsCache, setTranslationsCache] = React.useState<Record<SupportedLanguage, {
@@ -137,7 +137,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
   }>>({} as any)
   const [isTranslating, setIsTranslating] = React.useState(false)
   const [translatedLanguages, setTranslatedLanguages] = React.useState<Set<SupportedLanguage>>(new Set())
-  
+
   // Version history state
   const [versionHistory, setVersionHistory] = React.useState<TemplateVersion[]>([])
   const [loadingVersions, setLoadingVersions] = React.useState(false)
@@ -146,46 +146,46 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
   React.useEffect(() => {
     if (isNew) return
-    
+
     const loadTemplate = async () => {
       setLoading(true)
       try {
         const headers = await buildAdminHeaders()
         const resp = await fetch(`/api/admin/email-templates/${id}`, { headers, credentials: "same-origin" })
-        
+
         let foundTemplate: EmailTemplate | null = null;
 
         if (resp.ok) {
-           const data = await resp.json()
-           foundTemplate = data.template
+          const data = await resp.json()
+          foundTemplate = data.template
         } else {
-           // Fallback: load all
-           const respList = await fetch("/api/admin/email-templates", { headers, credentials: "same-origin" })
-           const dataList = await respList.json()
-           foundTemplate = dataList.templates?.find((t: EmailTemplate) => t.id === id) || null
+          // Fallback: load all
+          const respList = await fetch("/api/admin/email-templates", { headers, credentials: "same-origin" })
+          const dataList = await respList.json()
+          foundTemplate = dataList.templates?.find((t: EmailTemplate) => t.id === id) || null
         }
 
         if (foundTemplate) {
           setExistingTemplate(foundTemplate)
           setTemplateForm({
-             title: foundTemplate.title,
-             subject: foundTemplate.subject,
-             description: foundTemplate.description || "",
-             bodyHtml: foundTemplate.bodyHtml,
-             bodyDoc: foundTemplate.bodyJson,
+            title: foundTemplate.title,
+            subject: foundTemplate.subject,
+            description: foundTemplate.description || "",
+            bodyHtml: foundTemplate.bodyHtml,
+            bodyDoc: foundTemplate.bodyJson,
           })
           setInitialBody({
             html: foundTemplate.bodyHtml,
             doc: foundTemplate.bodyJson,
           })
           setTemplateEditorKey(`loaded-${foundTemplate.id}`)
-          
+
           // Load translations for this template
           const { data: translations } = await getEmailTemplateTranslations(foundTemplate.id)
           if (translations && translations.length > 0) {
             const cache: Record<SupportedLanguage, { subject: string; bodyHtml: string; bodyDoc: JSONContent | null }> = {} as any
             const translated = new Set<SupportedLanguage>()
-            
+
             for (const t of translations) {
               cache[t.language as SupportedLanguage] = {
                 subject: t.subject,
@@ -194,7 +194,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               }
               translated.add(t.language as SupportedLanguage)
             }
-            
+
             // Also include the default (English) content from the main template
             cache[DEFAULT_LANGUAGE] = {
               subject: foundTemplate.subject,
@@ -202,7 +202,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               bodyDoc: foundTemplate.bodyJson,
             }
             translated.add(DEFAULT_LANGUAGE)
-            
+
             setTranslationsCache(cache)
             setTranslatedLanguages(translated)
           } else {
@@ -217,7 +217,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
             setTranslatedLanguages(new Set([DEFAULT_LANGUAGE]))
           }
         } else {
-           throw new Error("Template not found")
+          throw new Error("Template not found")
         }
       } catch (err) {
         console.error(err)
@@ -241,10 +241,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
         bodyDoc: templateForm.bodyDoc,
       }
     }))
-    
+
     // Switch to new language
     setCurrentLanguage(newLang)
-    
+
     // Load from cache if available
     const cached = translationsCache[newLang]
     if (cached) {
@@ -281,7 +281,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
       alert("Please add subject and body content before translating.")
       return
     }
-    
+
     setIsTranslating(true)
     try {
       // Save current language content to cache first
@@ -293,7 +293,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
           bodyDoc: templateForm.bodyDoc,
         }
       }))
-      
+
       // Translate to all other languages
       const translations = await translateEmailToAllLanguages(
         {
@@ -303,11 +303,11 @@ export const AdminEmailTemplatePage: React.FC = () => {
         },
         currentLanguage
       )
-      
+
       // Update cache with all translations
       const newCache = { ...translationsCache }
       const translated = new Set(translatedLanguages)
-      
+
       for (const lang of SUPPORTED_LANGUAGES) {
         if (translations[lang]) {
           newCache[lang] = {
@@ -318,10 +318,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
           translated.add(lang)
         }
       }
-      
+
       setTranslationsCache(newCache)
       setTranslatedLanguages(translated)
-      
+
       // If template exists, save all translations to DB
       if (existingTemplate?.id) {
         for (const lang of SUPPORTED_LANGUAGES) {
@@ -336,7 +336,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
           }
         }
       }
-      
+
       alert("Successfully translated to all languages!")
     } catch (err) {
       console.error("Translation error:", err)
@@ -349,7 +349,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
   // Load version history
   const loadVersionHistory = React.useCallback(async () => {
     if (!existingTemplate?.id) return
-    
+
     setLoadingVersions(true)
     try {
       const { data, error } = await supabase
@@ -357,9 +357,9 @@ export const AdminEmailTemplatePage: React.FC = () => {
         .select("*")
         .eq("template_id", existingTemplate.id)
         .order("version", { ascending: false })
-      
+
       if (error) throw error
-      
+
       const versions: TemplateVersion[] = (data || []).map((row: any) => ({
         id: row.id,
         templateId: row.template_id,
@@ -373,7 +373,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
         variables: row.variables || [],
         createdAt: row.created_at,
       }))
-      
+
       setVersionHistory(versions)
     } catch (err) {
       console.error("Failed to load version history:", err)
@@ -389,7 +389,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
       alert("Template title, subject, and body are required.")
       return
     }
-    
+
     setSavingNewVersion(true)
     try {
       // First, save the current template state to version history
@@ -406,9 +406,9 @@ export const AdminEmailTemplatePage: React.FC = () => {
           body_json: existingTemplate.bodyJson,
           variables: existingTemplate.variables,
         })
-      
+
       if (versionError) throw versionError
-      
+
       // Get the default language content for the main template
       const updatedCache = {
         ...translationsCache,
@@ -418,11 +418,11 @@ export const AdminEmailTemplatePage: React.FC = () => {
           bodyDoc: templateForm.bodyDoc,
         }
       }
-      
-      const defaultContent = currentLanguage === DEFAULT_LANGUAGE 
+
+      const defaultContent = currentLanguage === DEFAULT_LANGUAGE
         ? { subject: templateForm.subject, bodyHtml: templateForm.bodyHtml, bodyDoc: templateForm.bodyDoc }
         : updatedCache[DEFAULT_LANGUAGE] || { subject: templateForm.subject, bodyHtml: templateForm.bodyHtml, bodyDoc: templateForm.bodyDoc }
-      
+
       // Then update the main template with new content and bumped version
       const headers = await buildAdminHeaders()
       const payload = {
@@ -435,17 +435,17 @@ export const AdminEmailTemplatePage: React.FC = () => {
         isActive: true,
         version: existingTemplate.version + 1,
       }
-      
+
       const resp = await fetch(`/api/admin/email-templates/${encodeURIComponent(existingTemplate.id)}`, {
         method: "PUT",
         headers,
         credentials: "same-origin",
         body: JSON.stringify(payload),
       })
-      
+
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || "Failed to save new version")
-      
+
       // Save translations for non-default languages
       for (const lang of SUPPORTED_LANGUAGES) {
         if (lang !== DEFAULT_LANGUAGE && updatedCache[lang]) {
@@ -458,11 +458,11 @@ export const AdminEmailTemplatePage: React.FC = () => {
           })
         }
       }
-      
+
       // Update local state
       setExistingTemplate(prev => prev ? { ...prev, version: prev.version + 1 } : null)
       await loadVersionHistory()
-      
+
       alert(`Saved as version ${existingTemplate.version + 1}!`)
     } catch (err) {
       console.error("Failed to save new version:", err)
@@ -477,7 +477,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
     if (!window.confirm(`Restore to version ${version.version}? This will save your current state as a new version first.`)) {
       return
     }
-    
+
     setSavingNewVersion(true)
     try {
       // First save current as new version (if there are changes)
@@ -495,10 +495,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
             body_json: existingTemplate.bodyJson,
             variables: existingTemplate.variables,
           })
-        
+
         if (versionError) throw versionError
       }
-      
+
       // Update template with restored version content
       const headers = await buildAdminHeaders()
       const newVersion = (existingTemplate?.version || 0) + 1
@@ -512,17 +512,17 @@ export const AdminEmailTemplatePage: React.FC = () => {
         isActive: true,
         version: newVersion,
       }
-      
+
       const resp = await fetch(`/api/admin/email-templates/${encodeURIComponent(existingTemplate!.id)}`, {
         method: "PUT",
         headers,
         credentials: "same-origin",
         body: JSON.stringify(payload),
       })
-      
+
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || "Failed to restore version")
-      
+
       // Update local state
       setTemplateForm({
         title: version.title,
@@ -536,8 +536,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
         doc: version.bodyJson,
       })
       setTemplateEditorKey(`restored-${version.version}-${Date.now()}`)
-      setExistingTemplate(prev => prev ? { 
-        ...prev, 
+      setExistingTemplate(prev => prev ? {
+        ...prev,
         version: newVersion,
         title: version.title,
         subject: version.subject,
@@ -545,10 +545,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
         bodyHtml: version.bodyHtml,
         bodyJson: version.bodyJson,
       } : null)
-      
+
       await loadVersionHistory()
       setVersionHistoryOpen(false)
-      
+
       alert(`Restored to version ${version.version} (now version ${newVersion})`)
     } catch (err) {
       console.error("Failed to restore version:", err)
@@ -571,16 +571,16 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      
+
       // Find clickable elements: sensitive code boxes, buttons, cards
       const codeBox = target.closest('[data-code]') as HTMLElement
       const sensitiveCodeContainer = target.closest('[data-type="sensitive-code"]') as HTMLElement
       const buttonLink = target.closest('[data-type="email-button"] a') as HTMLAnchorElement
       const emailCard = target.closest('[data-type="email-card"]') as HTMLElement
-      
+
       let textToCopy = ''
       let elementRect: DOMRect | null = null
-      
+
       if (codeBox) {
         textToCopy = codeBox.textContent || ''
         elementRect = codeBox.getBoundingClientRect()
@@ -601,7 +601,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
         textToCopy = title ? `${title}: ${content}` : content
         elementRect = emailCard.getBoundingClientRect()
       }
-      
+
       if (textToCopy && elementRect) {
         navigator.clipboard?.writeText(textToCopy).then(() => {
           setCopyNotification({
@@ -616,7 +616,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
     const container = previewBodyRef.current
     container.addEventListener('click', handleClick)
-    
+
     return () => {
       container.removeEventListener('click', handleClick)
     }
@@ -638,12 +638,12 @@ export const AdminEmailTemplatePage: React.FC = () => {
           bodyDoc: templateForm.bodyDoc,
         }
       }
-      
+
       // Get the default language content for the main template
-      const defaultContent = currentLanguage === DEFAULT_LANGUAGE 
+      const defaultContent = currentLanguage === DEFAULT_LANGUAGE
         ? { subject: templateForm.subject, bodyHtml: templateForm.bodyHtml, bodyDoc: templateForm.bodyDoc }
         : updatedCache[DEFAULT_LANGUAGE] || { subject: templateForm.subject, bodyHtml: templateForm.bodyHtml, bodyDoc: templateForm.bodyDoc }
-      
+
       const headers = await buildAdminHeaders()
       const payload = {
         title: templateForm.title.trim(),
@@ -654,26 +654,26 @@ export const AdminEmailTemplatePage: React.FC = () => {
         bodyJson: defaultContent.bodyDoc,
         isActive: true,
       }
-      
+
       const endpoint = isNew
         ? "/api/admin/email-templates"
         : `/api/admin/email-templates/${encodeURIComponent(id!)}`
-      
+
       const method = isNew ? "POST" : "PUT"
-      
+
       const resp = await fetch(endpoint, {
         method,
         headers,
         credentials: "same-origin",
         body: JSON.stringify(payload),
       })
-      
+
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || "Failed to save template")
-      
+
       // Get template ID (from response for new, from existing for edit)
       const templateId = isNew ? data.template?.id : id
-      
+
       // Save translations for non-default languages
       if (templateId) {
         for (const lang of SUPPORTED_LANGUAGES) {
@@ -688,8 +688,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
           }
         }
       }
-      
-      navigate("/admin/emails/templates") 
+
+      navigate("/admin/emails/templates")
     } catch (err) {
       alert((err as Error).message)
     } finally {
@@ -725,7 +725,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               <ArrowLeft className="h-4 w-4" />
               Back to templates
             </button>
-            
+
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-bold text-stone-900 dark:text-white">
@@ -735,7 +735,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                   Design beautiful emails with the rich text editor
                 </p>
               </div>
-              
+
               <div className="flex items-center gap-3">
                 <Button
                   variant="outline"
@@ -746,8 +746,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
                   <Eye className="mr-2 h-4 w-4" />
                   Preview
                 </Button>
-                <Button 
-                  onClick={handleSave} 
+                <Button
+                  onClick={handleSave}
                   disabled={templateSaving}
                   className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
                 >
@@ -769,263 +769,262 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
           {/* Main Content */}
           <div className="grid lg:grid-cols-[340px,1fr] gap-6">
-          {/* Sidebar - Template Settings */}
-          <div className="space-y-5">
-            {/* Template Info Card */}
-            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
-              <h2 className="text-sm font-semibold text-stone-900 dark:text-white mb-4 flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                  <Save className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                Template Details
-              </h2>
-              
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="template-title" className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                    Template Name
-                  </Label>
-                  <Input
-                    id="template-title"
-                    value={templateForm.title}
-                    onChange={(event) =>
-                      setTemplateForm((prev) => ({ ...prev, title: event.target.value }))
-                    }
-                    placeholder="e.g., Monthly Newsletter"
-                    className="rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20]"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="template-subject" className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                    Email Subject Line
-                  </Label>
-                  <Input
-                    id="template-subject"
-                    value={templateForm.subject}
-                    onChange={(event) =>
-                      setTemplateForm((prev) => ({ ...prev, subject: event.target.value }))
-                    }
-                    placeholder="What's new, {{user}}?"
-                    className="rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20]"
-                  />
-                  <p className="text-[11px] text-stone-400">This is what recipients see in their inbox</p>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="template-description" className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                    Internal Notes
-                  </Label>
-                  <Textarea
-                    id="template-description"
-                    value={templateForm.description}
-                    onChange={(event) =>
-                      setTemplateForm((prev) => ({ ...prev, description: event.target.value }))
-                    }
-                    placeholder="Notes about this template..."
-                    className="min-h-[70px] rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20] resize-none text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Variables Card */}
-            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                    <Info className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+            {/* Sidebar - Template Settings */}
+            <div className="space-y-5">
+              {/* Template Info Card */}
+              <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-stone-900 dark:text-white mb-4 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                    <Save className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                   </div>
-                  Variables
+                  Template Details
                 </h2>
-                <button
-                  type="button"
-                  onClick={() => setVariableInfoOpen(true)}
-                  className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
-                >
-                  View all
-                </button>
-              </div>
-              
-              <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">
-                Use these to personalize emails
-              </p>
-              
-              <div className="flex flex-wrap gap-2">
-                {VARIABLE_CATALOG.map(v => (
-                  <span 
-                    key={v.token} 
-                    className="px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-[#2a2a2d] text-xs font-mono text-stone-700 dark:text-stone-300 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(v.token)
-                    }}
-                    title="Click to copy"
-                  >
-                    {v.token}
-                  </span>
-                ))}
-              </div>
-            </div>
 
-            {/* Language Card */}
-            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
-              <h2 className="text-sm font-semibold text-stone-900 dark:text-white mb-4 flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-                  <Globe className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="template-title" className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                      Template Name
+                    </Label>
+                    <Input
+                      id="template-title"
+                      value={templateForm.title}
+                      onChange={(event) =>
+                        setTemplateForm((prev) => ({ ...prev, title: event.target.value }))
+                      }
+                      placeholder="e.g., Monthly Newsletter"
+                      className="rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20]"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="template-subject" className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                      Email Subject Line
+                    </Label>
+                    <Input
+                      id="template-subject"
+                      value={templateForm.subject}
+                      onChange={(event) =>
+                        setTemplateForm((prev) => ({ ...prev, subject: event.target.value }))
+                      }
+                      placeholder="What's new, {{user}}?"
+                      className="rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20]"
+                    />
+                    <p className="text-[11px] text-stone-400">This is what recipients see in their inbox</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="template-description" className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                      Internal Notes
+                    </Label>
+                    <Textarea
+                      id="template-description"
+                      value={templateForm.description}
+                      onChange={(event) =>
+                        setTemplateForm((prev) => ({ ...prev, description: event.target.value }))
+                      }
+                      placeholder="Notes about this template..."
+                      className="min-h-[70px] rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20] resize-none text-sm"
+                    />
+                  </div>
                 </div>
-                Language
-              </h2>
-              
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                    Editing Language
-                  </Label>
-                  <Select
-                    value={currentLanguage}
-                    onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
-                    className="w-full rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d]"
+              </div>
+
+              {/* Variables Card */}
+              <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                      <Info className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    Variables
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setVariableInfoOpen(true)}
+                    className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
                   >
-                    {SUPPORTED_LANGUAGES.map((lang) => (
-                      <option key={lang} value={lang}>
-                        {LANGUAGE_NAMES[lang]}{translatedLanguages.has(lang) ? ' ✓' : ''}
-                      </option>
-                    ))}
-                  </Select>
-                  <p className="text-[11px] text-stone-400">
-                    Currently editing: <span className="font-medium text-stone-600 dark:text-stone-300">{LANGUAGE_NAMES[currentLanguage]}</span>
-                  </p>
+                    View all
+                  </button>
                 </div>
-                
-                <div className="pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleTranslateToAll}
-                    disabled={isTranslating || !templateForm.bodyHtml.trim()}
-                    className="w-full rounded-xl border-sky-200 dark:border-sky-900/50 hover:border-sky-300 dark:hover:border-sky-800 hover:bg-sky-50 dark:hover:bg-sky-900/20"
-                  >
-                    {isTranslating ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Translating...
-                      </>
-                    ) : (
-                      <>
-                        <Languages className="mr-2 h-4 w-4" />
-                        Translate to All
-                      </>
-                    )}
-                  </Button>
-                  <p className="mt-2 text-[10px] text-stone-400 text-center">
-                    Uses DeepL to translate to all supported languages
-                  </p>
-                </div>
-                
-                {/* Translation status */}
-                <div className="flex flex-wrap gap-1.5 pt-2">
-                  {SUPPORTED_LANGUAGES.map((lang) => (
+
+                <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">
+                  Use these to personalize emails
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  {VARIABLE_CATALOG.map(v => (
                     <span
-                      key={lang}
-                      className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                        translatedLanguages.has(lang)
-                          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-                          : 'bg-stone-100 dark:bg-[#2a2a2d] text-stone-500 dark:text-stone-500'
-                      }`}
+                      key={v.token}
+                      className="px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-[#2a2a2d] text-xs font-mono text-stone-700 dark:text-stone-300 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(v.token)
+                      }}
+                      title="Click to copy"
                     >
-                      {LANGUAGE_NAMES[lang]}
+                      {v.token}
                     </span>
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* Stats & Version Card (only for existing templates) */}
-            {existingTemplate && (
+              {/* Language Card */}
               <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
                 <h2 className="text-sm font-semibold text-stone-900 dark:text-white mb-4 flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                    <Eye className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  <div className="w-6 h-6 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                    <Globe className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
                   </div>
-                  Stats
+                  Language
                 </h2>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-stone-50 dark:bg-[#2a2a2d] p-3 text-center">
-                    <div className="text-lg font-bold text-stone-900 dark:text-white">v{existingTemplate.version}</div>
-                    <div className="text-[11px] text-stone-500">Version</div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                      Editing Language
+                    </Label>
+                    <Select
+                      value={currentLanguage}
+                      onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
+                      className="w-full rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d]"
+                    >
+                      {SUPPORTED_LANGUAGES.map((lang) => (
+                        <option key={lang} value={lang}>
+                          {LANGUAGE_NAMES[lang]}{translatedLanguages.has(lang) ? ' ✓' : ''}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-[11px] text-stone-400">
+                      Currently editing: <span className="font-medium text-stone-600 dark:text-stone-300">{LANGUAGE_NAMES[currentLanguage]}</span>
+                    </p>
                   </div>
-                  <div className="rounded-xl bg-stone-50 dark:bg-[#2a2a2d] p-3 text-center">
-                    <div className="text-lg font-bold text-stone-900 dark:text-white">{existingTemplate.campaignCount}</div>
-                    <div className="text-[11px] text-stone-500">Campaigns</div>
+
+                  <div className="pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTranslateToAll}
+                      disabled={isTranslating || !templateForm.bodyHtml.trim()}
+                      className="w-full rounded-xl border-sky-200 dark:border-sky-900/50 hover:border-sky-300 dark:hover:border-sky-800 hover:bg-sky-50 dark:hover:bg-sky-900/20"
+                    >
+                      {isTranslating ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Translating...
+                        </>
+                      ) : (
+                        <>
+                          <Languages className="mr-2 h-4 w-4" />
+                          Translate to All
+                        </>
+                      )}
+                    </Button>
+                    <p className="mt-2 text-[10px] text-stone-400 text-center">
+                      Uses DeepL to translate to all supported languages
+                    </p>
                   </div>
-                </div>
-                
-                <div className="mt-3 pt-3 border-t border-stone-100 dark:border-[#2a2a2d] text-xs text-stone-500">
-                  Last updated: {new Date(existingTemplate.updatedAt).toLocaleDateString()}
-                </div>
-                
-                {/* Version Control */}
-                <div className="mt-4 pt-4 border-t border-stone-100 dark:border-[#2a2a2d] space-y-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSaveAsNewVersion}
-                    disabled={savingNewVersion}
-                    className="w-full rounded-xl border-amber-200 dark:border-amber-900/50 hover:border-amber-300 dark:hover:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-700 dark:text-amber-400"
-                  >
-                    {savingNewVersion ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Save as v{existingTemplate.version + 1}
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setVersionHistoryOpen(true)}
-                    className="w-full rounded-xl border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52]"
-                  >
-                    <History className="mr-2 h-4 w-4" />
-                    Version History
-                  </Button>
+
+                  {/* Translation status */}
+                  <div className="flex flex-wrap gap-1.5 pt-2">
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <span
+                        key={lang}
+                        className={`px-2 py-0.5 rounded text-[10px] font-medium ${translatedLanguages.has(lang)
+                            ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                            : 'bg-stone-100 dark:bg-[#2a2a2d] text-stone-500 dark:text-stone-500'
+                          }`}
+                      >
+                        {LANGUAGE_NAMES[lang]}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* Editor Section */}
-          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] shadow-sm flex flex-col" style={{ maxHeight: "calc(100vh - 200px)", minHeight: "600px" }}>
-            <div className="px-5 py-3 border-b border-stone-100 dark:border-[#2a2a2d] flex items-center justify-between bg-white dark:bg-[#1e1e20] rounded-t-2xl flex-shrink-0">
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Email Content</span>
-              {templateForm.bodyHtml.length > 0 && (
-                <span className="text-xs text-stone-400">{templateForm.bodyHtml.length} characters</span>
+              {/* Stats & Version Card (only for existing templates) */}
+              {existingTemplate && (
+                <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 shadow-sm">
+                  <h2 className="text-sm font-semibold text-stone-900 dark:text-white mb-4 flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                      <Eye className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    Stats
+                  </h2>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-stone-50 dark:bg-[#2a2a2d] p-3 text-center">
+                      <div className="text-lg font-bold text-stone-900 dark:text-white">v{existingTemplate.version}</div>
+                      <div className="text-[11px] text-stone-500">Version</div>
+                    </div>
+                    <div className="rounded-xl bg-stone-50 dark:bg-[#2a2a2d] p-3 text-center">
+                      <div className="text-lg font-bold text-stone-900 dark:text-white">{existingTemplate.campaignCount}</div>
+                      <div className="text-[11px] text-stone-500">Campaigns</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-stone-100 dark:border-[#2a2a2d] text-xs text-stone-500">
+                    Last updated: {new Date(existingTemplate.updatedAt).toLocaleDateString()}
+                  </div>
+
+                  {/* Version Control */}
+                  <div className="mt-4 pt-4 border-t border-stone-100 dark:border-[#2a2a2d] space-y-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveAsNewVersion}
+                      disabled={savingNewVersion}
+                      className="w-full rounded-xl border-amber-200 dark:border-amber-900/50 hover:border-amber-300 dark:hover:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-700 dark:text-amber-400"
+                    >
+                      {savingNewVersion ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Save as v{existingTemplate.version + 1}
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setVersionHistoryOpen(true)}
+                      className="w-full rounded-xl border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                    >
+                      <History className="mr-2 h-4 w-4" />
+                      Version History
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
-            
-            <div className="flex-1 overflow-y-auto">
-              <BlogEditor
-                key={templateEditorKey}
-                ref={templateEditorRef}
-                initialHtml={initialBody.html}
-                initialDocument={initialBody.doc}
-                uploadFolder="email-templates"
-                extraExtensions={[VariableHighlighter]}
-                variant="embedded"
-                className="min-h-[500px]"
-                onUpdate={({ html, doc }) =>
-                  setTemplateForm((prev) => ({ ...prev, bodyHtml: html, bodyDoc: doc }))
-                }
-              />
+
+            {/* Editor Section */}
+            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] shadow-sm flex flex-col" style={{ maxHeight: "calc(100vh - 200px)", minHeight: "600px" }}>
+              <div className="px-5 py-3 border-b border-stone-100 dark:border-[#2a2a2d] flex items-center justify-between bg-white dark:bg-[#1e1e20] rounded-t-2xl flex-shrink-0">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Email Content</span>
+                {templateForm.bodyHtml.length > 0 && (
+                  <span className="text-xs text-stone-400">{templateForm.bodyHtml.length} characters</span>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                <BlogEditor
+                  key={templateEditorKey}
+                  ref={templateEditorRef}
+                  initialHtml={initialBody.html}
+                  initialDocument={initialBody.doc}
+                  uploadFolder="email-templates"
+                  extraExtensions={[VariableHighlighter]}
+                  variant="embedded"
+                  className="min-h-[500px]"
+                  onUpdate={({ html, doc }) =>
+                    setTemplateForm((prev) => ({ ...prev, bodyHtml: html, bodyDoc: doc }))
+                  }
+                />
+              </div>
             </div>
           </div>
-        </div>
         </div>
       </div>
 
@@ -1038,8 +1037,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
           </DialogHeader>
           <div className="space-y-3">
             {VARIABLE_CATALOG.map((variable) => (
-              <div 
-                key={variable.token} 
+              <div
+                key={variable.token}
                 className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-4 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-800 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-all"
                 onClick={() => {
                   navigator.clipboard?.writeText(variable.token)
@@ -1072,7 +1071,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               View and restore previous versions of this template
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="flex-1 overflow-y-auto -mx-6 px-6">
             {loadingVersions ? (
               <div className="flex items-center justify-center py-12">
@@ -1150,7 +1149,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               </div>
             )}
           </div>
-          
+
           <DialogFooter className="border-t border-stone-100 dark:border-[#2a2a2d] pt-4 -mx-6 px-6 -mb-6 pb-6 bg-stone-50 dark:bg-[#1a1a1d]">
             <Button variant="ghost" onClick={() => setVersionHistoryOpen(false)} className="rounded-xl">
               Close
@@ -1161,16 +1160,16 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
       {/* Email Preview - Full Screen Overlay (always light theme) */}
       {previewOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex flex-col overflow-y-auto"
-          style={{ 
+          style={{
             background: 'linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%)',
             colorScheme: 'light',
           }}
         >
           {/* Google Fonts for Quicksand */}
           <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet" />
-          
+
           {/* Email Content Styles */}
           <style>{`
             /* Text colors - inline styles from editor take precedence automatically */
@@ -1433,9 +1432,9 @@ export const AdminEmailTemplatePage: React.FC = () => {
             }
           `}</style>
           {/* Floating Controls */}
-          <div 
+          <div
             className="fixed top-6 left-1/2 z-50 flex items-center gap-3 px-5 py-2.5 rounded-2xl shadow-2xl"
-            style={{ 
+            style={{
               transform: 'translateX(-50%)',
               background: 'rgba(255, 255, 255, 0.95)',
               backdropFilter: 'blur(20px)',
@@ -1451,7 +1450,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
             </div>
 
             <div style={{ height: '24px', width: '1px', background: '#e5e7eb' }} />
-            
+
             <button
               type="button"
               onClick={() => setPreviewOpen(false)}
@@ -1478,7 +1477,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
           <div style={{ flex: 1, paddingTop: '80px', paddingBottom: '80px', paddingLeft: '24px', paddingRight: '24px' }}>
             <div style={{ maxWidth: '680px', margin: '0 auto' }}>
               {/* Email Container */}
-              <div 
+              <div
                 style={{
                   borderRadius: '32px',
                   overflow: 'hidden',
@@ -1488,14 +1487,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 }}
               >
                 {/* Header */}
-                <div 
+                <div
                   style={{
                     background: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%)',
                     padding: '32px 48px',
                     textAlign: 'center',
                   }}
                 >
-                  <div 
+                  <div
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -1505,16 +1504,16 @@ export const AdminEmailTemplatePage: React.FC = () => {
                       padding: '14px 28px',
                     }}
                   >
-                    <img 
-                      src="/icons/plant-swipe-icon.svg" 
-                      alt="" 
+                    <img
+                      src="/icons/plant-swipe-icon.svg"
+                      alt=""
                       style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)' }}
                     />
-                    <span 
-                      style={{ 
-                        fontSize: '26px', 
-                        fontWeight: 700, 
-                        color: '#ffffff', 
+                    <span
+                      style={{
+                        fontSize: '26px',
+                        fontWeight: 700,
+                        color: '#ffffff',
                         letterSpacing: '-0.5px',
                         fontFamily: "'Quicksand', -apple-system, BlinkMacSystemFont, sans-serif",
                       }}
@@ -1525,17 +1524,17 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 </div>
 
                 {/* Email Body */}
-                <div 
+                <div
                   ref={previewBodyRef}
                   className="email-preview-body"
-                  style={{ 
-                    padding: '48px', 
-                    color: '#374151', 
-                    fontSize: '16px', 
+                  style={{
+                    padding: '48px',
+                    color: '#374151',
+                    fontSize: '16px',
                     lineHeight: 1.75,
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
                   }}
-                  dangerouslySetInnerHTML={{ 
+                  dangerouslySetInnerHTML={{
                     __html: sanitizeEmailHtml(
                       templateForm.bodyHtml
                         .replace(/\{\{user\}\}/gi, "Five")
@@ -1543,14 +1542,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
                         .replace(/\{\{random\}\}/gi, "1234567890")
                         .replace(/\{\{url\}\}/gi, "aphylia.app")
                         .replace(/\{\{code\}\}/gi, "50L57IC3")
-                    ) || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>" 
+                    ) || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>"
                   }}
                 />
 
                 {/* Signature Section */}
                 <div style={{ margin: '0 48px 48px 48px' }}>
-                  <div 
-                    style={{ 
+                  <div
+                    style={{
                       borderRadius: '20px',
                       padding: '28px 32px',
                       background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%)',
@@ -1559,7 +1558,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                       {/* Logo */}
-                      <div 
+                      <div
                         style={{
                           flexShrink: 0,
                           width: '56px',
@@ -1572,9 +1571,9 @@ export const AdminEmailTemplatePage: React.FC = () => {
                           boxShadow: '0 8px 24px -8px rgba(16, 185, 129, 0.5)',
                         }}
                       >
-                        <img 
-                          src="/icons/plant-swipe-icon.svg" 
-                          alt="Aphylia" 
+                        <img
+                          src="/icons/plant-swipe-icon.svg"
+                          alt="Aphylia"
                           style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)' }}
                         />
                       </div>
@@ -1591,14 +1590,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 </div>
 
                 {/* Footer */}
-                <div 
-                  style={{ 
-                    padding: '32px 48px', 
+                <div
+                  style={{
+                    padding: '32px 48px',
                     textAlign: 'center',
                     borderTop: '1px solid rgba(16, 185, 129, 0.08)',
                   }}
                 >
-                  <a 
+                  <a
                     href="#"
                     style={{
                       display: 'inline-block',
@@ -1659,18 +1658,18 @@ export const AdminEmailTemplatePage: React.FC = () => {
           )}
 
           {/* Bottom hint */}
-          <div 
+          <div
             className="fixed bottom-6 left-1/2 z-50"
             style={{ transform: 'translateX(-50%)' }}
           >
-            <p 
-              style={{ 
-                fontSize: '12px', 
-                color: '#9ca3af', 
-                background: 'rgba(255, 255, 255, 0.9)', 
+            <p
+              style={{
+                fontSize: '12px',
+                color: '#9ca3af',
+                background: 'rgba(255, 255, 255, 0.9)',
                 backdropFilter: 'blur(8px)',
-                padding: '8px 16px', 
-                borderRadius: '9999px', 
+                padding: '8px 16px',
+                borderRadius: '9999px',
                 border: '1px solid rgba(0, 0, 0, 0.08)',
                 margin: 0,
               }}
