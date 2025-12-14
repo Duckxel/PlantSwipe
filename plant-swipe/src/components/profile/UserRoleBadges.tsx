@@ -327,6 +327,8 @@ export const ProfileNameBadges: React.FC<{
     USER_ROLES.VIP,
     USER_ROLES.PLUS,
     USER_ROLES.MERCHANT,
+    USER_ROLES.CREATOR,
+    USER_ROLES.EDITOR,
   ]
 
   const badgesToShow = effectiveRoles.filter(role => visibleBadges.includes(role))
@@ -338,6 +340,8 @@ export const ProfileNameBadges: React.FC<{
     USER_ROLES.VIP,
     USER_ROLES.PLUS,
     USER_ROLES.MERCHANT,
+    USER_ROLES.CREATOR,
+    USER_ROLES.EDITOR,
   ]
 
   const sortedBadges = [...badgesToShow].sort((a, b) => {
