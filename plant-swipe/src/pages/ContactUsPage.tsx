@@ -15,6 +15,7 @@ import { usePageMetadata } from "@/hooks/usePageMetadata"
 const CHANNEL_EMAILS = {
   support: "support@aphylia.app",
   business: "contact@aphylia.app",
+  bug: "dev@aphylia.app",
 } as const
 const SUPPORT_FUNCTION = "contact-support"
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -26,11 +27,12 @@ type DialogFormState = {
   email: string
   subject: string
   message: string
+  attachment?: { filename: string; content: string }
 }
 
 type CopyState = "idle" | "copied"
 type ContactChannel = keyof typeof CHANNEL_EMAILS
-const CHANNEL_ORDER: ContactChannel[] = ["support", "business"]
+const CHANNEL_ORDER: ContactChannel[] = ["support", "business", "bug"]
 
 type ContactUsPageProps = {
   defaultChannel?: ContactChannel
@@ -74,6 +76,10 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
     business: {
       label: t('contactUs.channelSelector.options.business.name'),
       description: t('contactUs.channelSelector.options.business.description'),
+    },
+    bug: {
+      label: t('contactUs.channelSelector.options.bug.name'),
+      description: t('contactUs.channelSelector.options.bug.description'),
     },
   }
 
@@ -158,8 +164,41 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         email: "",
         subject: "",
         message: "",
+        attachment: undefined,
       })
     }
+  }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Max 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      setFormErrorMessage("File too large. Max 5MB.")
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const content = e.target?.result as string
+      // content is like "data:image/png;base64,....."
+      // Resend expects just the base64 part for attachment.content, OR we can send the whole data URI?
+      // Actually Resend node SDK takes buffer, but via API it might expect Base64 string of content.
+      // Checking resend docs again or assuming standard base64 content field behavior.
+      // Usually "content" in API means base64 encoded content.
+      // If we pass the data URL, we need to strip the prefix.
+      const base64Content = content.split(",")[1]
+
+      setFormValues((prev) => ({
+        ...prev,
+        attachment: {
+          filename: file.name,
+          content: base64Content,
+        },
+      }))
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -207,6 +246,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
             ...trimmedData,
             submittedAt: new Date().toISOString(),
             audience: selectedChannel,
+            attachments: formValues.attachment ? [formValues.attachment] : undefined,
           },
         })
 
@@ -223,6 +263,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         email: "",
         subject: "",
         message: "",
+        attachment: undefined,
       })
     } catch (err) {
       console.error('Unexpected error submitting contact form', err)
@@ -467,6 +508,19 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
                 disabled={inputsDisabled}
               />
             </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="contact-attachment">{t('contactUs.form.attachmentLabel')}</Label>
+              <Input
+                id="contact-attachment"
+                name="attachment"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                disabled={inputsDisabled}
+              />
+            </div>
+
             <DialogFooter className="pt-2">
               <Button
                 type="button"
