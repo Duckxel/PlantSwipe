@@ -718,6 +718,274 @@ export const AdminEmailTemplatePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-100 via-stone-50 to-emerald-50/50 dark:from-[#0a0a0c] dark:via-[#111113] dark:to-[#0a0a0c] p-4 md:p-6 lg:p-8">
+      {/* Google Fonts for Quicksand (Global) */}
+      <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet" />
+
+      {/* Email Content Styles (Global) */}
+      <style>{`
+        /* Text colors - inline styles from editor take precedence automatically */
+        /* Colored text spans will display their inline color attribute */
+        
+        .email-preview-body h1 {
+          font-size: 32px !important;
+          font-weight: 700 !important;
+          color: #111827;
+          margin: 0 0 20px 0 !important;
+          line-height: 1.2 !important;
+          letter-spacing: -0.5px !important;
+        }
+        .email-preview-body h2 {
+          font-size: 26px !important;
+          font-weight: 700 !important;
+          color: #1f2937;
+          margin: 32px 0 16px 0 !important;
+          line-height: 1.3 !important;
+        }
+        .email-preview-body h3 {
+          font-size: 22px !important;
+          font-weight: 600 !important;
+          color: #374151;
+          margin: 28px 0 12px 0 !important;
+          line-height: 1.4 !important;
+        }
+        .email-preview-body h4 {
+          font-size: 18px !important;
+          font-weight: 600 !important;
+          color: #4b5563;
+          margin: 24px 0 10px 0 !important;
+        }
+        .email-preview-body p {
+          margin: 0 0 16px 0 !important;
+          line-height: 1.75 !important;
+          color: #374151;
+        }
+        .email-preview-body a {
+          color: #059669 !important;
+          text-decoration: underline !important;
+          text-decoration-color: rgba(5, 150, 105, 0.4) !important;
+          text-underline-offset: 2px !important;
+          font-weight: 500 !important;
+          transition: all 0.15s ease !important;
+        }
+        .email-preview-body a:hover {
+          color: #047857 !important;
+          text-decoration-color: #047857 !important;
+        }
+        .email-preview-body code {
+          background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%) !important;
+          color: #dc2626 !important;
+          padding: 3px 8px !important;
+          border-radius: 6px !important;
+          font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
+          font-size: 0.9em !important;
+          border: 1px solid rgba(0, 0, 0, 0.08) !important;
+          font-weight: 500 !important;
+        }
+        .email-preview-body pre {
+          background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+          color: #e5e7eb !important;
+          padding: 20px 24px !important;
+          border-radius: 16px !important;
+          overflow-x: auto !important;
+          font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
+          font-size: 14px !important;
+          line-height: 1.6 !important;
+          margin: 20px 0 !important;
+          border: 1px solid rgba(255, 255, 255, 0.1) !important;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+        }
+        .email-preview-body pre code {
+          background: transparent !important;
+          color: #e5e7eb !important;
+          padding: 0 !important;
+          border: none !important;
+          border-radius: 0 !important;
+          font-size: inherit !important;
+        }
+        .email-preview-body mark,
+        .email-preview-body [data-color] {
+          background: linear-gradient(135deg, #fef08a 0%, #fde047 100%) !important;
+          color: #713f12 !important;
+          padding: 2px 6px !important;
+          border-radius: 4px !important;
+          box-decoration-break: clone !important;
+          -webkit-box-decoration-break: clone !important;
+        }
+        .email-preview-body blockquote {
+          border-left: 4px solid #10b981 !important;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 100%) !important;
+          margin: 20px 0 !important;
+          padding: 16px 24px !important;
+          border-radius: 0 12px 12px 0 !important;
+          font-style: italic !important;
+          color: #374151 !important;
+        }
+        .email-preview-body ul, .email-preview-body ol {
+          margin: 16px 0 !important;
+          padding-left: 28px !important;
+          // font-family: 'Quicksand', sans-serif !important;
+        }
+        .email-preview-body li {
+          margin: 8px 0 !important;
+          color: #374151 !important;
+        }
+        .email-preview-body hr {
+          border: none !important;
+          height: 2px !important;
+          background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%) !important;
+          margin: 32px 0 !important;
+        }
+        .email-preview-body strong, .email-preview-body b {
+          font-weight: 600 !important;
+          color: #111827 !important;
+        }
+        .email-preview-body em, .email-preview-body i {
+          font-style: italic !important;
+        }
+        .email-preview-body img {
+          max-width: 100% !important;
+          height: auto !important;
+          border-radius: 12px !important;
+        }
+        /* Email Card Styles - Override general table styles */
+        .email-preview-body [data-type="email-card"] {
+          margin: 28px 0 !important;
+          padding: 0 !important;
+          border-radius: 20px !important;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(255, 255, 255, 1) 50%, rgba(16, 185, 129, 0.06) 100%) !important;
+          border: 2px solid rgba(16, 185, 129, 0.25) !important;
+          box-shadow: 0 8px 32px rgba(16, 185, 129, 0.15), 0 2px 8px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+          overflow: hidden !important;
+        }
+        .email-preview-body [data-type="email-card"] table {
+          width: 100% !important;
+          margin: 0 !important;
+          border: none !important;
+          border-collapse: collapse !important;
+        }
+        .email-preview-body [data-type="email-card"] td {
+          padding: 24px !important;
+          border: none !important;
+          vertical-align: middle !important;
+        }
+        .email-preview-body [data-type="email-card"] td:first-child {
+          width: 60px !important;
+          padding-right: 8px !important;
+          font-size: 32px !important;
+          text-align: center !important;
+          // font-family: 'Quicksand', sans-serif !important;
+        }
+        .email-preview-body [data-type="email-card"] strong {
+          display: block !important;
+          font-size: 17px !important;
+          font-weight: 700 !important;
+          color: #065f46 !important;
+          margin-bottom: 6px !important;
+          letter-spacing: -0.3px !important;
+        }
+        .email-preview-body [data-type="email-card"] > table > tbody > tr > td:last-child > div > div {
+          font-size: 15px !important;
+          color: #374151 !important;
+          line-height: 1.6 !important;
+        }
+        /* Email Button Styles */
+        .email-preview-body [data-type="email-button"] a,
+        .email-preview-body a[style*="border-radius"][style*="padding"] {
+          display: inline-block !important;
+          background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+          color: #ffffff !important;
+          padding: 14px 32px !important;
+          border-radius: 50px !important;
+          text-decoration: none !important;
+          font-weight: 600 !important;
+          font-size: 15px !important;
+          box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35) !important;
+          transition: all 0.2s ease !important;
+        }
+        /* Table styling - exclude special components */
+        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) {
+          width: 100% !important;
+          border-collapse: collapse !important;
+          margin: 20px 0 !important;
+        }
+        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th,
+        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) td {
+          padding: 12px 16px !important;
+          border: 1px solid #e5e7eb !important;
+          text-align: left !important;
+        }
+        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th {
+          background: #f9fafb !important;
+          font-weight: 600 !important;
+          color: #111827 !important;
+        }
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -80%);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, -100%);
+          }
+        }
+        /* Sensitive Code Block Styles - Override general table styles */
+        .email-preview-body table[data-type="sensitive-code"] {
+          width: auto !important;
+          max-width: 420px !important;
+          margin: 32px auto !important;
+          border-radius: 16px !important;
+          border-collapse: separate !important;
+          border-spacing: 0 !important;
+          padding: 28px !important;
+          text-align: center !important;
+        }
+        /* Dashed border colors based on code type */
+        .email-preview-body table[data-code-type="otp"] {
+          background-color: #fef3c7 !important;
+          border: 3px dashed #fbbf24 !important;
+        }
+        .email-preview-body table[data-code-type="verification"] {
+          background-color: #d1fae5 !important;
+          border: 3px dashed #34d399 !important;
+        }
+        .email-preview-body table[data-code-type="password"] {
+          background-color: #ede9fe !important;
+          border: 3px dashed #a78bfa !important;
+        }
+        .email-preview-body table[data-code-type="link"] {
+          background-color: #dbeafe !important;
+          border: 3px dashed #60a5fa !important;
+        }
+        .email-preview-body table[data-code-type="email"] {
+          background-color: #fce7f3 !important;
+          border: 3px dashed #f472b6 !important;
+        }
+        .email-preview-body table[data-code-type="code"] {
+          background-color: #f3f4f6 !important;
+          border: 3px dashed #9ca3af !important;
+        }
+        .email-preview-body table[data-type="sensitive-code"] td {
+          padding: 0 !important;
+          border: none !important;
+          background: transparent !important;
+        }
+        .email-preview-body table[data-type="sensitive-code"] > tbody > tr > td {
+          padding: 0 !important;
+          border: none !important;
+          background: transparent !important;
+        }
+        .email-preview-body table[data-type="sensitive-code"] table {
+          width: auto !important;
+          margin: 0 auto 12px auto !important;
+          border: none !important;
+        }
+        .email-preview-body table[data-type="sensitive-code"] table td {
+          padding: 0 !important;
+          border: none !important;
+          border: none !important;
+        }
+      `}</style>
       <div className="max-w-6xl mx-auto">
         {/* Rounded Background Wrapper */}
         <div className="rounded-3xl bg-white/80 dark:bg-[#1a1a1d]/90 backdrop-blur-xl border border-stone-200/50 dark:border-[#2a2a2d] shadow-xl shadow-stone-200/50 dark:shadow-black/20 p-6 md:p-8">
@@ -1023,6 +1291,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                   uploadFolder="email-templates"
                   extraExtensions={[VariableHighlighter]}
                   variant="embedded"
+                  editorContentClassName="email-preview-body"
                   className="min-h-[500px]"
                   onUpdate={({ html, doc }) =>
                     setTemplateForm((prev) => ({ ...prev, bodyHtml: html, bodyDoc: doc }))

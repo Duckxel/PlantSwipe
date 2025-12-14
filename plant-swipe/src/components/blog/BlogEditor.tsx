@@ -85,6 +85,7 @@ type BlogEditorProps = {
   initialHtml?: string | null
   initialDocument?: JSONContent | null
   className?: string
+  editorContentClassName?: string
   uploadFolder: string
   onUpdate?: (payload: { html: string; doc: JSONContent | null; plainText: string }) => void
   extraExtensions?: Extension[]
@@ -206,7 +207,7 @@ const MobileToolbarContent: React.FC<{
 )
 
 export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
-  ({ initialHtml, initialDocument, className, uploadFolder, onUpdate, extraExtensions, toolbarAppend, variant = "default" }, ref) => {
+  ({ initialHtml, initialDocument, className, editorContentClassName, uploadFolder, onUpdate, extraExtensions, toolbarAppend, variant = "default" }, ref) => {
     const isMobile = useIsBreakpoint()
     const { height } = useWindowSize()
     const toolbarRef = useRef<HTMLDivElement>(null)
@@ -228,7 +229,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           autocomplete: "off",
           autocorrect: "off",
           autocapitalize: "off",
-          class: "simple-editor",
+          class: cn("simple-editor", editorContentClassName),
         },
       },
       extensions: [

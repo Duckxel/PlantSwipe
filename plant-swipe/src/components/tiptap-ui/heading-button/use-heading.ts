@@ -296,21 +296,36 @@ export function useHeading(config: UseHeadingConfig) {
 
     editor.on("selectionUpdate", handleSelectionUpdate)
     editor.on("transaction", handleSelectionUpdate)
+    editor.on("update", handleSelectionUpdate)
 
     return () => {
       editor.off("selectionUpdate", handleSelectionUpdate)
       editor.off("transaction", handleSelectionUpdate)
+      editor.off("update", handleSelectionUpdate)
     }
   }, [editor, level, hideWhenUnavailable])
 
   const handleToggle = useCallback(() => {
     if (!editor) return false
 
-    const success = toggleHeading(editor, level)
-    if (success) {
-      onToggled?.()
+    // Use native toggleHeading which handles node conversion and paragraph toggling reliably
+    if (typeof level === 'number') {
+      return editor.chain().focus().toggleHeading({ level }).run()
     }
-    return success
+
+    // Fallback for array of levels (uncommon for toggle, usually just for check)
+    // If any is active, turn to paragraph. Else turn to first level.
+    const isActive = isHeadingActive(editor, level)
+    if (isActive) {
+      return editor.chain().focus().setParagraph().run()
+    }
+
+    const firstLevel = Array.isArray(level) ? level[0] : level
+    if (firstLevel) {
+      return editor.chain().focus().toggleHeading({ level: firstLevel }).run()
+    }
+
+    return false
   }, [editor, level, onToggled])
 
   return {
