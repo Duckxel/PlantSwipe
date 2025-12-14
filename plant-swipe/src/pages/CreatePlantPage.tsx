@@ -789,6 +789,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [plantByLanguage, setPlantByLanguage] = React.useState<Partial<Record<SupportedLanguage, Plant>>>({})
   // Track which languages have been loaded from DB
   const [loadedLanguages, setLoadedLanguages] = React.useState<Set<SupportedLanguage>>(new Set())
+  // State to hold other language translations when cloning a plant
+  const [pendingTranslations, setPendingTranslations] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState<boolean>(!!id || !!prefillFromId)
   const [saving, setSaving] = React.useState(false)
   const [prefillSourceName, setPrefillSourceName] = React.useState<string | null>(duplicatedFromName)
@@ -944,10 +946,22 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         try {
           // Load all translations for the source plant
           const sourcePlant = await loadPlant(prefillFromId, 'en')
+
+          // NEW: Fetch all translations to preserve them
+          const { data: allTranslations } = await supabase
+            .from('plant_translations')
+            .select('*')
+            .eq('plant_id', prefillFromId)
+
           if (!sourcePlant) {
             throw new Error('Source plant not found')
           }
           if (!ignore) {
+            if (allTranslations) {
+               // Filter out English (as it is already loaded as base)
+               const others = allTranslations.filter(t => t.language !== 'en')
+               setPendingTranslations(others)
+            }
             // Create a new plant with a new ID, but copy all the data from the source
             const newId = generateUUIDv4()
             // Generate a unique name to avoid duplicate name conflicts
@@ -1322,6 +1336,31 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           .upsert(translationPayload, { onConflict: 'plant_id,language' })
         if (translationError) {
           throw { ...translationError, context: 'translation' }
+        }
+
+        // NEW: Save pending translations if this is the initial save (English)
+        if (isEnglish && pendingTranslations.length > 0) {
+           const pendingPayloads = pendingTranslations.map(t => {
+             // Create a copy without system fields
+             const { id, created_at, plant_id, ...rest } = t
+             return {
+               ...rest,
+               plant_id: savedId, // Link to the new plant ID
+             }
+           })
+
+           if (pendingPayloads.length > 0) {
+             const { error: pendingError } = await supabase
+               .from('plant_translations')
+               .upsert(pendingPayloads, { onConflict: 'plant_id,language' })
+
+             if (pendingError) {
+               console.error('Failed to save pending translations', pendingError)
+             } else {
+               // Clear pending so we don't save again
+               setPendingTranslations([])
+             }
+           }
         }
 
           const savedPlant = {
