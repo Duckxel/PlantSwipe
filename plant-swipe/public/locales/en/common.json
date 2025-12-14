@@ -260,6 +260,10 @@
           "business": {
             "name": "Business",
             "description": "Partnerships, press, or other business inquiries."
+          },
+          "bug": {
+            "name": "Bug Report",
+            "description": "Report a bug or issue with the app."
           }
         }
       },
@@ -313,6 +317,8 @@
       "subjectPlaceholder": "How can we help?",
       "messageLabel": "Message",
       "messagePlaceholder": "Tell us a bit more about what you need...",
+      "attachmentLabel": "Screenshot (optional)",
+      "attachmentPlaceholder": "Upload an image",
       "submitButton": "Send message",
       "submitSending": "Sending...",
       "cancelButton": "Cancel",
