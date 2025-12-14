@@ -5049,6 +5049,12 @@ app.options('/api/admin/media/:id', (_req, res) => {
   res.status(204).end()
 })
 
+app.get('/api/env.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript')
+  const token = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
+  res.send(`window.__ENV__ = window.__ENV__ || {}; window.__ENV__.VITE_ADMIN_STATIC_TOKEN = "${token}";`)
+})
+
 app.get('/api/admin/notifications', async (req, res) => {
   const adminId = await ensureEditor(req, res)
   if (!adminId) return
