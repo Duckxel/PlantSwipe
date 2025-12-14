@@ -1291,7 +1291,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
                   uploadFolder="email-templates"
                   extraExtensions={[VariableHighlighter]}
                   variant="embedded"
-                  editorContentClassName="email-preview-body"
                   className="min-h-[500px]"
                   onUpdate={({ html, doc }) =>
                     setTemplateForm((prev) => ({ ...prev, bodyHtml: html, bodyDoc: doc }))
