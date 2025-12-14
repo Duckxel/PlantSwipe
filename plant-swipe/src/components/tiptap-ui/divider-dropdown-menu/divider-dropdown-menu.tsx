@@ -61,7 +61,7 @@ export const DividerDropdownMenu = forwardRef<HTMLButtonElement, DividerDropdown
             <ChevronDown className="tiptap-button-icon h-3 w-3 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent portal={portal} className="w-48">
+        <DropdownMenuContent portal={portal} sideOffset={8} collisionPadding={8} className="w-48">
           {DIVIDER_OPTIONS.map((option) => (
             <DropdownMenuItem
               key={option.style}

@@ -114,8 +114,8 @@ const MainToolbarContent: React.FC<{
     <ToolbarSeparator />
 
     <ToolbarGroup>
-      <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal={isMobile} />
-      <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} portal={isMobile} />
+      <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal />
+      <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} portal />
       <BlockquoteButton />
       <CodeBlockButton />
     </ToolbarGroup>
@@ -170,7 +170,7 @@ const MainToolbarContent: React.FC<{
       <EmailButtonButton />
       <EmailCardButton />
       <SensitiveCodeButton />
-      <DividerDropdownMenu portal={isMobile} />
+      <DividerDropdownMenu portal />
     </ToolbarGroup>
 
   </>
