@@ -5097,7 +5097,7 @@ app.get('/api/admin/notifications', async (req, res) => {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
           )
           when n.audience = 'admins' then (
             select count(*)::bigint from public.profiles p 
@@ -5689,7 +5689,7 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
         from public.profiles p
         left join auth.users u on u.id = p.id
         where (p.notify_push is null or p.notify_push = true)
-          and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
+          and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
       `
       count = Number(rows?.[0]?.count || 0)
     } else if (audience === 'admins') {
@@ -6153,7 +6153,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
           `
           recipientCount = Number(countResult?.[0]?.cnt || 0)
         } else if (row.trigger_type === 'daily_task_reminder') {
@@ -6349,7 +6349,7 @@ async function runAutomation(automation) {
       from public.profiles p
       left join auth.users u on u.id = p.id
       where (p.notify_push is null or p.notify_push = true)
-        and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
+        and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
       limit 5000
     `
   } else if (triggerType === 'daily_task_reminder') {
@@ -15957,7 +15957,7 @@ async function processDueAutomations() {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
