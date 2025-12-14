@@ -236,6 +236,10 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           horizontalRule: false,
           heading: { levels: [1, 2, 3, 4] },
           dropcursor: { color: "#34d399", width: 2 },
+          // We define these extensions manually with custom config below
+          link: false,
+          underline: false,
+          gapcursor: false,
         }),
         Placeholder.configure({
           placeholder: 'Type "/" for quick commands or start writing…',
@@ -331,7 +335,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
     }, [editor])
 
     const isEmbedded = variant === "embedded"
-    
+
     return (
       <div
         className={cn(
@@ -350,8 +354,8 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
             style={
               isMobile
                 ? ({
-                    bottom: `calc(100% - ${height - rect.y}px)`,
-                  } as React.CSSProperties)
+                  bottom: `calc(100% - ${height - rect.y}px)`,
+                } as React.CSSProperties)
                 : undefined
             }
           >
