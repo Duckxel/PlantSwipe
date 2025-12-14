@@ -3435,3 +3435,48 @@ export async function fetchGardenAdvice(gardenId: string, forceRefresh = false):
   return response.json()
 }
 
+
+/**
+ * Get cached today's occurrences for multiple gardens (batch)
+ */
+export async function getGardensTodayOccurrencesBatchCached(gardenIds: string[], dayIso: string): Promise<Array<{
+  id: string
+  taskId: string
+  gardenPlantId: string
+  dueAt: string
+  requiredCount: number
+  completedCount: number
+  completedAt: string | null
+  taskType: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'
+  taskEmoji: string | null
+}>> {
+  if (gardenIds.length === 0) return []
+  const { valid: safeGardenIds } = normalizeGardenIdList(gardenIds)
+  if (safeGardenIds.length === 0) return []
+
+  try {
+    const { data, error } = await supabase
+      .from('garden_task_occurrences_today_cache')
+      .select('occurrence_id, task_id, garden_plant_id, task_type, task_emoji, due_at, required_count, completed_count, completed_at')
+      .in('garden_id', safeGardenIds)
+      .eq('cache_date', dayIso)
+      .order('due_at', { ascending: true })
+
+    if (!error && data && Array.isArray(data)) {
+      return data.map((r: any) => ({
+        id: String(r.occurrence_id),
+        taskId: String(r.task_id),
+        gardenPlantId: String(r.garden_plant_id),
+        dueAt: String(r.due_at),
+        requiredCount: Number(r.required_count ?? 1),
+        completedCount: Number(r.completed_count ?? 0),
+        completedAt: r.completed_at || null,
+        taskType: (r.task_type || 'custom') as 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom',
+        taskEmoji: r.task_emoji || null,
+      }))
+    }
+  } catch {
+    // Fallback handled by caller
+  }
+  return []
+}

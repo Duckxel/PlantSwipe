@@ -30,10 +30,10 @@ import {
   listTasksForMultipleGardensMinimal,
   getGardenMemberCountsBatch,
   progressTaskOccurrence,
-  listCompletionsForOccurrences,
   logGardenActivity,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getGardenTodayOccurrencesCached,
+  getGardensTodayOccurrencesBatchCached,
   getUserGardensTasksTodayCached,
   refreshGardenTaskCache,
   refreshUserTaskCache,
@@ -89,10 +89,7 @@ export const GardenListPage: React.FC = () => {
       taskEmoji?: string | null;
     }>
   >([]);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [completionsByOcc, setCompletionsByOcc] = React.useState<
-    Record<string, any[]>
-  >({});
+
   const [progressingOccIds, setProgressingOccIds] = React.useState<Set<string>>(
     new Set(),
   );
@@ -513,7 +510,6 @@ export const GardenListPage: React.FC = () => {
           } else {
             // Use cache but it's empty - mismatch detection will catch this
             setTodayTaskOccurrences(cached.data.occurrences);
-            setCompletionsByOcc(cached.data.completions || {});
             setAllPlants(cached.data.plants);
             setLoadingTasks(false);
             return;
@@ -521,7 +517,6 @@ export const GardenListPage: React.FC = () => {
         } else {
           // Cache has tasks or skipResync is true - use it
           setTodayTaskOccurrences(cached.data.occurrences);
-          setCompletionsByOcc(cached.data.completions || {});
           setAllPlants(cached.data.plants);
           setLoadingTasks(false);
           return;
@@ -552,7 +547,6 @@ export const GardenListPage: React.FC = () => {
           } else {
             // Cache is older, use it but refresh in background
             setTodayTaskOccurrences(cachedOccs);
-            setCompletionsByOcc(localStorageCache.data.completions || {});
             setAllPlants(localStorageCache.data.plants || []);
             setLoadingTasks(false);
 
@@ -583,7 +577,6 @@ export const GardenListPage: React.FC = () => {
         } else {
           // Cache has tasks or skipResync is true - use it
           setTodayTaskOccurrences(cachedOccs);
-          setCompletionsByOcc(localStorageCache.data.completions || {});
           setAllPlants(localStorageCache.data.plants || []);
           setLoadingTasks(false);
 
@@ -592,7 +585,7 @@ export const GardenListPage: React.FC = () => {
             data: localStorageCache.data,
             timestamp: localStorageCache.timestamp || now,
             today,
-          };
+            };
 
           // Refresh in background if cache is getting stale
           if (
@@ -616,8 +609,71 @@ export const GardenListPage: React.FC = () => {
       try {
         const startIso = `${today}T00:00:00.000Z`;
         const endIso = `${today}T23:59:59.999Z`;
-        // Optimization: Fetch tasks for ALL relevant gardens in one batch
+
+        // NEW: Try to fetch from database cache table first (FASTEST)
+        // This avoids calculating occurrences and resyncing if cache is valid
         const gardenIdsToLoad = gardensList.map(g => g.id);
+        const cachedOccurrences = await getGardensTodayOccurrencesBatchCached(gardenIdsToLoad, today);
+
+        // If we found cached occurrences, we can use them directly!
+        if (cachedOccurrences && cachedOccurrences.length > 0) {
+          setTodayTaskOccurrences(cachedOccurrences);
+
+          // Still need plants for names
+          const plantsMinimal = await getGardenPlantsMinimal(gardenIdsToLoad);
+          const idToGardenName = gardensList.reduce<Record<string, string>>(
+            (acc, g) => {
+              acc[g.id] = g.name;
+              return acc;
+            },
+            {},
+          );
+          const all = plantsMinimal.map((gp) => ({
+            id: gp.id,
+            gardenId: gp.gardenId,
+            nickname: gp.nickname,
+            plant: gp.plantName ? { name: gp.plantName } : null,
+            gardenName: idToGardenName[gp.gardenId] || "",
+          }));
+          setAllPlants(all);
+
+          // Reset mismatch counter on successful load
+          mismatchReloadAttemptsRef.current = 0;
+          setMismatchReloadAttempts(0);
+          lastSuccessfulLoadRef.current = Date.now();
+
+          console.log(
+            "[GardenList] Successfully loaded from DB cache",
+            cachedOccurrences.length,
+            "task occurrences and",
+            all.length,
+            "plants",
+          );
+
+          // Update memory/local caches
+          const cacheData = {
+            occurrences: cachedOccurrences,
+            completions: {}, // unused
+            plants: all,
+          };
+
+          taskDataCacheRef.current = {
+            data: cacheData,
+            timestamp: now,
+            today,
+          };
+
+          setLocalStorageCache(
+            localStorageKey,
+            cacheData,
+            LOCALSTORAGE_TASK_CACHE_TTL,
+          );
+
+          setLoadingTasks(false);
+          return;
+        }
+
+        // Optimization: Fetch tasks for ALL relevant gardens in one batch
         const tasksByGardenId = await listTasksForMultipleGardensMinimal(gardenIdsToLoad);
 
         const taskTypeById: Record<
@@ -669,11 +725,7 @@ export const GardenListPage: React.FC = () => {
           }
         }
         setTodayTaskOccurrences(occsAugmented);
-        // Fetch completions for all occurrences
-        const ids = occsAugmented.map((o) => o.id);
-        const compMap =
-          ids.length > 0 ? await listCompletionsForOccurrences(ids) : {};
-        setCompletionsByOcc(compMap || {});
+
         // 4) Load plants for all gardens - use minimal version to reduce egress by ~80%
         const gardenIds = gardensList.map((g) => g.id);
         const plantsMinimal = await getGardenPlantsMinimal(gardenIds);
@@ -709,7 +761,7 @@ export const GardenListPage: React.FC = () => {
         // Cache the results in both memory and localStorage
         const cacheData = {
           occurrences: occsAugmented,
-          completions: compMap,
+          completions: {}, // unused
           plants: all,
         };
 
