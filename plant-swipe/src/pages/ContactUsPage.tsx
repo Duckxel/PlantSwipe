@@ -3,18 +3,27 @@ import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Clock, HelpCircle, Mail, MessageCircle, Check, Copy } from "lucide-react"
+import { Clock, HelpCircle, Mail, MessageCircle, Check, Copy, UploadCloud, X, Loader2, Image, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { supabase } from "@/lib/supabaseClient"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { useAuth } from "@/context/AuthContext"
+import { useNavigate } from "react-router-dom"
 
 const CHANNEL_EMAILS = {
   support: "support@aphylia.app",
   business: "contact@aphylia.app",
+  bug: "support@aphylia.app",
 } as const
 const SUPPORT_FUNCTION = "contact-support"
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -30,13 +39,24 @@ type DialogFormState = {
 
 type CopyState = "idle" | "copied"
 type ContactChannel = keyof typeof CHANNEL_EMAILS
-const CHANNEL_ORDER: ContactChannel[] = ["support", "business"]
+const CHANNEL_ORDER: ContactChannel[] = ["support", "business", "bug"]
 
 type ContactUsPageProps = {
   defaultChannel?: ContactChannel
 }
 
 export default function ContactUsPage({ defaultChannel = "support" }: ContactUsPageProps) {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+
+  // If requesting bug report but not logged in, redirect to login via home or just fallback to support
+  useEffect(() => {
+    if (defaultChannel === "bug" && !user) {
+      // For now, silently fallback to support if not logged in, user can login elsewhere
+      setSelectedChannel("support")
+    }
+  }, [defaultChannel, user])
+
   const { t } = useTranslation('common')
   const seoKey = defaultChannel === "business" ? "contactBusiness" : "contactSupport"
   const seoTitle = t(`seo.${seoKey}.title`, {
@@ -62,9 +82,40 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
   const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null)
   const [selectedChannel, setSelectedChannel] = useState<ContactChannel>(defaultChannel)
 
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
   useEffect(() => {
-    setSelectedChannel(defaultChannel)
-  }, [defaultChannel])
+    if (defaultChannel === "bug" && !user) {
+        setSelectedChannel("support")
+    } else {
+        setSelectedChannel(defaultChannel)
+    }
+  }, [defaultChannel, user])
+
+  // Cleanup screenshot if form closed or cancelled
+  useEffect(() => {
+    if (!formOpen && screenshotUrl) {
+      // Best effort cleanup
+      const cleanup = async () => {
+        try {
+          const session = (await supabase.auth.getSession()).data.session
+          if (!session) return
+          await fetch('/api/contact/upload-screenshot', {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ path: screenshotUrl.split('/').pop() ? `BugReport/${screenshotUrl.split('/').pop()}` : '' })
+          })
+        } catch {}
+      }
+      cleanup()
+      setScreenshotUrl(null)
+    }
+  }, [formOpen])
 
     const channelOptions = {
     support: {
@@ -74,6 +125,10 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
     business: {
       label: t('contactUs.channelSelector.options.business.name'),
       description: t('contactUs.channelSelector.options.business.description'),
+    },
+    bug: {
+      label: t('contactUs.channelSelector.options.bug.name', { defaultValue: "Bug Report" }),
+      description: t('contactUs.channelSelector.options.bug.description', { defaultValue: "Report a technical issue or bug." }),
     },
   }
 
@@ -148,6 +203,72 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
     }
   };
 
+  const handleScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setUploadingScreenshot(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session) throw new Error("Not authenticated")
+
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/contact/upload-screenshot', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        throw new Error("Upload failed")
+      }
+
+      const data = await response.json()
+      if (data.url) {
+        setScreenshotUrl(data.url)
+      }
+    } catch (err) {
+      console.error("Screenshot upload failed", err)
+      // Optionally show error toast
+    } finally {
+      setUploadingScreenshot(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
+  const handleRemoveScreenshot = async () => {
+    if (!screenshotUrl) return
+    try {
+        const session = (await supabase.auth.getSession()).data.session
+        if (!session) return
+
+        // Extract path from URL roughly or pass URL if endpoint handles it
+        // The endpoint expects { path: ... } relative to bucket or full if handled logic
+        // But our endpoint logic uses path.basename(objectPath) in response... wait, the endpoint returns `path` in response.
+        // But we only stored URL. Let's assume we can derive or just fire-and-forget delete on submit success/cancel.
+        // For explicit remove button, we try to call delete.
+        // Construct path: "BugReport/<filename>"
+        const filename = screenshotUrl.split('/').pop()
+        if (filename) {
+            await fetch('/api/contact/upload-screenshot', {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path: `BugReport/${filename}` })
+            })
+        }
+    } catch (e) {
+        console.warn("Failed to delete screenshot", e)
+    }
+    setScreenshotUrl(null)
+  }
+
   const handleDialogOpenChange = (open: boolean) => {
     setFormOpen(open)
     if (!open) {
@@ -159,6 +280,12 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         subject: "",
         message: "",
       })
+      // Clear screenshot state (useEffect handles deletion)
+    } else {
+        // If opening directly to bug channel, prepopulate subject
+        if (selectedChannel === 'bug') {
+            setFormValues(prev => ({ ...prev, subject: "Bug Report: " }))
+        }
     }
   }
 
@@ -207,6 +334,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
             ...trimmedData,
             submittedAt: new Date().toISOString(),
             audience: selectedChannel,
+            screenshotUrl: screenshotUrl || undefined,
           },
         })
 
@@ -224,6 +352,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         subject: "",
         message: "",
       })
+      setScreenshotUrl(null) // Clear so we don't delete it on close
     } catch (err) {
       console.error('Unexpected error submitting contact form', err)
       setFormStatus("error")
@@ -268,18 +397,35 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
                 <Label htmlFor="contact-channel" className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
                   {t('contactUs.channelSelector.label')}
                 </Label>
-                <select
-                  id="contact-channel"
-                  value={selectedChannel}
-                  onChange={(event) => setSelectedChannel(event.target.value as ContactChannel)}
-                  className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
-                >
-                  {CHANNEL_ORDER.map((key) => (
-                    <option key={key} value={key}>
-                      {channelOptions[key]?.label}
-                    </option>
-                  ))}
-                </select>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between rounded-2xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]">
+                      {currentChannelLabel}
+                      <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[220px] rounded-xl">
+                    {CHANNEL_ORDER.map((key) => {
+                        // Skip bug option if user not logged in
+                        if (key === 'bug' && !user) return null;
+                        return (
+                            <DropdownMenuItem
+                                key={key}
+                                onClick={() => {
+                                    setSelectedChannel(key);
+                                    if (key === 'bug') {
+                                        setFormOpen(true);
+                                        setFormValues(prev => ({ ...prev, subject: "Bug Report: " }));
+                                    }
+                                }}
+                                className="cursor-pointer rounded-lg"
+                            >
+                                {channelOptions[key]?.label}
+                            </DropdownMenuItem>
+                        )
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <p className="text-xs text-stone-500 dark:text-stone-400">
                   {currentChannelDescription || t('contactUs.channelSelector.helper')}
                 </p>
@@ -467,6 +613,74 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
                 disabled={inputsDisabled}
               />
             </div>
+
+            {selectedChannel === 'bug' && (
+              <div className="space-y-2">
+                <Label>{t('contactUs.form.screenshotLabel', { defaultValue: "Screenshot (optional)" })}</Label>
+                <div className="flex flex-col gap-3">
+                  {!screenshotUrl ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full h-24 border-dashed border-2 rounded-2xl flex flex-col gap-2 items-center justify-center hover:bg-stone-50 dark:hover:bg-[#252526] transition-colors"
+                        disabled={uploadingScreenshot || inputsDisabled}
+                        onClick={() => fileInputRef.current?.click()}
+                    >
+                        {uploadingScreenshot ? (
+                            <>
+                                <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
+                                <span className="text-xs text-stone-500">{t('common.uploading', { defaultValue: "Uploading..." })}</span>
+                            </>
+                        ) : (
+                            <>
+                                <UploadCloud className="h-6 w-6 text-emerald-600 dark:text-emerald-500" />
+                                <div className="text-center">
+                                    <span className="text-sm font-medium">{t('contactUs.form.uploadScreenshot', { defaultValue: "Click to upload" })}</span>
+                                    <p className="text-xs text-stone-400 mt-1">PNG, JPG, WebP (max 10MB)</p>
+                                </div>
+                            </>
+                        )}
+                    </Button>
+                  ) : (
+                    <div className="relative rounded-2xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden group bg-stone-100 dark:bg-black/20">
+                        <div className="aspect-video w-full flex items-center justify-center bg-[url('/transparent-pattern.png')]">
+                            <img
+                                src={screenshotUrl}
+                                alt="Screenshot preview"
+                                className="max-h-48 max-w-full object-contain"
+                            />
+                        </div>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                className="rounded-full"
+                                onClick={handleRemoveScreenshot}
+                            >
+                                <X className="h-4 w-4 mr-1" />
+                                {t('common.remove', { defaultValue: "Remove" })}
+                            </Button>
+                        </div>
+                        <div className="absolute top-2 right-2">
+                             <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm">
+                                <Check className="h-3 w-3 inline mr-1" />
+                                {t('common.uploaded', { defaultValue: "Uploaded" })}
+                             </span>
+                        </div>
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={handleScreenshotUpload}
+                  />
+                </div>
+              </div>
+            )}
+
             <DialogFooter className="pt-2">
               <Button
                 type="button"
