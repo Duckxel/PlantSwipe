@@ -9208,6 +9208,9 @@ const BroadcastControls: React.FC<{
   }, []);
 
   // When current broadcast expires, revert to create form and notify parent (to re-open section)
+  // DISABLED: Keep the edit form active even if expired on client, so admin can extend/edit easily.
+  // The server is the authority on whether it's truly active for users.
+  /*
   React.useEffect(() => {
     if (!active?.expiresAt) return;
     const remain = msRemaining(active.expiresAt);
@@ -9222,6 +9225,7 @@ const BroadcastControls: React.FC<{
     );
     return () => window.clearTimeout(id);
   }, [active?.expiresAt, onExpired, msRemaining]);
+  */
 
   const onSubmit = React.useCallback(async () => {
     if (submitting) return;

@@ -9,7 +9,6 @@ export type BroadcastRecord = {
   createdAt: string | null
   expiresAt: string | null
   adminName?: string | null
-  clientExpiresAt?: string | null
 }
 
 function sanitizeBroadcast(raw: any): BroadcastRecord {
@@ -20,7 +19,6 @@ function sanitizeBroadcast(raw: any): BroadcastRecord {
     createdAt: raw?.createdAt || null,
     expiresAt: raw?.expiresAt || null,
     adminName: raw?.adminName ?? null,
-    clientExpiresAt: raw?.clientExpiresAt || null,
   }
 }
 
@@ -38,9 +36,9 @@ export function loadPersistedBroadcast(nowMs: number = Date.now()): BroadcastRec
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object') return null
-      const broadcast = sanitizeBroadcast(parsed)
-      const expiry = broadcast.clientExpiresAt || broadcast.expiresAt
-      if (isExpired(expiry, nowMs)) {
+    const broadcast = sanitizeBroadcast(parsed)
+    // Only return if not expired based on server time
+    if (broadcast.expiresAt && isExpired(broadcast.expiresAt, nowMs)) {
       localStorage.removeItem(STORAGE_KEY)
       return null
     }
@@ -60,14 +58,13 @@ export function savePersistedBroadcast(value: BroadcastRecord | null): void {
     }
     const severity: 'info' | 'warning' | 'danger' =
       value.severity && VALID_SEVERITIES.has(value.severity) ? value.severity : 'info'
-      const payload: BroadcastRecord = {
+    const payload: BroadcastRecord = {
       id: String(value.id || ''),
       message: String(value.message || ''),
       severity,
       createdAt: value.createdAt || null,
       expiresAt: value.expiresAt || null,
       adminName: value.adminName ?? null,
-        clientExpiresAt: value.clientExpiresAt || value.expiresAt || null,
     }
     if (!payload.id || !payload.message) {
       localStorage.removeItem(STORAGE_KEY)
