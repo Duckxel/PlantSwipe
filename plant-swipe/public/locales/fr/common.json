@@ -260,6 +260,10 @@
             "business": {
               "name": "Business",
               "description": "Partenariats, presse ou demandes commerciales."
+          },
+          "bug": {
+            "name": "Signaler un bug",
+            "description": "Signaler un problème ou un bug dans l'application."
             }
           }
         },
@@ -313,6 +317,8 @@
       "subjectPlaceholder": "Comment pouvons-nous vous aider ?",
       "messageLabel": "Message",
       "messagePlaceholder": "Dites-nous en un peu plus sur votre demande...",
+      "attachmentLabel": "Capture d'écran (optionnel)",
+      "attachmentPlaceholder": "Téléverser une image",
       "submitButton": "Envoyer le message",
       "submitSending": "Envoi...",
       "cancelButton": "Annuler",

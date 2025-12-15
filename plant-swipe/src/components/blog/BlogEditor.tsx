@@ -85,6 +85,7 @@ type BlogEditorProps = {
   initialHtml?: string | null
   initialDocument?: JSONContent | null
   className?: string
+  editorContentClassName?: string
   uploadFolder: string
   onUpdate?: (payload: { html: string; doc: JSONContent | null; plainText: string }) => void
   extraExtensions?: Extension[]
@@ -113,8 +114,8 @@ const MainToolbarContent: React.FC<{
     <ToolbarSeparator />
 
     <ToolbarGroup>
-      <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal={isMobile} />
-      <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} portal={isMobile} />
+      <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal />
+      <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} portal />
       <BlockquoteButton />
       <CodeBlockButton />
     </ToolbarGroup>
@@ -169,7 +170,7 @@ const MainToolbarContent: React.FC<{
       <EmailButtonButton />
       <EmailCardButton />
       <SensitiveCodeButton />
-      <DividerDropdownMenu portal={isMobile} />
+      <DividerDropdownMenu portal />
     </ToolbarGroup>
 
   </>
@@ -206,7 +207,7 @@ const MobileToolbarContent: React.FC<{
 )
 
 export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
-  ({ initialHtml, initialDocument, className, uploadFolder, onUpdate, extraExtensions, toolbarAppend, variant = "default" }, ref) => {
+  ({ initialHtml, initialDocument, className, editorContentClassName, uploadFolder, onUpdate, extraExtensions, toolbarAppend, variant = "default" }, ref) => {
     const isMobile = useIsBreakpoint()
     const { height } = useWindowSize()
     const toolbarRef = useRef<HTMLDivElement>(null)
@@ -228,7 +229,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           autocomplete: "off",
           autocorrect: "off",
           autocapitalize: "off",
-          class: "simple-editor",
+          class: cn("simple-editor", editorContentClassName),
         },
       },
       extensions: [
@@ -236,6 +237,10 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           horizontalRule: false,
           heading: { levels: [1, 2, 3, 4] },
           dropcursor: { color: "#34d399", width: 2 },
+          // We define these extensions manually with custom config below
+          link: false,
+          underline: false,
+          gapcursor: false,
         }),
         Placeholder.configure({
           placeholder: 'Type "/" for quick commands or start writing…',
@@ -331,7 +336,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
     }, [editor])
 
     const isEmbedded = variant === "embedded"
-    
+
     return (
       <div
         className={cn(
@@ -350,8 +355,8 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
             style={
               isMobile
                 ? ({
-                    bottom: `calc(100% - ${height - rect.y}px)`,
-                  } as React.CSSProperties)
+                  bottom: `calc(100% - ${height - rect.y}px)`,
+                } as React.CSSProperties)
                 : undefined
             }
           >

@@ -13,11 +13,12 @@ function useNowTick(intervalMs: number = 1000) {
   return now
 }
 
-function msRemaining(expiresAt: string | null, nowMs: number): number | null {
+function msRemaining(expiresAt: string | null, nowMs: number, clockOffset: number = 0): number | null {
   if (!expiresAt) return null
   const end = Date.parse(expiresAt)
   if (!Number.isFinite(end)) return null
-  return Math.max(0, end - nowMs)
+  // Calculate expiry relative to adjusted time
+  return end - (nowMs + clockOffset)
 }
 
 const POSITIONS = [
@@ -52,57 +53,31 @@ function savePosition(pos: PositionKey) {
   try { localStorage.setItem('plantswipe.broadcast.pos', pos) } catch {}
 }
 
-function computeDurationMs(b: BroadcastRecord): number | null {
-  if (!b?.createdAt || !b?.expiresAt) return null
-  const start = Date.parse(b.createdAt)
-  const end = Date.parse(b.expiresAt)
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return null
-  const diff = end - start
-  return diff > 0 ? diff : null
-}
-
-function computeClientExpiresAt(
-  current: BroadcastRecord,
-  previous: Broadcast | null,
-): string | null {
-  const sameVersion =
-    previous &&
-    previous.id === current.id &&
-    previous.message === current.message &&
-    previous.severity === current.severity &&
-    previous.expiresAt === current.expiresAt
-
-  if (sameVersion && previous?.clientExpiresAt) return previous.clientExpiresAt
-  if (current.clientExpiresAt) return current.clientExpiresAt
-
-  const durationMs = computeDurationMs(current)
-  if (!durationMs) return current.expiresAt || null
-  return new Date(Date.now() + durationMs).toISOString()
-}
-
-function mergeBroadcast(next: BroadcastRecord, prev: Broadcast | null): Broadcast {
-  return {
-    ...next,
-    clientExpiresAt: computeClientExpiresAt(next, prev),
-  }
-}
-
 const BroadcastToast: React.FC = () => {
   const [broadcast, setBroadcast] = React.useState<Broadcast | null>(() => loadPersistedBroadcast())
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
+  const [clockOffset, setClockOffset] = React.useState(0)
   const now = useNowTick(1000)
 
-  const applyBroadcast = React.useCallback((incoming: BroadcastRecord | null) => {
+  const applyBroadcast = React.useCallback((incoming: BroadcastRecord | null, serverTime?: string) => {
+    if (serverTime) {
+      const serverMs = Date.parse(serverTime)
+      if (Number.isFinite(serverMs)) {
+        setClockOffset(serverMs - Date.now())
+      }
+    }
+
+    // If null, clear.
     if (!incoming) {
       setBroadcast(null)
       savePersistedBroadcast(null)
       return
     }
-    setBroadcast((prev) => {
-      const merged = mergeBroadcast(incoming, prev)
-      savePersistedBroadcast(merged)
-      return merged
-    })
+
+    // If server returned it, trust it is active initially.
+    // Client-side expiry check will run in useEffect using offset.
+    setBroadcast(incoming)
+    savePersistedBroadcast(incoming)
   }, [])
 
   const refreshBroadcast = React.useCallback(async () => {
@@ -114,38 +89,28 @@ const BroadcastToast: React.FC = () => {
       if (r.ok) {
         const body = await r.json().catch(() => ({}))
         const next: Broadcast | null = body?.broadcast || null
+        const sTime: string | undefined = body?.serverTime
+
         if (next) {
-          applyBroadcast(next)
+          applyBroadcast(next, sTime)
         } else {
-          const persisted = loadPersistedBroadcast()
-          setBroadcast(persisted)
-          if (!persisted) savePersistedBroadcast(null)
+          // If server says nothing active, clear local
+          setBroadcast(null)
+          savePersistedBroadcast(null)
         }
         return true
       }
     } catch {}
+    // If fetch failed, do not clear local state (offline support)
+    // But check expiration of local state
     const persisted = loadPersistedBroadcast()
     setBroadcast(persisted)
     return false
-    }, [applyBroadcast])
+  }, [applyBroadcast])
 
+  // Initial fetch to hydrate: on load, check server for active broadcast
   React.useEffect(() => {
-    if (broadcast && !broadcast.clientExpiresAt) {
-      const merged = mergeBroadcast(broadcast, null)
-      setBroadcast(merged)
-      savePersistedBroadcast(merged)
-    }
-  }, [broadcast])
-
-  // Initial fetch to hydrate: on load, check server for active broadcast; if none, keep persisted
-  React.useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      await refreshBroadcast()
-      if (cancelled) return
-    }
-    load()
-    return () => { cancelled = true }
+    refreshBroadcast()
   }, [refreshBroadcast])
 
   // SSE stream for live updates with polling fallback
@@ -167,23 +132,24 @@ const BroadcastToast: React.FC = () => {
       }
     }
 
-      const handleBroadcast = (ev: MessageEvent) => {
-        try {
-          const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
-          const next: Broadcast = {
-            id: String(data?.id || ''),
-            message: String(data?.message || ''),
-            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
-            createdAt: data?.createdAt || null,
-            expiresAt: data?.expiresAt || null,
-          }
-          applyBroadcast(next)
-        } catch {}
-      }
+    const handleBroadcast = (ev: MessageEvent) => {
+      try {
+        const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+        const next: Broadcast = {
+          id: String(data?.id || ''),
+          message: String(data?.message || ''),
+          severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+          createdAt: data?.createdAt || null,
+          expiresAt: data?.expiresAt || null,
+          adminName: data?.adminName || null,
+        }
+        applyBroadcast(next, data?.serverTime)
+      } catch {}
+    }
 
-      const handleClear = () => {
-        applyBroadcast(null)
-      }
+    const handleClear = () => {
+      applyBroadcast(null)
+    }
 
     try {
       es = new EventSource('/api/broadcast/stream', { withCredentials: true })
@@ -204,18 +170,19 @@ const BroadcastToast: React.FC = () => {
       try { es?.close() } catch {}
       stopPolling()
     }
-    }, [refreshBroadcast, applyBroadcast])
+  }, [refreshBroadcast, applyBroadcast])
 
   // Auto-hide on expiry
   React.useEffect(() => {
-    const expirySource = broadcast?.clientExpiresAt || broadcast?.expiresAt
+    const expirySource = broadcast?.expiresAt
     if (!expirySource) return
-    const remaining = msRemaining(expirySource, now)
-    if (remaining !== null && remaining <= 0) {
+    const remaining = msRemaining(expirySource, now, clockOffset)
+    // Only hide if clearly expired (buffer 2s) to avoid flickering on drift
+    if (remaining !== null && remaining <= -2000) {
       setBroadcast(null)
       savePersistedBroadcast(null)
     }
-  }, [broadcast?.clientExpiresAt, broadcast?.expiresAt, now])
+  }, [broadcast?.expiresAt, now, clockOffset])
 
   const severity = (broadcast?.severity === 'warning' || broadcast?.severity === 'danger') ? broadcast?.severity : 'info'
   const severityLabel = severity === 'warning' ? 'Warning' : severity === 'danger' ? 'Danger' : 'Information'

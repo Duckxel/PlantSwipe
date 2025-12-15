@@ -27,11 +27,11 @@ dotenv.config()
 // Optionally load server-only secrets from .env.server (ignored if missing)
 try {
   dotenv.config({ path: path.resolve(__dirname, '.env.server') })
-} catch {}
+} catch { }
 // Ensure we also load a co-located .env next to server.js regardless of cwd
 try {
   dotenv.config({ path: path.resolve(__dirname, '.env') })
-} catch {}
+} catch { }
 
 // Map common env aliases so deployments can be plug‑and‑play with a single .env
 function preferEnv(target, sources) {
@@ -71,9 +71,9 @@ try {
  */
 function sanitizeHtmlForEmail(html) {
   if (!html) return html
-  
+
   let result = html
-  
+
   // 1. Replace CSS variables with hardcoded colors (Gmail doesn't support var())
   const cssVarMap = {
     '--tt-color-highlight-yellow': '#fef08a',
@@ -88,7 +88,7 @@ function sanitizeHtmlForEmail(html) {
   result = result.replace(/var\(\s*(--tt-color-[a-zA-Z-]+)\s*\)/gi, (match, varName) => {
     return cssVarMap[varName] || '#fef08a' // Default to yellow
   })
-  
+
   // 2. Replace linear-gradient backgrounds with solid colors
   // Match the full gradient including nested parentheses for rgb/rgba
   result = result.replace(/background:\s*linear-gradient\s*\([^;"}]*\)\s*;?/gi, (match) => {
@@ -108,10 +108,10 @@ function sanitizeHtmlForEmail(html) {
     }
     return 'background-color: #ffffff;'
   })
-  
+
   // 3. Remove box-shadow properties entirely (not supported in most email clients)
   result = result.replace(/box-shadow:\s*[^;"}]+;?/gi, '')
-  
+
   // 4. Replace rgba() colors with solid hex (in all contexts, not just background)
   result = result.replace(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/gi, (match, r, g, b) => {
     const toHex = (n) => {
@@ -120,23 +120,23 @@ function sanitizeHtmlForEmail(html) {
     }
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`
   })
-  
+
   // 5. Replace display: flex with text-align: center for centering
   result = result.replace(/display:\s*flex\s*;\s*flex-direction:\s*column\s*;\s*align-items:\s*center\s*;?/gi, 'text-align: center;')
   result = result.replace(/display:\s*flex\s*;\s*align-items:\s*center\s*;\s*justify-content:\s*center\s*;?/gi, 'text-align: center;')
   result = result.replace(/display:\s*flex\s*;\s*align-items:\s*center\s*;/gi, '')
-  
+
   // 6. Remove transition properties (not supported in email)
   result = result.replace(/transition:\s*[^;"}]+;?/gi, '')
-  
+
   // 7. Remove gap property (not supported in email)
   result = result.replace(/gap:\s*[^;"}]+;?/gi, '')
-  
+
   // 8. Clean up any double semicolons or empty style artifacts
   result = result.replace(/;\s*;/g, ';')
   result = result.replace(/style="\s*;/g, 'style="')
   result = result.replace(/;\s*"/g, '"')
-  
+
   return result
 }
 
@@ -171,7 +171,7 @@ const EMAIL_WRAPPER_STRINGS = {
 function wrapEmailHtml(bodyHtml, subject, language = 'en') {
   const currentYear = new Date().getFullYear()
   const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
-  
+
   // Get localized strings for the wrapper (fallback to English if language not found)
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS['en']
   const copyrightText = strings.copyright.replace('{{year}}', String(currentYear))
@@ -397,14 +397,14 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
 async function fetchEmailTemplateTranslations(templateId) {
   const translations = new Map()
   if (!templateId || !sql) return translations
-  
+
   try {
     const data = await sql`
       select language, subject, body_html
       from public.admin_email_template_translations
       where template_id = ${templateId}
     `
-    
+
     for (const row of data || []) {
       if (row?.language) {
         translations.set(row.language, {
@@ -416,7 +416,7 @@ async function fetchEmailTemplateTranslations(templateId) {
   } catch (err) {
     console.warn('[campaign-runner] failed to load email translations:', err?.message || err)
   }
-  
+
   return translations
 }
 
@@ -426,7 +426,7 @@ async function processEmailCampaigns() {
 
   // 0. Auto-migrate tracking table if missing
   try {
-     await sql`
+    await sql`
        create table if not exists public.admin_campaign_sends (
          id uuid primary key default gen_random_uuid(),
          campaign_id uuid references public.admin_email_campaigns(id) on delete cascade,
@@ -462,7 +462,7 @@ async function processEmailCampaigns() {
       // Check if this is a test mode campaign
       const isTestMode = campaign.test_mode === true
       const testEmail = campaign.test_email
-      
+
       // Fetch email template translations for multi-language support
       const emailTranslations = await fetchEmailTemplateTranslations(campaign.template_id)
 
@@ -501,35 +501,35 @@ async function processEmailCampaigns() {
       }
 
       if (!recipients || recipients.length === 0) {
-         // No pending recipients for this campaign. 
-         // If it's old enough (e.g. > 30h past schedule), mark as sent? 
-         // For now, just leave it running to catch stragglers or manual stop.
-         // Optionally verify if we are effectively "done"
-         const totalUsers = await sql`select count(*) as count from auth.users where email_confirmed_at is not null`
-         const sentCount = await sql`select count(*) as count from public.admin_campaign_sends where campaign_id = ${campaign.id}`
-         if (Number(totalUsers[0].count) <= Number(sentCount[0].count)) {
-            await sql`update public.admin_email_campaigns set status = 'sent', send_completed_at = now() where id = ${campaign.id}`
-         }
-         continue
+        // No pending recipients for this campaign. 
+        // If it's old enough (e.g. > 30h past schedule), mark as sent? 
+        // For now, just leave it running to catch stragglers or manual stop.
+        // Optionally verify if we are effectively "done"
+        const totalUsers = await sql`select count(*) as count from auth.users where email_confirmed_at is not null`
+        const sentCount = await sql`select count(*) as count from public.admin_campaign_sends where campaign_id = ${campaign.id}`
+        if (Number(totalUsers[0].count) <= Number(sentCount[0].count)) {
+          await sql`update public.admin_email_campaigns set status = 'sent', send_completed_at = now() where id = ${campaign.id}`
+        }
+        continue
       }
 
       // 3. Filter by Timezone
       const campaignTz = campaign.timezone || 'UTC'
       const scheduledFor = new Date(campaign.scheduled_for) // This is UTC
-      
+
       const dueRecipients = recipients.filter(r => {
         // Calculate when the campaign is due for THIS user
         // Formula: Target_Time = Scheduled_UTC - (User_Offset - Camp_Offset)
         // But since we don't have easy offset lookups in JS without a library like date-fns-tz or similar,
         // we rely on Postgres or an approximation. 
         // Alternatively, we can check if the *current local hour* matches.
-        
+
         // Approximation using Intl (available in Node 18+)
         try {
           // Get "Wall Clock" time of the scheduled event in Campaign TZ
           const schedInCampTzStr = scheduledFor.toLocaleString('en-US', { timeZone: campaignTz })
           const schedInCampTz = new Date(schedInCampTzStr)
-          
+
           // Get "Wall Clock" time of NOW in User TZ
           const nowInUserTzStr = new Date().toLocaleString('en-US', { timeZone: r.user_timezone })
           const nowInUserTz = new Date(nowInUserTzStr)
@@ -540,7 +540,7 @@ async function processEmailCampaigns() {
           // If Sched is "Oct 25 9:00 AM" (Camp TZ), we want to know if "Oct 25 9:00 AM" has passed in User TZ.
           // So we just compare the ISO strings or millis of these "floating" times?
           // No, `new Date(string)` creates a date in local system time.
-          
+
           // Let's compare the *absolute* epoch time if we treat them as same TZ.
           // This works because if 9AM passed in JST, it's "later" in absolute terms than 8AM JST.
           return nowInUserTz >= schedInCampTz
@@ -560,51 +560,51 @@ async function processEmailCampaigns() {
       for (let i = 0; i < dueRecipients.length; i += batchSize) {
         const batch = dueRecipients.slice(i, i + batchSize)
         const payload = batch.map(r => {
-           const userRaw = r.display_name || 'User'
-           const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
-           const userLang = r.user_language || 'en'
-           
-           // Generate random 10-character string (uppercase, lowercase, numbers)
-           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-           let randomStr = ''
-           for (let i = 0; i < 10; i++) {
-             randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
-           }
-           
-           const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
-           
-           // Variables available for replacement in email templates
-           const context = { 
-             user: userCap,                           // User's display name (capitalized)
-             email: r.email,                          // User's email address
-             random: randomStr,                       // 10 random characters (unique per email)
-             url: websiteUrl.replace(/^https?:\/\//, ''), // Website URL without protocol (e.g., "aphylia.app")
-             code: 'XXXXXX'                           // Placeholder for campaign emails (real codes are for transactional emails)
-           }
-           const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
-           
-           // Get user's language-specific content (fallback to campaign's default content)
-           const translation = emailTranslations.get(userLang)
-           const rawSubject = translation?.subject || campaign.subject
-           const rawBodyHtml = translation?.bodyHtml || campaign.body_html
-           
-           const bodyHtmlRaw = replaceVars(rawBodyHtml)
-           const subject = replaceVars(rawSubject)
-           // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
-           const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
-           // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
-           const html = wrapEmailHtml(bodyHtml, subject, userLang)
-           const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+          const userRaw = r.display_name || 'User'
+          const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+          const userLang = r.user_language || 'en'
 
-           return {
-             from: fromEmail,
-             to: r.email,
-             subject: subject,
-             html: html,
-             text: text,
-             headers: { 'X-Campaign-Id': campaign.id },
-             tags: [{ name: 'campaign_id', value: campaign.id }]
-           }
+          // Generate random 10-character string (uppercase, lowercase, numbers)
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+          let randomStr = ''
+          for (let i = 0; i < 10; i++) {
+            randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+          }
+
+          const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+
+          // Variables available for replacement in email templates
+          const context = {
+            user: userCap,                           // User's display name (capitalized)
+            email: r.email,                          // User's email address
+            random: randomStr,                       // 10 random characters (unique per email)
+            url: websiteUrl.replace(/^https?:\/\//, ''), // Website URL without protocol (e.g., "aphylia.app")
+            code: 'XXXXXX'                           // Placeholder for campaign emails (real codes are for transactional emails)
+          }
+          const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
+
+          // Get user's language-specific content (fallback to campaign's default content)
+          const translation = emailTranslations.get(userLang)
+          const rawSubject = translation?.subject || campaign.subject
+          const rawBodyHtml = translation?.bodyHtml || campaign.body_html
+
+          const bodyHtmlRaw = replaceVars(rawBodyHtml)
+          const subject = replaceVars(rawSubject)
+          // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
+          const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
+          // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
+          const html = wrapEmailHtml(bodyHtml, subject, userLang)
+          const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+
+          return {
+            from: fromEmail,
+            to: r.email,
+            subject: subject,
+            html: html,
+            text: text,
+            headers: { 'X-Campaign-Id': campaign.id },
+            tags: [{ name: 'campaign_id', value: campaign.id }]
+          }
         })
 
         // Send via Resend
@@ -622,9 +622,9 @@ async function processEmailCampaigns() {
           // Record success in tracking table (only for non-test mode with real user IDs)
           if (!isTestMode) {
             const values = batch.map(u => ({
-               campaign_id: campaign.id,
-               user_id: u.id,
-               status: 'sent'
+              campaign_id: campaign.id,
+              user_id: u.id,
+              status: 'sent'
             }))
             await sql`insert into public.admin_campaign_sends ${sql(values, 'campaign_id', 'user_id', 'status')}`
           }
@@ -632,7 +632,7 @@ async function processEmailCampaigns() {
           console.error('[campaign-runner] Batch failed:', await res.text())
         }
       }
-      
+
       // Update total stats
       if (isTestMode) {
         // For test mode, mark as sent immediately
@@ -672,15 +672,15 @@ async function getRepoRoot() {
         if (st && st.isDirectory()) {
           const topFromGit = await getTopLevelIfRepo(override)
           if (topFromGit) return topFromGit
-          try { await fs.access(path.join(override, '.git')) ; return override } catch {}
+          try { await fs.access(path.join(override, '.git')); return override } catch { }
         }
-      } catch {}
+      } catch { }
     }
-  } catch {}
+  } catch { }
 
   // 2) Prefer the real path of the current directory (handles symlinks)
   let realDir = __dirname
-  try { realDir = await fs.realpath(__dirname) } catch {}
+  try { realDir = await fs.realpath(__dirname) } catch { }
 
   // 3) Try to ask git for the top-level using a safe.directory override
   const topFromGitHere = await getTopLevelIfRepo(realDir)
@@ -699,7 +699,7 @@ async function getRepoRoot() {
       // Also accept git worktree layout where .git is a file
       await fs.access(path.join(dir, '.git'))
       return dir
-    } catch {}
+    } catch { }
   }
 
   // 5) Fallback: return the real directory (better than an incorrect parent)
@@ -736,8 +736,8 @@ function withTimeout(promise, ms, label = 'TIMEOUT') {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(label)), Math.max(1, ms || 0))
     Promise.resolve(promise)
-      .then((v) => { try { clearTimeout(t) } catch {}; resolve(v) })
-      .catch((e) => { try { clearTimeout(t) } catch {}; reject(e) })
+      .then((v) => { try { clearTimeout(t) } catch { }; resolve(v) })
+      .catch((e) => { try { clearTimeout(t) } catch { }; reject(e) })
   })
 }
 
@@ -953,7 +953,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
       res.status(400).json({ error: message })
       return
     }
-    ;(async () => {
+    ; (async () => {
       const file = req.file
       if (!file) {
         res.status(400).json({ error: 'Missing image file (expected form field "file")' })
@@ -982,7 +982,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
 
       // Determine if file should be optimized (only JPEG, PNG, WebP)
       const shouldOptimize = optimizableMimeTypes.has(mime)
-      
+
       let finalBuffer
       let finalMimeType
       let finalTypeSegment
@@ -1010,8 +1010,8 @@ async function handleScopedImageUpload(req, res, options = {}) {
           finalMimeType = 'image/webp'
           finalTypeSegment = sanitizePathSegment('webp', 'webp')
           quality = adminUploadWebpQuality
-          compressionPercent = file.size > 0 
-            ? Math.max(0, Math.round(100 - (finalBuffer.length / file.size) * 100)) 
+          compressionPercent = file.size > 0
+            ? Math.max(0, Math.round(100 - (finalBuffer.length / file.size) * 100))
             : 0
         } catch (sharpErr) {
           console.error('[upload-image] failed to convert image to webp', sharpErr)
@@ -1137,7 +1137,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
               console.error('[upload-image] failed to log admin activity (rest)', restErr)
             }
           }
-        } catch {}
+        } catch { }
       }
 
       res.json(payload)
@@ -1191,13 +1191,13 @@ function deriveUploadTypeSegment(originalName, mimeType) {
     if (ext && ext.length > 1) {
       return sanitizePathSegment(ext.slice(1))
     }
-  } catch {}
+  } catch { }
   try {
     if (mimeType && mimeType.includes('/')) {
       const subtype = mimeType.split('/')[1]
       if (subtype) return sanitizePathSegment(subtype)
     }
-  } catch {}
+  } catch { }
   return 'unknown'
 }
 
@@ -1228,7 +1228,7 @@ function parseStoragePublicUrl(url) {
   try {
     if (!url) return null
     const urlStr = String(url)
-    
+
     // Try to parse as a Supabase storage URL
     if (supabaseUrlEnv) {
       const normalizedBase = supabaseUrlEnv.replace(/\/+$/, '')
@@ -1243,7 +1243,7 @@ function parseStoragePublicUrl(url) {
         }
       }
     }
-    
+
     // Try to parse as a media proxy URL (e.g., https://media.aphylia.app/BUCKET/path)
     const proxyPrefix = `${mediaProxyBaseUrl}/`
     if (urlStr.startsWith(proxyPrefix)) {
@@ -1255,7 +1255,7 @@ function parseStoragePublicUrl(url) {
         if (bucket && path) return { bucket, path }
       }
     }
-    
+
     return null
   } catch {
     return null
@@ -1310,7 +1310,7 @@ async function getUserIdFromRequest(req) {
       try {
         const { data, error } = await supabaseServer.auth.getUser(token)
         if (!error && data?.user?.id) return data.user.id
-      } catch {}
+      } catch { }
     }
     // Fallback: decode JWT payload locally to grab the subject (sub)
     try {
@@ -1323,7 +1323,7 @@ async function getUserIdFromRequest(req) {
         const sub = (payload && (payload.sub || payload.user_id))
         if (typeof sub === 'string' && sub.length > 0) return sub
       }
-    } catch {}
+    } catch { }
     return null
   } catch {
     return null
@@ -1338,7 +1338,7 @@ async function isAdminUserId(userId) {
       const val = rows[0]?.is_admin
       return val === true
     }
-  } catch {}
+  } catch { }
   return false
 }
 
@@ -1359,7 +1359,7 @@ async function getUserFromRequest(req) {
         if (!error && data?.user?.id) {
           return { id: data.user.id, email: data.user.email || null }
         }
-      } catch {}
+      } catch { }
     }
     try {
       const parts = token.split('.')
@@ -1372,7 +1372,7 @@ async function getUserFromRequest(req) {
         const email = (payload && (payload.email || payload.user_email)) || null
         if (id) return { id, email }
       }
-    } catch {}
+    } catch { }
     return null
   } catch {
     return null
@@ -1398,7 +1398,7 @@ async function getUserFromRequestOrToken(req) {
       if (!error && data?.user?.id) {
         return { id: data.user.id, email: data.user.email || null }
       }
-    } catch {}
+    } catch { }
   }
   return null
 }
@@ -1440,7 +1440,7 @@ async function isAdminFromRequest(req) {
           const rows = await sql`select is_admin from public.profiles where id = ${user.id} limit 1`
           isAdmin = !!(rows?.[0]?.is_admin)
         }
-      } catch {}
+      } catch { }
     }
     // Supabase REST fallback: allow any authenticated user whose profile row has is_admin = true
     if (!isAdmin && supabaseUrlEnv && supabaseAnonKey) {
@@ -1455,7 +1455,7 @@ async function isAdminFromRequest(req) {
           const flag = Array.isArray(arr) && arr[0] ? (arr[0].is_admin === true) : false
           if (flag) isAdmin = true
         }
-      } catch {}
+      } catch { }
     }
     // Environment allowlists as fallback
     if (!isAdmin) {
@@ -1500,7 +1500,7 @@ async function isEditorFromRequest(req) {
             if (roles.includes('admin') || roles.includes('editor')) hasAccess = true
           }
         }
-      } catch {}
+      } catch { }
     }
     // Supabase REST fallback
     if (!hasAccess && supabaseUrlEnv && supabaseAnonKey) {
@@ -1518,7 +1518,7 @@ async function isEditorFromRequest(req) {
             if (roles.includes('admin') || roles.includes('editor')) hasAccess = true
           }
         }
-      } catch {}
+      } catch { }
     }
     // Environment allowlists as fallback (for admin only, not editor)
     if (!hasAccess) {
@@ -1549,7 +1549,7 @@ async function ensureEditor(req, res) {
       res.status(401).json({ error: 'Unauthorized' })
       return null
     }
-    
+
     const hasAccess = await isEditorFromRequest(req)
     if (!hasAccess) {
       res.status(403).json({ error: 'Editor privileges required' })
@@ -1804,8 +1804,8 @@ function schemaToBlueprint(node) {
         typeof obj.properties === 'object' && obj.properties !== null && !Array.isArray(obj.properties)
           ? obj.properties
           : Object.fromEntries(
-              Object.entries(obj).filter(([key]) => !metadataKeys.has(key))
-            )
+            Object.entries(obj).filter(([key]) => !metadataKeys.has(key))
+          )
       for (const [key, value] of Object.entries(source)) {
         result[key] = schemaToBlueprint(value)
       }
@@ -2075,7 +2075,7 @@ function coerceValueForSchema(schemaNode, value, existingValue) {
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           return parsed
         }
-      } catch {}
+      } catch { }
     }
     if (existingValue && typeof existingValue === 'object') {
       return existingValue
@@ -2219,7 +2219,7 @@ async function verifyPlantNameCandidate(plantName) {
     if (jsonMatch) {
       try {
         parsed = JSON.parse(jsonMatch[0])
-      } catch {}
+      } catch { }
     }
   }
 
@@ -2303,7 +2303,7 @@ function buildConnectionString() {
         const encPass = encodeURIComponent(pass)
         cs = `postgresql://${encUser}:${encPass}@${host}:${port}/${database}`
       }
-    } catch {}
+    } catch { }
   }
   // Intentionally avoid deriving connection string from Supabase-specific envs
   if (cs) {
@@ -2313,7 +2313,7 @@ function buildConnectionString() {
       if (!isLocal && !url.searchParams.has('sslmode')) url.searchParams.set('sslmode', 'require')
       if (!url.searchParams.has('connect_timeout')) url.searchParams.set('connect_timeout', '5')
       cs = url.toString()
-    } catch {}
+    } catch { }
   }
   return cs
 }
@@ -2335,10 +2335,10 @@ try {
         postgresOptions = { ssl: { rejectUnauthorized: false } }
       } else {
         const candidates = [
-        process.env.PGSSLROOTCERT,
-        process.env.NODE_EXTRA_CA_CERTS,
-        '/etc/ssl/certs/aws-rds-global.pem',
-        '/etc/ssl/certs/ca-certificates.crt',
+          process.env.PGSSLROOTCERT,
+          process.env.NODE_EXTRA_CA_CERTS,
+          '/etc/ssl/certs/aws-rds-global.pem',
+          '/etc/ssl/certs/ca-certificates.crt',
         ].filter(Boolean)
         let ssl = undefined
         for (const p of candidates) {
@@ -2347,14 +2347,14 @@ try {
               const ca = fsSync.readFileSync(p, 'utf8')
               if (ca && ca.length > 0) { ssl = { rejectUnauthorized: true, ca }; break }
             }
-          } catch {}
+          } catch { }
         }
         if (!ssl) ssl = true
         postgresOptions = { ssl }
       }
     }
   }
-} catch {}
+} catch { }
 const sql = connectionString ? postgres(connectionString, postgresOptions) : null
 
 let adminMediaUploadsEnsured = false
@@ -2397,7 +2397,7 @@ async function getAdminProfileName(userId) {
     try {
       const rows = await sql`select display_name from public.profiles where id = ${userId} limit 1`
       if (Array.isArray(rows) && rows[0]?.display_name) return rows[0].display_name
-    } catch {}
+    } catch { }
   }
   if (supabaseServiceClient) {
     try {
@@ -2408,7 +2408,7 @@ async function getAdminProfileName(userId) {
         .limit(1)
         .maybeSingle()
       if (!error && data?.display_name) return data.display_name
-    } catch {}
+    } catch { }
   }
   return null
 }
@@ -2664,7 +2664,7 @@ function buildVisitsTableIdentifier() {
     // Allow letters, digits, underscore or hyphen
     if (/^[a-zA-Z0-9_]+$/.test(t)) return `public.${t}`
     if (/^[a-zA-Z0-9_-]+$/.test(t)) return `public."${t}"`
-  } catch {}
+  } catch { }
   return 'public.web_visits'
 }
 const VISITS_TABLE_SQL_IDENT = buildVisitsTableIdentifier()
@@ -2678,13 +2678,13 @@ function getVisitsTableIdentifierParts() {
     if (/^[a-zA-Z0-9_-]+$/.test(t)) {
       return ['public', t]
     }
-  } catch {}
+  } catch { }
   return ['public', 'web_visits']
 }
 
 const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
-try { app.set('trust proxy', true) } catch {}
+try { app.set('trust proxy', true) } catch { }
 app.use(express.json())
 
 // Global CORS and preflight handling for API routes
@@ -2701,15 +2701,15 @@ app.use((req, res, next) => {
     } else {
       res.setHeader('Access-Control-Allow-Origin', '*')
     }
-      if (req.path && req.path.startsWith('/api/')) {
-        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
+    if (req.path && req.path.startsWith('/api/')) {
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
       if (req.method === 'OPTIONS') {
         res.status(204).end()
         return
       }
     }
-  } catch {}
+  } catch { }
   next()
 })
 
@@ -2810,7 +2810,7 @@ app.get('/api/admin/system-health', async (req, res) => {
           }
         }
       }
-    } catch {}
+    } catch { }
 
     // Count active HTTP connections (approximation via server connections)
     let activeConnections = 0
@@ -2820,7 +2820,7 @@ app.get('/api/admin/system-health', async (req, res) => {
           app._httpServer.getConnections((err, count) => resolve(err ? 0 : count))
         })
       }
-    } catch {}
+    } catch { }
 
     // Load average (1, 5, 15 min)
     const loadAvg = os.loadavg()
@@ -2982,11 +2982,11 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
 
       const cleanedField =
         fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
-    if (cleanedField !== undefined) {
-      aggregated[fieldKey] = removeExternalIds(cleanedField)
-    } else {
-      delete aggregated[fieldKey]
-    }
+      if (cleanedField !== undefined) {
+        aggregated[fieldKey] = removeExternalIds(cleanedField)
+      } else {
+        delete aggregated[fieldKey]
+      }
     }
 
     let plantData = ensureStructure(schemaBlueprint, aggregated)
@@ -3125,7 +3125,7 @@ app.post('/api/admin/log-action', async (req, res) => {
         try {
           const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
           adminName = (rows?.[0]?.name || '').trim() || null
-        } catch {}
+        } catch { }
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
@@ -3138,9 +3138,9 @@ app.post('/api/admin/log-action', async (req, res) => {
             const arr = await r.json().catch(() => [])
             adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
           }
-        } catch {}
+        } catch { }
       }
-    } catch {}
+    } catch { }
 
     let ok = false
     if (sql) {
@@ -3151,13 +3151,13 @@ app.post('/api/admin/log-action', async (req, res) => {
           values (${adminId || null}::uuid, ${adminName || null}::text, ${action}::text, ${target || null}::text, ${sql.json(detail)})
         `
         ok = true
-      } catch {}
+      } catch { }
     }
     if (!ok) {
       try {
         const row = { admin_id: adminId, admin_name: adminName, action, target: target || null, detail }
         ok = await insertAdminActivityViaRest(req, row)
-      } catch {}
+      } catch { }
     }
     if (!ok) {
       res.status(500).json({ error: 'Failed to log action' })
@@ -3174,6 +3174,128 @@ app.options('/api/admin/log-action', (_req, res) => {
   res.status(204).end()
 })
 
+const contactScreenshotUploadMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+})
+const singleContactScreenshotUpload = contactScreenshotUploadMulter.single('file')
+const contactScreenshotPrefix = 'contact/screenshots'
+
+app.post('/api/contact/upload-screenshot', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+
+    singleContactScreenshotUpload(req, res, (err) => {
+      if (err) {
+        const message = err.code === 'LIMIT_FILE_SIZE'
+          ? 'File too large. Max 5MB.'
+          : err.message || 'Upload failed'
+        res.status(400).json({ error: message })
+        return
+      }
+
+      ;(async () => {
+        const file = req.file
+        if (!file) {
+          res.status(400).json({ error: 'Missing file' })
+          return
+        }
+
+        // Optimize
+        let buffer
+        try {
+          buffer = await sharp(file.buffer)
+            .resize({ width: 1920, height: 1080, fit: 'inside', withoutEnlargement: true })
+            .webp({ quality: 80 })
+            .toBuffer()
+        } catch (e) {
+          res.status(400).json({ error: 'Invalid image file' })
+          return
+        }
+
+        const unique = crypto.randomUUID()
+        const path = `${contactScreenshotPrefix}/${user.id}/${unique}.webp`
+
+        try {
+          const { error: uploadError } = await supabaseServiceClient.storage
+            .from(adminUploadBucket)
+            .upload(path, buffer, {
+              contentType: 'image/webp',
+              cacheControl: '3600',
+              upsert: false
+            })
+
+          if (uploadError) throw uploadError
+
+          const { data: publicData } = supabaseServiceClient.storage
+            .from(adminUploadBucket)
+            .getPublicUrl(path)
+
+          // Use media proxy
+          const proxyUrl = supabaseStorageToMediaProxy(publicData.publicUrl)
+
+          res.json({ url: proxyUrl })
+        } catch (e) {
+          console.error('[contact-upload] upload failed', e)
+          res.status(500).json({ error: 'Storage upload failed' })
+        }
+      })().catch(e => {
+        console.error('[contact-upload] unexpected error', e)
+        res.status(500).json({ error: 'Unexpected error' })
+      })
+    })
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/contact/delete-screenshot', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+
+    const { url } = req.body
+    if (!url) {
+      res.status(400).json({ error: 'URL required' })
+      return
+    }
+
+    const info = parseStoragePublicUrl(url)
+    if (!info || info.bucket !== adminUploadBucket) {
+      // Just ignore if it doesn't match our bucket, claim success
+      res.json({ ok: true })
+      return
+    }
+
+    // Check path prefix to ensure user can only delete their own screenshots
+    if (!info.path.startsWith(`${contactScreenshotPrefix}/${user.id}/`)) {
+      res.status(403).json({ error: 'Permission denied for this file' })
+      return
+    }
+
+    const { error } = await supabaseServiceClient.storage
+      .from(adminUploadBucket)
+      .remove([info.path])
+
+    if (error) {
+      console.error('[contact-delete] delete failed', error)
+      // Don't fail the request if delete fails, it's just cleanup
+    }
+
+    res.json({ ok: true })
+
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // Database health: returns ok along with latency; always 200 for easier probes
 app.get('/api/health/db', async (_req, res) => {
   const started = Date.now()
@@ -3186,7 +3308,7 @@ app.get('/api/health/db', async (_req, res) => {
           const ok = !error
           res.status(200).json({ ok, latencyMs: Date.now() - started, via: 'supabase' })
           return
-        } catch {}
+        } catch { }
       }
       res.status(200).json({
         ok: false,
@@ -3484,7 +3606,7 @@ function isPrivateIp(ip) {
     if (a === 172 && b >= 16 && b <= 31) return true
     if (s.startsWith('fc') || s.startsWith('fd')) return true // IPv6 unique local
     if (s.startsWith('fe80:')) return true // IPv6 link-local
-  } catch {}
+  } catch { }
   return false
 }
 
@@ -3492,7 +3614,7 @@ function geoDebugLog(...args) {
   try {
     const enabled = String(process.env.GEO_LOG_DEBUG || '').toLowerCase() === 'true'
     if (enabled) console.log('[geo]', ...args)
-  } catch {}
+  } catch { }
 }
 
 async function lookupGeoForIp(ip) {
@@ -3774,7 +3896,7 @@ async function insertWebVisitViaSupabaseRest(payload, req) {
 
 async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language, visitNum }, req) {
   // Always record into in-memory analytics, regardless of DB availability
-  try { memAnalytics.recordVisit(String(ipAddress || ''), Date.now()) } catch {}
+  try { memAnalytics.recordVisit(String(ipAddress || ''), Date.now()) } catch { }
 
   // Prepare common fields
   const parsedUtm = null
@@ -3850,7 +3972,7 @@ async function handleRestartServer(req, res) {
         try {
           const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
           adminName = (rows?.[0]?.name || '').trim() || null
-        } catch {}
+        } catch { }
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
@@ -3863,16 +3985,16 @@ async function handleRestartServer(req, res) {
             const arr = await r.json().catch(() => [])
             adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
           }
-        } catch {}
+        } catch { }
       }
       let ok = false
       if (sql) {
-        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_server', null, ${sql.json({})})`; ok = true } catch {}
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_server', null, ${sql.json({})})`; ok = true } catch { }
       }
       if (!ok) {
-        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'restart_server', target: null, detail: {} }) } catch {}
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'restart_server', target: null, detail: {} }) } catch { }
       }
-    } catch {}
+    } catch { }
     res.json({ ok: true, message: 'Restarting server' })
     // Give time for response to flush, then request systemd to restart the service.
     setTimeout(() => {
@@ -3880,12 +4002,12 @@ async function handleRestartServer(req, res) {
       try {
         const serviceName = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
         const child = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceName], { detached: true, stdio: 'ignore' })
-        try { child.unref() } catch {}
+        try { child.unref() } catch { }
         restartedViaSystemd = true
-      } catch {}
+      } catch { }
       // Exit in all cases so the systemd unit can take over.
       // If systemd call failed to spawn, exit non-zero to trigger Restart=on-failure.
-      try { process.exit(restartedViaSystemd ? 0 : 1) } catch {}
+      try { process.exit(restartedViaSystemd ? 0 : 1) } catch { }
     }, 150)
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to restart server' })
@@ -3907,22 +4029,22 @@ function scheduleRestartAllServices(trigger = 'manual') {
   const label = trigger || 'manual'
   setTimeout(() => {
     console.log(`[restart] Scheduling service restart (trigger=${label})`)
-    ;(async () => {
-      try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch {}
-      try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch {}
-      try {
-        const admin = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
-        try { admin.unref() } catch {}
-      } catch {}
-      try {
-        const node = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceNode], { detached: true, stdio: 'ignore' })
-        try { node.unref() } catch {}
-      } catch {}
-    })()
-      .catch(() => {})
-      .finally(() => {
-        try { process.exit(0) } catch {}
-      })
+      ; (async () => {
+        try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch { }
+        try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch { }
+        try {
+          const admin = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
+          try { admin.unref() } catch { }
+        } catch { }
+        try {
+          const node = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceNode], { detached: true, stdio: 'ignore' })
+          try { node.unref() } catch { }
+        } catch { }
+      })()
+        .catch(() => { })
+        .finally(() => {
+          try { process.exit(0) } catch { }
+        })
   }, 150)
 }
 
@@ -3943,7 +4065,7 @@ app.post('/api/admin/restart-all', async (req, res) => {
         try {
           const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
           adminName = (rows?.[0]?.name || '').trim() || null
-        } catch {}
+        } catch { }
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
@@ -3956,19 +4078,19 @@ app.post('/api/admin/restart-all', async (req, res) => {
             const arr = await r.json().catch(() => [])
             adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
           }
-        } catch {}
+        } catch { }
       }
       let ok = false
       if (sql) {
-        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_all', null, ${sql.json({})})`; ok = true } catch {}
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_all', null, ${sql.json({})})`; ok = true } catch { }
       }
       if (!ok) {
-        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'restart_all', target: null, detail: {} }) } catch {}
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'restart_all', target: null, detail: {} }) } catch { }
       }
-    } catch {}
+    } catch { }
     res.json({ ok: true, message: 'Reloading nginx and restarting services' })
 
-      scheduleRestartAllServices('api_endpoint')
+    scheduleRestartAllServices('api_endpoint')
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to restart all services' })
   }
@@ -4008,7 +4130,7 @@ async function ensureBanTables() {
       );
     `
     await sql`create index if not exists banned_ips_banned_at_idx on public.banned_ips (banned_at desc);`
-  } catch {}
+  } catch { }
 }
 
 // Ensure broadcast table exists (idempotent)
@@ -4027,8 +4149,8 @@ async function ensureBroadcastTable() {
       );
     `
     // Backfill/ensure severity column and constraint for older deployments
-    try { await sql`alter table if exists public.broadcast_messages add column if not exists severity text;` } catch {}
-    try { await sql`update public.broadcast_messages set severity = 'info' where severity is null;` } catch {}
+    try { await sql`alter table if exists public.broadcast_messages add column if not exists severity text;` } catch { }
+    try { await sql`update public.broadcast_messages set severity = 'info' where severity is null;` } catch { }
     try {
       await sql`
         do $$ begin
@@ -4040,10 +4162,10 @@ async function ensureBroadcastTable() {
           end if;
         end $$;
       `
-    } catch {}
+    } catch { }
     await sql`create index if not exists broadcast_messages_created_at_idx on public.broadcast_messages (created_at desc);`
     await sql`create index if not exists broadcast_messages_active_idx on public.broadcast_messages (expires_at) where removed_at is null;`
-  } catch {}
+  } catch { }
 }
 
 let notificationTablesEnsured = false
@@ -4618,7 +4740,7 @@ async function handleSyncSchema(req, res) {
 
     // Verify important objects exist after sync
     let summary = null
-    try { summary = await verifySchemaAfterSync() } catch {}
+    try { summary = await verifySchemaAfterSync() } catch { }
 
     // Log admin action (success)
     try {
@@ -4630,14 +4752,14 @@ async function handleSyncSchema(req, res) {
         try {
           await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'sync_schema', null, ${sql.json(detail)})`
           logged = true
-        } catch {}
+        } catch { }
       }
       if (!logged) {
         try {
           await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: null, action: 'sync_schema', target: null, detail })
-        } catch {}
+        } catch { }
       }
-    } catch {}
+    } catch { }
 
     res.json({ ok: true, message: 'Schema synchronized successfully', summary })
   } catch (e) {
@@ -4647,11 +4769,11 @@ async function handleSyncSchema(req, res) {
       const adminId = caller?.id || null
       const detail = { error: e?.message || String(e) }
       if (sql) {
-        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'sync_schema_failed', null, ${sql.json(detail)})` } catch {}
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'sync_schema_failed', null, ${sql.json(detail)})` } catch { }
       } else {
-        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: null, action: 'sync_schema_failed', target: null, detail }) } catch {}
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: null, action: 'sync_schema_failed', target: null, detail }) } catch { }
       }
-    } catch {}
+    } catch { }
     res.status(500).json({ error: e?.message || 'Failed to sync schema' })
   }
 }
@@ -4673,7 +4795,7 @@ async function runSupabaseEdgeDeploy() {
   } catch {
     throw new Error(`deploy script not found at ${scriptPath}`)
   }
-  try { await fs.chmod(scriptPath, 0o755) } catch {}
+  try { await fs.chmod(scriptPath, 0o755) } catch { }
 
   const env = {
     ...process.env,
@@ -4758,12 +4880,12 @@ app.post('/api/admin/upload-image', async (req, res) => {
 
   try {
     await ensureAdminMediaUploadsTable()
-  } catch {}
+  } catch { }
 
   let adminUser = null
   try {
     adminUser = await getUserFromRequest(req)
-  } catch {}
+  } catch { }
   let adminDisplayName = null
   if (adminUser?.id) {
     adminDisplayName = await getAdminProfileName(adminUser.id)
@@ -4794,12 +4916,12 @@ app.post('/api/blog/upload-image', async (req, res) => {
 
   try {
     await ensureAdminMediaUploadsTable()
-  } catch {}
+  } catch { }
 
   let adminUser = null
   try {
     adminUser = await getUserFromRequest(req)
-  } catch {}
+  } catch { }
   let adminDisplayName = null
   if (adminUser?.id) {
     adminDisplayName = await getAdminProfileName(adminUser.id)
@@ -4979,7 +5101,7 @@ app.delete('/api/admin/media/:id', async (req, res) => {
 
   try {
     await ensureAdminMediaUploadsTable()
-  } catch {}
+  } catch { }
 
   const mediaId = String(req.params?.id || '').trim()
   if (!mediaId) {
@@ -5049,6 +5171,12 @@ app.options('/api/admin/media/:id', (_req, res) => {
   res.status(204).end()
 })
 
+app.get('/api/env.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript')
+  const token = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
+  res.send(`window.__ENV__ = window.__ENV__ || {}; window.__ENV__.VITE_ADMIN_STATIC_TOKEN = "${token}";`)
+})
+
 app.get('/api/admin/notifications', async (req, res) => {
   const adminId = await ensureEditor(req, res)
   if (!adminId) return
@@ -5097,7 +5225,7 @@ app.get('/api/admin/notifications', async (req, res) => {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
           )
           when n.audience = 'admins' then (
             select count(*)::bigint from public.profiles p 
@@ -5149,7 +5277,7 @@ app.post('/api/admin/notifications', async (req, res) => {
   }
   const deliveryMode = parsed.deliveryMode
   const campaignTimezone = parsed.timezone || DEFAULT_TIMEZONE
-  
+
   // Convert datetime-local input to UTC timestamp in campaign timezone
   const convertDatetimeLocalToUTC = (datetimeLocal, tz) => {
     if (!datetimeLocal || !datetimeLocal.length) return null
@@ -5159,16 +5287,16 @@ app.post('/api/admin/notifications', async (req, res) => {
         const fallback = new Date(datetimeLocal)
         return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
       }
-      
+
       const [, year, month, day, hour, minute] = match
       const y = parseInt(year)
       const m = parseInt(month) - 1
       const d = parseInt(day)
       const h = parseInt(hour)
       const min = parseInt(minute)
-      
+
       let candidateUtc = new Date(Date.UTC(y, m, d, h, min, 0))
-      
+
       for (let iteration = 0; iteration < 10; iteration++) {
         const formatter = new Intl.DateTimeFormat('en-US', {
           timeZone: tz,
@@ -5180,33 +5308,33 @@ app.post('/api/admin/notifications', async (req, res) => {
           second: '2-digit',
           hour12: false
         })
-        
+
         const parts = formatter.formatToParts(candidateUtc)
         const getPart = (type) => parseInt(parts.find(p => p.type === type)?.value || '0')
-        
+
         const tzYear = getPart('year')
         const tzMonth = getPart('month') - 1
         const tzDay = getPart('day')
         const tzHour = getPart('hour')
         const tzMinute = getPart('minute')
         const tzSecond = getPart('second')
-        
-        if (tzYear === y && tzMonth === m && tzDay === d && 
-            tzHour === h && tzMinute === min && tzSecond === 0) {
+
+        if (tzYear === y && tzMonth === m && tzDay === d &&
+          tzHour === h && tzMinute === min && tzSecond === 0) {
           return candidateUtc.toISOString()
         }
-        
+
         const desiredLocal = new Date(y, m, d, h, min, 0)
         const actualLocal = new Date(tzYear, tzMonth, tzDay, tzHour, tzMinute, tzSecond)
         const diffMs = desiredLocal.getTime() - actualLocal.getTime()
-        
+
         if (Math.abs(diffMs) < 1000) {
           return candidateUtc.toISOString()
         }
-        
+
         candidateUtc = new Date(candidateUtc.getTime() + diffMs)
       }
-      
+
       return candidateUtc.toISOString()
     } catch (err) {
       console.error('[notifications] Error converting datetime-local:', err)
@@ -5214,8 +5342,8 @@ app.post('/api/admin/notifications', async (req, res) => {
       return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
     }
   }
-  
-  const plannedFor = deliveryMode === 'planned' && parsed.plannedFor 
+
+  const plannedFor = deliveryMode === 'planned' && parsed.plannedFor
     ? convertDatetimeLocalToUTC(parsed.plannedFor, campaignTimezone)
     : null
   const scheduleStartAt = deliveryMode === 'scheduled' && parsed.scheduleStartAt
@@ -5267,7 +5395,7 @@ app.post('/api/admin/notifications', async (req, res) => {
     `
     const notification = normalizeNotificationCampaign(rows?.[0])
     res.json({ notification, pushConfigured: pushNotificationsEnabled })
-    runNotificationWorkerTick().catch(() => {})
+    runNotificationWorkerTick().catch(() => { })
   } catch (err) {
     console.error('[notifications] failed to create campaign', err)
     res.status(500).json({ error: err?.message || 'Failed to create notification' })
@@ -5310,7 +5438,7 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
   }
   const deliveryMode = parsed.deliveryMode
   const campaignTimezone = parsed.timezone || DEFAULT_TIMEZONE
-  
+
   // Convert datetime-local input to UTC timestamp in campaign timezone (same logic as create)
   const convertDatetimeLocalToUTC = (datetimeLocal, tz) => {
     if (!datetimeLocal || !datetimeLocal.length) return null
@@ -5320,16 +5448,16 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
         const fallback = new Date(datetimeLocal)
         return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
       }
-      
+
       const [, year, month, day, hour, minute] = match
       const y = parseInt(year)
       const m = parseInt(month) - 1
       const d = parseInt(day)
       const h = parseInt(hour)
       const min = parseInt(minute)
-      
+
       let candidateUtc = new Date(Date.UTC(y, m, d, h, min, 0))
-      
+
       for (let iteration = 0; iteration < 10; iteration++) {
         const formatter = new Intl.DateTimeFormat('en-US', {
           timeZone: tz,
@@ -5341,33 +5469,33 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
           second: '2-digit',
           hour12: false
         })
-        
+
         const parts = formatter.formatToParts(candidateUtc)
         const getPart = (type) => parseInt(parts.find(p => p.type === type)?.value || '0')
-        
+
         const tzYear = getPart('year')
         const tzMonth = getPart('month') - 1
         const tzDay = getPart('day')
         const tzHour = getPart('hour')
         const tzMinute = getPart('minute')
         const tzSecond = getPart('second')
-        
-        if (tzYear === y && tzMonth === m && tzDay === d && 
-            tzHour === h && tzMinute === min && tzSecond === 0) {
+
+        if (tzYear === y && tzMonth === m && tzDay === d &&
+          tzHour === h && tzMinute === min && tzSecond === 0) {
           return candidateUtc.toISOString()
         }
-        
+
         const desiredLocal = new Date(y, m, d, h, min, 0)
         const actualLocal = new Date(tzYear, tzMonth, tzDay, tzHour, tzMinute, tzSecond)
         const diffMs = desiredLocal.getTime() - actualLocal.getTime()
-        
+
         if (Math.abs(diffMs) < 1000) {
           return candidateUtc.toISOString()
         }
-        
+
         candidateUtc = new Date(candidateUtc.getTime() + diffMs)
       }
-      
+
       return candidateUtc.toISOString()
     } catch (err) {
       console.error('[notifications] Error converting datetime-local:', err)
@@ -5375,8 +5503,8 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
       return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString()
     }
   }
-  
-  const plannedFor = deliveryMode === 'planned' && parsed.plannedFor 
+
+  const plannedFor = deliveryMode === 'planned' && parsed.plannedFor
     ? convertDatetimeLocalToUTC(parsed.plannedFor, campaignTimezone)
     : null
   const scheduleStartAt = deliveryMode === 'scheduled' && parsed.scheduleStartAt
@@ -5491,7 +5619,7 @@ app.post('/api/admin/notifications/:id/trigger', async (req, res) => {
     }
     const notification = normalizeNotificationCampaign(rows[0])
     res.json({ notification })
-    runNotificationWorkerTick().catch(() => {})
+    runNotificationWorkerTick().catch(() => { })
   } catch (err) {
     console.error('[notifications] failed to trigger campaign', err)
     res.status(500).json({ error: err?.message || 'Failed to trigger notification' })
@@ -5561,7 +5689,7 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
         next_run_at asc nulls last
       limit 10
     `
-    
+
     // Get recent user notifications with error breakdown
     const recentNotifications = await sql`
       select un.id, un.user_id, un.title, un.delivery_status, un.scheduled_for, un.delivered_at, un.delivery_error, un.campaign_id, un.delivery_attempts
@@ -5569,7 +5697,7 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
       order by un.scheduled_for desc
       limit 30
     `
-    
+
     // Get subscription counts
     const subscriptionStats = await sql`
       select 
@@ -5577,7 +5705,7 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
         count(*) as total_subscriptions
       from public.user_push_subscriptions
     `
-    
+
     // Get notification delivery stats
     const deliveryStats = await sql`
       select 
@@ -5587,7 +5715,7 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
       where scheduled_for >= now() - interval '24 hours'
       group by delivery_status
     `
-    
+
     // Get failure reason breakdown (last 24 hours)
     const failureReasons = await sql`
       select 
@@ -5601,7 +5729,7 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
       order by count desc
       limit 10
     `
-    
+
     // Get count of users who have push enabled in profile but no subscription registered
     const usersWithoutSubscription = await sql`
       select count(*) as count
@@ -5612,7 +5740,7 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
           where ups.user_id = p.id
         )
     `
-    
+
     // Check for stuck campaigns
     const stuckCampaigns = await sql`
       select id, title, state, updated_at
@@ -5621,7 +5749,7 @@ app.get('/api/admin/notifications/debug', async (req, res) => {
         and state = 'processing'
         and updated_at < now() - interval '5 minutes'
     `
-    
+
     res.json({
       pushEnabled: pushNotificationsEnabled,
       vapidConfigured: Boolean(vapidPublicKey && vapidPrivateKey),
@@ -5689,7 +5817,7 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
         from public.profiles p
         left join auth.users u on u.id = p.id
         where (p.notify_push is null or p.notify_push = true)
-          and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
+          and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
       `
       count = Number(rows?.[0]?.count || 0)
     } else if (audience === 'admins') {
@@ -5886,8 +6014,8 @@ app.delete('/api/admin/notification-templates/:id', async (req, res) => {
     const campaignCount = Number(usageCheck?.[0]?.campaign_count || 0)
     const automationCount = Number(usageCheck?.[0]?.automation_count || 0)
     if (campaignCount > 0 || automationCount > 0) {
-      res.status(400).json({ 
-        error: `Template is in use by ${campaignCount} campaign(s) and ${automationCount} automation(s). Remove references first.` 
+      res.status(400).json({
+        error: `Template is in use by ${campaignCount} campaign(s) and ${automationCount} automation(s). Remove references first.`
       })
       return
     }
@@ -5962,7 +6090,7 @@ app.put('/api/admin/notification-templates/:id/translations/:lang', async (req, 
   const messageVariants = toStringArray(body.messageVariants || [])
     .map(v => v.trim())
     .filter(v => v.length > 0)
-  
+
   if (!messageVariants.length) {
     // Delete translation if no variants
     try {
@@ -5977,7 +6105,7 @@ app.put('/api/admin/notification-templates/:id/translations/:lang', async (req, 
     }
     return
   }
-  
+
   try {
     const rows = await sql`
       insert into public.notification_template_translations (template_id, language, message_variants, updated_at)
@@ -6013,11 +6141,11 @@ app.put('/api/admin/notification-templates/:id/translations', async (req, res) =
   }
   const body = req.body || {}
   const translationsInput = body.translations || {}
-  
+
   try {
     // Delete all existing translations first
     await sql`delete from public.notification_template_translations where template_id = ${templateId}`
-    
+
     // Insert new translations
     const savedTranslations = {}
     for (const [language, variants] of Object.entries(translationsInput)) {
@@ -6027,14 +6155,14 @@ app.put('/api/admin/notification-templates/:id/translations', async (req, res) =
         .map(v => v.trim())
         .filter(v => v.length > 0)
       if (!messageVariants.length) continue
-      
+
       await sql`
         insert into public.notification_template_translations (template_id, language, message_variants, updated_at)
         values (${templateId}, ${lang}, ${sql.array(messageVariants)}, now())
       `
       savedTranslations[lang] = messageVariants
     }
-    
+
     res.json({ templateId, translations: savedTranslations })
   } catch (err) {
     console.error('[notification-templates] failed to save translations', err)
@@ -6049,9 +6177,9 @@ async function ensureDefaultAutomations() {
     console.log('[notification-automations] No SQL connection, skipping')
     return
   }
-  
+
   console.log('[notification-automations] Starting to ensure default automations...')
-  
+
   try {
     // First check if the table exists
     const tableCheck = await sql`
@@ -6062,12 +6190,12 @@ async function ensureDefaultAutomations() {
       ) as table_exists
     `
     console.log('[notification-automations] Table exists:', tableCheck?.[0]?.table_exists)
-    
+
     if (!tableCheck?.[0]?.table_exists) {
       console.log('[notification-automations] Table does not exist, skipping seeding')
       return
     }
-    
+
     const defaultAutomations = [
       {
         trigger_type: 'weekly_inactive_reminder',
@@ -6088,7 +6216,7 @@ async function ensureDefaultAutomations() {
         send_hour: 9,
       },
     ]
-    
+
     for (const auto of defaultAutomations) {
       try {
         // First check if it exists
@@ -6096,7 +6224,7 @@ async function ensureDefaultAutomations() {
           select id from public.notification_automations where trigger_type = ${auto.trigger_type} limit 1
         `
         console.log(`[notification-automations] Checking ${auto.trigger_type}: exists=${existing?.length > 0}`)
-        
+
         if (!existing || existing.length === 0) {
           await sql`
             insert into public.notification_automations (trigger_type, display_name, description, send_hour)
@@ -6108,11 +6236,11 @@ async function ensureDefaultAutomations() {
         console.error(`[notification-automations] Failed to create ${auto.trigger_type}:`, insertErr?.message || insertErr)
       }
     }
-    
+
     // Verify what we have
     const allAutomations = await sql`select trigger_type from public.notification_automations`
     console.log('[notification-automations] All automations in DB:', allAutomations?.map(a => a.trigger_type))
-    
+
   } catch (err) {
     console.error('[notification-automations] failed to ensure defaults:', err?.message || err)
   }
@@ -6131,6 +6259,79 @@ app.get('/api/admin/reports/flagged-count', async (req, res) => {
     return
   }
   try {
+    // Ensure notification tables exist first
+    console.log('[notification-automations] Ensuring tables exist...')
+    await ensureNotificationTables()
+    // Ensure default automations exist
+    console.log('[notification-automations] Ensuring default automations exist...')
+    await ensureDefaultAutomations()
+
+    // First, get basic automations
+    const rows = await sql`
+      select a.*,
+             t.title as template_title
+      from public.notification_automations a
+      left join public.notification_templates t on t.id = a.template_id
+      order by a.created_at asc
+    `
+    console.log('[notification-automations] Query returned:', rows?.length || 0, 'rows')
+
+    // Calculate recipient counts separately to avoid query failures
+    const automationsWithCounts = await Promise.all((rows || []).map(async (row) => {
+      let recipientCount = 0
+      try {
+        if (row.trigger_type === 'weekly_inactive_reminder') {
+          const countResult = await sql`
+            select count(*)::bigint as cnt
+            from public.profiles p
+            left join auth.users u on u.id = p.id
+            where (p.notify_push is null or p.notify_push = true)
+              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+          `
+          recipientCount = Number(countResult?.[0]?.cnt || 0)
+        } else if (row.trigger_type === 'daily_task_reminder') {
+          try {
+            const countResult = await sql`
+              select count(distinct p.id)::bigint as cnt
+              from public.profiles p
+              join public.garden_members gm on gm.user_id = p.id
+              join public.garden_plant_tasks t on t.garden_id = gm.garden_id
+              join public.garden_plant_task_occurrences occ on occ.task_id = t.id
+              where (p.notify_push is null or p.notify_push = true)
+                and occ.due_at::date = current_date
+                and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+            `
+            recipientCount = Number(countResult?.[0]?.cnt || 0)
+          } catch (e) {
+            // Table might not exist
+            recipientCount = 0
+          }
+        } else if (row.trigger_type === 'journal_continue_reminder') {
+          try {
+            const countResult = await sql`
+              select count(distinct p.id)::bigint as cnt
+              from public.profiles p
+              join public.garden_members gm on gm.user_id = p.id
+              join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
+              where (p.notify_push is null or p.notify_push = true)
+                and gal.kind = 'note'
+                and gal.occurred_at::date = current_date - interval '1 day'
+            `
+            recipientCount = Number(countResult?.[0]?.cnt || 0)
+          } catch (e) {
+            // Table might not exist
+            recipientCount = 0
+          }
+        }
+      } catch (countErr) {
+        console.error('[notification-automations] Error counting recipients for', row.trigger_type, countErr)
+      }
+      return { ...row, recipient_count: recipientCount }
+    }))
+
+    const automations = automationsWithCounts.map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
+    console.log('[notification-automations] Returning:', automations.length, 'automations')
+    res.json({ automations })
     const result = await sql`
       select 
         count(distinct subject_user_id)::integer as flagged_users,
@@ -6293,6 +6494,28 @@ app.get('/api/admin/reports/file/:fileId', async (req, res) => {
   const { fileId } = req.params
   
   try {
+    // Convert undefined to null for SQL compatibility
+    const isEnabled = typeof parsed.isEnabled === 'boolean' ? parsed.isEnabled : null
+    const templateId = parsed.templateId !== undefined ? (parsed.templateId || null) : null
+    const sendHour = typeof parsed.sendHour === 'number' ? parsed.sendHour : null
+    const ctaUrl = parsed.ctaUrl !== undefined ? (parsed.ctaUrl || null) : null
+
+    // Track which fields to update
+    const hasIsEnabled = typeof parsed.isEnabled === 'boolean'
+    const hasTemplateId = parsed.templateId !== undefined
+    const hasSendHour = typeof parsed.sendHour === 'number'
+    const hasCtaUrl = parsed.ctaUrl !== undefined
+
+    const rows = await sql`
+      update public.notification_automations
+      set is_enabled = case when ${hasIsEnabled} then ${isEnabled} else is_enabled end,
+          template_id = case when ${hasTemplateId} then ${templateId} else template_id end,
+          send_hour = case when ${hasSendHour} then ${sendHour} else send_hour end,
+          cta_url = case when ${hasCtaUrl} then ${ctaUrl} else cta_url end,
+          updated_by = ${adminUuid},
+          updated_at = now()
+      where id = ${automationId}
+      returning *
     const fileResult = await sql`
       select 
         rf.*,
@@ -6391,6 +6614,30 @@ app.post('/api/admin/reports/files', async (req, res) => {
   }
 })
 
+// Helper function to run an automation
+async function runAutomation(automation) {
+  if (!sql) return { error: 'Database not configured' }
+
+  const defaultVariants = toStringArray(automation.message_variants)
+  if (!defaultVariants.length) return { error: 'No message variants' }
+
+  // Get the notification title from template (fallback to automation display_name)
+  const notificationTitle = automation.template_title || automation.display_name || 'Reminder'
+
+  // Load translations for the template
+  let translations = {}
+  if (automation.template_id) {
+    try {
+      const transRows = await sql`
+        select language, message_variants
+        from public.notification_template_translations
+        where template_id = ${automation.template_id}
+      `
+      for (const row of transRows || []) {
+        translations[row.language] = toStringArray(row.message_variants)
+      }
+    } catch (err) {
+      console.error('[automation] failed to load translations', err)
 // Update a report file
 app.put('/api/admin/reports/file/:fileId', async (req, res) => {
   const adminId = await ensureAdmin(req, res)
@@ -6435,6 +6682,18 @@ app.post('/api/admin/reports/file/:fileId/close', async (req, res) => {
     res.status(500).json({ error: 'Database not configured' })
     return
   }
+
+  const triggerType = automation.trigger_type
+  let recipientQuery
+
+  if (triggerType === 'weekly_inactive_reminder') {
+    recipientQuery = sql`
+      select p.id as user_id, p.display_name, p.language
+      from public.profiles p
+      left join auth.users u on u.id = p.id
+      where (p.notify_push is null or p.notify_push = true)
+        and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+      limit 5000
   
   const { fileId } = req.params
   const { resolution, actionTaken } = req.body
@@ -6476,6 +6735,58 @@ app.post('/api/admin/reports/file/:fileId/close', async (req, res) => {
     console.error('[admin/reports] Failed to close report file:', err)
     res.status(500).json({ error: err?.message || 'Failed to close report file' })
   }
+
+  const recipients = await recipientQuery
+  if (!recipients || !recipients.length) {
+    return { recipients: 0, sent: 0, message: 'No recipients found' }
+  }
+
+  // Create user_notifications entries
+  let insertedCount = 0
+  for (const recipient of recipients) {
+    // Get message variants for user's language (with fallback to default)
+    const userLang = (recipient.language || 'en').toLowerCase()
+    let messageVariants = defaultVariants
+    if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
+      messageVariants = translations[userLang]
+    }
+
+    const messageIndex = automation.randomize
+      ? Math.floor(Math.random() * messageVariants.length)
+      : 0
+    const message = messageVariants[messageIndex]
+      .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+
+    try {
+      // Check if notification already exists for this automation + user today
+      const existing = await sql`
+        select id from public.user_notifications 
+        where automation_id = ${automation.id} 
+          and user_id = ${recipient.user_id}
+          and scheduled_for::date = current_date
+        limit 1
+      `
+      if (existing && existing.length > 0) {
+        continue // Skip, already sent today
+      }
+
+      await sql`
+        insert into public.user_notifications (
+          automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
+        )
+        values (
+          ${automation.id},
+          ${recipient.user_id},
+          ${notificationTitle},
+          ${message},
+          ${automation.cta_url || null},
+          now(),
+          'pending'
+        )
+      `
+      insertedCount++
+    } catch (insertErr) {
+      console.error('[automation] insert error', insertErr)
 })
 
 // Reopen a report file
@@ -6513,6 +6824,9 @@ app.post('/api/admin/reports/file/:fileId/reopen', async (req, res) => {
     console.error('[admin/reports] Failed to reopen report file:', err)
     res.status(500).json({ error: err?.message || 'Failed to reopen report file' })
   }
+
+  return { recipients: recipients.length, queued: insertedCount }
+}
 })
 
 // Link existing reports to a file
@@ -7013,6 +7327,22 @@ app.put('/api/admin/notification-automations/:id', async (req, res) => {
   }
   let parsed
   try {
+    // First, delete any campaign sends records (in case cascade doesn't work)
+    await sql`delete from public.admin_campaign_sends where campaign_id = ${campaignId}`
+
+    // Allow deletion of campaigns in any status (including sent, partial, failed, running)
+    const rows = await sql`
+      delete from public.admin_email_campaigns
+      where id = ${campaignId}
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+    const campaign = normalizeEmailCampaignRow(rows[0])
+    console.log('[email-campaigns] deleted campaign:', campaign.id, campaign.title, 'status:', campaign.status)
+    res.json({ campaign })
     parsed = notificationAutomationUpdateSchema.parse(req.body || {})
   } catch (err) {
     res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
@@ -7322,6 +7652,11 @@ app.post('/api/admin/email-templates', async (req, res) => {
   const isActive = parsed.isActive !== false
   const adminUuid = toAdminUuid(adminId)
   try {
+    const body = req.body || {}
+
+    // Get current state
+    const current = await sql`
+      select * from public.admin_email_triggers where id = ${triggerId} limit 1
     const rows = await sql`
       insert into public.admin_email_templates (
         title, subject, description, preview_text, body_html, body_json, variables,
@@ -7380,6 +7715,29 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
       res.status(404).json({ error: 'Template not found' })
       return
     }
+
+    // Calculate new values
+    let newEnabled = current[0].is_enabled
+    let newTemplateId = current[0].template_id
+
+    if (body.templateId !== undefined) {
+      newTemplateId = body.templateId || null
+      // If clearing template, also disable the trigger
+      if (!newTemplateId) {
+        newEnabled = false
+      }
+    }
+
+    if (typeof body.isEnabled === 'boolean') {
+      // Only allow enabling if there's a template
+      if (body.isEnabled && !newTemplateId) {
+        newEnabled = false
+      } else {
+        newEnabled = body.isEnabled
+      }
+    }
+
+    // Simple direct update
     const current = existing[0]
     const description = parsed.description && parsed.description.length ? parsed.description : null
     const previewText = resolvePreviewText(parsed.previewText, parsed.bodyHtml)
@@ -7405,6 +7763,24 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
       where id = ${templateId}
       returning *
     `
+
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Trigger not found after update' })
+      return
+    }
+
+    // Fetch with template title
+    const refreshed = await sql`
+      select t.*, tpl.title as template_title
+      from public.admin_email_triggers t
+      left join public.admin_email_templates tpl on tpl.id = t.template_id
+      where t.id = ${triggerId}
+      limit 1
+    `
+
+    const trigger = normalizeEmailTriggerRow(refreshed[0])
+    console.log('[email-triggers] updated trigger:', trigger.triggerType, 'enabled:', trigger.isEnabled, 'template:', trigger.templateId)
+    res.json({ trigger })
     const template = normalizeEmailTemplateRow(rows?.[0])
     res.json({ template })
   } catch (err) {
@@ -7413,6 +7789,16 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
   }
 })
 
+// Public endpoint to send automatic email (called from auth flow)
+// Uses the same method as campaign emails: direct Resend API call with wrapper
+app.post('/api/send-automatic-email', async (req, res) => {
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+  if (!apiKey) {
+    console.error('[send-automatic-email] No Resend API key configured')
+    res.status(500).json({ error: 'Email service not configured' })
+    return
+  }
+
 app.delete('/api/admin/email-templates/:id', async (req, res) => {
   const adminId = await ensureEditor(req, res)
   if (!adminId) return
@@ -7420,6 +7806,16 @@ app.delete('/api/admin/email-templates/:id', async (req, res) => {
     res.status(500).json({ error: 'Database not configured' })
     return
   }
+
+  const { triggerType, userId, userEmail, userDisplayName, userLanguage } = req.body || {}
+
+  if (!triggerType || !userId || !userEmail || !userDisplayName) {
+    res.status(400).json({ error: 'Missing required fields: triggerType, userId, userEmail, userDisplayName' })
+    return
+  }
+
+  const lang = userLanguage || 'en'
+
   const templateId = String(req.params?.id || '').trim()
   if (!templateId) {
     res.status(400).json({ error: 'Missing template id' })
@@ -7432,6 +7828,131 @@ app.delete('/api/admin/email-templates/:id', async (req, res) => {
       where template_id = ${templateId}
         and status in ('draft','scheduled','running')
     `
+
+    if (!triggerRows || !triggerRows.length) {
+      console.log(`[send-automatic-email] Trigger type "${triggerType}" not found`)
+      res.json({ sent: false, reason: 'Trigger not configured' })
+      return
+    }
+
+    const trigger = triggerRows[0]
+
+    // 2. Check if enabled and has a template
+    if (!trigger.is_enabled) {
+      console.log(`[send-automatic-email] Trigger "${triggerType}" is disabled`)
+      res.json({ sent: false, reason: 'Trigger is disabled' })
+      return
+    }
+
+    if (!trigger.template_id) {
+      console.log(`[send-automatic-email] Trigger "${triggerType}" has no template configured`)
+      res.json({ sent: false, reason: 'No template configured' })
+      return
+    }
+
+    // 3. Check if we've already sent this automatic email to this user
+    const existingSend = await sql`
+      select id from public.admin_automatic_email_sends
+      where trigger_type = ${triggerType} and user_id = ${userId}
+      limit 1
+    `
+
+    if (existingSend && existingSend.length > 0) {
+      console.log(`[send-automatic-email] Already sent "${triggerType}" to user ${userId}`)
+      res.json({ sent: false, reason: 'Already sent to this user' })
+      return
+    }
+
+    // 4. Load translations for the template (for multi-language support)
+    const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
+
+    // 5. Get user's language-specific content (fallback to template's default content)
+    const translation = emailTranslations.get(lang)
+    const rawSubject = translation?.subject || trigger.subject
+    const rawBodyHtml = translation?.bodyHtml || trigger.body_html
+
+    if (!rawSubject || !rawBodyHtml) {
+      console.error(`[send-automatic-email] Template "${trigger.template_id}" has no content`)
+      res.status(500).json({ error: 'Template has no content' })
+      return
+    }
+
+    // 6. Prepare variable replacement context (same as campaign emails)
+    const userRaw = userDisplayName || 'User'
+    const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+
+    // Generate random 10-character string (uppercase, lowercase, numbers)
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    let randomStr = ''
+    for (let i = 0; i < 10; i++) {
+      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+
+    const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+
+    // Variables available for replacement in email templates
+    const context = {
+      user: userCap,                                     // User's display name (capitalized)
+      email: userEmail,                                  // User's email address
+      random: randomStr,                                 // 10 random characters (unique per email)
+      url: websiteUrl.replace(/^https?:\/\//, ''),       // Website URL without protocol (e.g., "aphylia.app")
+      code: 'XXXXXX'                                     // Placeholder (real codes are for transactional emails)
+    }
+    const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
+
+    // 7. Render the email content
+    const subject = replaceVars(rawSubject)
+    const bodyHtmlRaw = replaceVars(rawBodyHtml)
+
+    // 8. Sanitize HTML for email client compatibility (same as campaigns)
+    const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
+
+    // 9. Wrap with the beautiful email wrapper (same as campaigns)
+    const html = wrapEmailHtml(bodyHtml, subject, lang)
+    const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+
+    // 10. Send via Resend API (same method as campaigns)
+    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
+
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: userEmail,
+        subject: subject,
+        html: html,
+        text: text,
+        headers: { 'X-Trigger-Type': triggerType },
+        tags: [{ name: 'trigger_type', value: triggerType }]
+      })
+    })
+
+    if (!resendResponse.ok) {
+      const errorText = await resendResponse.text().catch(() => '')
+      console.error(`[send-automatic-email] Resend API error (${resendResponse.status}):`, errorText)
+      res.status(500).json({ error: `Failed to send email: ${errorText || resendResponse.status}` })
+      return
+    }
+
+    const resendData = await resendResponse.json().catch(() => ({}))
+    console.log(`[send-automatic-email] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
+
+    // 11. Record the send to prevent duplicates
+    try {
+      await sql`
+        insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
+        values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
+      `
+    } catch (logErr) {
+      // Don't fail the request if logging fails, email was already sent
+      console.warn('[send-automatic-email] Failed to log send:', logErr?.message || logErr)
+    }
+
+    res.json({ sent: true, resendId: resendData.id })
     const activeCount = usage && usage[0] ? Number(usage[0].cnt) : 0
     if (activeCount > 0) {
       res.status(409).json({ error: 'Template is used by active campaigns' })
@@ -7454,6 +7975,70 @@ app.delete('/api/admin/email-templates/:id', async (req, res) => {
   }
 })
 
+// Admin: global stats (bypass RLS via server connection)
+app.get('/api/admin/stats', async (req, res) => {
+  const uid = "public"
+  if (!uid) return
+  try {
+    let profilesCount = 0
+    let authUsersCount = null
+    let plantsCount = null
+
+    if (sql) {
+      try {
+        const profilesRows = await sql`select count(*)::int as count from public.profiles`
+        profilesCount = Array.isArray(profilesRows) && profilesRows[0] ? Number(profilesRows[0].count) : 0
+      } catch { }
+      try {
+        const authRows = await sql`select count(*)::int as count from auth.users`
+        authUsersCount = Array.isArray(authRows) && authRows[0] ? Number(authRows[0].count) : null
+      } catch { }
+      try {
+        const plantsRows = await sql`select count(*)::int as count from public.plants`
+        plantsCount = Array.isArray(plantsRows) && plantsRows[0] ? Number(plantsRows[0].count) : 0
+      } catch { }
+    }
+
+    // Fallback via Supabase REST RPC if DB connection not available
+    if (!sql && supabaseUrlEnv && supabaseAnonKey) {
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      try {
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_profiles_total`, {
+          method: 'POST',
+          headers: baseHeaders,
+          body: '{}',
+        })
+        if (pr.ok) {
+          const val = await pr.json().catch(() => 0)
+          if (typeof val === 'number' && Number.isFinite(val)) profilesCount = val
+        }
+      } catch { }
+      try {
+        const ar = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_auth_users_total`, {
+          method: 'POST',
+          headers: baseHeaders,
+          body: '{}',
+        })
+        if (ar.ok) {
+          const val = await ar.json().catch(() => null)
+          if (typeof val === 'number' && Number.isFinite(val)) authUsersCount = val
+        }
+      } catch { }
+      try {
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+        })
+        if (pr.ok) {
+          const contentRange = pr.headers.get('content-range') || ''
+          const match = contentRange.match(/\/(\d+)$/)
+          if (match) plantsCount = Number(match[1])
+        }
+      } catch { }
+    }
+
+    res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
+  } catch (e) {
+    res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
 // ---- Admin email campaigns ----
 app.get('/api/admin/email-campaigns', async (req, res) => {
   const adminId = await ensureEditor(req, res)
@@ -8367,7 +8952,7 @@ app.get('/api/admin/member', async (req, res) => {
             const val = await rpc.json().catch(() => null)
             if (val) targetId = String(val)
           }
-        } catch {}
+        } catch { }
       } else if (displayParam) {
         try {
           const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_display_name`, {
@@ -8379,7 +8964,7 @@ app.get('/api/admin/member', async (req, res) => {
             const val = await rpc.json().catch(() => null)
             if (val) targetId = String(val)
           }
-        } catch {}
+        } catch { }
         // Also resolve email for downstream fields
         if (targetId && !resolvedEmail) {
           try {
@@ -8392,7 +8977,7 @@ app.get('/api/admin/member', async (req, res) => {
               const val = await er.json().catch(() => null)
               if (val) resolvedEmail = String(val)
             }
-          } catch {}
+          } catch { }
         }
       }
       if (!targetId) {
@@ -8409,7 +8994,7 @@ app.get('/api/admin/member', async (req, res) => {
           const arr = await pr.json().catch(() => [])
           profile = Array.isArray(arr) && arr[0] ? arr[0] : null
         }
-      } catch {}
+      } catch { }
 
       // Last online and last IP/country/referrer (best-effort; requires Authorization due to RLS)
       let lastOnlineAt = null
@@ -8432,7 +9017,7 @@ app.get('/api/admin/member', async (req, res) => {
             lastReferrer = domain || (ref ? String(ref) : 'direct')
           }
         }
-      } catch {}
+      } catch { }
 
       // Distinct IPs via security-definer RPC to ensure completeness
       let ips = []
@@ -8446,7 +9031,7 @@ app.get('/api/admin/member', async (req, res) => {
           const arr = await ipRes.json().catch(() => [])
           ips = Array.isArray(arr) ? arr.map((r) => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean) : []
         }
-      } catch {}
+      } catch { }
       // Fallback: if lastIp is null but we have IPs, use the first one from distinct IPs list
       if (!lastIp && Array.isArray(ips) && ips.length > 0) {
         lastIp = ips[0]
@@ -8461,7 +9046,7 @@ app.get('/api/admin/member', async (req, res) => {
         const cr = vc.headers.get('content-range') || ''
         const m = cr.match(/\/(\d+)$/)
         if (m) visitsCount = Number(m[1])
-      } catch {}
+      } catch { }
 
       // Bans (does not require Authorization; public schema via security definer policies)
       let isBannedEmail = false
@@ -8481,7 +9066,7 @@ app.get('/api/admin/member', async (req, res) => {
             bannedAt = arr[0].banned_at || null
           }
         }
-      } catch {}
+      } catch { }
       try {
         const emailForBan = (resolvedEmail || emailParam || '').toLowerCase()
         const bi = await fetch(`${supabaseUrlEnv}/rest/v1/banned_ips?or=(user_id.eq.${encodeURIComponent(targetId)},email.eq.${encodeURIComponent(emailForBan)})&select=ip_address`, {
@@ -8491,9 +9076,9 @@ app.get('/api/admin/member', async (req, res) => {
           const arr = await bi.json().catch(() => [])
           bannedIps = Array.isArray(arr) ? arr.map(r => String(r.ip_address)).filter(Boolean) : []
         }
-      } catch {}
+      } catch { }
 
-    // Plants count only (drop garden counts)
+      // Plants count only (drop garden counts)
       // Plants count only (drop garden counts)
       let plantsTotal = undefined
       try {
@@ -8509,7 +9094,7 @@ app.get('/api/admin/member', async (req, res) => {
         if (ownListResp.ok) {
           const arr = await ownListResp.json().catch(() => [])
           const ownedGardenIds = Array.isArray(arr) ? arr.map(r => String(r.id)).filter(Boolean) : []
-          const set = new Set([ ...gardenIds, ...ownedGardenIds ])
+          const set = new Set([...gardenIds, ...ownedGardenIds])
           gardenIds = Array.from(set)
         }
         // Plants total across all user's gardens (sum plants_on_hand)
@@ -8523,7 +9108,7 @@ app.get('/api/admin/member', async (req, res) => {
             plantsTotal = Array.isArray(arr) ? arr.reduce((acc, r) => acc + Number(r?.plants_on_hand ?? 0), 0) : undefined
           }
         }
-      } catch {}
+      } catch { }
 
       // Aggregates (REST fallback): pull recent visits and compute locally
       let memberTopReferrers = []
@@ -8551,7 +9136,7 @@ app.get('/api/admin/member', async (req, res) => {
             if (cc) countryCounts.set(cc, (countryCounts.get(cc) || 0) + 1)
             const dev = categorizeDeviceFromUa(v?.user_agent || '')
             deviceCounts.set(dev, (deviceCounts.get(dev) || 0) + 1)
-            try { if (v?.occurred_at && new Date(v.occurred_at).getTime() >= cutoff5m) last5mCount++ } catch {}
+            try { if (v?.occurred_at && new Date(v.occurred_at).getTime() >= cutoff5m) last5mCount++ } catch { }
           }
           memberTopReferrers = Array.from(refCounts.entries()).map(([source, visits]) => ({ source, visits: Number(visits) }))
           memberTopCountries = Array.from(countryCounts.entries()).map(([country, visits]) => ({ country, visits: Number(visits) }))
@@ -8561,7 +9146,7 @@ app.get('/api/admin/member', async (req, res) => {
           memberTopDevices.sort((a, b) => (b.visits || 0) - (a.visits || 0))
           meanRpm5m = Number((last5mCount / 5).toFixed(2))
         }
-      } catch {}
+      } catch { }
 
       // Load admin notes via REST (admin-only via RLS)
       let adminNotes = []
@@ -8571,13 +9156,14 @@ app.get('/api/admin/member', async (req, res) => {
           const arr = await nr.json().catch(() => [])
           adminNotes = Array.isArray(arr) ? arr.map((r) => ({ id: String(r.id), admin_id: r?.admin_id || null, admin_name: r?.admin_name || null, message: String(r?.message || ''), created_at: r?.created_at || null })) : []
         }
-      } catch {}
+      } catch { }
 
       try {
         const caller = await getUserFromRequest(req)
         const adminId = caller?.id || null
         const adminName = null
         if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
+      } catch { }
       } catch {}
       // Get social stats via REST (best effort)
       let socialStats = null
@@ -8648,6 +9234,7 @@ app.get('/api/admin/member', async (req, res) => {
     try {
       const rows = await sql`select id, display_name, is_admin, roles, flag_level, is_suspended, suspended_at, is_private from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
+    } catch { }
     } catch {}
     // Get social stats for admin (friends, messages, conversations, reports)
     let socialStats = null
@@ -8685,7 +9272,7 @@ app.get('/api/admin/member', async (req, res) => {
           adminNotes = Array.isArray(arr) ? arr.map((r) => ({ id: String(r.id), admin_id: r?.admin_id || null, admin_name: r?.admin_name || null, message: String(r?.message || ''), created_at: r?.created_at || null })) : []
         }
       }
-    } catch {}
+    } catch { }
     let ips = []
     let lastOnlineAt = null
     let lastIp = null
@@ -8699,7 +9286,7 @@ app.get('/api/admin/member', async (req, res) => {
     try {
       const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null order by ip asc`, [user.id])
       ips = (ipRows || []).map(r => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean)
-    } catch {}
+    } catch { }
     let lastCountry = null
     let lastReferrer = null
     try {
@@ -8719,7 +9306,7 @@ app.get('/api/admin/member', async (req, res) => {
         const domain = extractHostname(ref)
         lastReferrer = domain || (ref ? String(ref) : 'direct')
       }
-    } catch {}
+    } catch { }
     // Fallback: if lastIp is null but we have IPs, use the first one from distinct IPs list
     if (!lastIp && Array.isArray(ips) && ips.length > 0) {
       lastIp = ips[0]
@@ -8731,7 +9318,7 @@ app.get('/api/admin/member', async (req, res) => {
       ])
       visitsCount = vcRows?.[0]?.c ?? 0
       uniqueIpsCount = uipRows?.[0]?.c ?? 0
-    } catch {}
+    } catch { }
     // Drop garden counts on server path
     try {
       const rows = await sql`
@@ -8744,7 +9331,7 @@ app.get('/api/admin/member', async (req, res) => {
         )
       `
       plantsTotal = rows?.[0]?.c ?? 0
-    } catch {}
+    } catch { }
     try {
       const br = await sql`
         select reason, banned_at
@@ -8758,7 +9345,7 @@ app.get('/api/admin/member', async (req, res) => {
         bannedReason = br[0].reason || null
         bannedAt = br[0].banned_at || null
       }
-    } catch {}
+    } catch { }
     try {
       const bi = await sql`
         select ip_address::text as ip
@@ -8766,7 +9353,7 @@ app.get('/api/admin/member', async (req, res) => {
         where user_id = ${user.id} or lower(email) = ${email ? email : (user.email ? user.email.toLowerCase() : '')}
       `
       bannedIps = Array.isArray(bi) ? bi.map(r => String(r.ip)).filter(Boolean) : []
-    } catch {}
+    } catch { }
     // Aggregates (SQL path)
     let topReferrers = []
     let topCountries = []
@@ -8821,14 +9408,14 @@ app.get('/api/admin/member', async (req, res) => {
       topDevices = Array.from(deviceMap.entries()).map(([device, visits]) => ({ device, visits: Number(visits) }))
       topDevices.sort((a, b) => (b.visits || 0) - (a.visits || 0))
       meanRpm5m = Number((((rpmRows?.[0]?.c ?? 0) / 5)).toFixed(2))
-    } catch {}
+    } catch { }
 
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
       const adminName = null
       if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || qLower || null}, ${sql.json({ via: 'db' })})`
-    } catch {}
+    } catch { }
     res.json({
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at, email_confirmed_at: user.email_confirmed_at || null, last_sign_in_at: user.last_sign_in_at || null },
@@ -8885,7 +9472,7 @@ app.post('/api/admin/member-note', async (req, res) => {
           adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
         }
       }
-    } catch {}
+    } catch { }
 
     // Insert note
     let created = null
@@ -8923,7 +9510,7 @@ app.post('/api/admin/member-note', async (req, res) => {
       if (sql) {
         await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${aid}, ${aname}, 'add_note', ${profileId}, ${sql.json({ message: msg })})`
       }
-    } catch {}
+    } catch { }
     res.json({ ok: true, created_at: created })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to add note' })
@@ -8946,9 +9533,9 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
       try {
         const rows = await sql`select profile_id from public.profile_admin_notes where id = ${noteId}::uuid`
         pid = rows?.[0]?.profile_id || null
-      } catch {}
+      } catch { }
       await sql`delete from public.profile_admin_notes where id = ${noteId}::uuid`
-      try { await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUserId}, 'delete_note', ${pid}, ${sql.json({ noteId })})` } catch {}
+      try { await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUserId}, 'delete_note', ${pid}, ${sql.json({ noteId })})` } catch { }
       res.json({ ok: true })
       return
     }
@@ -9060,8 +9647,8 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
           const caller = await getUserFromRequest(req)
           const adminId = caller?.id || null
           if (sql) await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminId}, 'admin_lookup', ${ip}, ${sql.json({ path: 'members-by-ip', via: 'db' })})`
-        } catch {}
-        res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'database', ipTopReferrers: ipTopReferrers.slice(0,5), ipTopDevices: ipTopDevices.slice(0,5), ipCountry, ipMeanRpm5m })
+        } catch { }
+        res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'database', ipTopReferrers: ipTopReferrers.slice(0, 5), ipTopDevices: ipTopDevices.slice(0, 5), ipCountry, ipMeanRpm5m })
         return
       } catch (e) {
         // fall back to REST
@@ -9108,7 +9695,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
         deviceCounts.set(dev, (deviceCounts.get(dev) || 0) + 1)
       }
       if (!lastCountry && v?.geo_country) lastCountry = String(v.geo_country).toUpperCase()
-      try { if (ts && new Date(ts).getTime() >= cutoff5m) rpmCount5m++ } catch {}
+      try { if (ts && new Date(ts).getTime() >= cutoff5m) rpmCount5m++ } catch { }
     }
     const userIds = Array.from(userIdToLastSeen.keys())
     if (userIds.length === 0) {
@@ -9134,7 +9721,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
       if (emailResp.ok) {
         emails = await emailResp.json().catch(() => [])
       }
-    } catch {}
+    } catch { }
     const idToEmail = new Map()
     for (const r of Array.isArray(emails) ? emails : []) {
       if (r && r.id) idToEmail.set(String(r.id), r?.email ? String(r.email) : null)
@@ -9174,17 +9761,17 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
       if (lastResp.ok) {
         await lastResp.json().catch(() => null)
       }
-    } catch {}
+    } catch { }
 
-    const ipTopReferrers = Array.from(refCounts.entries()).map(([source, visits]) => ({ source, visits: Number(visits) })).sort((a, b) => (b.visits || 0) - (a.visits || 0)).slice(0,5)
-    const ipTopDevices = Array.from(deviceCounts.entries()).map(([device, visits]) => ({ device, visits: Number(visits) })).sort((a, b) => (b.visits || 0) - (a.visits || 0)).slice(0,5)
+    const ipTopReferrers = Array.from(refCounts.entries()).map(([source, visits]) => ({ source, visits: Number(visits) })).sort((a, b) => (b.visits || 0) - (a.visits || 0)).slice(0, 5)
+    const ipTopDevices = Array.from(deviceCounts.entries()).map(([device, visits]) => ({ device, visits: Number(visits) })).sort((a, b) => (b.visits || 0) - (a.visits || 0)).slice(0, 5)
     const ipCountry = lastCountry || null
     const ipMeanRpm5m = Number((rpmCount5m / 5).toFixed(2))
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
       if (sql) await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminId}, 'admin_lookup', ${ip}, ${sql.json({ path: 'members-by-ip', via: 'rest' })})`
-    } catch {}
+    } catch { }
     res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'supabase', ipTopReferrers, ipTopDevices, ipCountry, ipMeanRpm5m })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to search by IP' })
@@ -9211,7 +9798,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
           const val = await rpc.json().catch(() => null)
           if (val) return String(val)
         }
-      } catch {}
+      } catch { }
       return null
     }
 
@@ -9223,7 +9810,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
         try {
           const users = await sql`select id from auth.users where lower(email) = ${email} limit 1`
           if (Array.isArray(users) && users[0]) targetUserId = String(users[0].id)
-        } catch {}
+        } catch { }
       }
       if (!targetUserId) targetUserId = await resolveUserIdViaRest(emailParam)
     }
@@ -9264,7 +9851,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
       const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
-      
+
       // Try RPC function first (if available)
       try {
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_visits_series_days`, {
@@ -9280,48 +9867,48 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
       } catch (e) {
         // RPC might not exist, try direct query
       }
-      
+
       // Fallback: Query visits table directly via REST
       try {
         const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-        
+
         // Fetch visits with pagination support (limit 1000 per page)
         let allVisits = []
         let offset = 0
         const limit = 1000
-        
+
         while (true) {
           const visitsResp = await fetch(
             `${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetUserId)}&occurred_at=gte.${thirtyDaysAgo}&select=occurred_at&order=occurred_at.asc&limit=${limit}&offset=${offset}`,
             { headers: { ...headers, 'Prefer': 'count=exact' } }
           )
-          
+
           if (!visitsResp.ok) {
             const errorText = await visitsResp.text().catch(() => 'Unknown error')
             console.error(`REST direct query failed for user ${targetUserId}: ${visitsResp.status} ${errorText}`)
             break
           }
-          
+
           const visits = await visitsResp.json().catch(() => [])
           if (!Array.isArray(visits) || visits.length === 0) break
-          
+
           allVisits = allVisits.concat(visits)
-          
+
           // Check if we got all results (if less than limit, we're done)
           if (visits.length < limit) break
-          
+
           offset += limit
-          
+
           // Safety limit: don't fetch more than 10k visits
           if (offset >= 10000) break
         }
-        
+
         // Generate series for last 30 days
         const series30d = []
         const today = new Date()
         today.setUTCHours(0, 0, 0, 0)
-        
+
         // Group visits by date
         const visitsByDate = new Map()
         if (Array.isArray(allVisits)) {
@@ -9334,7 +9921,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
             }
           }
         }
-        
+
         // Generate 30 days of data
         for (let i = 29; i >= 0; i--) {
           const date = new Date(today)
@@ -9345,7 +9932,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
             visits: visitsByDate.get(dateStr) || 0
           })
         }
-        
+
         const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
         res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase-rest' })
         return
@@ -9357,11 +9944,11 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
     // If we get here, both SQL and REST failed
     // Return empty data instead of error so the graph can still render (empty)
     console.warn(`Could not load visits series for user ${targetUserId}: SQL and REST both failed`)
-    res.json({ 
-      ok: true, 
-      userId: targetUserId, 
-      series30d: [], 
-      total30d: 0, 
+    res.json({
+      ok: true,
+      userId: targetUserId,
+      series30d: [],
+      total30d: 0,
       via: 'fallback',
       warning: 'Could not load visits data from database'
     })
@@ -9432,15 +10019,15 @@ app.get('/api/admin/member-list', async (req, res) => {
                    else 99
                  end asc, u.created_at desc`
               : 'u.created_at desc'
-      
+
       // Build WHERE clause for role filtering
       // Special case for admin: also check legacy is_admin field
-      const roleFilterClause = filterRole 
+      const roleFilterClause = filterRole
         ? filterRole === 'admin'
           ? `where (p.is_admin = true or '${filterRole}' = any(coalesce(p.roles, '{}')))`
           : `where '${filterRole}' = any(coalesce(p.roles, '{}'))`
         : ''
-      
+
       const rows = await sql.unsafe(
         `
         select
@@ -9533,7 +10120,7 @@ app.get('/api/admin/role-stats', async (req, res) => {
         group by role
         order by count desc
       `
-      
+
       // Also count legacy admins who might not have the role in array
       const legacyAdminResult = await sql`
         select count(*)::int as count from public.profiles 
@@ -9545,7 +10132,7 @@ app.get('/api/admin/role-stats', async (req, res) => {
       const roleCounts = {}
       const validRoles = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip', 'plus']
       validRoles.forEach(r => { roleCounts[r] = 0 })
-      
+
       if (Array.isArray(roleCountsResult)) {
         roleCountsResult.forEach(row => {
           if (row?.role && validRoles.includes(row.role)) {
@@ -9553,7 +10140,7 @@ app.get('/api/admin/role-stats', async (req, res) => {
           }
         })
       }
-      
+
       // Add legacy admin count to admin role
       roleCounts.admin = (roleCounts.admin || 0) + legacyAdminCount
 
@@ -9691,6 +10278,9 @@ app.get('/api/admin/member-suggest', async (req, res) => {
           }
         }
       }
+    } catch { }
+    const suggestions = out.slice(0, 7)
+    res.json({ ok: true, suggestions })
     } catch {}
     const suggestions = out.slice(0, 7)
     res.json({ ok: true, suggestions })
@@ -9980,6 +10570,7 @@ app.post('/api/admin/roles/remove', async (req, res) => {
       if (Array.isArray(profileRows) && profileRows[0] && Array.isArray(profileRows[0].roles)) {
         currentRoles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
       }
+    } catch { }
     } catch {}
     
     // Remove role if present
@@ -10002,6 +10593,10 @@ app.post('/api/admin/roles/remove', async (req, res) => {
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'promote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
+    } catch { }
+    res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: true })
       await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'remove_role', ${targetId}, ${sql.json({ email: targetEmail, role: roleParam })})`
     } catch {}
     
@@ -10158,6 +10753,27 @@ app.post('/api/recaptcha/verify', async (req, res) => {
       res.status(400).json({ success: false, error: 'Invalid token', reason: tokenProperties?.invalidReason })
       return
     }
+    // Ensure profiles table exists, then set is_admin = false
+    try {
+      const exists = await sql`select 1 from information_schema.tables where table_schema = 'public' and table_name = 'profiles'`
+      if (!exists || exists.length === 0) {
+        res.status(500).json({ error: 'Profiles table not found' })
+        return
+      }
+    } catch { }
+    try {
+      await sql`insert into public.profiles (id, is_admin) values (${targetId}, false) on conflict (id) do update set is_admin = false`
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to demote user' })
+      return
+    }
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'demote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
+    } catch { }
+    res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: false })
 
     // Check if action matches (important for security)
     if (action && tokenProperties.action !== action) {
@@ -10200,6 +10816,78 @@ app.post('/api/admin/ban', async (req, res) => {
     }
     const { email: rawEmail, reason: rawReason } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const roleParam = (rawRole || '').toString().trim().toLowerCase()
+
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    if (!roleParam) {
+      res.status(400).json({ error: 'Missing role' })
+      return
+    }
+    if (!ADMIN_ASSIGNABLE_ROLES.includes(roleParam)) {
+      res.status(400).json({ error: `Invalid role. Must be one of: ${ADMIN_ASSIGNABLE_ROLES.join(', ')}` })
+      return
+    }
+
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+
+    // Get current roles
+    let currentRoles = []
+    try {
+      const profileRows = await sql`select roles from public.profiles where id = ${targetId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0] && Array.isArray(profileRows[0].roles)) {
+        currentRoles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+      }
+    } catch { }
+
+    // Add role if not already present
+    if (!currentRoles.includes(roleParam)) {
+      currentRoles.push(roleParam)
+    }
+
+    // Update profile with new roles (profile must already exist)
+    try {
+      // First check if profile exists
+      const profileCheck = await sql`select id from public.profiles where id = ${targetId} limit 1`
+      if (!profileCheck || profileCheck.length === 0) {
+        res.status(404).json({ error: 'User profile not found. The user must have a profile before roles can be assigned.' })
+        return
+      }
+
+      // Update the roles array
+      await sql`update public.profiles set roles = ${sql.array(currentRoles)} where id = ${targetId}`
+
+      // If adding admin role, also set is_admin = true for legacy support
+      if (roleParam === 'admin') {
+        await sql`update public.profiles set is_admin = true where id = ${targetId}`
+      }
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to add role' })
+      return
+    }
+
+    // Log admin action
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'add_role', ${targetId}, ${sql.json({ email: targetEmail, role: roleParam })})`
+    } catch { }
+
+    res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, addedRole: roleParam })
     const reason = (rawReason || '').toString().trim() || null
     if (!emailParam) {
       res.status(400).json({ error: 'Missing email' })
@@ -10316,6 +11004,13 @@ app.post('/api/contact', async (req, res) => {
       res.status(400).json({ error: 'Message is required.' })
       return
     }
+    const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const roleParam = (rawRole || '').toString().trim().toLowerCase()
+
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
 
     const ip = getClientIp(req) || 'unknown'
     if (isContactRateLimited(ip)) {
@@ -10348,6 +11043,55 @@ app.post('/api/translate', async (req, res) => {
     if (source_lang.toUpperCase() === target_lang.toUpperCase()) {
       return res.json({ translatedText: text })
     }
+
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+
+    // Get current roles
+    let currentRoles = []
+    try {
+      const profileRows = await sql`select roles from public.profiles where id = ${targetId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0] && Array.isArray(profileRows[0].roles)) {
+        currentRoles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+      }
+    } catch { }
+
+    // Remove role if present
+    currentRoles = currentRoles.filter(r => r !== roleParam)
+
+    // Update profile with new roles
+    try {
+      await sql`update public.profiles set roles = ${sql.array(currentRoles)} where id = ${targetId}`
+
+      // If removing admin role, also set is_admin = false for legacy support
+      if (roleParam === 'admin') {
+        await sql`update public.profiles set is_admin = false where id = ${targetId}`
+      }
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to remove role' })
+      return
+    }
+
+    // Log admin action
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'remove_role', ${targetId}, ${sql.json({ email: targetEmail, role: roleParam })})`
+    } catch { }
+
+    res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, removedRole: roleParam })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to remove role' })
     
     // Get DeepL API key from environment
     const deeplApiKey = process.env.DEEPL_API_KEY
@@ -10433,6 +11177,22 @@ app.get('/api/plants', async (_req, res) => {
       res.json(fallback)
       return
     }
+
+    let roles = []
+    try {
+      const profileRows = await sql`select roles, is_admin from public.profiles where id = ${userId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0]) {
+        if (Array.isArray(profileRows[0].roles)) {
+          roles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+        }
+        // Support legacy is_admin field
+        if (profileRows[0].is_admin === true && !roles.includes('admin')) {
+          roles.push('admin')
+        }
+      }
+    } catch { }
+
+    res.json({ ok: true, userId, roles })
     res.status(500).json({ error: 'Database not configured' })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Query failed' })
@@ -10452,6 +11212,32 @@ app.post('/api/admin/backup-db', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
+    const emailParam = (req.query.email || '').toString().trim()
+    const ip = getClientIp(req)
+    // Check IP ban first
+    if (ip) {
+      try {
+        const rows = await sql`select 1 from public.banned_ips where ip_address = ${ip}::inet limit 1`
+        if (Array.isArray(rows) && rows.length > 0) {
+          res.json({ banned: true, source: 'ip' })
+          return
+        }
+      } catch { }
+    }
+    if (emailParam) {
+      try {
+        const rows = await sql`
+          select reason, banned_at from public.banned_accounts
+          where lower(email) = ${emailParam.toLowerCase()}
+          order by banned_at desc
+          limit 1
+        `
+        if (Array.isArray(rows) && rows.length > 0) {
+          const r = rows[0]
+          res.json({ banned: true, source: 'email', reason: r.reason || null, bannedAt: r.banned_at || null })
+          return
+        }
+      } catch { }
 
     const backupDir = path.resolve(__dirname, 'tmp_backups')
     await fs.mkdir(backupDir, { recursive: true })
@@ -10526,6 +11312,22 @@ app.get('/api/admin/download-backup', async (req, res) => {
   const uid = "public"
   if (!uid) return
 
+app.post('/api/recaptcha/verify', async (req, res) => {
+  try {
+    const { token, action } = req.body || {}
+
+    if (!token) {
+      res.status(400).json({ success: false, error: 'Missing reCAPTCHA token' })
+      return
+    }
+
+    if (!GOOGLE_API_KEY) {
+      // If no API key configured, log warning and allow request
+      // This enables development without reCAPTCHA verification
+      console.warn('[recaptcha] No GOOGLE_API_KEY configured, skipping verification')
+      res.json({ success: true, score: 1.0, warning: 'verification_skipped' })
+      return
+    }
   const token = (req.query.token || '').toString().trim()
   if (!token) {
     res.status(400).json({ error: 'Missing token' })
@@ -10564,6 +11366,13 @@ app.get('/api/admin/download-backup', async (req, res) => {
   res.on('close', cleanup)
 })
 
+    // Check the token properties
+    const tokenProperties = verifyData.tokenProperties
+    const riskAnalysis = verifyData.riskAnalysis
+
+    if (!tokenProperties?.valid) {
+      console.warn('[recaptcha] Invalid token:', tokenProperties?.invalidReason)
+      res.status(400).json({ success: false, error: 'Invalid token', reason: tokenProperties?.invalidReason })
 // Admin: refresh website by invoking scripts/refresh-plant-swipe.sh from repo root
 async function handlePullCode(req, res) {
   try {
@@ -10608,6 +11417,14 @@ async function handlePullCode(req, res) {
       } catch {}
     }
 
+    // Get the risk score (0.0 = likely bot, 1.0 = likely human)
+    const score = riskAnalysis?.score ?? 0.5
+
+    // Threshold: scores below 0.3 are likely bots
+    if (score < 0.3) {
+      console.warn('[recaptcha] Low score, likely bot:', score)
+      res.status(400).json({ success: false, error: 'Suspicious activity detected', score })
+      return
     // Execute the script from repository root so it updates current branch and builds
     // Run detached so we can return a response before the service restarts
     const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '', PLANTSWIPE_REPO_DIR: repoRoot }
@@ -10686,6 +11503,35 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
       return
     }
 
+    // Insert ban records
+    try {
+      await sql`
+        insert into public.banned_accounts (user_id, email, ip_addresses, reason, banned_by)
+        values (${userId}, ${email}, ${ips}, ${reason}, ${bannedBy})
+      `
+    } catch { }
+    // Insert per-IP rows (upsert to avoid duplicates)
+    for (const ip of ips) {
+      try {
+        await sql`
+          insert into public.banned_ips (ip_address, reason, banned_by, user_id, email)
+          values (${ip}::inet, ${reason}, ${bannedBy}, ${userId}, ${email})
+          on conflict (ip_address) do update set
+            reason = coalesce(excluded.reason, public.banned_ips.reason),
+            banned_by = coalesce(excluded.banned_by, public.banned_ips.banned_by),
+            banned_at = excluded.banned_at,
+            user_id = coalesce(excluded.user_id, public.banned_ips.user_id),
+            email = coalesce(excluded.email, public.banned_ips.email)
+        `
+      } catch { }
+    }
+
+    // Delete profile row
+    if (userId) {
+      try { await sql`delete from public.profiles where id = ${userId}` } catch { }
+      // Attempt to delete auth user as well; ignore failures
+      try { await sql`delete from auth.users where id = ${userId}` } catch { }
+    }
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
     res.setHeader('Cache-Control', 'no-cache, no-transform')
@@ -10713,6 +11559,48 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'ban_user', ${email}, ${sql.json({ userId, ips })})`
+    } catch { }
+    res.json({ ok: true, userId: userId || null, email, ipCount: ips.length, bannedAt: new Date().toISOString() })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to ban user' })
+  }
+})
+
+// Helper: load plants via Supabase anon client when SQL is unavailable
+async function loadPlantsViaSupabase() {
+  if (!supabaseServer) return null
+  try {
+    const { data, error } = await supabaseServer
+      .from('plants')
+      .select('*')
+      .order('name', { ascending: true })
+    if (error) return null
+    return (Array.isArray(data) ? data : []).map((r) => {
+      const photos = Array.isArray(r.photos) ? r.photos : undefined
+      return {
+        id: r.id,
+        name: r.name,
+        scientificName: r.scientific_name,
+        colors: r.colors ?? [],
+        seasons: r.seasons ?? [],
+        rarity: r.rarity,
+        meaning: r.meaning ?? '',
+        description: r.description ?? '',
+        photos,
+        image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+        care: {
+          sunlight: r.level_sun || null,
+          water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
+          soil: Array.isArray(r.soil) ? r.soil.join(', ') : null,
+          difficulty: r.maintenance_level || null,
+        },
+        seedsAvailable: r.seeds_available === true,
+      }
+    })
+  } catch {
+    return null
       let adminName = null
       if (sql && adminId) {
         try {
@@ -10837,6 +11725,15 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
 // Admin: list remote branches and current branch
 app.get('/api/admin/branches', async (req, res) => {
   try {
+    const body = req.body || {}
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : ''
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 180) : ''
+    const message = typeof body.message === 'string' ? body.message.trim().slice(0, 5000) : ''
+    const audienceInput =
+      typeof body.audience === 'string' ? body.audience :
+        (typeof body.channel === 'string' ? body.channel : '')
+    const audience = normalizeContactAudience(audienceInput)
     const uid = "public"
     if (!uid) return
 
@@ -10901,6 +11798,57 @@ app.options('/api/admin/branches', (_req, res) => {
 // This endpoint is designed to be tolerant and never block user flows
 app.post('/api/track-visit', async (req, res) => {
   try {
+    const { text, source_lang, target_lang } = req.body
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid text field' })
+    }
+
+    if (!source_lang || !target_lang) {
+      return res.status(400).json({ error: 'Missing source_lang or target_lang' })
+    }
+
+    // Skip translation if source and target are the same
+    if (source_lang.toUpperCase() === target_lang.toUpperCase()) {
+      return res.json({ translatedText: text })
+    }
+
+    // Get DeepL API key from environment
+    const deeplApiKey = process.env.DEEPL_API_KEY
+    if (!deeplApiKey) {
+      console.error('[translate] DeepL API key not configured')
+      return res.status(500).json({ error: 'Translation service not configured' })
+    }
+
+    // Use DeepL API (Pro: https://api.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        source_lang: source_lang.toUpperCase(),
+        target_lang: target_lang.toUpperCase(),
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[translate] DeepL API error:', response.status, errorText)
+      return res.status(response.status).json({ error: 'Translation failed: ' + (errorText || response.statusText) })
+    }
+
+    const data = await response.json()
+    const translatedText = data.translations?.[0]?.text || text
+
+    res.json({ translatedText })
+  } catch (error) {
+    console.error('[translate] Translation error:', error)
+    res.status(500).json({ error: 'Translation service error: ' + (error?.message || 'Unknown error') })
     const sessionId = getOrSetSessionId(req, res)
     const { pagePath, referrer: bodyReferrer, userId, extra, pageTitle, language } = req.body || {}
     const ipAddress = getClientIp(req)
@@ -10943,6 +11891,47 @@ app.options('/api/account/delete', (_req, res) => {
 
 app.post('/api/account/delete', async (req, res) => {
   try {
+    const setPlantsCache = () => {
+      if (!res.getHeader('Cache-Control')) {
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+      }
+    }
+    if (sql) {
+      try {
+        const rows = await sql`select * from plants order by name asc`
+        const mapped = rows.map(r => {
+          const photos = Array.isArray(r.photos) ? r.photos : undefined
+          return {
+            id: r.id,
+            name: r.name,
+            scientificName: r.scientific_name,
+            colors: r.colors ?? [],
+            seasons: r.seasons ?? [],
+            rarity: r.rarity,
+            meaning: r.meaning ?? '',
+            description: r.description ?? '',
+            photos,
+            image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+            care: {
+              sunlight: r.level_sun || null,
+              water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
+              soil: Array.isArray(r.soil) ? r.soil.join(', ') : null,
+              difficulty: r.maintenance_level || null,
+            },
+            seedsAvailable: r.seeds_available === true,
+          }
+        })
+        setPlantsCache()
+        res.json(mapped)
+        return
+      } catch (e) {
+        // Fall through to Supabase fallback on SQL query failure
+      }
+    }
+    const fallback = await loadPlantsViaSupabase()
+    if (fallback) {
+      setPlantsCache()
+      res.json(fallback)
     if (!supabaseServiceClient) {
       res.status(503).json({ error: 'Account deletion is not configured on this server' })
       return
@@ -10984,6 +11973,16 @@ app.post('/api/account/delete', async (req, res) => {
           .select('user_id, role')
           .eq('garden_id', gardenId)
 
+    // Spawn pg_dump and gzip the output to a file
+    let stderrBuf = ''
+    const dump = spawnChild('pg_dump', ['--dbname', connectionString, '--no-owner', '--no-acl'], {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    dump.on('error', async () => {
+      try { await fs.unlink(destPath) } catch { }
+    })
+    dump.stderr.on('data', (d) => { stderrBuf += d.toString() })
         const otherMembers = (allMembers || []).filter((m) => m.user_id !== userId)
         const otherOwners = otherMembers.filter((m) => m.role === 'owner')
 
@@ -11034,6 +12033,26 @@ app.post('/api/account/delete', async (req, res) => {
               deletedGardens++
               deletedGardenIds.push(gardenId)
 
+    const [, code] = await Promise.all([pipelinePromise, exitPromise]).catch(async (e) => {
+      try { await fs.unlink(destPath) } catch { }
+      throw e
+    })
+    if (code !== 0) {
+      try { await fs.unlink(destPath) } catch { }
+      throw new Error(`pg_dump exit code ${code}: ${stderrBuf || 'unknown error'}`)
+    }
+
+    // Stat the file
+    const stat = await fs.stat(destPath)
+    const token = crypto.randomBytes(24).toString('hex')
+    backupTokenStore.set(token, { path: destPath, filename, size: stat.size, createdAt: Date.now() })
+
+    // Expire tokens after 15 minutes
+    const expireMs = 15 * 60 * 1000
+    for (const [t, info] of backupTokenStore.entries()) {
+      if ((Date.now() - info.createdAt) > expireMs) {
+        backupTokenStore.delete(t)
+        try { await fs.unlink(info.path) } catch { }
               // Delete cover image from storage
               if (coverUrl) {
                 try {
@@ -11102,6 +12121,26 @@ app.post('/api/account/delete', async (req, res) => {
 app.get('/api/admin/visitors-stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
+
+  const token = (req.query.token || '').toString().trim()
+  if (!token) {
+    res.status(400).json({ error: 'Missing token' })
+    return
+  }
+
+  const info = backupTokenStore.get(token)
+  if (!info) {
+    res.status(404).json({ error: 'Invalid or expired token' })
+    return
+  }
+
+  // Enforce 15-minute token expiry
+  const maxAge = 15 * 60 * 1000
+  if ((Date.now() - info.createdAt) > maxAge) {
+    backupTokenStore.delete(token)
+    try { await fs.unlink(info.path) } catch { }
+    res.status(410).json({ error: 'Token expired' })
+    return
   // Helper that always succeeds using in-memory analytics
   const respondFromMemory = (extra = {}) => {
     try {
@@ -11132,6 +12171,13 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
           const daysParam = Number(req.query.days || 7)
           const days = (daysParam === 30 ? 30 : 7)
 
+  const cleanup = async () => {
+    backupTokenStore.delete(token)
+    try { await fs.unlink(info.path) } catch { }
+  }
+  res.on('finish', cleanup)
+  res.on('close', cleanup)
+})
           const [c10, c30, c60u, c60v, uN, sN] = await Promise.all([
             fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 10 }) }),
             fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 30 }) }),
@@ -11171,6 +12217,32 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
       // Fallback to memory-only if Supabase REST isn't configured or failed
       respondFromMemory()
       return
+    }
+    // Ensure it is executable (best-effort)
+    try { await fs.chmod(scriptPath, 0o755) } catch { }
+
+    // Pre-validate requested branch to fail fast on typos or deleted branches
+    if (branch) {
+      try {
+        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
+        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+        ])
+        const normalize = (s) => s.trim().replace(/^origin\//, '')
+        const allowed = new Set(
+          [...(remoteOut || '').split('\n'), ...(localOut || '').split('\n')]
+            .map(x => x.trim())
+            .filter(Boolean)
+            .map(normalize)
+            .filter(name => name && name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
+        )
+        if (!allowed.has(branch)) {
+          res.status(400).json({ ok: false, error: `Unknown branch: ${branch}` })
+          return
+        }
+      } catch { }
     }
 
     const daysParam = Number(req.query.days || 7)
@@ -11213,6 +12285,14 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     if (!respondFromMemory({ error: e?.message || 'DB query failed' })) {
       res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
     }
+    const child = spawnChild(scriptPath, {
+      cwd: repoRoot,
+      detached: true,
+      stdio: 'ignore',
+      env: execEnv,
+      shell: false,
+    })
+    try { child.unref() } catch { }
   }
 })
 
@@ -11222,6 +12302,37 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
   if (!uid) return
   const respondFromMemory = (extra = {}) => {
     try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch { }
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch { }
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`; ok = true } catch { }
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'api' } }) } catch { }
+      }
+    } catch { }
+    res.json({ ok: true, branch, started: true })
       const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
       res.json({ ok: true, uniqueIps7d, via: 'memory', ...extra })
       return true
@@ -11301,6 +12412,22 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       return
     }
 
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no') // for nginx
+    res.flushHeaders?.()
+
+    const send = (event, data) => {
+      try {
+        if (event) res.write(`event: ${event}\n`)
+        const payload = typeof data === 'string' ? data : JSON.stringify(data)
+        // Split by lines to avoid giant frames
+        const lines = String(payload).split(/\r?\n/) || []
+        for (const line of lines) res.write(`data: ${line}\n`)
+        res.write('\n')
+      } catch { }
     if (supabaseUrlEnv && supabaseAnonKey) {
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
       const token = getBearerTokenFromRequest(req)
@@ -11348,6 +12475,43 @@ app.get('/api/admin/online-ips', async (req, res) => {
 
   const respondFromMemory = (extra = {}) => {
     try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch { }
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch { }
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'stream' })})`; ok = true } catch { }
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'stream' } }) } catch { }
+      }
+    } catch { }
+    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
+    try { await fs.access(scriptPath) } catch {
+      send('error', { error: `refresh script not found at ${scriptPath}` })
+      res.end()
+      return
+    }
+    try { await fs.chmod(scriptPath, 0o755) } catch { }
       // Build set of IPs from the in-memory minute buckets within the window
       const nowMin = Math.floor(Date.now() / 60000)
       const start = nowMin - windowMinutes + 1
@@ -11396,6 +12560,61 @@ app.get('/api/admin/online-ips', async (req, res) => {
           const uniq = new Set((Array.isArray(arr) ? arr : []).map(r => String(r.ip_address || '')).filter(Boolean))
           ips = Array.from(uniq).sort()
         }
+      } catch { }
+      childEnv.PLANTSWIPE_TARGET_BRANCH = branch
+      send('log', `[pull] Target branch requested: ${branch}`)
+    }
+    const child = spawnChild(scriptPath, [], {
+      cwd: repoRoot,
+      env: childEnv,
+      shell: false,
+    })
+
+    // Heartbeat to keep the connection alive behind proxies
+    const heartbeatId = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    let clientDisconnected = false
+    let streamClosedGracefully = false
+    let autoRestartScheduled = false
+
+    // Stream stdout/stderr
+    child.stdout?.on('data', (buf) => {
+      const text = buf.toString()
+      send('log', text)
+    })
+    child.stderr?.on('data', (buf) => {
+      const text = buf.toString()
+      send('log', text)
+    })
+    child.on('error', (err) => {
+      send('error', { error: err?.message || 'spawn failed' })
+    })
+    child.on('close', (code) => {
+      const ok = code === 0
+      if (!streamClosedGracefully) {
+        if (ok) {
+          send('done', { ok: true, code })
+        } else {
+          send('done', { ok: false, code })
+        }
+      }
+      streamClosedGracefully = true
+      try { clearInterval(heartbeatId) } catch { }
+      try { res.end() } catch { }
+      if (ok && clientDisconnected && !autoRestartScheduled) {
+        autoRestartScheduled = true
+        console.log('[pull-code] Build finished after client disconnect; scheduling service restart.')
+        scheduleRestartAllServices('pull_code_stream_auto')
+      }
+    })
+
+    req.on('close', () => {
+      if (streamClosedGracefully) return
+      clientDisconnected = true
+      try { clearInterval(heartbeatId) } catch { }
+      console.warn('[pull-code] SSE client disconnected early; continuing refresh in background.')
+    })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
       } catch {}
       if (ips.length > 0) {
         res.json({ ok: true, ips, via: 'supabase', windowMinutes, count: ips.length, updatedAt: Date.now() })
@@ -11476,6 +12695,21 @@ function sseWrite(res, event, data) {
   } catch {}
 }
 
+    // Always operate from the repository root and mark it safe for this process
+    const repoRoot = await getRepoRoot()
+    const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
+    // Keep this fast: limit network timeout and avoid blocking when offline
+    try { await exec(`${gitBase} remote update --prune`, { timeout: 5000 }) } catch { }
+    // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
+    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
+    let branches = branchesStdout
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(name => name.replace(/^origin\//, ''))
+      // Exclude HEAD pointer, the remote namespace itself ("origin"), and any symbolic ref lines
+      .filter(name => name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
+      .sort((a, b) => a.localeCompare(b))
 async function getActiveBroadcastRow() {
   // Prefer direct SQL when available
   if (sql) {
@@ -11539,6 +12773,12 @@ app.get('/api/broadcast/active', async (_req, res) => {
   try {
     // Prevent caches from serving stale broadcast state
     try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'list_branches', ${current || null}, ${sql.json({ count: branches.length })})`
+    } catch { }
+    res.json({ branches, current, lastUpdateTime })
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
       res.setHeader('Pragma', 'no-cache')
     } catch {}
@@ -11572,6 +12812,28 @@ app.get('/api/broadcast/stream', async (req, res) => {
 
     // Send initial state (only broadcast if active exists; do not force-clear here)
     try {
+      geo = await withTimeout(resolveGeo(req, ipAddress), 800, 'GEO_TIMEOUT')
+    } catch { }
+    const userAgent = req.get('user-agent') || ''
+    const tokenUserId = await getUserIdFromRequest(req)
+    const effectiveUserId = tokenUserId || (typeof userId === 'string' ? userId : null)
+
+    // Be tolerant: if pagePath is missing, log and still respond with 204
+    // Tracking should never block or break user flows
+    if (typeof pagePath !== 'string' || pagePath.length === 0) {
+      console.warn('[track-visit] Missing pagePath, skipping visit recording')
+      res.status(204).end()
+      return
+    }
+
+    const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
+    const lang = language || acceptLanguage
+    const referrer = (typeof bodyReferrer === 'string' && bodyReferrer.length > 0) ? bodyReferrer : (req.get('referer') || req.get('referrer') || '')
+    // Do not block the response on DB write; best-effort in background
+    insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req).catch((err) => {
+      console.warn('[track-visit] Failed to insert visit:', err?.message || 'unknown error')
+    })
+    res.status(204).end()
       const row = await getActiveBroadcastRow()
       if (row) {
         sseWrite(res, 'broadcast', {
@@ -11711,6 +12973,7 @@ app.get('/api/users/:id/private', async (req, res) => {
             user: row ? { id: String(row.id || targetId), email: row.email || null } : null,
           })
           return
+        } catch { }
         }
       } catch {}
     }
@@ -12059,6 +13322,17 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
       }
 
       try {
+        const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
+        const url = `${supabaseUrlEnv}/rest/v1/${tablePath}?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`
+        const resp = await withTimeout(fetch(url, { headers }), 1200, 'REST_TIMEOUT')
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          const uniq = new Set((Array.isArray(arr) ? arr : []).map(r => String(r.ip_address || '')).filter(Boolean))
+          ips = Array.from(uniq).sort()
+        }
+      } catch { }
+      if (ips.length > 0) {
+        res.json({ ok: true, ips, via: 'supabase', windowMinutes, count: ips.length, updatedAt: Date.now() })
         // Store the proxy URL in the database for display
         await updateGardenCoverImage(gardenId, proxyUrl)
       } catch (dbErr) {
@@ -12131,6 +13405,148 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
   })
 })
 
+// --- Global broadcast message system ---
+// SSE client registry
+const broadcastClients = new Set()
+
+function sseWrite(res, event, data) {
+  try {
+    if (!res) return
+    if (event) res.write(`event: ${event}\n`)
+    const payload = typeof data === 'string' ? data : JSON.stringify(data)
+    const lines = String(payload).split(/\r?\n/)
+    for (const line of lines) res.write(`data: ${line}\n`)
+    res.write('\n')
+  } catch { }
+}
+
+async function getActiveBroadcastRow() {
+  // Prefer direct SQL when available
+  if (sql) {
+    try {
+      // Fetch broadcast first without join to be robust
+      const rows = await sql`
+        select 
+          bm.id::text as id,
+          bm.message,
+          bm.severity,
+          bm.created_at,
+          bm.expires_at,
+          bm.created_by::text as created_by
+        from public.broadcast_messages bm
+        where bm.removed_at is null and (bm.expires_at is null or bm.expires_at > now())
+        order by bm.created_at desc
+        limit 1
+      `
+      const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+      if (row && row.created_by) {
+        try {
+          const p = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+          if (p && p[0]) row.admin_name = p[0].name
+        } catch { /* ignore profile fetch error */ }
+      }
+      return row
+    } catch (err) {
+      console.error('[broadcast] sql fetch failed', err)
+    }
+  }
+  // Supabase REST fallback for reads
+  if (supabaseUrlEnv && supabaseAnonKey) {
+    try {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const url = `${supabaseUrlEnv}/rest/v1/broadcast_messages?removed_at=is.null&select=id,message,severity,created_at,expires_at,created_by&order=created_at.desc&limit=10`
+      const r = await fetch(url, { headers })
+      if (r.ok) {
+        const arr = await r.json().catch(() => [])
+        const now = Date.now()
+        const valid = (Array.isArray(arr) ? arr : []).find((row) => {
+          const ex = row?.expires_at ? Date.parse(row.expires_at) : null
+          return !ex || ex > now
+        })
+        return valid || null
+      }
+    } catch { }
+  }
+  return null
+}
+
+function broadcastToAll(payload) {
+  try {
+    const enriched = { ...payload, serverTime: new Date().toISOString() }
+    for (const res of Array.from(broadcastClients)) {
+      sseWrite(res, 'broadcast', enriched)
+    }
+  } catch { }
+}
+
+function clearBroadcastForAll() {
+  try {
+    for (const res of Array.from(broadcastClients)) {
+      sseWrite(res, 'clear', { ok: true })
+    }
+  } catch { }
+}
+
+// Public: fetch current active broadcast
+app.get('/api/broadcast/active', async (_req, res) => {
+  try {
+    // Prevent caches from serving stale broadcast state
+    try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+    } catch { }
+    const row = await getActiveBroadcastRow()
+    if (row) {
+      res.json({
+        ok: true, broadcast: {
+          id: String(row.id || ''),
+          message: String(row.message || ''),
+          severity: String(row.severity || 'info'),
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+          expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+          createdBy: row.created_by ? String(row.created_by) : null,
+          adminName: row.admin_name ? String(row.admin_name) : null,
+        }
+      })
+    } else {
+      res.json({ ok: true, broadcast: null })
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load broadcast' })
+  }
+})
+
+// Public: Server-Sent Events stream for broadcast updates
+app.get('/api/broadcast/stream', async (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    // Send initial state (only broadcast if active exists; do not force-clear here)
+    try {
+      const row = await getActiveBroadcastRow()
+      if (row) {
+        sseWrite(res, 'broadcast', {
+          id: String(row.id || ''),
+          message: String(row.message || ''),
+          severity: String(row.severity || 'info'),
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+          expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+          createdBy: row.created_by ? String(row.created_by) : null,
+          adminName: row.admin_name ? String(row.admin_name) : null,
+          serverTime: new Date().toISOString(),
+        })
+      }
+    } catch { }
+
+    broadcastClients.add(res)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    req.on('close', () => { try { clearInterval(hb) } catch { }; broadcastClients.delete(res) })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
 app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for storage cleanup' })
@@ -12187,6 +13603,23 @@ app.delete('/api/garden/:id', async (req, res) => {
   }
 
   try {
+    // Allow token via query param for EventSource
+    let user = null
+    try {
+      const qToken = (req.query?.token || req.query?.access_token)
+      if (qToken && supabaseServer) {
+        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
+        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
+      }
+    } catch { }
+    if (!user) user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
     // 1. Get the garden's cover image URL before deleting
     const gardenRow = await getGardenCoverRow(gardenId)
     const coverImageUrl = gardenRow?.cover_image_url || null
@@ -12197,6 +13630,49 @@ app.delete('/api/garden/:id', async (req, res) => {
       .delete()
       .eq('id', gardenId)
 
+    const getSig = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select gm.garden_id::text as garden_id
+            from public.garden_members gm
+            where gm.user_id = ${user.id}
+            order by gm.garden_id asc
+          `
+          const list = (rows || []).map((r) => String(r.garden_id))
+          return list.join(',')
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&order=garden_id.asc`
+          const r = await fetch(url, { headers })
+          const arr = r.ok ? (await r.json().catch(() => [])) : []
+          const list = (arr || []).map((row) => String(row.garden_id))
+          return list.join(',')
+        }
+      } catch { }
+      return ''
+    }
+
+    let lastSig = await getSig()
+
+    const poll = async () => {
+      try {
+        const next = await getSig()
+        if (next !== lastSig) {
+          lastSig = next
+          sseWrite(res, 'memberships', { changed: true })
+        }
+      } catch { }
+    }
+
+    const iv = setInterval(poll, 1000)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch { } })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
     if (deleteErr) {
       console.error('[garden-delete] Failed to delete garden row', deleteErr)
       res.status(500).json({ error: 'Failed to delete garden' })
@@ -12231,6 +13707,17 @@ app.delete('/api/garden/:id', async (req, res) => {
 
 app.get('/api/garden/:id/activity', async (req, res) => {
   try {
+    const targetId = String(req.params.id || '').trim()
+    if (!targetId) { res.status(400).json({ ok: false, error: 'user id required' }); return }
+    const viewer = await getUserFromRequest(req)
+    if (!viewer?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    let allowed = viewer.id === targetId
+    if (!allowed) {
+      try {
+        allowed = await isAdminFromRequest(req)
+      } catch { }
+    }
+    if (!allowed) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
@@ -12301,6 +13788,16 @@ app.get('/api/garden/:id/activity', async (req, res) => {
           taskName: row.task_name ?? row.taskName ?? null,
           occurredAt: occurredAtRaw,
         })
+        if (resp.ok) {
+          const body = await resp.json().catch(() => null)
+          const row = Array.isArray(body) ? body[0] : body
+          res.json({
+            ok: true,
+            user: row ? { id: String(row.id || targetId), email: row.email || null } : null,
+          })
+          return
+        }
+      } catch { }
       }
     }
 
@@ -12312,6 +13809,46 @@ app.get('/api/garden/:id/activity', async (req, res) => {
 
 app.get('/api/garden/:id/tasks', async (req, res) => {
   try {
+    // Resolve user from token param or cookie session
+    let user = null
+    try {
+      const qToken = (req.query?.token || req.query?.access_token)
+      if (qToken && supabaseServer) {
+        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
+        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
+      }
+    } catch { }
+    if (!user) user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    sseWrite(res, 'ready', { ok: true })
+
+    const getGardenIdsCsv = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select garden_id::text as garden_id from public.garden_members where user_id = ${user.id}
+          `
+          const list = (rows || []).map((r) => String(r.garden_id))
+          return list
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id`
+          const r = await fetch(url, { headers })
+          const arr = r.ok ? (await r.json().catch(() => [])) : []
+          const list = (arr || []).map((row) => String(row.garden_id))
+          return list
+        }
+      } catch { }
+      return []
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const startDay = typeof req.query.start === 'string' ? req.query.start : ''
@@ -12326,6 +13863,68 @@ app.get('/api/garden/:id/tasks', async (req, res) => {
     const member = await isGardenMember(req, gardenId, user.id)
     if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
+    let gardenIds = await getGardenIdsCsv()
+    let lastSig = gardenIds.slice().sort().join(',')
+    let lastSeen = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+
+    const poll = async () => {
+      try {
+        // Refresh membership set
+        const nextIds = await getGardenIdsCsv()
+        const nextSig = nextIds.slice().sort().join(',')
+        if (nextSig !== lastSig) {
+          gardenIds = nextIds
+          lastSig = nextSig
+          sseWrite(res, 'membership', { changed: true })
+        }
+        if (!gardenIds || gardenIds.length === 0) return
+        if (sql) {
+          const rows = await sql`
+            select id::text as id, garden_id::text as garden_id, actor_id::text as actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at
+            from public.garden_activity_logs
+            where garden_id = any(${sql.array(gardenIds)}) and occurred_at > ${lastSeen}
+            order by occurred_at asc
+            limit 500
+          `
+          for (const r of rows || []) {
+            lastSeen = new Date(r.occurred_at).toISOString()
+            sseWrite(res, 'activity', {
+              id: String(r.id), gardenId: String(r.garden_id), actorId: r.actor_id || null, actorName: r.actor_name || null, actorColor: r.actor_color || null,
+              kind: r.kind, message: r.message, plantName: r.plant_name || null, taskName: r.task_name || null, occurredAt: new Date(r.occurred_at).toISOString(),
+            })
+          }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          // Build OR filter for multiple garden_ids: or=(garden_id.eq.id1,garden_id.eq.id2,...)
+          const orExpr = gardenIds.length > 0 ? `or=(${gardenIds.map(id => `garden_id.eq.${id}`).join(',')})` : ''
+          const qp = [orExpr, `occurred_at=gt.${lastSeen}`, 'select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at', 'order=occurred_at.asc', 'limit=500']
+            .filter(Boolean)
+            .map(s => encodeURI(s))
+            .join('&')
+          const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?${qp}`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            for (const row of arr || []) {
+              lastSeen = new Date(row.occurred_at).toISOString()
+              sseWrite(res, 'activity', {
+                id: String(row.id), gardenId: String(row.garden_id), actorId: row.actor_id || null, actorName: row.actor_name || null, actorColor: row.actor_color || null,
+                kind: row.kind, message: row.message, plantName: row.plant_name || null, taskName: row.task_name || null, occurredAt: new Date(row.occurred_at).toISOString(),
+              })
+            }
+          }
+        }
+      } catch { }
+    }
+
+    const iv = setInterval(poll, 1000)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch { } })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
     let rows = []
     if (sql) {
       rows = await sql`
@@ -12384,6 +13983,10 @@ app.get('/api/garden/:id/tasks', async (req, res) => {
 
 app.post('/api/garden/:id/activity', async (req, res) => {
   try {
+    const user = userIdOverride ? { id: userIdOverride } : await getUserFromRequest(req)
+    if (!user?.id) return false
+    // Admins can access any garden
+    try { if (await isAdminFromRequest(req)) return true } catch { }
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequest(req)
@@ -12608,6 +14211,19 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           }
         })
 
+async function isGardenOwner(req, gardenId, userIdOverride = null) {
+  try {
+    const user = userIdOverride ? { id: userIdOverride } : await getUserFromRequest(req)
+    if (!user?.id) return false
+    try { if (await isAdminFromRequest(req)) return true } catch { }
+    if (sql) {
+      const rows = await sql`
+        select role from public.garden_members
+        where garden_id = ${gardenId} and user_id = ${user.id}
+        limit 1
+      `
+      if (Array.isArray(rows) && rows.length > 0) {
+        return String(rows[0].role || '').toLowerCase() === 'owner'
       // Fetch members - try with auth.users first, fallback if access denied
       console.log('[overview] Fetching members for garden', gardenId)
       let mRows = []
@@ -12654,6 +14270,43 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
 
+  singleGardenCoverUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(gardenCoverMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ; (async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const gardenRow = await getGardenCoverRow(gardenId)
+      if (!gardenRow) {
+        res.status(404).json({ error: 'Garden not found' })
+        return
+      }
+      let uploaderDisplayName = null
+      try {
+        uploaderDisplayName = await getAdminProfileName(user.id)
+      } catch { }
+      const previousUrl = gardenRow.cover_image_url || null
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
       // Garden (include privacy field and location if available)
       const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy,location_city,location_country,location_timezone,location_lat,location_lon&limit=1`
       console.log('[overview] Fetching garden via REST API')
@@ -12792,6 +14445,73 @@ app.get('/api/garden/:id/overview', async (req, res) => {
     // Calculate today's task progress
     if (sql && gardenId) {
       try {
+        // Store the proxy URL in the database for display
+        await updateGardenCoverImage(gardenId, proxyUrl)
+      } catch (dbErr) {
+        console.error('[garden-cover] failed to update garden cover', dbErr)
+        res.status(500).json({ error: dbErr?.message || 'Failed to update garden cover' })
+        return
+      }
+
+      let deletedPrevious = false
+      if (previousUrl && previousUrl !== proxyUrl) {
+        try {
+          const result = await deleteGardenCoverObject(previousUrl)
+          deletedPrevious = Boolean(result.deleted)
+        } catch { }
+      }
+
+      const compressionPercent =
+        file.size > 0
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+      try {
+        await recordAdminMediaUpload({
+          adminId: user.id,
+          adminEmail: user.email || null,
+          adminName: uploaderDisplayName,
+          bucket: gardenCoverUploadBucket,
+          path: objectPath,
+          publicUrl: proxyUrl,
+          mimeType: 'image/webp',
+          originalMimeType: mime,
+          sizeBytes: optimizedBuffer.length,
+          originalSizeBytes: file.size,
+          quality: gardenCoverWebpQuality,
+          compressionPercent,
+          metadata: {
+            source: 'garden_cover',
+            gardenId,
+            gardenName: gardenRow.name || null,
+            originalName: file.originalname,
+            previousUrl,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      } catch (recordErr) {
+        console.error('[garden-cover] failed to record media upload', recordErr)
+      }
+
+      res.json({
+        ok: true,
+        gardenId,
+        bucket: gardenCoverUploadBucket,
+        path: objectPath,
+        url: proxyUrl,
+        mimeType: 'image/webp',
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        quality: gardenCoverWebpQuality,
+        maxDimension: gardenCoverMaxDimension,
+        compressionPercent,
+        deletedPrevious,
+      })
+    })().catch((uploadErr) => {
+      console.error('[garden-cover] unexpected failure', uploadErr)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
         const progressRows = await sql`
           SELECT 
             COALESCE(SUM(GREATEST(1, o.required_count)), 0)::int as due,
@@ -12911,6 +14631,10 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
     const adminId = await ensureAdmin(req, res)
     if (!adminId) return
 
+    const dayParam = typeof req.query.day === 'string' ? req.query.day : ''
+    const dayIso = /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : new Date().toISOString().slice(0, 10)
+    const start = new Date(`${dayIso}T00:00:00.000Z`).toISOString()
+    const endExclusive = new Date(new Date(`${dayIso}T00:00:00.000Z`).getTime() + 24 * 3600 * 1000).toISOString()
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
     res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('Connection', 'keep-alive')
@@ -13004,6 +14728,9 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
       } catch {}
     }
 
+    res.json({ ok: true, activity })
+  } catch (e) {
+    try { res.status(500).json({ ok: false, error: e?.message || 'failed to load activity' }) } catch { }
     const iv = setInterval(poll, 2500)
     const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
     req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
@@ -13218,6 +14945,27 @@ app.get('/api/garden/:id/advice', async (req, res) => {
 
     const forceRefresh = req.query.refresh === 'true'
 
+    if (sql) {
+      let actorName = null
+      try {
+        // First try profiles table for display_name
+        const nameRows = await sql`select display_name from public.profiles where id = ${user.id} limit 1`
+        if (Array.isArray(nameRows) && nameRows[0]?.display_name) {
+          actorName = nameRows[0].display_name
+        } else {
+          // Fallback to email username from auth.users
+          const emailRows = await sql`select email from auth.users where id = ${user.id} limit 1`
+          if (Array.isArray(emailRows) && emailRows[0]?.email) {
+            actorName = emailRows[0].email.split('@')[0] || null
+          }
+        }
+      } catch { }
+      const nowIso = new Date().toISOString()
+      await sql`
+        insert into public.garden_activity_logs (garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at)
+        values (${gardenId}, ${user.id}, ${actorName}, ${actorColor || null}, ${kindRaw}, ${messageRaw}, ${plantName || null}, ${taskName || null}, ${nowIso})
+      `
+      res.json({ ok: true })
     // Verify membership
     const membership = await sql`
       select 1 from public.garden_members
@@ -13239,6 +14987,164 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       return
     }
 
+    res.status(503).json({ ok: false, error: 'activity logging unavailable' })
+  } catch (e) {
+    try { res.status(500).json({ ok: false, error: e?.message || 'failed to log activity' }) } catch { }
+  }
+})
+
+// Batched initial load for a garden
+app.get('/api/garden/:id/overview', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+
+    // Try to get user (may be null for unauthenticated requests)
+    const user = await getUserFromRequest(req).catch(() => null)
+    const isMember = user?.id ? await isGardenMember(req, gardenId, user.id).catch(() => false) : false
+
+    let garden = null
+    let plants = []
+    let members = []
+    const serverNow = new Date().toISOString()
+
+    // First, fetch garden to check privacy
+    if (sql) {
+      // Try with privacy column first, then progressively simpler fallbacks
+      let gRows = []
+      let gardenQuerySuccess = false
+
+      // Attempt 1: Full query with privacy, streak, location, and preferred_language
+      try {
+        console.log('[overview] Fetching garden', gardenId, '(attempt 1: full query)')
+        gRows = await sql`
+          select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy,
+                 location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language
+          from public.gardens where id = ${gardenId} limit 1
+        `
+        console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
+        gardenQuerySuccess = true
+      } catch (e1) {
+        console.error('[overview] Garden query failed (attempt 1):', e1?.message || e1)
+
+        // Attempt 2: Without privacy column
+        try {
+          console.log('[overview] Fetching garden', gardenId, '(attempt 2: without privacy)')
+          gRows = await sql`
+            select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy,
+                   location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language
+            from public.gardens where id = ${gardenId} limit 1
+          `
+          console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
+          gardenQuerySuccess = true
+        } catch (e2) {
+          console.error('[overview] Garden query failed (attempt 2):', e2?.message || e2)
+
+          // Attempt 3: Minimal query (basic columns only)
+          try {
+            console.log('[overview] Fetching garden', gardenId, '(attempt 3: minimal)')
+            gRows = await sql`
+              select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy,
+                     location_city, location_country, location_timezone, location_lat, location_lon, 'en' as preferred_language
+              from public.gardens where id = ${gardenId} limit 1
+            `
+            console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
+            gardenQuerySuccess = true
+          } catch (e3) {
+            console.error('[overview] Garden query failed (attempt 3):', e3?.message || e3)
+            throw new Error('Failed to fetch garden after all attempts: ' + (e3?.message || 'Unknown error'))
+          }
+        }
+      }
+
+      garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
+      console.log('[overview] Garden found:', !!garden, 'querySuccess:', gardenQuerySuccess)
+
+      // Fetch plants with try-catch
+      console.log('[overview] Fetching plants for garden', gardenId)
+      let gpRows = []
+      try {
+        gpRows = await sql`
+          select
+            gp.id::text as id,
+            gp.garden_id::text as garden_id,
+            gp.plant_id::text as plant_id,
+            gp.nickname,
+            gp.seeds_planted::int as seeds_planted,
+            gp.planted_at,
+            gp.expected_bloom_date,
+            gp.override_water_freq_unit,
+            gp.override_water_freq_value::int as override_water_freq_value,
+            gp.plants_on_hand::int as plants_on_hand,
+            gp.sort_index::int as sort_index,
+            gp.health_status,
+            gp.notes,
+            gp.last_health_update,
+            p.id as p_id,
+            p.name as p_name,
+            p.scientific_name as p_scientific_name,
+            p.colors as p_colors,
+            p.seasons as p_seasons,
+            p.rarity as p_rarity,
+            p.meaning as p_meaning,
+            p.description as p_description,
+            p.image_url as p_image_url,
+            p.photos as p_photos,
+            p.level_sun as p_level_sun,
+            p.watering_type as p_watering_type,
+            p.soil as p_soil,
+            p.maintenance_level as p_maintenance_level,
+            p.seeds_available as p_seeds_available
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.garden_id = ${gardenId}
+          order by gp.sort_index asc nulls last
+        `
+        console.log('[overview] Plants query succeeded, rows:', gpRows?.length || 0)
+      } catch (plantsErr) {
+        console.error('[overview] Plants query failed:', plantsErr?.message || plantsErr)
+        // Plants query failed, continue with empty plants (non-fatal)
+        gpRows = []
+      }
+      plants = (gpRows || []).map((r) => {
+        const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
+        const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
+        return {
+          id: String(r.id),
+          gardenId: String(r.garden_id),
+          plantId: String(r.plant_id),
+          nickname: r.nickname,
+          seedsPlanted: Number(r.seeds_planted || 0),
+          plantedAt: r.planted_at || null,
+          expectedBloomDate: r.expected_bloom_date || null,
+          overrideWaterFreqUnit: r.override_water_freq_unit || null,
+          overrideWaterFreqValue: (r.override_water_freq_value ?? null),
+          plantsOnHand: Number(r.plants_on_hand || 0),
+          sortIndex: (r.sort_index ?? null),
+          healthStatus: r.health_status || null,
+          notes: r.notes || null,
+          lastHealthUpdate: r.last_health_update || null,
+          plant: r.p_id ? {
+            id: String(r.p_id),
+            name: String(r.p_name || ''),
+            scientificName: String(r.p_scientific_name || ''),
+            colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
+            seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
+            rarity: r.p_rarity,
+            meaning: r.p_meaning || '',
+            description: r.p_description || '',
+            photos: plantPhotos,
+            image: plantImage,
+            care: {
+              sunlight: r.p_level_sun || null,
+              water: Array.isArray(r.p_watering_type) ? r.p_watering_type.join(', ') : null,
+              soil: Array.isArray(r.p_soil) ? r.p_soil.join(', ') : null,
+              difficulty: r.p_maintenance_level || null,
+            },
+            seedsAvailable: Boolean(r.p_seeds_available ?? false),
+          } : null,
+        }
+      })
     // Determine target language: garden's preferred language or Accept-Language header
     const acceptLang = req.headers['accept-language'] || ''
     const headerLang = acceptLang.split(',')[0]?.split('-')[0]?.toUpperCase() || 'EN'
@@ -13458,6 +15364,178 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       plantImages = imgRows || []
     } catch {}
 
+      // Garden plants
+      const gpUrl = `${supabaseUrlEnv}/rest/v1/garden_plants?garden_id=eq.${encodeURIComponent(gardenId)}&select=id,garden_id,plant_id,nickname,seeds_planted,planted_at,expected_bloom_date,override_water_freq_unit,override_water_freq_value,plants_on_hand,sort_index,health_status,notes,last_health_update`
+      const gpResp = await fetch(gpUrl, { headers })
+      let gpRows = []
+      if (gpResp.ok) gpRows = await gpResp.json().catch(() => [])
+      const plantIds = Array.from(new Set(gpRows.map((r) => r.plant_id)))
+      let plantsMap = {}
+      if (plantIds.length > 0) {
+        const inParam = plantIds.map((id) => encodeURIComponent(String(id))).join(',')
+        const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=*`
+        const pResp = await fetch(pUrl, { headers })
+        const pRows = pResp.ok ? (await pResp.json().catch(() => [])) : []
+        for (const p of pRows) {
+          const plantPhotos = Array.isArray(p.photos) ? p.photos : undefined
+          plantsMap[String(p.id)] = {
+            id: String(p.id),
+            name: String(p.name || ''),
+            scientificName: String(p.scientific_name || ''),
+            colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
+            seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
+            rarity: p.rarity,
+            meaning: p.meaning || '',
+            description: p.description || '',
+            photos: plantPhotos,
+            image: pickPrimaryPhotoUrlFromArray(plantPhotos, p.image_url || ''),
+            care: {
+              sunlight: p.level_sun || null,
+              water: Array.isArray(p.watering_type) ? p.watering_type.join(', ') : null,
+              soil: Array.isArray(p.soil) ? p.soil.join(', ') : null,
+              difficulty: p.maintenance_level || null,
+            },
+            seedsAvailable: Boolean(p.seeds_available ?? false),
+          }
+        }
+      }
+      plants = gpRows.map((r) => ({
+        id: String(r.id),
+        gardenId: String(r.garden_id),
+        plantId: String(r.plant_id),
+        nickname: r.nickname,
+        seedsPlanted: Number(r.seeds_planted || 0),
+        plantedAt: r.planted_at || null,
+        expectedBloomDate: r.expected_bloom_date || null,
+        overrideWaterFreqUnit: r.override_water_freq_unit || null,
+        overrideWaterFreqValue: (r.override_water_freq_value ?? null),
+        plantsOnHand: Number(r.plants_on_hand || 0),
+        sortIndex: (r.sort_index ?? null),
+        healthStatus: r.health_status || null,
+        notes: r.notes || null,
+        lastHealthUpdate: r.last_health_update || null,
+        plant: plantsMap[String(r.plant_id)] || null,
+      }))
+
+      // Members via RPC to include email
+      try {
+        const rpcResp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_profiles_for_garden`, {
+          method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ _garden_id: gardenId })
+        })
+        if (rpcResp.ok) {
+          const rows = await rpcResp.json().catch(() => [])
+          const gmResp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&select=garden_id,user_id,role,joined_at`, { headers })
+          const gms = gmResp.ok ? (await gmResp.json().catch(() => [])) : []
+          const meta = {}
+          for (const r of rows) meta[String(r.user_id)] = { display_name: r.display_name || null, email: r.email || null }
+          members = gms.map((m) => ({
+            gardenId: String(m.garden_id),
+            userId: String(m.user_id),
+            role: m.role,
+            joinedAt: m.joined_at,
+            displayName: (meta[String(m.user_id)] || {}).display_name || null,
+            email: (meta[String(m.user_id)] || {}).email || null,
+            accentKey: null,
+          }))
+        }
+      } catch { }
+    } else {
+      res.status(500).json({ ok: false, error: 'Database not configured' }); return
+    }
+
+    // Normalize garden object to frontend shape
+    const gardenOut = garden ? {
+      id: String(garden.id),
+      name: String(garden.name),
+      coverImageUrl: (garden.cover_image_url || garden.coverImageUrl || null),
+      createdBy: String(garden.created_by || garden.createdBy || ''),
+      createdAt: garden.created_at ? new Date(garden.created_at).toISOString() : (garden.createdAt || null),
+      streak: Number(garden.streak ?? 0),
+      privacy: garden.privacy || 'public',
+      locationCity: garden.location_city || null,
+      locationCountry: garden.location_country || null,
+      locationTimezone: garden.location_timezone || null,
+      locationLat: garden.location_lat || null,
+      locationLon: garden.location_lon || null,
+      preferredLanguage: garden.preferred_language || 'en',
+    } : null
+
+    // Check access: members always allowed, otherwise check privacy
+    const gardenPrivacy = garden?.privacy || 'public'
+    if (!isMember && gardenPrivacy === 'private') {
+      res.status(403).json({ ok: false, error: 'This garden is private' })
+      return
+    }
+    // TODO: For friends_only, would need to check friend status with members
+
+    // Calculate today's progress and stats server-side to avoid round-trips
+    const today = new Date().toISOString().slice(0, 10)
+    const startIso = `${today}T00:00:00.000Z`
+    const endIso = `${today}T23:59:59.999Z`
+
+    let todayProgress = { due: 0, completed: 0 }
+    let totalOnHand = 0
+    let speciesCount = 0
+
+    // Calculate species count and totalOnHand from plants
+    const seenSpecies = new Set()
+    for (const p of plants) {
+      const c = Number(p.plantsOnHand || 0)
+      totalOnHand += c
+      if (p.plantId) seenSpecies.add(String(p.plantId))
+    }
+    speciesCount = seenSpecies.size
+
+    // Calculate today's task progress
+    if (sql && gardenId) {
+      try {
+        const progressRows = await sql`
+          SELECT 
+            COALESCE(SUM(GREATEST(1, o.required_count)), 0)::int as due,
+            COALESCE(SUM(LEAST(GREATEST(1, o.required_count), o.completed_count)), 0)::int as completed
+          FROM garden_plant_task_occurrences o
+          JOIN garden_plant_tasks t ON t.id = o.task_id
+          WHERE t.garden_id = ${gardenId}
+            AND o.due_at >= ${startIso}::timestamptz
+            AND o.due_at <= ${endIso}::timestamptz
+        `
+        if (progressRows && progressRows[0]) {
+          todayProgress = {
+            due: Number(progressRows[0].due || 0),
+            completed: Number(progressRows[0].completed || 0),
+          }
+        }
+      } catch (progressErr) {
+        console.warn('[overview] Progress query failed:', progressErr?.message || progressErr)
+      }
+    }
+
+    res.json({
+      ok: true,
+      garden: gardenOut,
+      plants,
+      members,
+      serverNow,
+      todayProgress,
+      totalOnHand,
+      speciesCount,
+    })
+  } catch (e) {
+    console.error('[overview] Error for garden', req.params.id, ':', e?.message || e)
+    console.error('[overview] Stack:', e?.stack || 'No stack')
+    res.status(500).json({ ok: false, error: e?.message || 'overview failed' })
+  }
+})
+
+// Garden activity SSE — pushes new rows in garden_activity_logs
+app.get('/api/garden/:id/stream', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ error: 'Forbidden' }); return }
     // Get journal photos from recent entries (with URLs for vision analysis)
     let journalPhotos = []
     let journalPhotoUrls = []
@@ -13562,6 +15640,64 @@ ${recentJournalEntries.map(e => {
 }).join('\n')}`
     }
 
+    const poll = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select id::text as id, garden_id::text as garden_id, actor_id::text as actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at
+            from public.garden_activity_logs
+            where garden_id = ${gardenId} and occurred_at > ${lastSeen}
+            order by occurred_at asc
+            limit 500
+          `
+          for (const r of rows || []) {
+            lastSeen = new Date(r.occurred_at).toISOString()
+            sseWrite(res, 'activity', {
+              id: String(r.id), gardenId: String(r.garden_id), actorId: r.actor_id || null, actorName: r.actor_name || null, actorColor: r.actor_color || null,
+              kind: r.kind, message: r.message, plantName: r.plant_name || null, taskName: r.task_name || null, occurredAt: new Date(r.occurred_at).toISOString(),
+            })
+          }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getAuthTokenFromRequest(req)
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gt.${encodeURIComponent(lastSeen)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.asc&limit=500`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            for (const row of arr) {
+              lastSeen = new Date(row.occurred_at).toISOString()
+              sseWrite(res, 'activity', {
+                id: String(row.id), gardenId: String(row.garden_id), actorId: row.actor_id || null, actorName: row.actor_name || null, actorColor: row.actor_color || null,
+                kind: row.kind, message: row.message, plantName: row.plant_name || null, taskName: row.task_name || null, occurredAt: new Date(row.occurred_at).toISOString(),
+              })
+            }
+          }
+        }
+      } catch { }
+    }
+
+    const iv = setInterval(poll, 1000)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch { } })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
+  }
+})
+
+// ---- Admin logs SSE ----
+app.get('/api/admin/admin-logs/stream', async (req, res) => {
+  try {
+    // Allow admin static token via query param for EventSource
+    try {
+      const adminToken = (req.query?.admin_token ? String(req.query.admin_token) : '')
+      if (adminToken) {
+        try { req.headers['x-admin-token'] = adminToken } catch { }
+      }
+    } catch { }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     // Build photo observations context
     let photoContext = ''
     const photoObservations = journalPhotos.filter(p => p.observations || p.plant_health)
@@ -13591,6 +15727,45 @@ Average task completion time: ${avgCompletionTime}
 Plants (${plants.length} total):
 ${plantList || 'No plants yet'}
 
+    // Send initial snapshot (latest 200)
+    try {
+      if (sql) {
+        const rows = await sql`
+          select occurred_at, admin_id::text as admin_id, admin_name, action, target, detail
+          from public.admin_activity_logs
+          where occurred_at >= now() - interval '30 days'
+          order by occurred_at desc
+          limit 200
+        `
+        const list = (rows || []).map((r) => ({
+          occurred_at: new Date(r.occurred_at).toISOString(),
+          admin_id: r.admin_id || null,
+          admin_name: r.admin_name || null,
+          action: r.action,
+          target: r.target || null,
+          detail: r.detail || null,
+        }))
+        sseWrite(res, 'snapshot', { logs: list })
+        if (list[0]?.occurred_at) lastSeen = list[0].occurred_at
+      } else if (supabaseUrlEnv && supabaseAnonKey) {
+        const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+        const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.desc&limit=200`
+        const r = await fetch(url, { headers })
+        if (r.ok) {
+          const arr = await r.json().catch(() => [])
+          const list = (arr || []).map((row) => ({
+            occurred_at: new Date(row.occurred_at).toISOString(),
+            admin_id: row.admin_id || null,
+            admin_name: row.admin_name || null,
+            action: row.action,
+            target: row.target || null,
+            detail: row.detail || null,
+          }))
+          sseWrite(res, 'snapshot', { logs: list })
+          if (list[0]?.occurred_at) lastSeen = list[0].occurred_at
+        }
+      }
+    } catch { }
 ═══════════════════════════════════════════════════════════════
 📊 TASK PERFORMANCE
 ═══════════════════════════════════════════════════════════════
@@ -13687,6 +15862,16 @@ Include specific observations from the photos in your advice.` }
         } else {
           messages.push({ role: 'user', content: prompt })
         }
+      } catch { }
+    }
+
+    const iv = setInterval(poll, 2500)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch { } })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
+  }
+})
 
         const completionOptions = {
           model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
@@ -13741,6 +15926,68 @@ Include specific observations from the photos in your advice.` }
       timezone: gardenLocation.location_timezone,
     }
 
+    // Get member contributions for this week
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    let memberContributions = []
+    try {
+      // First get all garden members
+      const allMembers = await sql`
+        select
+          gm.user_id,
+          gm.role,
+          gm.joined_at,
+          p.display_name,
+          p.accent_key,
+          p.avatar_url
+        from public.garden_members gm
+        left join public.profiles p on p.id = gm.user_id
+        where gm.garden_id = ${gardenId}
+        order by gm.joined_at asc
+      `
+
+      // Then get task completion counts for this week
+      const memberStats = await sql`
+        select
+          uc.user_id,
+          sum(uc.increment) as tasks_completed
+        from public.garden_task_user_completions uc
+        join public.garden_plant_task_occurrences o on o.id = uc.occurrence_id
+        join public.garden_plant_tasks t on t.id = o.task_id
+        where t.garden_id = ${gardenId}
+          and uc.occurred_at >= ${weekAgo}::date
+        group by uc.user_id
+      `
+
+      // Build a map of user_id -> tasks_completed
+      const completionMap = {}
+      for (const row of memberStats) {
+        completionMap[String(row.user_id)] = Number(row.tasks_completed || 0)
+      }
+
+      // Merge all members with their completion counts
+      const totalCompleted = memberStats.reduce((s, r) => s + Number(r.tasks_completed || 0), 0)
+      const memberColors = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4', '#84cc16', '#f97316']
+
+      memberContributions = allMembers.map((m, i) => {
+        const userId = String(m.user_id)
+        const tasksCompleted = completionMap[userId] || 0
+        return {
+          userId,
+          displayName: m.display_name || 'Member',
+          role: m.role || 'member',
+          avatarUrl: m.avatar_url || null,
+          accentKey: m.accent_key || null,
+          joinedAt: m.joined_at,
+          tasksCompleted,
+          percentage: totalCompleted > 0 ? Math.round((tasksCompleted / totalCompleted) * 100) : 0,
+          color: memberColors[i % memberColors.length],
+        }
+      })
+
+      // Sort by tasks completed (descending), but keep showing all members
+      memberContributions.sort((a, b) => b.tasksCompleted - a.tasksCompleted)
+    } catch (err) {
+      console.warn('[analytics] Failed to get member contributions:', err)
     // Store in database with enhanced context. Fall back gracefully if the target columns don't exist yet.
     let insertResult
     const focusAreasArray = Array.isArray(parsed.focusAreas)
@@ -14077,6 +16324,42 @@ function generateRuleBasedAdvice({
         : ''
   summaryParts.push(`You logged ${completionRate}% of scheduled tasks this week${trendText}.`)
 
+            // Check if translation is needed and exists
+            if (targetLang !== 'EN') {
+              const translations = adv.translations || {}
+              if (translations[targetLang]) {
+                // Use cached translation
+                console.log(`[garden-advice] Using cached ${targetLang} translation`)
+                adviceResponse = { ...adviceResponse, ...translations[targetLang] }
+              } else {
+                // Translate and cache the translation
+                console.log(`[garden-advice] Translating existing advice to ${targetLang}`)
+                try {
+                  const translatedAdvice = await translateAdvice(adviceResponse, targetLang)
+                  // Store the translation in the database
+                  const updatedTranslations = {
+                    ...translations, [targetLang]: {
+                      adviceText: translatedAdvice.adviceText,
+                      adviceSummary: translatedAdvice.adviceSummary,
+                      focusAreas: translatedAdvice.focusAreas,
+                      plantSpecificTips: translatedAdvice.plantSpecificTips,
+                      weeklyFocus: translatedAdvice.weeklyFocus,
+                      weatherAdvice: translatedAdvice.weatherAdvice,
+                      encouragement: translatedAdvice.encouragement,
+                    }
+                  }
+                  await sql`
+                    update public.garden_ai_advice
+                    set translations = ${JSON.stringify(updatedTranslations)}::jsonb
+                    where id = ${adv.id}
+                  `.catch(err => console.warn('[garden-advice] Failed to cache translation:', err))
+
+                  adviceResponse = { ...adviceResponse, ...translatedAdvice }
+                } catch (translateErr) {
+                  console.warn('[garden-advice] Translation failed, returning English:', translateErr)
+                }
+              }
+            }
   if (avgCompletionTime && avgCompletionTime !== 'Not enough data') {
     summaryParts.push(`Most tasks get completed around ${avgCompletionTime}.`)
   }
@@ -14130,6 +16413,48 @@ function generateRuleBasedAdvice({
     let reason = 'General upkeep keeps foliage breathing well.'
     let priority = 'medium'
 
+    // Get weather data for the location
+    let weatherData = null
+    if (gardenLocation.location_city || gardenLocation.location_lat) {
+      weatherData = await fetchWeatherForLocation(
+        gardenLocation.location_lat,
+        gardenLocation.location_lon,
+        gardenLocation.location_city
+      )
+    }
+
+    // Get task completion data for last 14 days (for better trend analysis)
+    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const taskData = await sql`
+      select
+        t.type,
+        p.name as plant_name,
+        gp.nickname,
+        o.due_at,
+        o.required_count,
+        o.completed_count,
+        o.completed_at
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      join public.garden_plants gp on gp.id = t.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where t.garden_id = ${gardenId}
+        and o.due_at >= ${twoWeeksAgo}::date
+      order by o.due_at desc
+      limit 300
+    `
+
+    // Calculate average completion time (hour of day when tasks are typically completed)
+    const completionHours = taskData
+      .filter(t => t.completed_at)
+      .map(t => new Date(t.completed_at).getHours())
+    const avgCompletionHour = completionHours.length > 0
+      ? Math.round(completionHours.reduce((a, b) => a + b, 0) / completionHours.length)
+      : null
+    const avgCompletionTime = avgCompletionHour !== null
+      ? `${avgCompletionHour}:00`
+      : 'Not enough data'
     if (health.includes('dry')) {
       tip = 'Soak the soil thoroughly, add mulch to retain moisture, and monitor afternoon sun.'
       reason = 'Reported dryness suggests the roots need a deeper drink.'
@@ -14155,6 +16480,108 @@ function generateRuleBasedAdvice({
 
   const formatDay = iso => {
     try {
+      const journalRows = await sql`
+        select entry_date, title, content, mood, weather_snapshot
+        from public.garden_journal_entries
+        where garden_id = ${gardenId}
+          and entry_date >= ${weekAgo}::date
+        order by entry_date desc
+        limit 5
+      `
+      recentJournalEntries = journalRows || []
+    } catch { }
+
+    // Get custom plant images if available
+    let plantImages = []
+    try {
+      const imgRows = await sql`
+        select gpi.image_url, gp.nickname, p.name as plant_name
+        from public.garden_plant_images gpi
+        join public.garden_plants gp on gp.id = gpi.garden_plant_id
+        left join public.plants p on p.id = gp.plant_id
+        where gp.garden_id = ${gardenId}
+        order by gpi.uploaded_at desc
+        limit 5
+      `
+      plantImages = imgRows || []
+    } catch { }
+
+    // Get journal photos from recent entries (with URLs for vision analysis)
+    let journalPhotos = []
+    let journalPhotoUrls = []
+    try {
+      const photoRows = await sql`
+        select gjp.image_url, gjp.caption, gjp.plant_health, gjp.observations, 
+               gp.nickname, p.name as plant_name, gje.entry_date
+        from public.garden_journal_photos gjp
+        join public.garden_journal_entries gje on gje.id = gjp.entry_id
+        left join public.garden_plants gp on gp.id = gjp.garden_plant_id
+        left join public.plants p on p.id = gp.plant_id
+        where gje.garden_id = ${gardenId}
+          and gje.entry_date >= ${weekAgo}::date
+        order by gjp.uploaded_at desc
+        limit 6
+      `
+      journalPhotos = photoRows || []
+      // Transform URLs to media proxy format
+      journalPhotoUrls = journalPhotos
+        .map(p => supabaseStorageToMediaProxy(p.image_url) || p.image_url)
+        .filter(Boolean)
+    } catch { }
+
+    // Get previous week's advice to avoid repetition
+    let previousAdvice = null
+    try {
+      const prevWeekStart = new Date(weekStart)
+      prevWeekStart.setDate(prevWeekStart.getDate() - 7)
+      const prevWeekStartIso = prevWeekStart.toISOString().slice(0, 10)
+
+      const prevAdviceRows = await sql`
+        select advice_text, advice_summary, focus_areas, plant_specific_tips
+        from public.garden_ai_advice
+        where garden_id = ${gardenId} and week_start = ${prevWeekStartIso}
+        limit 1
+      `
+      if (prevAdviceRows && prevAdviceRows.length > 0) {
+        previousAdvice = prevAdviceRows[0]
+      }
+    } catch { }
+
+    // Build comprehensive plant list
+    const plantList = plants.map(p => {
+      const details = []
+      if (p.plants_on_hand) details.push(`${p.plants_on_hand} on hand`)
+      if (p.level_sun) details.push(`sun: ${p.level_sun}`)
+      if (p.maintenance_level) details.push(`maintenance: ${p.maintenance_level}`)
+      if (p.watering_type) details.push(`watering: ${p.watering_type}`)
+      if (p.health_status) details.push(`health: ${p.health_status}`)
+      if (p.notes) details.push(`notes: ${p.notes}`)
+      return `- ${p.nickname || p.plant_name || 'Unknown'} (${p.plant_name || 'N/A'}): ${details.join(', ') || 'no details'}`
+    }).join('\n')
+
+    // Calculate task statistics for this week and last week
+    const thisWeekTasks = taskData.filter(t => t.due_at >= weekAgo)
+    const lastWeekTasks = taskData.filter(t => t.due_at >= twoWeeksAgo && t.due_at < weekAgo)
+
+    const calcStats = (tasks) => {
+      const summary = tasks.reduce((acc, t) => {
+        const key = t.type
+        if (!acc[key]) acc[key] = { due: 0, completed: 0 }
+        acc[key].due += Number(t.required_count || 0)
+        acc[key].completed += Math.min(Number(t.completed_count || 0), Number(t.required_count || 0))
+        return acc
+      }, {})
+      const totalDue = Object.values(summary).reduce((s, d) => s + d.due, 0)
+      const totalCompleted = Object.values(summary).reduce((s, d) => s + d.completed, 0)
+      return { summary, totalDue, totalCompleted, rate: totalDue > 0 ? Math.round((totalCompleted / totalDue) * 100) : 100 }
+    }
+
+    const thisWeekStats = calcStats(thisWeekTasks)
+    const lastWeekStats = calcStats(lastWeekTasks)
+
+    const taskSummaryText = Object.entries(thisWeekStats.summary)
+      .map(([type, data]) => `${type}: ${data.completed}/${data.due}`)
+      .join(', ')
       return new Date(iso).toLocaleDateString(undefined, { weekday: 'long' })
     } catch {
       return 'upcoming days'
@@ -14212,6 +16639,15 @@ function generateRuleBasedAdvice({
   }
 }
 
+    // Build journal context
+    let journalContext = ''
+    if (recentJournalEntries.length > 0) {
+      journalContext = `
+RECENT JOURNAL ENTRIES (gardener's own observations):
+${recentJournalEntries.map(e => {
+        const moodEmoji = { great: '🌟', good: '😊', neutral: '😐', concerned: '😟', struggling: '😰' }[e.mood] || ''
+        return `- ${e.entry_date}${moodEmoji ? ' ' + moodEmoji : ''}: "${e.content.slice(0, 200)}${e.content.length > 200 ? '...' : ''}"`
+      }).join('\n')}`
 // Garden Weather endpoint
 app.get('/api/garden/:id/weather', async (req, res) => {
   try {
@@ -14278,6 +16714,39 @@ app.put('/api/garden/:id/location', async (req, res) => {
     let finalLon = lon
     if (city && (!lat || !lon)) {
       try {
+        // Build messages with optional images for vision analysis
+        const useVision = journalPhotoUrls.length > 0
+        let messages = [
+          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
+        ]
+
+        if (useVision) {
+          // Include up to 4 most recent journal photos for analysis
+          const imageUrls = journalPhotoUrls.slice(0, 4)
+          const content = [
+            {
+              type: 'text', text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
+- Overall plant health and vigor
+- Signs of disease, pests, or stress
+- Watering issues (overwatering/underwatering)
+- Nutrient deficiencies
+- Growth progress
+Include specific observations from the photos in your advice.` }
+          ]
+
+          for (const url of imageUrls) {
+            content.push({
+              type: 'image_url',
+              image_url: {
+                url: url,
+                detail: 'high'
+              }
+            })
+          }
+
+          messages.push({ role: 'user', content })
+        } else {
+          messages.push({ role: 'user', content: prompt })
         const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)
         if (geoResp.ok) {
           const geoData = await geoResp.json()
@@ -14502,6 +16971,53 @@ app.put('/api/garden/:gardenId/plant/:plantId/health', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
+    const saved = insertResult[0]
+
+    // Build the advice response
+    let adviceResponse = {
+      id: String(saved.id),
+      weekStart: saved.week_start,
+      adviceText: saved.advice_text,
+      adviceSummary: saved.advice_summary,
+      focusAreas: saved.focus_areas || [],
+      plantSpecificTips: normalizeJsonArray(saved.plant_specific_tips),
+      improvementScore: saved.improvement_score,
+      generatedAt: saved.generated_at,
+      weeklyFocus: parsed.weeklyFocus || null,
+      weatherAdvice: parsed.weatherAdvice || null,
+      encouragement: parsed.encouragement || null,
+      weatherContext: saved.weather_context || null,
+      locationContext: saved.location_context || null,
+    }
+
+    // Translate if target language is not English
+    if (targetLang !== 'EN') {
+      console.log(`[garden-advice] Translating new advice to ${targetLang}`)
+      try {
+        const translatedAdvice = await translateAdvice(adviceResponse, targetLang)
+
+        // Store the translation in the database
+        const translations = {
+          [targetLang]: {
+            adviceText: translatedAdvice.adviceText,
+            adviceSummary: translatedAdvice.adviceSummary,
+            focusAreas: translatedAdvice.focusAreas,
+            plantSpecificTips: translatedAdvice.plantSpecificTips,
+            weeklyFocus: translatedAdvice.weeklyFocus,
+            weatherAdvice: translatedAdvice.weatherAdvice,
+            encouragement: translatedAdvice.encouragement,
+          }
+        }
+        await sql`
+          update public.garden_ai_advice
+          set translations = ${JSON.stringify(translations)}::jsonb
+          where id = ${saved.id}
+        `.catch(err => console.warn('[garden-advice] Failed to cache translation:', err))
+
+        adviceResponse = { ...adviceResponse, ...translatedAdvice }
+      } catch (translateErr) {
+        console.warn('[garden-advice] Translation failed, returning English:', translateErr)
+      }
     const { healthStatus, notes } = req.body || {}
 
     // Verify membership
@@ -14539,6 +17055,104 @@ app.put('/api/garden/:gardenId/plant/:plantId/health', async (req, res) => {
   }
 })
 
+// Translate text using DeepL API
+async function translateWithDeepL(text, targetLang, sourceLang = 'EN') {
+  if (!text || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return text
+  }
+
+  const deeplApiKey = process.env.DEEPL_API_KEY
+  if (!deeplApiKey) {
+    console.log('[translate] DeepL API key not configured, skipping translation')
+    return text
+  }
+
+  try {
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        source_lang: sourceLang.toUpperCase(),
+        target_lang: targetLang.toUpperCase(),
+      }),
+    })
+
+    if (!response.ok) {
+      console.warn('[translate] DeepL API error:', response.status)
+      return text
+    }
+
+    const data = await response.json()
+    return data.translations?.[0]?.text || text
+  } catch (err) {
+    console.warn('[translate] DeepL translation failed:', err)
+    return text
+  }
+}
+
+// Translate array of strings using DeepL
+async function translateArrayWithDeepL(items, targetLang, sourceLang = 'EN') {
+  if (!items || items.length === 0 || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return items
+  }
+
+  // Translate each item in parallel
+  const translated = await Promise.all(
+    items.map(item => translateWithDeepL(item, targetLang, sourceLang))
+  )
+  return translated
+}
+
+// Translate gardening advice object to target language
+async function translateAdvice(advice, targetLang, sourceLang = 'EN') {
+  if (!advice || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return advice
+  }
+
+  console.log(`[translate] Translating advice to ${targetLang}...`)
+
+  const translated = { ...advice }
+
+  // Translate text fields in parallel where possible
+  const [adviceText, adviceSummary, weeklyFocus, weatherAdvice, encouragement] = await Promise.all([
+    advice.adviceText ? translateWithDeepL(advice.adviceText, targetLang, sourceLang) : advice.adviceText,
+    advice.adviceSummary ? translateWithDeepL(advice.adviceSummary, targetLang, sourceLang) : advice.adviceSummary,
+    advice.weeklyFocus ? translateWithDeepL(advice.weeklyFocus, targetLang, sourceLang) : advice.weeklyFocus,
+    advice.weatherAdvice ? translateWithDeepL(advice.weatherAdvice, targetLang, sourceLang) : advice.weatherAdvice,
+    advice.encouragement ? translateWithDeepL(advice.encouragement, targetLang, sourceLang) : advice.encouragement,
+  ])
+
+  translated.adviceText = adviceText
+  translated.adviceSummary = adviceSummary
+  translated.weeklyFocus = weeklyFocus
+  translated.weatherAdvice = weatherAdvice
+  translated.encouragement = encouragement
+
+  // Translate focus areas
+  if (advice.focusAreas && Array.isArray(advice.focusAreas)) {
+    translated.focusAreas = await translateArrayWithDeepL(advice.focusAreas, targetLang, sourceLang)
+  }
+
+  // Translate plant-specific tips
+  if (advice.plantSpecificTips && Array.isArray(advice.plantSpecificTips)) {
+    translated.plantSpecificTips = await Promise.all(
+      advice.plantSpecificTips.map(async (tip) => ({
+        ...tip,
+        tip: tip.tip ? await translateWithDeepL(tip.tip, targetLang, sourceLang) : tip.tip,
+        reason: tip.reason ? await translateWithDeepL(tip.reason, targetLang, sourceLang) : tip.reason,
+        // Don't translate plant name - keep it in original language
+      }))
+    )
+  }
+
+  console.log(`[translate] Advice translation to ${targetLang} complete`)
+  return translated
+}
 // Get plant details including health
 app.get('/api/garden/:gardenId/plant/:plantId', async (req, res) => {
   try {
@@ -14611,6 +17225,53 @@ app.get('/api/garden/:gardenId/plant/:plantId', async (req, res) => {
 // Get journal entries for a garden
 app.get('/api/garden/:id/journal', async (req, res) => {
   try {
+    if (!lat || !lon) {
+      // Try geocoding if we only have city name
+      if (city) {
+        const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)
+        if (geoResp.ok) {
+          const geoData = await geoResp.json()
+          if (geoData.results?.[0]) {
+            lat = geoData.results[0].latitude
+            lon = geoData.results[0].longitude
+          }
+        }
+      }
+      if (!lat || !lon) return null
+    }
+
+    const weatherResp = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7`
+    )
+
+    if (!weatherResp.ok) return null
+    const data = await weatherResp.json()
+
+    // Weather code to description mapping
+    const weatherCodes = {
+      0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+      45: 'Foggy', 48: 'Rime fog', 51: 'Light drizzle', 53: 'Moderate drizzle',
+      55: 'Dense drizzle', 61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+      71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow', 80: 'Rain showers',
+      95: 'Thunderstorm'
+    }
+
+    return {
+      current: {
+        temp: data.current?.temperature_2m,
+        humidity: data.current?.relative_humidity_2m,
+        condition: weatherCodes[data.current?.weather_code] || 'Unknown',
+        windSpeed: data.current?.wind_speed_10m,
+        weatherCode: data.current?.weather_code,
+      },
+      forecast: (data.daily?.time || []).slice(0, 7).map((date, i) => ({
+        date,
+        tempMax: data.daily?.temperature_2m_max?.[i],
+        tempMin: data.daily?.temperature_2m_min?.[i],
+        condition: weatherCodes[data.daily?.weather_code?.[i]] || 'Unknown',
+        precipProbability: data.daily?.precipitation_probability_max?.[i],
+      })),
+      timezone: data.timezone,
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
@@ -14996,6 +17657,16 @@ Be specific and reference what you actually see in the images. If you notice any
       set ai_feedback = ${feedback}, ai_feedback_generated_at = now()
       where id = ${entryId}
     `
+    const garden = gardenRows[0]
+    if (!garden) {
+      res.status(404).json({ ok: false, error: 'Garden not found' })
+      return
+    }
+
+    if (!garden.location_city && !garden.location_lat) {
+      res.json({ ok: true, weather: null, message: 'No location set for this garden' })
+      return
+    }
 
     res.json({ ok: true, feedback, imagesAnalyzed: photos.length, tokensUsed })
   } catch (e) {
@@ -15065,6 +17736,36 @@ app.get('/api/garden/:id/advice/export', async (req, res) => {
         } else {
           throw err
         }
+      } catch { }
+    }
+
+    console.log('[garden-location] Updating garden with:', { city, country, timezone, finalLat, finalLon, preferredLanguage })
+
+    // Build update query - only include preferred_language if explicitly provided
+    let updateResult
+    if (preferredLanguage !== undefined) {
+      updateResult = await sql`
+        update public.gardens set
+          location_city = ${city || null},
+          location_country = ${country || null},
+          location_timezone = ${timezone || null},
+          location_lat = ${finalLat || null},
+          location_lon = ${finalLon || null},
+          preferred_language = ${preferredLanguage || 'en'}
+        where id = ${gardenId}
+        returning id, location_city, location_country, preferred_language
+      `
+    } else {
+      updateResult = await sql`
+        update public.gardens set
+          location_city = ${city || null},
+          location_country = ${country || null},
+          location_timezone = ${timezone || null},
+          location_lat = ${finalLat || null},
+          location_lon = ${finalLon || null}
+        where id = ${gardenId}
+        returning id, location_city, location_country, preferred_language
+      `
       }
     } else {
       adviceHistory = await runAdviceHistoryBaseQuery()
@@ -15229,6 +17930,62 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       }
     }
 
+    let lat = garden.location_lat
+    let lon = garden.location_lon
+
+    // If lat/lon missing but city is set, try to geocode
+    if ((!lat || !lon) && garden.location_city) {
+      try {
+        console.log('[garden-weather] Geocoding city:', garden.location_city)
+        const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(garden.location_city)}&count=1`)
+        if (geoResp.ok) {
+          const geoData = await geoResp.json()
+          if (geoData.results?.[0]) {
+            lat = geoData.results[0].latitude
+            lon = geoData.results[0].longitude
+            console.log('[garden-weather] Geocoded to:', lat, lon)
+            // Optionally update the garden record with the coordinates
+            await sql`
+              update public.gardens 
+              set location_lat = ${lat}, location_lon = ${lon}
+              where id = ${gardenId}
+            `.catch(() => { }) // Non-blocking update
+          }
+        }
+      } catch (geoErr) {
+        console.warn('[garden-weather] Geocoding failed:', geoErr)
+      }
+    }
+
+    if (!lat || !lon) {
+      res.status(400).json({ ok: false, error: 'Garden location not set', noLocation: true })
+      return
+    }
+
+    // Fetch weather from Open-Meteo API
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=${garden.location_timezone || 'auto'}&forecast_days=7`
+
+    const weatherResp = await fetch(weatherUrl)
+    if (!weatherResp.ok) {
+      res.status(502).json({ ok: false, error: 'Failed to fetch weather data' })
+      return
+    }
+
+    const weatherJson = await weatherResp.json()
+
+    // Convert weather code to condition string
+    const getConditionFromCode = (code) => {
+      if (code === 0) return 'clear'
+      if (code === 1 || code === 2) return 'partly cloudy'
+      if (code === 3) return 'cloudy'
+      if (code >= 45 && code <= 48) return 'foggy'
+      if (code >= 51 && code <= 67) return 'rain'
+      if (code >= 71 && code <= 77) return 'snow'
+      if (code >= 80 && code <= 82) return 'rain'
+      if (code >= 85 && code <= 86) return 'snow'
+      if (code >= 95) return 'thunderstorm'
+      return 'cloudy'
+    }
     // Parse multipart form data
     const busboy = (await import('busboy')).default
     const bb = busboy({ headers: req.headers })
@@ -15292,6 +18049,10 @@ app.post('/api/garden/:id/upload', async (req, res) => {
 // Admin: create a new broadcast message
 app.post('/api/admin/broadcast', async (req, res) => {
   try {
+    const gardenId = String(req.params.gardenId || '').trim()
+    const plantId = String(req.params.plantId || '').trim()
+    if (!gardenId || !plantId) {
+      res.status(400).json({ ok: false, error: 'garden id and plant id required' })
     // Require admin and ensure table
     const adminId = await ensureAdmin(req, res)
     if (!adminId) return
@@ -15356,6 +18117,10 @@ app.post('/api/admin/broadcast', async (req, res) => {
 // Admin: update current broadcast message (edit message or severity, optionally extend/shorten duration)
 app.put('/api/admin/broadcast', async (req, res) => {
   try {
+    const gardenId = String(req.params.gardenId || '').trim()
+    const plantId = String(req.params.plantId || '').trim()
+    if (!gardenId || !plantId) {
+      res.status(400).json({ ok: false, error: 'garden id and plant id required' })
     const adminId = await ensureAdmin(req, res)
     if (!adminId) return
     if (!sql) {
@@ -15402,6 +18167,27 @@ app.put('/api/admin/broadcast', async (req, res) => {
         adminName = nameRows?.[0]?.name || null
       } catch {}
     }
+
+    const plant = plants[0]
+    res.json({
+      ok: true,
+      plant: {
+        id: plant.id,
+        nickname: plant.nickname,
+        plantsOnHand: plant.plants_on_hand,
+        healthStatus: plant.health_status,
+        notes: plant.notes,
+        lastHealthUpdate: plant.last_health_update,
+        plantedAt: plant.planted_at,
+        expectedBloomDate: plant.expected_bloom_date,
+        plantId: plant.plant_id,
+        plantName: plant.plant_name,
+        scientificName: plant.scientific_name,
+        wateringType: plant.watering_type,
+        levelSun: plant.level_sun,
+        maintenanceLevel: plant.maintenance_level,
+      }
+    })
     const payload = row ? {
       id: String(row.id || ''),
       message: String(row.message || ''),
@@ -15512,6 +18298,28 @@ app.post('/api/notifications/:id/read', async (req, res) => {
       set seen_at = now()
       where id = ${notificationId} and user_id = ${user.id}
     `
+    if (!membership?.length) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
+      return
+    }
+
+    // Fetch weather for the entry
+    let weatherSnapshot = {}
+    try {
+      const gardenRows = await sql`
+        select location_city, location_lat, location_lon
+        from public.gardens where id = ${gardenId} limit 1
+      `
+      const garden = gardenRows[0]
+      if (garden?.location_city || garden?.location_lat) {
+        const weather = await fetchWeatherForLocation(garden.location_lat, garden.location_lon, garden.location_city)
+        if (weather?.current) {
+          weatherSnapshot = weather.current
+        }
+      }
+    } catch { }
+
+    const today = new Date().toISOString().slice(0, 10)
     res.json({ ok: true })
   } catch (err) {
     console.error('[notifications] failed to update notification', err)
@@ -15804,6 +18612,61 @@ app.get('/api/messages/conversations/:conversationId/messages', async (req, res)
     if (!participant?.length) {
       return res.status(404).json({ error: 'Conversation not found' })
     }
+
+    // Build prompt
+    const textPrompt = `You are a friendly, knowledgeable gardening expert providing personalized feedback on a gardener's journal entry.
+
+Garden: "${entry.garden_name}"
+${entry.location_city ? `Location: ${entry.location_city}` : ''}
+Plants in garden: ${plantList || 'Not specified'}
+${weatherContext}
+
+Journal Entry Date: ${entry.entry_date}
+${entry.mood ? `Garden Status: ${moodLabels[entry.mood] || entry.mood}` : ''}
+${entry.title ? `Title: ${entry.title}` : ''}
+
+Entry Content:
+"${entry.content}"
+
+${photos.length > 0 ? `The gardener has attached ${photos.length} photo(s) with this entry. Please analyze the images carefully and include observations about:
+- Plant health and appearance
+- Any signs of disease, pests, or nutrient deficiency
+- Growth progress
+- Care recommendations based on what you see` : ''}
+
+Please provide detailed, warm, helpful feedback that:
+1. ${photos.length > 0 ? 'Describes what you observe in the photos' : 'Acknowledges their observations'}
+2. Identifies any issues or areas needing attention
+3. Offers specific, actionable tips based on what you see
+4. Celebrates any positive progress
+5. Encourages their gardening journey
+
+Be specific and reference what you actually see in the images. If you notice any concerning signs, explain what they might be and how to address them.`
+
+    // Build messages array with images for OpenAI Vision
+    const messages = [
+      { role: 'system', content: 'You are a friendly, expert gardener who can analyze plant photos and provide detailed, helpful feedback. When analyzing images, be specific about what you observe.' },
+    ]
+
+    // If we have photos, use vision model with images
+    if (photos.length > 0) {
+      const content = [
+        { type: 'text', text: textPrompt }
+      ]
+
+      // Add images - transform URLs to media proxy format for optimization
+      for (const photo of photos) {
+        const imageUrl = supabaseStorageToMediaProxy(photo.image_url) || photo.image_url
+        content.push({
+          type: 'image_url',
+          image_url: {
+            url: imageUrl,
+            detail: 'high' // Use high detail for plant analysis
+          }
+        })
+      }
+
+      messages.push({ role: 'user', content })
     
     let messagesQuery
     if (before) {
@@ -16150,6 +19013,22 @@ app.post('/api/messages/start', async (req, res) => {
         ctaUrl: '/messages'
       }).catch(() => {})
     }
+
+    // Parse multipart form data
+    const busboy = (await import('busboy')).default
+    const bb = busboy({ headers: req.headers })
+
+    let fileBuffer = null
+    let fileName = ''
+    let mimeType = ''
+    let folder = 'journal'
+
+    bb.on('file', (name, file, info) => {
+      fileName = info.filename
+      mimeType = info.mimeType
+      const chunks = []
+      file.on('data', (data) => chunks.push(data))
+      file.on('end', () => { fileBuffer = Buffer.concat(chunks) })
     
     res.json({
       conversationId,
@@ -16256,6 +19135,11 @@ app.get('/api/messages/unread-count', async (req, res) => {
 // Friend Request & Task Notification Triggers
 // ============================================================================
 
+      // Get public URL and transform to media proxy
+      const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
+      const proxyUrl = supabaseStorageToMediaProxy(urlData?.publicUrl) || urlData?.publicUrl || ''
+
+      res.json({ ok: true, url: proxyUrl, path: storagePath })
 // Send notification when friend request is sent
 app.post('/api/notifications/friend-request-sent', async (req, res) => {
   const user = await getUserFromRequestOrToken(req)
@@ -16293,6 +19177,122 @@ app.post('/api/notifications/friend-request-sent', async (req, res) => {
   }
 })
 
+// Serve environment config for admin frontend
+app.get('/api/env.js', (req, res) => {
+  const adminToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
+  const content = `window.__ENV__ = { VITE_ADMIN_STATIC_TOKEN: "${adminToken}" };`
+  res.setHeader('Content-Type', 'application/javascript')
+  res.send(content)
+})
+
+// Admin: Get all email templates
+app.get('/api/admin/email-templates', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) { res.status(500).json({ error: 'Database not configured' }); return }
+
+    const templates = await sql`
+      select 
+        id, title, subject, description, preview_text as "previewText",
+        body_html as "bodyHtml", body_json as "bodyJson", variables,
+        is_active as "isActive", version, last_used_at as "lastUsedAt",
+        campaign_count as "campaignCount", created_at as "createdAt", updated_at as "updatedAt"
+      from public.admin_email_templates
+      where deleted_at is null
+      order by updated_at desc
+    `
+    res.json({ ok: true, templates })
+  } catch (e) {
+    console.error('[email-templates] Error listing templates:', e)
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+// Admin: Get single email template
+app.get('/api/admin/email-templates/:id', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) { res.status(500).json({ error: 'Database not configured' }); return }
+
+    const { id } = req.params
+    const templates = await sql`
+      select 
+        id, title, subject, description, preview_text as "previewText",
+        body_html as "bodyHtml", body_json as "bodyJson", variables,
+        is_active as "isActive", version, last_used_at as "lastUsedAt",
+        campaign_count as "campaignCount", created_at as "createdAt", updated_at as "updatedAt"
+      from public.admin_email_templates
+      where id = ${id}
+    `
+
+    if (!templates || templates.length === 0) {
+      res.status(404).json({ ok: false, error: 'Template not found' })
+      return
+    }
+
+    res.json(templates[0])
+  } catch (e) {
+    console.error('[email-templates] Error getting template:', e)
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+// Admin: Create/Update email template
+app.post('/api/admin/email-templates', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) { res.status(500).json({ error: 'Database not configured' }); return }
+
+    const {
+      id, title, subject, description, previewText,
+      bodyHtml, bodyJson, variables, isActive
+    } = req.body
+
+    let result
+    if (id) {
+      // Update existing
+      result = await sql`
+        update public.admin_email_templates set
+          title = ${title},
+          subject = ${subject},
+          description = ${description},
+          preview_text = ${previewText},
+          body_html = ${bodyHtml},
+          body_json = ${bodyJson},
+          variables = ${variables},
+          is_active = ${isActive},
+          updated_at = now(),
+          version = version + 1
+        where id = ${id}
+        returning id
+      `
+    } else {
+      // Create new
+      result = await sql`
+        insert into public.admin_email_templates (
+          title, subject, description, preview_text, 
+          body_html, body_json, variables, is_active
+        ) values (
+          ${title}, ${subject}, ${description}, ${previewText},
+          ${bodyHtml}, ${bodyJson}, ${variables}, ${isActive}
+        )
+        returning id
+      `
+    }
+
+    res.json({ ok: true, id: result?.[0]?.id })
+  } catch (e) {
+    console.error('[email-templates] Error saving template:', e)
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+
+// Admin: create a new broadcast message
+app.post('/api/admin/broadcast', async (req, res) => {
 // Send notification when friend request is accepted
 app.post('/api/notifications/friend-request-accepted', async (req, res) => {
   const user = await getUserFromRequestOrToken(req)
@@ -16357,6 +19357,29 @@ app.post('/api/notifications/task-completed', async (req, res) => {
     const gardens = await sql`
       select name from public.gardens where id = ${gardenId}
     `
+    const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+    // Resolve admin name for SSE payload convenience
+    let adminName = null
+    if (row?.created_by && sql) {
+      try {
+        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        adminName = nameRows?.[0]?.name || null
+      } catch { }
+    }
+    const payload = row ? {
+      id: String(row.id || ''),
+      message: String(row.message || ''),
+      severity: String(row.severity || 'info'),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      createdBy: row.created_by ? String(row.created_by) : null,
+      adminName: adminName ? String(adminName) : null,
+      serverTime: new Date().toISOString(),
+    } : null
+    if (payload) broadcastToAll(payload)
+    res.json({ ok: true, broadcast: payload })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to create broadcast' })
     const gardenName = gardens?.[0]?.name || 'your garden'
     
     // Get all other garden members
@@ -16506,6 +19529,38 @@ app.post('/api/users/:userId/mute', async (req, res) => {
     if (sql) {
       await sql`select public.mute_user(${mutedId}::uuid)`
     } else {
+      const n = Number(durationMsRaw)
+      if (Number.isFinite(n) && n > 0) nextExpires = new Date(Date.now() + Math.floor(n))
+      else nextExpires = null
+    }
+    const upd = await sql`
+      update public.broadcast_messages
+      set message = ${nextMessage}, severity = ${nextSeverity}, expires_at = ${nextExpires ? nextExpires.toISOString() : null}
+      where id = ${cur.id}
+      returning id::text as id, message, severity, created_at, expires_at, created_by::text as created_by
+    `
+    const row = upd?.[0]
+    let adminName = null
+    if (row?.created_by && sql) {
+      try {
+        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        adminName = nameRows?.[0]?.name || null
+      } catch { }
+    }
+    const payload = row ? {
+      id: String(row.id || ''),
+      message: String(row.message || ''),
+      severity: String(row.severity || 'info'),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      createdBy: row.created_by ? String(row.created_by) : null,
+      adminName: adminName ? String(adminName) : null,
+      serverTime: new Date().toISOString(),
+    } : null
+    if (payload) broadcastToAll(payload)
+    res.json({ ok: true, broadcast: payload })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to update broadcast' })
       const { error } = await supabaseAdmin.rpc('mute_user', { _muted_id: mutedId })
       if (error) throw error
     }
@@ -16910,13 +19965,13 @@ function normalizeNotificationTemplate(row, translations = null) {
 function getMessageVariantsForLanguage(template, userLanguage) {
   const defaultVariants = toStringArray(template.message_variants)
   if (!userLanguage || userLanguage === 'en') return defaultVariants
-  
+
   // Check if translations exist for this language
   const translations = template.translations || {}
   if (translations[userLanguage] && translations[userLanguage].length > 0) {
     return translations[userLanguage]
   }
-  
+
   // Fallback to default (English)
   return defaultVariants
 }
@@ -17073,13 +20128,13 @@ async function translateNotificationText(text, targetLang, sourceLang = 'EN') {
   if (!text || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
     return text
   }
-  
+
   const deeplApiKey = process.env.DEEPL_API_KEY
   if (!deeplApiKey) {
     console.warn('[notifications] DeepL API key not configured, skipping translation')
     return text
   }
-  
+
   try {
     const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
     const response = await fetch(deeplUrl, {
@@ -17094,13 +20149,13 @@ async function translateNotificationText(text, targetLang, sourceLang = 'EN') {
         target_lang: targetLang.toUpperCase(),
       }),
     })
-    
+
     if (!response.ok) {
       const errorText = await response.text()
       console.error('[notifications] DeepL translation failed:', response.status, errorText)
       return text // Return original text on translation failure
     }
-    
+
     const data = await response.json()
     return data.translations?.[0]?.text || text
   } catch (err) {
@@ -17112,9 +20167,9 @@ async function translateNotificationText(text, targetLang, sourceLang = 'EN') {
 // Get user language preferences for multiple users (batch fetch)
 async function getUserLanguages(userIds) {
   if (!sql || !userIds.length) return new Map()
-  
+
   const languageMap = new Map()
-  
+
   try {
     // Try to get from profiles table (if preferred_language column exists)
     // This will fail gracefully if the column doesn't exist
@@ -17134,7 +20189,7 @@ async function getUserLanguages(userIds) {
     } catch (err) {
       // Column doesn't exist or other error - continue to fallback
     }
-    
+
     // Fallback: get most recent language from web visits for users we don't have yet
     const missingIds = userIds.filter(id => !languageMap.has(String(id)))
     if (missingIds.length > 0) {
@@ -17145,7 +20200,7 @@ async function getUserLanguages(userIds) {
           and language is not null
         order by user_id, occurred_at desc
       `.catch(() => null)
-      
+
       for (const row of visitLangs || []) {
         if (!languageMap.has(row.user_id)) {
           const lang = String(row.language).toLowerCase()
@@ -17160,7 +20215,7 @@ async function getUserLanguages(userIds) {
   } catch (err) {
     console.error('[notifications] Error getting user languages:', err)
   }
-  
+
   return languageMap
 }
 
@@ -17169,9 +20224,9 @@ async function getUserLanguages(userIds) {
 // Final fallback is Europe/London
 async function getUserTimezones(userIds) {
   if (!sql || !userIds.length) return new Map()
-  
+
   const timezoneMap = new Map()
-  
+
   try {
     // First, get timezones from profiles
     const profiles = await sql`
@@ -17180,14 +20235,14 @@ async function getUserTimezones(userIds) {
       where id = any(${sql.array(userIds)}::uuid[])
         and timezone is not null
     `.catch(() => null)
-    
+
     for (const row of profiles || []) {
       const tz = String(row.timezone).trim()
       if (tz) {
         timezoneMap.set(row.id, tz)
       }
     }
-    
+
     // For users without timezone in profile, try to get from web visits
     const missingIds = userIds.filter(id => !timezoneMap.has(String(id)))
     if (missingIds.length > 0) {
@@ -17202,7 +20257,7 @@ async function getUserTimezones(userIds) {
           and (extra->>'timezone')::text != ''
         order by user_id, occurred_at desc
       `.catch(() => null)
-      
+
       for (const row of visitTimezones || []) {
         if (!timezoneMap.has(row.user_id)) {
           const tz = String(row.timezone).trim()
@@ -17215,7 +20270,7 @@ async function getUserTimezones(userIds) {
   } catch (err) {
     console.error('[notifications] Error getting user timezones:', err)
   }
-  
+
   return timezoneMap
 }
 
@@ -17231,12 +20286,12 @@ function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) 
     if (Number.isNaN(targetDate.getTime())) {
       return targetLocalTime
     }
-    
+
     // If same timezone, return as-is
     if (userTimezone === campaignTimezone || !userTimezone) {
       return targetLocalTime
     }
-    
+
     // Extract local time components when displayed in campaign timezone
     const campaignFormatter = new Intl.DateTimeFormat('en-US', {
       timeZone: campaignTimezone,
@@ -17248,27 +20303,27 @@ function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) 
       second: '2-digit',
       hour12: false
     })
-    
+
     const campaignParts = campaignFormatter.formatToParts(targetDate)
     const getPart = (type) => parseInt(campaignParts.find(p => p.type === type)?.value || '0')
-    
+
     const year = getPart('year')
     const month = getPart('month') - 1 // JavaScript months are 0-indexed
     const day = getPart('day')
     const hour = getPart('hour')
     const minute = getPart('minute')
     const second = getPart('second')
-    
+
     // Now find the UTC timestamp that represents this same local time in user's timezone
     // We'll use a binary search-like approach: start with a reasonable guess and refine
-    
+
     // Create an ISO string with the desired local time components
     // Format: "YYYY-MM-DDTHH:mm:ss"
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
-    
+
     // Start with a guess: assume the date string represents UTC
     let candidateUtc = new Date(dateStr + 'Z') // 'Z' means UTC
-    
+
     // Refine the guess by checking what local time this UTC represents in user's timezone
     // and adjusting until we get the right local time
     for (let iteration = 0; iteration < 10; iteration++) {
@@ -17282,38 +20337,38 @@ function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) 
         second: '2-digit',
         hour12: false
       })
-      
+
       const userParts = userFormatter.formatToParts(candidateUtc)
       const getUserPart = (type) => parseInt(userParts.find(p => p.type === type)?.value || '0')
-      
+
       const userYear = getUserPart('year')
       const userMonth = getUserPart('month') - 1
       const userDay = getUserPart('day')
       const userHour = getUserPart('hour')
       const userMinute = getUserPart('minute')
       const userSecond = getUserPart('second')
-      
+
       // Check if we've found the exact match
-      if (userYear === year && userMonth === month && userDay === day && 
-          userHour === hour && userMinute === minute && Math.abs(userSecond - second) <= 1) {
+      if (userYear === year && userMonth === month && userDay === day &&
+        userHour === hour && userMinute === minute && Math.abs(userSecond - second) <= 1) {
         return candidateUtc.toISOString()
       }
-      
+
       // Calculate how far off we are
       // Create Date objects in local time for comparison
       const desiredLocal = new Date(year, month, day, hour, minute, second)
       const actualLocal = new Date(userYear, userMonth, userDay, userHour, userMinute, userSecond)
       const diffMs = desiredLocal.getTime() - actualLocal.getTime()
-      
+
       // If difference is very small, we're close enough
       if (Math.abs(diffMs) < 1000) {
         return candidateUtc.toISOString()
       }
-      
+
       // Adjust candidate UTC by the difference
       candidateUtc = new Date(candidateUtc.getTime() + diffMs)
     }
-    
+
     // Return the best guess we found
     return candidateUtc.toISOString()
   } catch (err) {
@@ -17325,23 +20380,23 @@ function convertToUserTimezone(targetLocalTime, campaignTimezone, userTimezone) 
 // Calculate scheduled time for a user based on campaign and user timezone
 function calculateUserScheduledTime(campaign, userTimezone) {
   const now = new Date()
-  
+
   // For instant notifications, send immediately
   if (campaign.deliveryMode === 'send_now') {
     return now.toISOString()
   }
-  
+
   // For planned notifications, convert planned time to user's timezone
   if (campaign.deliveryMode === 'planned' && campaign.plannedFor) {
     const plannedDate = new Date(campaign.plannedFor)
     if (Number.isNaN(plannedDate.getTime())) {
       return now.toISOString()
     }
-    
+
     const campaignTz = campaign.timezone || DEFAULT_TIMEZONE
     return convertToUserTimezone(campaign.plannedFor, campaignTz, userTimezone || DEFAULT_TIMEZONE)
   }
-  
+
   // For scheduled notifications, convert scheduled time to user's timezone
   if (campaign.deliveryMode === 'scheduled') {
     // Use next_run_at if available, otherwise schedule_start_at
@@ -17349,16 +20404,16 @@ function calculateUserScheduledTime(campaign, userTimezone) {
     if (!baseTime) {
       return now.toISOString()
     }
-    
+
     const baseDate = new Date(baseTime)
     if (Number.isNaN(baseDate.getTime())) {
       return now.toISOString()
     }
-    
+
     const campaignTz = campaign.timezone || DEFAULT_TIMEZONE
     return convertToUserTimezone(baseTime, campaignTz, userTimezone || DEFAULT_TIMEZONE)
   }
-  
+
   return now.toISOString()
 }
 
@@ -17367,10 +20422,10 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
   const insertedRows = []
   let processedCount = 0
   const chunks = chunkArray(recipients, 200)
-  
+
   // Detect source language from campaign title/message (assume English if not specified)
   const sourceLang = 'EN'
-  
+
   for (const chunk of chunks) {
     // Fetch user display names, language preferences, and timezones for this chunk
     const userProfiles = await sql`
@@ -17381,7 +20436,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
     const userDisplayNames = new Map()
     const userLanguages = new Map()
     const userTimezones = new Map()
-    
+
     // Get display names and timezones
     for (const profile of userProfiles || []) {
       const displayName = profile.display_name || profile.username || profile.email || 'User'
@@ -17390,43 +20445,43 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
         userTimezones.set(profile.id, String(profile.timezone))
       }
     }
-    
+
     // Get language preferences for all users in this chunk (batch fetch)
     const chunkLanguageMap = await getUserLanguages(chunk)
     for (const userId of chunk) {
       const lang = chunkLanguageMap.get(String(userId)) || 'en'
       userLanguages.set(String(userId), lang)
     }
-    
+
     // Prepare payloads with personalized, translated messages, and timezone-adjusted scheduled times
     const payloadPromises = chunk.map(async (userId, index) => {
       const baseMessage = pickNotificationMessage(campaign, processedCount + index)
       const userDisplayName = userDisplayNames.get(String(userId)) || 'User'
       // Replace {{user}} with the actual user display name
       let personalizedMessage = baseMessage.replace(/\{\{user\}\}/g, userDisplayName)
-      
+
       // Translate message based on user's language preference
       const userLang = userLanguages.get(String(userId)) || 'en'
       const targetLang = userLang === 'fr' ? 'FR' : 'EN'
-      
+
       if (targetLang !== sourceLang) {
         personalizedMessage = await translateNotificationText(personalizedMessage, targetLang, sourceLang)
       }
-      
+
       // Translate title if needed
       let translatedTitle = campaign.title
       if (targetLang !== sourceLang) {
         translatedTitle = await translateNotificationText(campaign.title, targetLang, sourceLang)
       }
-      
+
       // Calculate scheduled time based on user's timezone
       // For instant notifications, use provided scheduledFor (current time)
       // For planned/scheduled, calculate per-user timezone
       const userTimezone = userTimezones.get(String(userId)) || DEFAULT_TIMEZONE
-      const userScheduledTime = campaign.deliveryMode === 'send_now' 
-        ? scheduledFor 
+      const userScheduledTime = campaign.deliveryMode === 'send_now'
+        ? scheduledFor
         : calculateUserScheduledTime(campaign, userTimezone)
-      
+
       return {
         campaign_id: campaign.id,
         iteration,
@@ -17441,23 +20496,23 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
         delivery_error: null,
       }
     })
-    
+
     const payload = await Promise.all(payloadPromises)
     const inserted = await sql`
       insert into public.user_notifications ${sql(
-        payload,
-        'campaign_id',
-        'iteration',
-        'user_id',
-        'title',
-        'message',
-        'payload',
-        'cta_url',
-        'scheduled_for',
-        'delivery_status',
-        'delivery_attempts',
-        'delivery_error',
-      )}
+      payload,
+      'campaign_id',
+      'iteration',
+      'user_id',
+      'title',
+      'message',
+      'payload',
+      'cta_url',
+      'scheduled_for',
+      'delivery_status',
+      'delivery_attempts',
+      'delivery_error',
+    )}
       on conflict (campaign_id, iteration, user_id)
       do update set
         title = excluded.title,
@@ -17513,10 +20568,10 @@ async function deliverPushNotifications(notifications, campaign) {
   const failedWithReason = new Map() // Map<notificationId, errorReason>
   const staleSubscriptionIds = new Set()
   const usedSubscriptionIds = new Set()
-  
+
   // Track users without subscriptions for better logging
   const usersWithoutSubs = []
-  
+
   for (const notification of notifications) {
     const subs = subsByUser.get(notification.user_id) || []
     if (subs.length === 0) {
@@ -17567,12 +20622,12 @@ async function deliverPushNotifications(notifications, campaign) {
       failedWithReason.set(notification.id, lastError || 'PUSH_FAILED')
     }
   }
-  
+
   // Log summary of users without subscriptions
   if (usersWithoutSubs.length > 0) {
     console.warn(`[notifications] ${usersWithoutSubs.length} user(s) have no push subscriptions registered. They may need to enable notifications in their browser settings.`)
   }
-  
+
   if (staleSubscriptionIds.size) {
     console.log(`[notifications] Cleaning up ${staleSubscriptionIds.size} expired subscription(s)`)
     await sql`
@@ -17597,7 +20652,7 @@ async function deliverPushNotifications(notifications, campaign) {
       where id = any(${deliveredIds}::uuid[])
     `
   }
-  
+
   // Update failed notifications with specific error reasons
   for (const [notifId, errorReason] of failedWithReason.entries()) {
     await sql`
@@ -17609,7 +20664,7 @@ async function deliverPushNotifications(notifications, campaign) {
       where id = ${notifId}::uuid
     `
   }
-  
+
   return { sent: deliveredIds.length, failed: failedWithReason.size }
 }
 
@@ -17695,15 +20750,15 @@ async function runNotificationCampaign(row) {
   if (!campaign) return
   const iteration = (campaign.runCount || 0) + 1
   console.log(`[notifications] Running campaign "${campaign.title}" (id=${campaign.id}), iteration=${iteration}, audience=${campaign.audience}`)
-  
+
   try {
     const recipients = await resolveNotificationAudience(campaign)
     console.log(`[notifications] Resolved ${recipients.length} recipient(s) for campaign ${campaign.id}`)
-    
+
     if (recipients.length === 0) {
       console.warn(`[notifications] Campaign ${campaign.id} has no recipients matching audience "${campaign.audience}"`)
     }
-    
+
     const scheduledFor = new Date().toISOString()
     const inserted = await insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor)
     console.log(`[notifications] Queued ${inserted.length} notification(s) for delivery`)
@@ -17760,7 +20815,7 @@ async function runNotificationCampaign(row) {
 async function processDueNotificationCampaigns() {
   if (!sql) return
   await ensureNotificationTables()
-  
+
   // First, recover any campaigns stuck in 'processing' for more than 5 minutes
   try {
     const stuckCampaigns = await sql`
@@ -17786,7 +20841,7 @@ async function processDueNotificationCampaigns() {
   } catch (err) {
     console.error('[notifications] Failed to recover stuck campaigns:', err)
   }
-  
+
   const due = await sql`
     select *
     from public.notification_campaigns
@@ -17827,7 +20882,7 @@ async function runNotificationWorkerTick() {
 // Process due automations based on user timezone and send_hour
 async function processDueAutomations() {
   if (!sql) return
-  
+
   try {
     // Get all enabled automations with their templates and translations
     const automations = await sql`
@@ -17843,32 +20898,32 @@ async function processDueAutomations() {
       where a.is_enabled = true
         and a.template_id is not null
     `
-    
+
     if (!automations || !automations.length) return
-    
+
     const now = new Date()
     const currentHourUTC = now.getUTCHours()
-    
+
     for (const automation of automations) {
       try {
         // Check if this automation should run based on current UTC hour
         // We check if any timezone would currently be at the target send_hour
         // This runs every hour, and we check all timezones where current local time = send_hour
         const sendHour = automation.send_hour || 9
-        
+
         // Parse translations from JSONB
         const translations = automation.translations || {}
-        
+
         // Get users eligible for this automation whose local time is at send_hour
         let recipientQuery
-        
+
         if (automation.trigger_type === 'weekly_inactive_reminder') {
           recipientQuery = sql`
             select p.id as user_id, p.display_name, p.language, p.timezone
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
@@ -17918,16 +20973,16 @@ async function processDueAutomations() {
         } else {
           continue
         }
-        
+
         const recipients = await recipientQuery
         if (!recipients || !recipients.length) continue
-        
+
         // Default message variants (English)
         const defaultVariants = toStringArray(automation.message_variants)
         if (!defaultVariants.length) continue
-        
+
         console.log(`[automations] Processing ${automation.trigger_type}: ${recipients.length} recipients`)
-        
+
         for (const recipient of recipients) {
           // Get message variants for user's language (with fallback to default)
           const userLang = (recipient.language || 'en').toLowerCase()
@@ -17935,13 +20990,13 @@ async function processDueAutomations() {
           if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
             messageVariants = translations[userLang]
           }
-          
-          const messageIndex = automation.randomize 
+
+          const messageIndex = automation.randomize
             ? Math.floor(Math.random() * messageVariants.length)
             : 0
           const message = messageVariants[messageIndex]
             .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
-          
+
           try {
             await sql`
               insert into public.user_notifications (
@@ -17961,7 +21016,7 @@ async function processDueAutomations() {
             // Ignore errors (e.g. if notification already exists)
           }
         }
-        
+
         // Update last_run_at
         await sql`
           update public.notification_automations
@@ -17982,7 +21037,7 @@ function scheduleNotificationWorker() {
   if (!sql) return
   if (notificationWorkerTimer) return
   const tick = () => {
-    runNotificationWorkerTick().catch(() => {})
+    runNotificationWorkerTick().catch(() => { })
     notificationWorkerTimer = setTimeout(tick, notificationWorkerIntervalMs)
   }
   notificationWorkerTimer = setTimeout(tick, 2000)
@@ -17995,22 +21050,22 @@ function scheduleNotificationWorker() {
 const publicDir = path.resolve(__dirname, 'public')
 app.get('/sitemap.xml', async (req, res) => {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
-  
+
   // Supported languages (en = default with no prefix, fr = with /fr prefix)
   const languages = ['en', 'fr']
   const defaultLang = 'en'
-  
+
   // Helper to generate URL with language prefix
   const langUrl = (path, lang) => {
     if (lang === defaultLang) return `${siteUrl}${path}`
     return `${siteUrl}/${lang}${path}`
   }
-  
+
   // Helper to generate alternate links for hreflang
-  const alternateLinks = (path) => languages.map(lang => 
+  const alternateLinks = (path) => languages.map(lang =>
     `    <xhtml:link rel="alternate" hreflang="${lang}" href="${langUrl(path, lang)}" />`
   ).join('\n') + `\n    <xhtml:link rel="alternate" hreflang="x-default" href="${siteUrl}${path}" />`
-  
+
   // Static pages - NO lastmod to prevent Google from showing dates
   // These are "evergreen" pages that shouldn't display modification dates in search
   const staticPages = [
@@ -18026,7 +21081,7 @@ app.get('/sitemap.xml', async (req, res) => {
     { loc: '/contact/business', priority: '0.6', changefreq: 'monthly' },
     { loc: '/terms', priority: '0.3', changefreq: 'yearly' },
   ]
-  
+
   // Build sitemap XML - generate URLs for each language
   let urls = ''
   for (const lang of languages) {
@@ -18037,7 +21092,7 @@ app.get('/sitemap.xml', async (req, res) => {
 ${alternateLinks(page.loc)}
   </url>`).join('\n') + '\n'
   }
-  
+
   // Add dynamic content WITH lastmod (blog posts, plants, profiles, gardens, bookmarks)
   // Use supabaseServiceClient (service role key) to bypass RLS and fetch ALL content including private
   const sitemapDb = supabaseServiceClient || supabaseServer
@@ -18050,7 +21105,7 @@ ${alternateLinks(page.loc)}
         .eq('is_published', true)
         .order('published_at', { ascending: false })
         .limit(100)
-      
+
       if (posts?.length) {
         for (const lang of languages) {
           urls += posts.map(post => {
@@ -18066,7 +21121,7 @@ ${alternateLinks(path)}
           }).join('\n') + '\n'
         }
       }
-      
+
       // ALL plants (with lastmod based on when they were updated)
       // Approved plants get higher priority, other statuses get lower priority
       // Fetch in batches to get all plants
@@ -18074,26 +21129,26 @@ ${alternateLinks(path)}
       const plantBatchSize = 1000
       const maxPlants = 10000
       let plantOffset = 0
-      
+
       while (allPlants.length < maxPlants) {
         const { data: plantBatch, error: plantError } = await sitemapDb
           .from('plants')
           .select('id, updated_time, created_time, status')
           .order('updated_time', { ascending: false, nullsFirst: false })
           .range(plantOffset, plantOffset + plantBatchSize - 1)
-        
+
         if (plantError) {
           console.error('[sitemap] Error fetching plants batch:', plantError.message)
           break
         }
-        
+
         if (!plantBatch || plantBatch.length === 0) break
-        
+
         allPlants.push(...plantBatch)
         if (plantBatch.length < plantBatchSize) break
         plantOffset += plantBatchSize
       }
-      
+
       if (allPlants.length) {
         for (const lang of languages) {
           urls += allPlants.map(plant => {
@@ -18113,7 +21168,7 @@ ${alternateLinks(path)}
           }).join('\n') + '\n'
         }
       }
-      
+
       // ALL user profiles (public and private) with different priorities
       // Public profiles: priority 0.5, Private profiles: priority 0.3
       // Fetch in batches to get all profiles
@@ -18121,7 +21176,7 @@ ${alternateLinks(path)}
       const profileBatchSize = 1000
       const maxProfiles = 10000
       let profileOffset = 0
-      
+
       while (allProfiles.length < maxProfiles) {
         const { data: profileBatch, error: profileError } = await sitemapDb
           .from('profiles')
@@ -18130,19 +21185,19 @@ ${alternateLinks(path)}
           .order('is_private', { ascending: true }) // public first
           .order('display_name', { ascending: true })
           .range(profileOffset, profileOffset + profileBatchSize - 1)
-        
+
         if (profileError) {
           console.error('[sitemap] Error fetching profiles batch:', profileError.message)
           break
         }
-        
+
         if (!profileBatch || profileBatch.length === 0) break
-        
+
         allProfiles.push(...profileBatch)
         if (profileBatch.length < profileBatchSize) break
         profileOffset += profileBatchSize
       }
-      
+
       if (allProfiles.length) {
         for (const lang of languages) {
           urls += allProfiles.map(profile => {
@@ -18160,7 +21215,7 @@ ${alternateLinks(path)}
           }).join('\n') + '\n'
         }
       }
-      
+
       // ALL gardens (public and private) with different priorities
       // Public gardens: priority 0.6, Private gardens: priority 0.4
       // Fetch in batches to get all gardens
@@ -18168,32 +21223,32 @@ ${alternateLinks(path)}
       const gardenBatchSize = 1000
       const maxGardens = 10000
       let gardenOffset = 0
-      
+
       while (allGardens.length < maxGardens) {
         const { data: gardenBatch, error: gardenError } = await sitemapDb
           .from('gardens')
           .select('id, created_at, privacy')
           .order('created_at', { ascending: false })
           .range(gardenOffset, gardenOffset + gardenBatchSize - 1)
-        
+
         if (gardenError) {
           console.error('[sitemap] Error fetching gardens batch:', gardenError.message)
           break
         }
-        
+
         if (!gardenBatch || gardenBatch.length === 0) break
-        
+
         allGardens.push(...gardenBatch)
         if (gardenBatch.length < gardenBatchSize) break
         gardenOffset += gardenBatchSize
       }
-      
+
       if (allGardens.length) {
         for (const lang of languages) {
           urls += allGardens.map(garden => {
             // Use created_at for lastmod
             const lastmodStr = garden.created_at ? `\n    <lastmod>${new Date(garden.created_at).toISOString().split('T')[0]}</lastmod>` : ''
-            
+
             const path = `/garden/${garden.id}`
             // Public gardens (privacy = 'public' or null) get higher priority (0.6)
             // Private gardens get lower priority (0.4)
@@ -18208,7 +21263,7 @@ ${alternateLinks(path)}
           }).join('\n') + '\n'
         }
       }
-      
+
       // ALL bookmarks (public and private) with different priorities
       // Public bookmarks: priority 0.5, Private bookmarks: priority 0.3
       // Fetch in batches to get all bookmarks
@@ -18216,32 +21271,32 @@ ${alternateLinks(path)}
       const bookmarkBatchSize = 1000
       const maxBookmarks = 10000
       let bookmarkOffset = 0
-      
+
       while (allBookmarks.length < maxBookmarks) {
         const { data: bookmarkBatch, error: bookmarkError } = await sitemapDb
           .from('bookmarks')
           .select('id, created_at, visibility')
           .order('created_at', { ascending: false })
           .range(bookmarkOffset, bookmarkOffset + bookmarkBatchSize - 1)
-        
+
         if (bookmarkError) {
           console.error('[sitemap] Error fetching bookmarks batch:', bookmarkError.message)
           break
         }
-        
+
         if (!bookmarkBatch || bookmarkBatch.length === 0) break
-        
+
         allBookmarks.push(...bookmarkBatch)
         if (bookmarkBatch.length < bookmarkBatchSize) break
         bookmarkOffset += bookmarkBatchSize
       }
-      
+
       if (allBookmarks.length) {
         for (const lang of languages) {
           urls += allBookmarks.map(bookmark => {
             // Use created_at for lastmod
             const lastmodStr = bookmark.created_at ? `\n    <lastmod>${new Date(bookmark.created_at).toISOString().split('T')[0]}</lastmod>` : ''
-            
+
             const path = `/bookmarks/${bookmark.id}`
             // Public bookmarks get higher priority (0.5)
             // Private bookmarks get lower priority (0.3)
@@ -18260,12 +21315,12 @@ ${alternateLinks(path)}
       console.error('[sitemap] Error fetching dynamic content:', err?.message)
     }
   }
-  
+
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urls}
 </urlset>`
-  
+
   res.setHeader('Content-Type', 'application/xml; charset=utf-8')
   res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
   res.send(sitemap)
@@ -18282,45 +21337,45 @@ const hashedAssetPattern =
   /assets\/.+[-.]([a-z0-9_\-]{8,})\.(?:js|mjs|cjs|css|json|png|jpe?g|webp|avif|svg|ttf|woff2?)$/i
 app.use(
   express.static(distDir, {
-      // CRITICAL: Disable index.html auto-serving so crawler detection in catch-all route works
-      // Without this, express.static serves index.html for "/" before our SSR logic runs
-      index: false,
-      setHeaders: (res, filePath) => {
-        const relativePath = path.relative(distDir, filePath).replace(/\\+/g, '/')
-        if (relativePath === 'index.html') {
-          res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
-          return
-        }
-        if (hashedAssetPattern.test(relativePath)) {
-          res.setHeader('Cache-Control', `public, max-age=${ONE_YEAR_SECONDS}, immutable`)
-          return
-        }
-        if (relativePath.startsWith('assets/')) {
-          res.setHeader(
-            'Cache-Control',
-            `public, max-age=${ONE_WEEK_SECONDS}, stale-while-revalidate=${EXTENDED_STALE_WHILE_REVALIDATE}`,
-          )
-          return
-        }
-        if (
-          relativePath.startsWith('locales/') ||
-          relativePath.startsWith('icons/') ||
-          relativePath === 'offline.html' ||
-          relativePath === 'robots.txt' ||
-          relativePath === 'env-loader.js' ||
-          relativePath === 'env.js'
-        ) {
-          res.setHeader(
-            'Cache-Control',
-            `public, max-age=${ONE_WEEK_SECONDS}, stale-while-revalidate=${EXTENDED_STALE_WHILE_REVALIDATE}`,
-          )
-          return
-        }
+    // CRITICAL: Disable index.html auto-serving so crawler detection in catch-all route works
+    // Without this, express.static serves index.html for "/" before our SSR logic runs
+    index: false,
+    setHeaders: (res, filePath) => {
+      const relativePath = path.relative(distDir, filePath).replace(/\\+/g, '/')
+      if (relativePath === 'index.html') {
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+        return
+      }
+      if (hashedAssetPattern.test(relativePath)) {
+        res.setHeader('Cache-Control', `public, max-age=${ONE_YEAR_SECONDS}, immutable`)
+        return
+      }
+      if (relativePath.startsWith('assets/')) {
         res.setHeader(
           'Cache-Control',
-          `public, max-age=${ONE_DAY_SECONDS}, stale-while-revalidate=${DEFAULT_STALE_WHILE_REVALIDATE}`,
+          `public, max-age=${ONE_WEEK_SECONDS}, stale-while-revalidate=${EXTENDED_STALE_WHILE_REVALIDATE}`,
         )
-      },
+        return
+      }
+      if (
+        relativePath.startsWith('locales/') ||
+        relativePath.startsWith('icons/') ||
+        relativePath === 'offline.html' ||
+        relativePath === 'robots.txt' ||
+        relativePath === 'env-loader.js' ||
+        relativePath === 'env.js'
+      ) {
+        res.setHeader(
+          'Cache-Control',
+          `public, max-age=${ONE_WEEK_SECONDS}, stale-while-revalidate=${EXTENDED_STALE_WHILE_REVALIDATE}`,
+        )
+        return
+      }
+      res.setHeader(
+        'Cache-Control',
+        `public, max-age=${ONE_DAY_SECONDS}, stale-while-revalidate=${DEFAULT_STALE_WHILE_REVALIDATE}`,
+      )
+    },
   }),
 )
 // --- Crawler Detection and Server-Side Rendering for Web Archives ---
@@ -18337,7 +21392,7 @@ const CRAWLER_USER_AGENTS = [
   'yandexbot',
   'applebot',
   'seznambot',
-  
+
   // Social media preview bots (IMPORTANT for link previews!)
   'discordbot',         // Discord link previews
   'facebookexternalhit', // Facebook/Meta
@@ -18359,7 +21414,7 @@ const CRAWLER_USER_AGENTS = [
   'viber',              // Viber
   'line-poker',         // LINE messenger
   'kakaotalk-scrap',    // KakaoTalk
-  
+
   // OG Preview/Debug tools
   'opengraph',          // opengraph.xyz and similar
   'iframely',           // iframely.com
@@ -18381,11 +21436,11 @@ const CRAWLER_USER_AGENTS = [
   'playwright',         // Playwright
   'selenium',           // Selenium
   'chrome-lighthouse',  // Lighthouse
-  
+
   // Web archives
   'ia_archiver',        // Internet Archive / Wayback Machine
   'archive.org_bot',    // Internet Archive
-  
+
   // SEO tools
   'ahrefsbot',
   'semrushbot',
@@ -18396,7 +21451,7 @@ const CRAWLER_USER_AGENTS = [
   'petalbot',
   'bytespider',
   'ccbot',
-  
+
   // Generic HTTP clients (often used for unfurling)
   'wget',
   'curl',
@@ -18428,7 +21483,7 @@ function isCrawler(userAgent) {
 async function generateCrawlerHtml(req, pagePath) {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
   const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
-  
+
   // Internal debug tracking (attached to req for debugging)
   req._ssrDebug = {
     pagePath,
@@ -18441,11 +21496,11 @@ async function generateCrawlerHtml(req, pagePath) {
     req._ssrDebug.steps.push({ step, data, time: Date.now() })
     console.log(`[ssr-debug] ${step}:`, JSON.stringify(data))
   }
-  
+
   // SSR timeout for database queries (Discord/social bots typically timeout after 5-10 seconds)
   // Increased to 8 seconds to allow for slow database responses
   const SSR_QUERY_TIMEOUT = Number(process.env.SSR_QUERY_TIMEOUT_MS) || 8000
-  
+
   // Helper to wrap Supabase queries with a timeout to prevent slow responses
   const ssrQuery = async (queryPromise, label = 'query') => {
     const startTime = Date.now()
@@ -18459,7 +21514,7 @@ async function generateCrawlerHtml(req, pagePath) {
       return { data: null, error: err }
     }
   }
-  
+
   // Helper to ensure image URLs are absolute (required for og:image)
   const ensureAbsoluteUrl = (url) => {
     if (!url) return null
@@ -18472,13 +21527,13 @@ async function generateCrawlerHtml(req, pagePath) {
     // No leading slash - treat as relative
     return `${siteUrl.replace(/\/+$/, '')}/${url}`
   }
-  
+
   // Default meta tags
   let title = 'Aphylia - Discover, Swipe and Manage Plants for Your Garden'
   let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
   let image = `${siteUrl}/icons/icon-512x512.png`
   let pageContent = ''
-  
+
   // Parse language from path BEFORE try block so it's always available for HTML template
   const pathParts = pagePath.split('/').filter(Boolean)
   // Supported languages with full translations
@@ -18493,13 +21548,13 @@ async function generateCrawlerHtml(req, pagePath) {
     detectedLang = supportedLangs.includes(langPrefix) ? langPrefix : 'en'
     effectivePath = pathParts.slice(1)
   }
-  
+
   ssrDebug('path_parsed', { pathParts, effectivePath, detectedLang, firstPart: effectivePath[0], secondPart: effectivePath[1] })
   console.log(`[ssr] Generating HTML for: ${pagePath}, lang: ${detectedLang}`)
-  
+
   try {
     console.log(`[ssr] Path parts: ${JSON.stringify(pathParts)}, effective: ${JSON.stringify(effectivePath)}`)
-    
+
     // Translations for SSR previews
     const t = {
       en: {
@@ -18866,19 +21921,19 @@ async function generateCrawlerHtml(req, pagePath) {
         homeFree: 'Gratuit. Pas de carte bancaire. Juste des plantes !',
       },
     }
-    
+
     // Get translations for detected language, fallback to English
     const tr = t[detectedLang] || t.en
-    
+
     // Plant detail page: /plants/:id
     const isPlantRoute = effectivePath[0] === 'plants' && !!effectivePath[1]
     const isGardenRoute = (effectivePath[0] === 'garden' || effectivePath[0] === 'gardens') && !!effectivePath[1]
     const isBlogRoute = effectivePath[0] === 'blog' && !!effectivePath[1]
     const isProfileRoute = effectivePath[0] === 'u' && !!effectivePath[1]
     const isBookmarkRoute = effectivePath[0] === 'bookmarks' && !!effectivePath[1]
-    
-    ssrDebug('route_detection', { 
-      effectivePath0: effectivePath[0], 
+
+    ssrDebug('route_detection', {
+      effectivePath0: effectivePath[0],
       effectivePath1: effectivePath[1],
       effectivePath2: effectivePath[2],
       isPlantRoute,
@@ -18894,7 +21949,7 @@ async function generateCrawlerHtml(req, pagePath) {
       const plantId = decodeURIComponent(effectivePath[1])
       ssrDebug('plant_route_matched', { plantId, supabaseAvailable: !!supabaseServer })
       console.log(`[ssr] ✓ Matched plant route! Looking up plant: ${plantId}, supabase available: ${!!supabaseServer}`)
-      
+
       if (!supabaseServer) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
       } else {
@@ -18907,7 +21962,7 @@ async function generateCrawlerHtml(req, pagePath) {
             .maybeSingle(),
           'plant_lookup'
         )
-        
+
         // Query translated fields from plant_translations for the detected language
         // Note: scientific_name, family, level_sun, maintenance_level, season were migrated to plants table
         const ssrLang = detectedLang || 'en'
@@ -18920,7 +21975,7 @@ async function generateCrawlerHtml(req, pagePath) {
             .maybeSingle(),
           'plant_translation_lookup'
         )
-        
+
         // Also fetch English translation as fallback for empty fields
         let enTranslation = null
         if (ssrLang !== 'en') {
@@ -18935,10 +21990,10 @@ async function generateCrawlerHtml(req, pagePath) {
           )
           enTranslation = enData
         }
-        
+
         // Use target language translation, falling back to English for empty fields
         const finalTranslation = translation || enTranslation
-        
+
         // Merge base plant with translations, with field-level fallback to English
         // Non-translatable fields (scientific_name, family, level_sun, maintenance_level, season) come from basePlant
         const plant = basePlant ? {
@@ -18955,10 +22010,10 @@ async function generateCrawlerHtml(req, pagePath) {
           tags: (translation?.tags?.length ? translation.tags : null) || enTranslation?.tags,
           origin: (translation?.origin?.length ? translation.origin : null) || enTranslation?.origin,
         } : null
-        
-        ssrDebug('plant_query_result', { 
-          hasData: !!plant, 
-          hasError: !!plantError, 
+
+        ssrDebug('plant_query_result', {
+          hasData: !!plant,
+          hasError: !!plantError,
           plantName: plant?.name,
           errorMsg: plantError?.message
         })
@@ -18971,11 +22026,11 @@ async function generateCrawlerHtml(req, pagePath) {
           req._ssrDebug.errors.push({ type: 'plant_not_found', plantId })
           console.log(`[ssr] ✗ Plant not found in database: ${plantId}`)
         }
-        
+
         if (plant) {
-          ssrDebug('plant_found', { 
-            name: plant.name, 
-            id: plant.id, 
+          ssrDebug('plant_found', {
+            name: plant.name,
+            id: plant.id,
             type: plant.plant_type,
             hasOverview: !!plant.overview,
             overviewLength: plant.overview?.length || 0,
@@ -18983,15 +22038,15 @@ async function generateCrawlerHtml(req, pagePath) {
             lang: ssrLang
           })
           console.log(`[ssr] ✓ Found plant: ${plant.name} (${plant.id}), overview=${plant.overview?.length || 0}chars, tags=${plant.tags?.length || 0}, lang=${ssrLang}`)
-          
+
           // Simple, clean title format: "🌱 Lotus - Complete Care Guide | Aphylia"
           title = `🌱 ${plant.name} - ${tr.plantCareGuide} | Aphylia`
-          
+
           // Use overview cropped to ~150 characters for description
           // Fallback to plant-specific info using tags, family, type
           if (plant.overview) {
             const overview = plant.overview.trim()
-            description = overview.length > 150 
+            description = overview.length > 150
               ? overview.slice(0, 150).trim() + '...'
               : overview
           } else {
@@ -19009,7 +22064,7 @@ async function generateCrawlerHtml(req, pagePath) {
               description = `${tr.plantLearnGrow} ${plant.name}. ${tr.plantExpertTips} 🌱`
             }
           }
-          
+
           // Keep these for pageContent structured data
           const plantEmoji = {
             'vegetable': '🥬',
@@ -19032,13 +22087,13 @@ async function generateCrawlerHtml(req, pagePath) {
           }
           const typeKey = (plant.plant_type || '').toLowerCase()
           const emoji = plantEmoji[typeKey] || '🌱'
-          
+
           // Care difficulty indicator - use translations (for pageContent)
           const difficulty = tr.difficulty[(plant.maintenance_level || '').toLowerCase()] || ''
-          
+
           // Light requirement indicator - use translations (for pageContent)
           const light = tr.light[(plant.level_sun || '').toLowerCase()] || ''
-          
+
           // Fetch primary image, fallback to discovery image (with timeout)
           const { data: images } = await ssrQuery(
             supabaseServer
@@ -19050,12 +22105,12 @@ async function generateCrawlerHtml(req, pagePath) {
               .limit(3),
             'plant_images'
           )
-          
+
           // Prefer primary, then discovery, then any other
           const primaryImg = images?.find(img => img.use === 'primary')
           const discoveryImg = images?.find(img => img.use === 'discovery')
           const anyImg = images?.[0]
-          
+
           if (primaryImg?.link) {
             image = ensureAbsoluteUrl(primaryImg.link) || image
           } else if (discoveryImg?.link) {
@@ -19063,20 +22118,20 @@ async function generateCrawlerHtml(req, pagePath) {
           } else if (anyImg?.link) {
             image = ensureAbsoluteUrl(anyImg.link) || image
           }
-          
+
           // Build structured content for the page
           const quickFacts = []
           if (plant.scientific_name) quickFacts.push(`🔬 <em>${escapeHtml(plant.scientific_name)}</em>`)
           if (plant.family) quickFacts.push(`👨‍👩‍👧 ${tr.family}: ${escapeHtml(plant.family)}`)
           if (plant.plant_type) quickFacts.push(`${emoji} ${escapeHtml(plant.plant_type)}`)
           if (plant.origin?.length) quickFacts.push(`🌍 ${tr.origin}: ${plant.origin.slice(0, 2).map(o => escapeHtml(o)).join(', ')}`)
-          
+
           const careInfo = []
           if (light) careInfo.push(light)
           if (plant.watering_type?.length) careInfo.push(`💧 ${plant.watering_type.map(w => escapeHtml(w)).join(', ')}`)
           if (difficulty) careInfo.push(difficulty)
           if (plant.season?.length) careInfo.push(`🌿 ${plant.season.map(s => escapeHtml(s)).join(', ')}`)
-          
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Product">
               <h1 itemprop="name">${emoji} ${escapeHtml(plant.name)}</h1>
@@ -19106,26 +22161,26 @@ async function generateCrawlerHtml(req, pagePath) {
               </p>
             </article>
           `
-          
+
           console.log(`[ssr] Plant image: ${image}`)
         }
       }
     }
-    
+
     // Blog post page: /blog/:slug
     else if (isBlogRoute && supabaseServer) {
       const slugOrId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up blog post: ${slugOrId}`)
       req._ssrDebug.matchedRoute = 'blog_post'
-      
+
       // Check if it looks like a UUID (for ID-based lookup)
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)
       ssrDebug('blog_route_matched', { slugOrId, isUUID })
-      
+
       // Try slug lookup first, then ID if it's a UUID
       let post = null
       let postError = null
-      
+
       // First try by slug
       const { data: postBySlug, error: slugError } = await ssrQuery(
         supabaseServer
@@ -19136,7 +22191,7 @@ async function generateCrawlerHtml(req, pagePath) {
           .maybeSingle(),
         'blog_lookup_by_slug'
       )
-      
+
       if (postBySlug) {
         post = postBySlug
       } else if (isUUID) {
@@ -19156,18 +22211,18 @@ async function generateCrawlerHtml(req, pagePath) {
       } else {
         postError = slugError
       }
-      
+
       if (postError) {
         console.log(`[ssr] Blog query error: ${postError.message}`)
       } else if (post) {
         console.log(`[ssr] ✓ Found blog post: ${post.title}`)
-        
+
         // Estimate read time from body_html content
         const readTime = post.body_html ? Math.ceil(post.body_html.replace(/<[^>]*>/g, '').split(/\s+/).length / 200) : 5
-        
+
         // Create engaging title
         title = `${post.title} | ${tr.blogTitle} 📖`
-        
+
         // Create compelling description with read time
         const descParts = []
         if (post.excerpt) {
@@ -19178,19 +22233,19 @@ async function generateCrawlerHtml(req, pagePath) {
         }
         if (readTime > 0) descParts.push(`📚 ${readTime} ${tr.blogMinRead}`)
         if (post.author_name) descParts.push(`✍️ ${tr.blogBy} ${post.author_name}`)
-        
+
         description = descParts.length > 0 ? descParts.join(' • ') : tr.blogDesc
-        
+
         if (post.cover_image_url) image = ensureAbsoluteUrl(post.cover_image_url) || image
-        
+
         // Use locale-specific date format
         const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
-        const publishDate = post.published_at ? new Date(post.published_at).toLocaleDateString(dateLocales[detectedLang] || 'en-US', { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
+        const publishDate = post.published_at ? new Date(post.published_at).toLocaleDateString(dateLocales[detectedLang] || 'en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
         }) : null
-        
+
         pageContent = `
           <article itemscope itemtype="https://schema.org/BlogPosting">
             <h1 itemprop="headline">📖 ${escapeHtml(post.title)}</h1>
@@ -19206,30 +22261,30 @@ async function generateCrawlerHtml(req, pagePath) {
         console.log(`[ssr] Blog image: ${image}`)
       }
     }
-    
+
     // User profile page: /u/:username
     else if (isProfileRoute && supabaseServer) {
       const username = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'profile'
       ssrDebug('profile_route_matched', { username, supabaseAvailable: !!supabaseServer })
       console.log(`[ssr] Looking up user profile: ${username}`)
-      
+
       // Use the same RPC function as the frontend for consistent results
       // This handles all the display_name/username matching logic in the database
       let profile = null
       let profileError = null
-      
+
       // Try RPC function first (same as frontend)
       const { data: rpcResult, error: rpcErr } = await ssrQuery(
         supabaseServer.rpc('get_profile_public_by_display_name', { _name: username }),
         'profile_lookup_rpc'
       )
-      
+
       if (rpcResult) {
         // RPC returns array or single object
         profile = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
       }
-      
+
       // Fallback: direct query if RPC fails or doesn't exist
       // Search WITHOUT is_private filter first - we'll handle privacy after
       if (!profile && !rpcErr) {
@@ -19241,7 +22296,7 @@ async function generateCrawlerHtml(req, pagePath) {
             .maybeSingle(),
           'profile_lookup_by_display_name'
         )
-        
+
         if (profileByDisplayName) {
           profile = profileByDisplayName
         } else {
@@ -19260,24 +22315,24 @@ async function generateCrawlerHtml(req, pagePath) {
       } else if (rpcErr) {
         profileError = rpcErr
       }
-      
+
       ssrDebug('profile_query_result', { found: !!profile, displayName: profile?.display_name, isPrivate: profile?.is_private, error: profileError?.message })
-      
+
       if (profileError) {
         console.log(`[ssr] Profile query error: ${profileError.message}`)
       } else if (profile) {
         const isPrivate = Boolean(profile.is_private)
         const displayName = profile.display_name || profile.username || username
         console.log(`[ssr] ✓ Found profile: ${displayName} (private: ${isPrivate})`)
-        
+
         // Always set the title with the user's name
         title = `🌱 ${displayName} | ${tr.profileGardenProfile} | Aphylia`
-        
+
         // For private profiles, show limited info
         if (isPrivate) {
           description = `${displayName} ${tr.profileOnAphylia || 'on Aphylia'} 🌱 ${tr.profilePrivateAccount || 'This is a private profile.'}`
           if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
-          
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Person">
               <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
@@ -19300,7 +22355,7 @@ async function generateCrawlerHtml(req, pagePath) {
               'profile_garden_count'
             )
             gardenCount = gCount || 0
-            
+
             // Get total plants across all gardens
             const { data: gardens } = await ssrQuery(
               supabaseServer
@@ -19320,8 +22375,8 @@ async function generateCrawlerHtml(req, pagePath) {
               )
               plantCount = pCount || 0
             }
-          } catch {}
-          
+          } catch { }
+
           // Create rich description
           const descParts = []
           if (profile.bio) {
@@ -19333,11 +22388,11 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
           if (profile.country) descParts.push(`📍 ${profile.country}`)
           if (profile.favorite_plant) descParts.push(`❤️ ${profile.favorite_plant}`)
-          
+
           description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
-          
+
           if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
-          
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Person">
               <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
@@ -19354,17 +22409,17 @@ async function generateCrawlerHtml(req, pagePath) {
         }
       }
     }
-    
+
     // Garden page: /garden/:id or /gardens/:id or /garden/:id/overview etc.
     else if (isGardenRoute && supabaseServer) {
       const gardenId = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'garden'
       ssrDebug('garden_route_matched', { gardenId, supabaseAvailable: !!supabaseServer, serviceClientAvailable: !!supabaseServiceClient })
       console.log(`[ssr] Looking up garden: ${gardenId}`)
-      
+
       // Use service client to bypass RLS (gardens may have privacy restrictions)
       const dbClient = supabaseServiceClient || supabaseServer
-      
+
       const { data: garden, error: gardenError } = await ssrQuery(
         dbClient
           .from('gardens')
@@ -19373,16 +22428,16 @@ async function generateCrawlerHtml(req, pagePath) {
           .maybeSingle(),
         'garden_lookup'
       )
-      
+
       ssrDebug('garden_query_result', { found: !!garden, name: garden?.name, privacy: garden?.privacy, error: gardenError?.message })
-      
+
       if (gardenError) {
         console.log(`[ssr] Garden query error: ${gardenError.message}`)
       } else if (garden) {
         const isPrivate = garden.privacy === 'private'
         const gardenName = garden.name || tr.gardenBeautiful
         console.log(`[ssr] ✓ Found garden: ${gardenName} (privacy: ${garden.privacy || 'public'})`)
-        
+
         // Get owner name (needed for both public and private gardens)
         let ownerName = null
         if (garden.created_by) {
@@ -19398,14 +22453,14 @@ async function generateCrawlerHtml(req, pagePath) {
             ownerName = owner.display_name
           }
         }
-        
+
         // For private gardens, show limited info
         if (isPrivate) {
           const gardenEmoji = '🏡'
           title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
           description = `${gardenName} ${tr.gardenOnAphylia || 'on Aphylia'} 🌱 ${tr.gardenPrivate || 'This is a private garden.'}`
           if (garden.cover_image_url) image = ensureAbsoluteUrl(garden.cover_image_url)
-          
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Place">
               <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
@@ -19419,13 +22474,13 @@ async function generateCrawlerHtml(req, pagePath) {
           // Public garden - show full details
           let plantCount = 0
           let gardenImage = null
-          
+
           try {
             // Use garden cover image if available
             if (garden.cover_image_url) {
               gardenImage = ensureAbsoluteUrl(garden.cover_image_url)
             }
-            
+
             // Get owner avatar if no garden cover
             if (!gardenImage && garden.created_by) {
               const { data: ownerForAvatar } = await ssrQuery(
@@ -19438,7 +22493,7 @@ async function generateCrawlerHtml(req, pagePath) {
               )
               if (ownerForAvatar?.avatar_url) gardenImage = ensureAbsoluteUrl(ownerForAvatar.avatar_url)
             }
-            
+
             // Get plant count (with timeout)
             const { count } = await ssrQuery(
               dbClient
@@ -19448,7 +22503,7 @@ async function generateCrawlerHtml(req, pagePath) {
               'garden_plant_count'
             )
             plantCount = count || 0
-            
+
             // Try to get a plant image from the garden (with timeout)
             if (!gardenImage) {
               const { data: gardenPlants } = await ssrQuery(
@@ -19472,8 +22527,8 @@ async function generateCrawlerHtml(req, pagePath) {
                 if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
               }
             }
-          } catch {}
-          
+          } catch { }
+
           // Get garden age - with translations
           const createdDate = garden.created_at ? new Date(garden.created_at) : null
           const gardenAge = createdDate ? (() => {
@@ -19483,28 +22538,28 @@ async function generateCrawlerHtml(req, pagePath) {
             const years = Math.floor(months / 12)
             return `${years} ${tr.gardenYears} ${tr.gardenOld}`
           })() : null
-          
+
           // Create engaging title
           const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
           title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
-          
+
           // Create rich description
           const descParts = []
           // Build location string from city/country
           const locationParts = [garden.location_city, garden.location_country].filter(Boolean)
           const gardenLocation = locationParts.length > 0 ? locationParts.join(', ') : null
-          
+
           if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.gardenPlantsGrowing}`)
           if (ownerName) descParts.push(`👤 ${tr.gardenBy} ${ownerName}`)
           if (gardenLocation) descParts.push(`📍 ${gardenLocation}`)
           if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
-          
-          description = descParts.length > 0 
+
+          description = descParts.length > 0
             ? descParts.join(' • ')
             : `${tr.gardenExploreThis}. ${tr.gardenDiscover}`
-          
+
           if (gardenImage) image = gardenImage
-          
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Place">
               <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
@@ -19522,7 +22577,7 @@ async function generateCrawlerHtml(req, pagePath) {
         }
       }
     }
-    
+
     // Static pages with enhanced previews
     else if (effectivePath[0] === 'about' || pagePath === '/about') {
       title = `🌱 ${tr.aboutTitle}`
@@ -19543,7 +22598,7 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
     else if (effectivePath[0] === 'search' || pagePath === '/search') {
       title = `🔍 ${tr.searchTitle} | Aphylia`
       description = tr.searchDesc
@@ -19563,11 +22618,11 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
     else if (effectivePath[0] === 'blog' && !effectivePath[1]) {
       title = `📚 ${tr.blogTitle} - ${tr.blogTagline}`
       description = tr.blogDesc
-      
+
       // Fetch recent blog posts for the listing
       if (supabaseServer) {
         const { data: posts } = await ssrQuery(
@@ -19579,12 +22634,12 @@ async function generateCrawlerHtml(req, pagePath) {
             .limit(10),
           'blog_listing'
         )
-        
+
         if (posts?.length) {
           // Use the most recent post's cover image
           const latestWithImage = posts.find(p => p.cover_image_url)
           if (latestWithImage) image = ensureAbsoluteUrl(latestWithImage.cover_image_url) || image
-          
+
           pageContent = `
             <article>
               <h1>📚 ${tr.blogTitle}</h1>
@@ -19604,7 +22659,7 @@ async function generateCrawlerHtml(req, pagePath) {
         }
       }
     }
-    
+
     // Gardens listing page
     else if (effectivePath[0] === 'gardens' && !effectivePath[1]) {
       title = `🏡 ${tr.gardensTitle} | Aphylia`
@@ -19623,7 +22678,7 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
     // Discovery/Swipe page
     else if (effectivePath[0] === 'discovery') {
       title = `🎴 ${tr.discoveryTitle}`
@@ -19643,7 +22698,7 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
     // Pricing page
     else if (effectivePath[0] === 'pricing') {
       title = `💎 ${tr.pricingTitle}`
@@ -19670,7 +22725,7 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
     // Download page
     else if (effectivePath[0] === 'download') {
       title = `📲 ${tr.downloadTitle}`
@@ -19691,7 +22746,7 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
     // Terms page
     else if (effectivePath[0] === 'terms') {
       const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
@@ -19713,7 +22768,7 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
     // Contact page
     else if (effectivePath[0] === 'contact' && effectivePath[1] === 'business') {
       title = `🤝 ${tr.businessTitle} | Aphylia`
@@ -19732,7 +22787,7 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
     else if (effectivePath[0] === 'contact') {
       title = `💬 ${tr.contactTitle}`
       description = tr.contactDesc
@@ -19752,13 +22807,13 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
     // Bookmarks page
     // Bookmark list page: /bookmarks/:id
     else if (isBookmarkRoute && supabaseServer) {
       const listId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
-      
+
       // Try to get the bookmark list info (using correct table name 'bookmarks')
       const { data: bookmarkList } = await ssrQuery(
         supabaseServer
@@ -19769,15 +22824,15 @@ async function generateCrawlerHtml(req, pagePath) {
           .maybeSingle(),
         'bookmark_lookup'
       )
-      
+
       if (bookmarkList) {
         console.log(`[ssr] ✓ Found bookmark list: ${bookmarkList.name}`)
-        
+
         // Get owner and plant count
         let ownerName = null
         let plantCount = 0
         let listImage = null
-        
+
         try {
           if (bookmarkList.user_id) {
             const { data: owner } = await ssrQuery(
@@ -19790,7 +22845,7 @@ async function generateCrawlerHtml(req, pagePath) {
             )
             if (owner) ownerName = owner.display_name
           }
-          
+
           // Get plant count (with timeout) - using correct table 'bookmark_items'
           const { count } = await ssrQuery(
             supabaseServer
@@ -19800,7 +22855,7 @@ async function generateCrawlerHtml(req, pagePath) {
             'bookmark_plant_count'
           )
           plantCount = count || 0
-          
+
           // Get first plant image (with timeout)
           const { data: listPlants } = await ssrQuery(
             supabaseServer
@@ -19822,23 +22877,23 @@ async function generateCrawlerHtml(req, pagePath) {
             )
             if (plantImg?.link) listImage = ensureAbsoluteUrl(plantImg.link)
           }
-        } catch {}
-        
+        } catch { }
+
         // Title: "🔖 FAV_MTP - Plant Bookmark | Aphylia"
         title = `🔖 ${bookmarkList.name || tr.bookmarksCollection} - ${tr.bookmarkTitle} | Aphylia`
-        
+
         // Description: "📌 Bookmark "FAV_MTP" made by Username 🌿 4 plants saved 🌱"
         const bookmarkName = bookmarkList.name || tr.bookmarksCollection
         const plantWord = plantCount === 1 ? tr.bookmarkPlant : tr.bookmarkPlants
-        
+
         if (ownerName) {
           description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" ${tr.bookmarkMadeBy} ${ownerName} 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
         } else {
           description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
         }
-        
+
         if (listImage) image = listImage
-        
+
         pageContent = `
           <article>
             <h1>🔖 ${escapeHtml(bookmarkName)} - ${tr.bookmarkTitle}</h1>
@@ -19852,12 +22907,12 @@ async function generateCrawlerHtml(req, pagePath) {
         `
       }
     }
-    
+
     // Homepage with dynamic content
     else if (pagePath === '/' || effectivePath.length === 0) {
       title = `🌱 ${tr.homeTitle}`
       description = tr.homeDesc
-      
+
       // Try to get some stats (with timeout to avoid blocking)
       let plantCountStat = '5,000+'
       let userCount = '10,000+'
@@ -19871,8 +22926,8 @@ async function generateCrawlerHtml(req, pagePath) {
           )
           if (pCount) plantCountStat = pCount.toLocaleString() + '+'
         }
-      } catch {}
-      
+      } catch { }
+
       pageContent = `
         <article>
           <h1>🌱 ${tr.homeWelcome}</h1>
@@ -19892,12 +22947,12 @@ async function generateCrawlerHtml(req, pagePath) {
         </article>
       `
     }
-    
+
   } catch (err) {
     console.error('[ssr] Error generating crawler content:', err?.message || err)
     console.error('[ssr] Stack trace:', err?.stack || 'no stack')
   }
-  
+
   // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
   // This ensures web archives can display content without errors
   const html = `<!DOCTYPE html>
@@ -20093,7 +23148,7 @@ app.get('/api/debug-ssr', async (req, res) => {
   const userAgent = req.get('user-agent') || ''
   const testPath = req.query.path || '/plants/test'
   const isCrawlerResult = isCrawler(userAgent)
-  
+
   // Test Supabase connection
   let supabaseTest = { ok: false, error: null }
   if (supabaseServer) {
@@ -20104,7 +23159,7 @@ app.get('/api/debug-ssr', async (req, res) => {
       supabaseTest = { ok: false, error: e?.message || 'Connection failed' }
     }
   }
-  
+
   res.json({
     userAgent,
     isCrawler: isCrawlerResult,
@@ -20130,14 +23185,14 @@ app.get('/api/force-ssr', async (req, res) => {
   const debugMode = req.query.debug === '1' || req.query.debug === 'true'
   console.log(`[force-ssr] Generating SSR for: ${testPath} (json: ${jsonMode}, debug: ${debugMode})`)
   console.log(`[force-ssr] Supabase available: ${!!supabaseServer}, URL configured: ${!!supabaseUrlEnv}`)
-  
+
   // If debug mode, test Supabase directly first
   let supabaseTestResult = null
   if (debugMode && supabaseServer) {
     try {
       const pathParts = testPath.split('/').filter(Boolean)
-      const plantId = pathParts.find((_, i) => pathParts[i-1] === 'plants' || pathParts[i-1] === 'fr' && pathParts[i] === 'plants') 
-        ? pathParts[pathParts.indexOf('plants') + 1] 
+      const plantId = pathParts.find((_, i) => pathParts[i - 1] === 'plants' || pathParts[i - 1] === 'fr' && pathParts[i] === 'plants')
+        ? pathParts[pathParts.indexOf('plants') + 1]
         : pathParts[1]
       if (plantId) {
         const { data, error } = await supabaseServer.from('plants').select('id, name').eq('id', plantId).maybeSingle()
@@ -20147,7 +23202,7 @@ app.get('/api/force-ssr', async (req, res) => {
       supabaseTestResult = { error: e.message }
     }
   }
-  
+
   try {
     const fakeReq = {
       ...req,
@@ -20158,18 +23213,18 @@ app.get('/api/force-ssr', async (req, res) => {
         return req.get(header)
       }
     }
-    
+
     const ssrStartTime = Date.now()
     const html = await generateCrawlerHtml(fakeReq, testPath)
     const ssrDuration = Date.now() - ssrStartTime
-    
+
     if (jsonMode) {
       // Extract title, og:title, og:description, og:image from HTML
       const titleMatch = html.match(/<title>([^<]*)<\/title>/)
       const ogTitleMatch = html.match(/<meta property="og:title" content="([^"]*)"/)
       const ogDescMatch = html.match(/<meta property="og:description" content="([^"]*)"/)
       const ogImageMatch = html.match(/<meta property="og:image" content="([^"]*)"/)
-      
+
       res.json({
         path: testPath,
         title: titleMatch?.[1] || null,
@@ -20197,7 +23252,7 @@ app.get('/api/force-ssr', async (req, res) => {
     }
   } catch (err) {
     console.error('[force-ssr] Error:', err)
-    res.status(500).json({ 
+    res.status(500).json({
       error: err.message,
       stack: err.stack,
       supabaseAvailable: !!supabaseServer
@@ -20208,13 +23263,13 @@ app.get('/api/force-ssr', async (req, res) => {
 // Test endpoint to preview what crawlers see
 app.get('/api/preview-ssr', async (req, res) => {
   const testPath = req.query.path || '/'
-  const fakeReq = { 
-    ...req, 
-    originalUrl: testPath, 
+  const fakeReq = {
+    ...req,
+    originalUrl: testPath,
     path: testPath,
     get: (header) => header === 'user-agent' ? 'Discordbot/2.0' : req.get(header)
   }
-  
+
   try {
     const html = await generateCrawlerHtml(fakeReq, testPath)
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -20227,28 +23282,28 @@ app.get('/api/preview-ssr', async (req, res) => {
 app.get('*', async (req, res) => {
   const userAgent = req.get('user-agent') || ''
   const pagePath = req.originalUrl || req.path || '/'
-  
+
   // Strip query params from path for asset detection
   const pathWithoutQuery = pagePath.split('?')[0]
-  
+
   // Check for force SSR query param (useful for testing)
   const forceSSR = req.query._ssr === '1' || req.query._ssr === 'true'
-  
+
   // Always log incoming requests (first 100 chars of UA)
   const uaShort = userAgent.slice(0, 80)
   console.log(`[request] ${req.method} ${pagePath} | UA: ${uaShort}`)
-  
+
   // Check if this is a crawler
   const detectedAsCrawler = isCrawler(userAgent) || forceSSR
-  
+
   // Check if this is a crawler requesting a page (not an asset)
   const isAssetRequest = /\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|map|json|xml|txt|webmanifest)$/i.test(pathWithoutQuery)
-  
+
   // Log crawler detection result
   if (detectedAsCrawler) {
     console.log(`[ssr] ✓ Crawler DETECTED: ${uaShort} -> ${pagePath} (isAsset: ${isAssetRequest}, forced: ${forceSSR})`)
   }
-  
+
   if (!isAssetRequest && detectedAsCrawler) {
     const ssrStartTime = Date.now()
     try {
@@ -20269,7 +23324,7 @@ app.get('*', async (req, res) => {
       // Fall through to normal SPA serving
     }
   }
-  
+
   // Record initial page load visit for SPA routes (non-crawlers)
   try {
     const sessionId = getOrSetSessionId(req, res)
@@ -20280,11 +23335,11 @@ app.get('*', async (req, res) => {
     resolveGeo(req, ipAddress)
       .then((geo) => getUserIdFromRequest(req)
         .then((uid) => insertWebVisit({ sessionId, userId: uid || null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' }, language: acceptLanguage }, req))
-        .catch(() => {}))
-      .catch(() => {})
-    } catch {}
-    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
-    res.sendFile(path.join(distDir, 'index.html'))
+        .catch(() => { }))
+      .catch(() => { })
+  } catch { }
+  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+  res.sendFile(path.join(distDir, 'index.html'))
 })
 
 const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase() !== 'true'
@@ -20294,15 +23349,15 @@ if (shouldListen) {
   const httpServer = app.listen(port, host, () => {
     console.log(`[server] listening on http://${host}:${port}`)
     // Best-effort ensure ban tables are present at startup
-    ensureBanTables().catch(() => {})
-    ensureBroadcastTable().catch(() => {})
-    ensureNotificationTables().catch(() => {})
+    ensureBanTables().catch(() => { })
+    ensureBroadcastTable().catch(() => { })
+    ensureNotificationTables().catch(() => { })
     scheduleNotificationWorker()
   })
   // Store reference for system-health endpoint to count connections
   app._httpServer = httpServer
 } else {
-  ensureNotificationTables().catch(() => {})
+  ensureNotificationTables().catch(() => { })
   scheduleNotificationWorker()
 }
 

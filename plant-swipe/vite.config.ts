@@ -61,7 +61,7 @@ export default defineConfig({
         display: 'standalone',
         display_override: ['window-controls-overlay', 'standalone'],
         scope,
-        start_url: scope,
+        start_url: scope === '/' ? '/discovery' : `${scope}discovery`,
         orientation: 'portrait-primary',
         categories: ['productivity', 'lifestyle', 'utilities'],
         // Cleared for general audiences today, while remaining flexible enough for

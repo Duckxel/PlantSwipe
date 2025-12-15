@@ -60,7 +60,7 @@ export function setParagraph(editor: Editor | null): boolean {
   if (!editor || !editor.isEditable) return false
   if (!canSetParagraph(editor)) return false
 
-  return editor.chain().focus().setNode("paragraph").run()
+  return editor.chain().focus(undefined, { scrollIntoView: false }).setNode("paragraph").run()
 }
 
 /**

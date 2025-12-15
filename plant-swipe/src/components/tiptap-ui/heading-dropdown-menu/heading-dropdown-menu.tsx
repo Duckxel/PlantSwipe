@@ -26,7 +26,7 @@ import { Separator } from "@/components/tiptap-ui-primitive/separator"
 
 export interface HeadingDropdownMenuProps
   extends Omit<ButtonProps, "type">,
-    UseHeadingDropdownMenuConfig {
+  UseHeadingDropdownMenuConfig {
   /**
    * Whether to render the dropdown menu in a portal
    * @default false
@@ -101,7 +101,7 @@ export const HeadingDropdownMenu = forwardRef<
           </Button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="start" portal={portal}>
+        <DropdownMenuContent align="start" portal={portal} sideOffset={8} collisionPadding={8}>
           <Card>
             <CardBody>
               <ButtonGroup>
