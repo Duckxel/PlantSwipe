@@ -10785,6 +10785,7 @@ async function getActiveBroadcastRow() {
   // Prefer direct SQL when available
   if (sql) {
     try {
+      // Fetch broadcast first without join to be robust
       const rows = await sql`
         select 
           bm.id::text as id,
@@ -10792,16 +10793,23 @@ async function getActiveBroadcastRow() {
           bm.severity,
           bm.created_at,
           bm.expires_at,
-          bm.created_by::text as created_by,
-          coalesce(p.display_name, p.email, '') as admin_name
+          bm.created_by::text as created_by
         from public.broadcast_messages bm
-        left join public.profiles p on p.id = bm.created_by
         where bm.removed_at is null and (bm.expires_at is null or bm.expires_at > now())
         order by bm.created_at desc
         limit 1
       `
-      return Array.isArray(rows) && rows[0] ? rows[0] : null
-    } catch { }
+      const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+      if (row && row.created_by) {
+        try {
+          const p = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+          if (p && p[0]) row.admin_name = p[0].name
+        } catch { /* ignore profile fetch error */ }
+      }
+      return row
+    } catch (err) {
+      console.error('[broadcast] sql fetch failed', err)
+    }
   }
   // Supabase REST fallback for reads
   if (supabaseUrlEnv && supabaseAnonKey) {
