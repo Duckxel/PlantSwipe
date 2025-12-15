@@ -944,21 +944,26 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       setLoading(true)
       const prefillFromSource = async () => {
         try {
-          // Load all translations for the source plant
-          const sourcePlant = await loadPlant(prefillFromId, 'en')
-
-          // NEW: Fetch all translations to preserve them
+          // NEW: Fetch all translations to preserve them and determine best source language
           const { data: allTranslations } = await supabase
             .from('plant_translations')
             .select('*')
             .eq('plant_id', prefillFromId)
+
+          // Determine best language: English if available, otherwise first available, otherwise 'en'
+          const hasEnglish = allTranslations?.some(t => t.language === 'en')
+          const sourceLang = hasEnglish ? 'en' : (allTranslations?.[0]?.language || 'en')
+
+          // Load source plant with the best available language
+          const sourcePlant = await loadPlant(prefillFromId, sourceLang)
 
           if (!sourcePlant) {
             throw new Error('Source plant not found')
           }
           if (!ignore) {
             if (allTranslations) {
-               // Filter out English (as it is already loaded as base)
+               // Filter out English (as it is already loaded as base/target)
+               // We assume we are creating the English version first
                const others = allTranslations.filter(t => t.language !== 'en')
                setPendingTranslations(others)
             }
@@ -970,15 +975,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               ...sourcePlant,
               id: newId,
               name: uniqueName,
-              // Clear images to avoid duplicate link constraint violations
-              // Users can re-add images or the images will be handled during save
-              images: [],
-              // Clear/modify identity fields that have unique constraints
+              // Keep images - if they conflict, the user will be notified on save
+              images: sourcePlant.images || [],
+              // Modify identity fields that have unique constraints
               identity: {
                 ...sourcePlant.identity,
-                // Clear scientific name to avoid unique constraint violation
-                // The user should enter a new scientific name for the cloned plant
-                scientificName: undefined,
+                // Append (Copy) to scientific name to avoid unique constraint violation
+                scientificName: sourcePlant.identity?.scientificName
+                  ? `${sourcePlant.identity.scientificName} (Copy)`
+                  : undefined,
               },
               meta: {
                 ...sourcePlant.meta,
