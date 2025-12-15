@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { Garden, GardenMember, GardenPlant } from '@/types/garden'
+import type { Garden, GardenMember, GardenPlant, GardenPrivacy } from '@/types/garden'
 import type { GardenTaskRow } from '@/types/garden'
 import type { GardenPlantTask, GardenPlantTaskOccurrence, TaskType, TaskScheduleKind, TaskUnit } from '@/types/garden'
 import type { Plant } from '@/types/plant'
@@ -380,28 +380,64 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   if (memberErr) throw new Error(memberErr.message)
   const gardenIds = (memberRows || []).map((r: { garden_id: string }) => r.garden_id)
   if (gardenIds.length === 0) return []
-  const { data: gardens, error: gerr } = await supabase
+  
+  // Try with privacy column first, fallback if column doesn't exist
+  let gardens: any[] = []
+  let gerr: any = null
+  const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
     .in('id', gardenIds)
+  gardens = result.data || []
+  gerr = result.error
+  
+  // If error mentions privacy column, try without it
+  if (gerr && String(gerr.message || '').toLowerCase().includes('privacy')) {
+    const fallbackResult = await supabase
+      .from('gardens')
+      .select('id, name, cover_image_url, created_by, created_at, streak')
+      .in('id', gardenIds)
+    gardens = fallbackResult.data || []
+    gerr = fallbackResult.error
+  }
+  
   if (gerr) throw new Error(gerr.message)
-  return (gardens || []).map((g: { id: string; name: string; cover_image_url: string | null; created_by: string; created_at: string }) => ({
+  return gardens.map((g: any) => ({
     id: String(g.id),
     name: String(g.name),
     coverImageUrl: g.cover_image_url || null,
     createdBy: String(g.created_by),
     createdAt: String(g.created_at),
-    streak: Number((g as any).streak ?? 0),
+    streak: Number(g.streak ?? 0),
+    privacy: (g.privacy || 'public') as GardenPrivacy,
   }))
 }
 
-export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string }): Promise<Garden> {
-  const { name, coverImageUrl = null, ownerUserId } = params
-  const { data, error } = await supabase
+export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string; privacy?: GardenPrivacy }): Promise<Garden> {
+  const { name, coverImageUrl = null, ownerUserId, privacy = 'public' } = params
+  
+  // Try with privacy column first, fallback if column doesn't exist
+  let data: any = null
+  let error: any = null
+  const result = await supabase
     .from('gardens')
-    .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId })
-    .select('id, name, cover_image_url, created_by, created_at')
+    .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId, privacy })
+    .select('id, name, cover_image_url, created_by, created_at, privacy')
     .single()
+  data = result.data
+  error = result.error
+  
+  // If error mentions privacy column, try without it
+  if (error && String(error.message || '').toLowerCase().includes('privacy')) {
+    const fallbackResult = await supabase
+      .from('gardens')
+      .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId })
+      .select('id, name, cover_image_url, created_by, created_at')
+      .single()
+    data = fallbackResult.data
+    error = fallbackResult.error
+  }
+  
   if (error) throw new Error(error.message)
   const garden: Garden = {
     id: String(data.id),
@@ -409,6 +445,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
     coverImageUrl: data.cover_image_url || null,
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
+    privacy: ((data as any).privacy || privacy) as GardenPrivacy,
   }
   // Add owner as member
   const { error: merr } = await supabase
@@ -419,13 +456,53 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
 }
 
 export async function getGarden(gardenId: string): Promise<Garden | null> {
-  const { data, error } = await supabase
+  // Try with new privacy column first
+  let data: any = null
+  let error: any = null
+  
+  const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language')
     .eq('id', gardenId)
     .maybeSingle()
+  
+  if (result.error && result.error.message?.includes('privacy')) {
+    // New column doesn't exist, try old is_public column
+    const fallback1 = await supabase
+      .from('gardens')
+      .select('id, name, cover_image_url, created_by, created_at, streak, is_public, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language')
+      .eq('id', gardenId)
+      .maybeSingle()
+    
+    if (fallback1.error && fallback1.error.message?.includes('is_public')) {
+      // Neither column exists, use base schema
+      const fallback2 = await supabase
+        .from('gardens')
+        .select('id, name, cover_image_url, created_by, created_at, streak, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language')
+        .eq('id', gardenId)
+        .maybeSingle()
+      data = fallback2.data
+      error = fallback2.error
+    } else {
+      data = fallback1.data
+      error = fallback1.error
+    }
+  } else {
+    data = result.data
+    error = result.error
+  }
+  
   if (error) throw new Error(error.message)
   if (!data) return null
+  
+  // Determine privacy value from available data
+  let privacy: GardenPrivacy = 'public'
+  if (data.privacy) {
+    privacy = data.privacy as GardenPrivacy
+  } else if (data.is_public !== undefined) {
+    privacy = data.is_public ? 'public' : 'private'
+  }
+  
   return {
     id: String(data.id),
     name: String(data.name),
@@ -433,7 +510,58 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
     streak: Number((data as any).streak ?? 0),
+    privacy,
+    locationCity: data.location_city || null,
+    locationCountry: data.location_country || null,
+    locationTimezone: data.location_timezone || null,
+    locationLat: data.location_lat || null,
+    locationLon: data.location_lon || null,
+    preferredLanguage: data.preferred_language || null,
   }
+}
+
+export async function updateGardenPrivacy(gardenId: string, privacy: GardenPrivacy): Promise<void> {
+  const { error } = await supabase
+    .from('gardens')
+    .update({ privacy })
+    .eq('id', gardenId)
+  if (error) {
+    // If the column doesn't exist yet, throw a user-friendly error
+    if (error.message?.includes('privacy')) {
+      throw new Error('Privacy feature not yet available. Please run database migration.')
+    }
+    throw new Error(error.message)
+  }
+}
+
+/**
+ * Deletes a garden and its cover image from storage.
+ * This calls the server endpoint which handles both the database row deletion
+ * and the storage cleanup for the cover image.
+ */
+export async function deleteGarden(gardenId: string): Promise<{ ok: boolean; coverDeleted?: boolean }> {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData?.session?.access_token
+  if (!token) {
+    throw new Error('You must be signed in to delete a garden')
+  }
+  
+  const resp = await fetch(`/api/garden/${encodeURIComponent(gardenId)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}))
+    throw new Error(body?.error || `Failed to delete garden (status ${resp.status})`)
+  }
+  
+  const result = await resp.json()
+  return { ok: Boolean(result.ok), coverDeleted: Boolean(result.coverDeleted) }
 }
 
 export async function refreshGardenStreak(gardenId: string, anchorDayIso?: string | null): Promise<void> {
@@ -452,7 +580,7 @@ export async function refreshGardenStreak(gardenId: string, anchorDayIso?: strin
 export async function getGardenPlants(gardenId: string, language?: SupportedLanguage): Promise<Array<GardenPlant & { plant?: Plant | null; sortIndex?: number | null }>> {
   const { data, error } = await supabase
     .from('garden_plants')
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value, plants_on_hand')
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value, plants_on_hand, health_status, notes, last_health_update')
     .eq('garden_id', gardenId)
     .order('sort_index', { ascending: true, nullsFirst: false })
   if (error) throw new Error(error.message)
@@ -464,21 +592,19 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
       .select('*, plant_images (id,link,use)')
       .in('id', plantIds)
   
-  // Always load translations for the specified language (including English)
-  // This ensures plants created in one language display correctly in another
+  // Load translations for ALL languages (including English)
   // Only fetch name field to minimize egress (~90% reduction)
-  let translationMap = new Map()
-  if (language) {
-    const { data: translations } = await supabase
-      .from('plant_translations')
-      .select('plant_id, name')
-      .eq('language', language)
-      .in('plant_id', plantIds)
-    if (translations) {
-      translations.forEach(t => {
-        translationMap.set(t.plant_id, { name: t.name })
-      })
-    }
+  const translationMap = new Map()
+  const targetLanguage = language || 'en'
+  const { data: translations } = await supabase
+    .from('plant_translations')
+    .select('plant_id, name')
+    .eq('language', targetLanguage)
+    .in('plant_id', plantIds)
+  if (translations) {
+    translations.forEach(t => {
+      translationMap.set(t.plant_id, { name: t.name })
+    })
   }
   
   const idToPlant: Record<string, Plant> = {}
@@ -522,14 +648,17 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
       overrideWaterFreqUnit: r.override_water_freq_unit || null,
       overrideWaterFreqValue: r.override_water_freq_value ?? null,
       plantsOnHand: Number(r.plants_on_hand ?? 0),
+      healthStatus: r.health_status || null,
+      notes: r.notes || null,
+      lastHealthUpdate: r.last_health_update || null,
       plant: idToPlant[plantId] || null,
       sortIndex: (r as any).sort_index ?? null,
     }
   })
 }
 
-export async function addPlantToGarden(params: { gardenId: string; plantId: string; nickname?: string | null; seedsPlanted?: number; plantedAt?: string | null; expectedBloomDate?: string | null }): Promise<GardenPlant> {
-  const { gardenId, plantId, nickname = null, seedsPlanted = 0, plantedAt = null, expectedBloomDate = null } = params
+export async function addPlantToGarden(params: { gardenId: string; plantId: string; nickname?: string | null; seedsPlanted?: number; plantedAt?: string | null; expectedBloomDate?: string | null; plantsOnHand?: number }): Promise<GardenPlant> {
+  const { gardenId, plantId, nickname = null, seedsPlanted = 0, plantedAt = null, expectedBloomDate = null, plantsOnHand = 0 } = params
   // Determine next sort_index to append to bottom
   const { data: maxRow } = await supabase
     .from('garden_plants')
@@ -541,7 +670,7 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
   const nextIndex = Number((maxRow as any)?.sort_index ?? -1) + 1
   const { data, error } = await supabase
     .from('garden_plants')
-    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, plants_on_hand: 0, sort_index: nextIndex })
+    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, plants_on_hand: plantsOnHand, sort_index: nextIndex })
     .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, plants_on_hand, sort_index')
     .single()
   if (error) throw new Error(error.message)
@@ -580,11 +709,13 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
   const idToName: Record<string, string | null> = {}
   const idToEmail: Record<string, string | null> = {}
   const idToAccent: Record<string, string | null> = {}
+  const idToAvatar: Record<string, string | null> = {}
   for (const r of (profilesData as any[]) || []) {
     const uid = String((r as any).user_id)
     idToName[uid] = (r as any).display_name || null
     idToEmail[uid] = (r as any).email || null
     idToAccent[uid] = (r as any).accent_key || null
+    idToAvatar[uid] = (r as any).avatar_url || null
   }
   return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
@@ -594,6 +725,7 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     displayName: idToName[String(r.user_id)] ?? null,
     email: idToEmail[String(r.user_id)] ?? null,
     accentKey: idToAccent[String(r.user_id)] ?? null,
+    avatarUrl: idToAvatar[String(r.user_id)] ?? null,
   }))
 }
 
@@ -607,6 +739,33 @@ export async function addGardenMember(params: { gardenId: string; userId: string
 
 export async function updateGardenMemberRole(params: { gardenId: string; userId: string; role: 'member' | 'owner' }): Promise<void> {
   const { gardenId, userId, role } = params
+  
+  // If demoting an owner to member, check if this is the last owner
+  // If so, delete the garden properly (including cover image cleanup)
+  if (role === 'member') {
+    const { data: currentMember } = await supabase
+      .from('garden_members')
+      .select('role')
+      .eq('garden_id', gardenId)
+      .eq('user_id', userId)
+      .maybeSingle()
+    
+    if (currentMember?.role === 'owner') {
+      const { count } = await supabase
+        .from('garden_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('garden_id', gardenId)
+        .eq('role', 'owner')
+      
+      if ((count ?? 0) <= 1) {
+        // This is the last owner - delete the garden via server endpoint
+        // which handles cover image cleanup
+        await deleteGarden(gardenId)
+        return
+      }
+    }
+  }
+  
   const { error } = await supabase
     .from('garden_members')
     .update({ role })
@@ -617,6 +776,31 @@ export async function updateGardenMemberRole(params: { gardenId: string; userId:
 
 export async function removeGardenMember(params: { gardenId: string; userId: string }): Promise<void> {
   const { gardenId, userId } = params
+  
+  // Check if the member being removed is the last owner
+  // If so, delete the garden properly (including cover image cleanup)
+  const { data: memberData } = await supabase
+    .from('garden_members')
+    .select('role')
+    .eq('garden_id', gardenId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  
+  if (memberData?.role === 'owner') {
+    const { count } = await supabase
+      .from('garden_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('garden_id', gardenId)
+      .eq('role', 'owner')
+    
+    if ((count ?? 0) <= 1) {
+      // This is the last owner - delete the garden via server endpoint
+      // which handles cover image cleanup
+      await deleteGarden(gardenId)
+      return
+    }
+  }
+  
   const { error } = await supabase
     .from('garden_members')
     .delete()
@@ -634,7 +818,7 @@ export async function addMemberByEmail(params: { gardenId: string; email: string
   try {
     await addGardenMember({ gardenId, userId, role })
     return { ok: true }
-  } catch (e) {
+  } catch (_e) {
     return { ok: false, reason: 'insert_failed' }
   }
 }
@@ -655,7 +839,7 @@ export async function addMemberByNameOrEmail(params: { gardenId: string; input: 
     if (!userId) return { ok: false, reason: 'no_account' }
     await addGardenMember({ gardenId, userId, role })
     return { ok: true }
-  } catch (e) {
+  } catch (_e) {
     return { ok: false, reason: 'insert_failed' }
   }
 }
@@ -1200,7 +1384,7 @@ export async function getGardenPlantSchedule(gardenPlantId: string): Promise<{ p
   // Try selecting with monthly_nth_weekdays; fallback if column missing
   const selectWithNth = 'period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays'
   const base = supabase.from('garden_plant_schedule')
-  let q = base.select(selectWithNth).eq('garden_plant_id', gardenPlantId).maybeSingle()
+  const q = base.select(selectWithNth).eq('garden_plant_id', gardenPlantId).maybeSingle()
   let { data, error } = await q
   if (error && /column .*monthly_nth_weekdays.* does not exist/i.test(error.message)) {
     const res2 = await base.select('period, amount, weekly_days, monthly_days, yearly_days').eq('garden_plant_id', gardenPlantId).maybeSingle()
@@ -2956,5 +3140,298 @@ export async function logGardenActivity(params: { gardenId: string; kind: Garden
     _actor_color: actorColor,
   })
   if (error) throw new Error(error.message)
+}
+
+/**
+ * Extended garden type with plant preview data for profile display
+ */
+export interface PublicGardenWithPreview extends Garden {
+  plantCount: number
+  previewPlants: Array<{
+    id: string
+    name: string
+    nickname: string | null
+    imageUrl: string | null
+  }>
+  ownerDisplayName: string | null
+}
+
+/**
+ * Get all public gardens for a user, with plant preview data
+ * Used for displaying gardens on the public profile page
+ */
+export async function getUserPublicGardens(userId: string): Promise<PublicGardenWithPreview[]> {
+  // Fetch garden ids where user is a member (owner or member)
+  const { data: memberRows, error: memberErr } = await supabase
+    .from('garden_members')
+    .select('garden_id, role')
+    .eq('user_id', userId)
+  
+  if (memberErr) throw new Error(memberErr.message)
+  const gardenIds = (memberRows || []).map((r: { garden_id: string }) => r.garden_id)
+  if (gardenIds.length === 0) return []
+  
+  // Fetch gardens with privacy = 'public' only
+  let gardens: any[] = []
+  let gerr: any = null
+  
+  const result = await supabase
+    .from('gardens')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
+    .in('id', gardenIds)
+    .eq('privacy', 'public')
+  
+  gardens = result.data || []
+  gerr = result.error
+  
+  // If error mentions privacy column, try filtering client-side
+  if (gerr && String(gerr.message || '').toLowerCase().includes('privacy')) {
+    const fallbackResult = await supabase
+      .from('gardens')
+      .select('id, name, cover_image_url, created_by, created_at, streak')
+      .in('id', gardenIds)
+    gardens = (fallbackResult.data || []).filter((g: any) => !g.is_private)
+    gerr = fallbackResult.error
+  }
+  
+  if (gerr) throw new Error(gerr.message)
+  if (gardens.length === 0) return []
+  
+  const publicGardenIds = gardens.map((g: any) => String(g.id))
+  
+  // Fetch plant counts and preview plants for each garden
+  const { data: gardenPlants, error: gpErr } = await supabase
+    .from('garden_plants')
+    .select('id, garden_id, plant_id, nickname, sort_index')
+    .in('garden_id', publicGardenIds)
+    .order('sort_index', { ascending: true })
+  
+  if (gpErr) console.error('Error fetching garden plants:', gpErr)
+  
+  // Group plants by garden
+  const plantsByGarden: Record<string, any[]> = {}
+  for (const gp of gardenPlants || []) {
+    const gid = String(gp.garden_id)
+    if (!plantsByGarden[gid]) plantsByGarden[gid] = []
+    plantsByGarden[gid].push(gp)
+  }
+  
+  // Collect unique plant IDs for image fetching
+  // Validate that plant IDs are valid UUIDs or numeric IDs to avoid malformed queries
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const numericIdRegex = /^\d+$/
+  const isValidPlantId = (id: string): boolean => uuidRegex.test(id) || numericIdRegex.test(id)
+  
+  const allPlantIds = new Set<string>()
+  for (const plants of Object.values(plantsByGarden)) {
+    for (const p of plants) {
+      if (p.plant_id) {
+        const plantId = String(p.plant_id).trim()
+        if (plantId && isValidPlantId(plantId)) {
+          allPlantIds.add(plantId)
+        }
+      }
+    }
+  }
+  
+  // Fetch plant details with images
+  const plantsMap: Record<string, { name: string; imageUrl: string | null }> = {}
+  if (allPlantIds.size > 0) {
+    const { data: plantRows, error: pErr } = await supabase
+      .from('plants')
+      .select('id, common_name, plant_images(link, use)')
+      .in('id', Array.from(allPlantIds))
+    
+    if (!pErr && plantRows) {
+      for (const p of plantRows) {
+        const images = Array.isArray((p as any).plant_images) ? (p as any).plant_images : []
+        const photos = images.map((img: any) => ({
+          url: img.link || '',
+          isPrimary: img.use === 'primary',
+          isVertical: false
+        }))
+        const primaryUrl = getPrimaryPhotoUrl(photos) || (photos[0]?.url || null)
+        plantsMap[String(p.id)] = {
+          name: (p as any).common_name || '',
+          imageUrl: primaryUrl
+        }
+      }
+    }
+  }
+  
+  // Fetch owner display names
+  const ownerIds = [...new Set(gardens.map((g: any) => String(g.created_by)))]
+  const ownerNamesMap: Record<string, string | null> = {}
+  if (ownerIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', ownerIds)
+    
+    if (profiles) {
+      for (const p of profiles) {
+        ownerNamesMap[String(p.id)] = p.display_name || null
+      }
+    }
+  }
+  
+  // Build result with preview data
+  return gardens.map((g: any) => {
+    const gid = String(g.id)
+    const gardenPlantsList = plantsByGarden[gid] || []
+    
+    // Get up to 4 preview plants with images
+    const previewPlants = gardenPlantsList.slice(0, 4).map((gp: any) => {
+      const plantId = String(gp.plant_id)
+      const plantData = plantsMap[plantId] || { name: '', imageUrl: null }
+      return {
+        id: String(gp.id),
+        name: plantData.name,
+        nickname: gp.nickname || null,
+        imageUrl: plantData.imageUrl
+      }
+    })
+    
+    return {
+      id: gid,
+      name: String(g.name),
+      coverImageUrl: g.cover_image_url || null,
+      createdBy: String(g.created_by),
+      createdAt: String(g.created_at),
+      streak: Number(g.streak ?? 0),
+      privacy: 'public' as GardenPrivacy,
+      plantCount: gardenPlantsList.length,
+      previewPlants,
+      ownerDisplayName: ownerNamesMap[String(g.created_by)] || null
+    }
+  })
+}
+
+
+// ----- Garden Analytics Types and Functions -----
+
+export interface DailyStat {
+  date: string
+  due: number
+  completed: number
+  success: boolean
+  water: number
+  fertilize: number
+  harvest: number
+  cut: number
+  custom: number
+}
+
+export interface WeeklyStats {
+  tasksCompleted: number
+  tasksDue: number
+  completionRate: number
+  trend: 'up' | 'down' | 'stable'
+  trendValue: number
+  tasksByType: {
+    water: number
+    fertilize: number
+    harvest: number
+    cut: number
+    custom: number
+  }
+}
+
+export interface MemberContribution {
+  userId: string
+  displayName: string
+  tasksCompleted: number
+  percentage: number
+  color: string
+}
+
+export interface PlantStats {
+  total: number
+  species: number
+  needingAttention: number
+  healthy: number
+}
+
+export interface GardenAnalytics {
+  dailyStats: DailyStat[]
+  weeklyStats: WeeklyStats
+  memberContributions: MemberContribution[]
+  plantStats: PlantStats
+}
+
+export interface PlantTip {
+  plantName: string
+  tip: string
+  priority: 'high' | 'medium' | 'low'
+}
+
+export interface GardenAdvice {
+  id: string
+  weekStart: string
+  adviceText: string
+  adviceSummary: string
+  focusAreas: string[]
+  plantSpecificTips: PlantTip[]
+  improvementScore: number | null
+  generatedAt: string
+}
+
+export interface AdviceResponse {
+  ok: boolean
+  advice: GardenAdvice | null
+  message?: string
+}
+
+export interface AnalyticsResponse {
+  ok: boolean
+  analytics: GardenAnalytics
+  error?: string
+}
+
+/**
+ * Fetch garden analytics data from the server
+ */
+export async function fetchGardenAnalytics(gardenId: string): Promise<AnalyticsResponse> {
+  const { data: session } = await supabase.auth.getSession()
+  const token = session?.session?.access_token
+  
+  const response = await fetch(`/api/garden/${gardenId}/analytics`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+  })
+  
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Failed to fetch analytics' }))
+    throw new Error(err.error || 'Failed to fetch analytics')
+  }
+  
+  return response.json()
+}
+
+/**
+ * Fetch or generate garden AI advice
+ */
+export async function fetchGardenAdvice(gardenId: string, forceRefresh = false): Promise<AdviceResponse> {
+  const { data: session } = await supabase.auth.getSession()
+  const token = session?.session?.access_token
+  
+  const url = `/api/garden/${gardenId}/advice${forceRefresh ? '?refresh=true' : ''}`
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+  })
+  
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Failed to fetch advice' }))
+    throw new Error(err.error || 'Failed to fetch advice')
+  }
+  
+  return response.json()
 }
 

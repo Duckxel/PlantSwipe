@@ -17,6 +17,8 @@ type CampaignRow = {
   variables: unknown
   scheduled_for: string | null
   timezone: string | null
+  test_mode: boolean | null
+  test_email: string | null
 }
 
 type Recipient = {
@@ -36,6 +38,7 @@ type EmailTranslation = {
 }
 
 // Supported languages - should match frontend i18n config
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const SUPPORTED_LANGUAGES = ['en', 'fr'] as const
 type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]
 const DEFAULT_LANGUAGE: SupportedLanguage = 'en'
@@ -122,7 +125,7 @@ const RESEND_API_KEY =
   Deno.env.get("SUPABASE_RESEND_API_KEY") ??
   ""
 
-const DEFAULT_FROM_EMAIL = "Plant Swipe <info@aphylia.app>"
+const DEFAULT_FROM_EMAIL = "Aphylia <info@aphylia.app>"
 const fromEmail = formatFromAddress(
   Deno.env.get("EMAIL_CAMPAIGN_FROM") ?? Deno.env.get("RESEND_FROM") ?? DEFAULT_FROM_EMAIL,
 )
@@ -294,7 +297,43 @@ async function processCampaign(
   }
 
   try {
-    const recipients = await collectRecipients(client, options.recipientLimit)
+    // Check if this is a test mode campaign - only send to test_email
+    const isTestMode = claimed.test_mode === true
+    const testEmail = claimed.test_email?.trim()
+
+    let recipients: Recipient[]
+
+    if (isTestMode) {
+      if (!testEmail) {
+        summary.status = "failed"
+        summary.reason = "Test mode enabled but no test_email specified"
+        summary.durationMs = Date.now() - startedAt.getTime()
+        await finalizeCampaign(client, campaign.id, {
+          status: "failed",
+          send_completed_at: new Date().toISOString(),
+          send_error: summary.reason,
+          total_recipients: 0,
+          sent_count: 0,
+          failed_count: 0,
+          send_summary: summary,
+        })
+        return summary
+      }
+
+      // For test mode, create a single test recipient
+      console.log(`[email-campaign-runner] TEST MODE: sending only to ${testEmail}`)
+      recipients = [{
+        userId: "test-user-" + campaign.id,
+        email: testEmail,
+        displayName: "Test User",
+        timezone: null,
+        language: DEFAULT_LANGUAGE,
+      }]
+    } else {
+      // Normal mode: collect all recipients
+      recipients = await collectRecipients(client, options.recipientLimit)
+    }
+
     summary.totalRecipients = recipients.length
 
     if (!recipients.length) {
@@ -320,7 +359,9 @@ async function processCampaign(
     const unsentRecipients = recipients.filter((recipient) => !alreadySentSet.has(recipient.userId))
 
     // Fetch email template translations for multi-language support
+    console.log(`[email-campaign-runner] Campaign ${campaign.id} template_id: ${campaign.template_id || 'NULL'}`)
     const emailTranslations = await fetchEmailTemplateTranslations(client, campaign.template_id)
+    console.log(`[email-campaign-runner] Loaded ${emailTranslations.size} translations: [${Array.from(emailTranslations.keys()).join(', ')}]`)
 
     if (!unsentRecipients.length) {
       summary.status = "sent"
@@ -345,7 +386,7 @@ async function processCampaign(
     summary.pendingCount = future.length
     summary.nextScheduledFor = future.length ? future[0].sendAt : null
 
-    let remainingBudget =
+    const remainingBudget =
       typeof options.recipientLimit === "number"
         ? Math.max(options.recipientLimit - summary.sentCount, 0)
         : Number.POSITIVE_INFINITY
@@ -387,7 +428,8 @@ async function processCampaign(
       }
     }
 
-    if (successfulRecipients.length) {
+    // Record sends for tracking (skip for test mode since test users don't exist in auth.users)
+    if (successfulRecipients.length && !isTestMode) {
       await recordCampaignSends(client, campaign.id, successfulRecipients)
     }
 
@@ -440,8 +482,15 @@ async function processCampaign(
 
     return summary
   } catch (error) {
+    // Properly stringify any error type (Error instances, plain objects, or primitives)
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error)
+    
     summary.status = "failed"
-    summary.reason = error instanceof Error ? error.message : String(error)
+    summary.reason = errorMessage
     summary.durationMs = Date.now() - startedAt.getTime()
     const failureCount =
       summary.totalRecipients > 0
@@ -449,17 +498,27 @@ async function processCampaign(
         : summary.failedCount
     summary.failedCount = failureCount
 
-    await finalizeCampaign(client, campaign.id, {
-      status: "failed",
-      send_completed_at: new Date().toISOString(),
-      send_error: summary.reason,
-      total_recipients: summary.totalRecipients,
-      sent_count: summary.sentCount,
-      failed_count: failureCount,
-      send_summary: summary,
-    })
+    // If emails were already sent, mark as partial success instead of failed
+    if (summary.sentThisRun > 0) {
+      summary.status = "partial"
+    }
 
-    console.error("[email-campaign-runner] campaign failed", campaign.id, error)
+    // Try to finalize with error status (don't throw if this fails)
+    try {
+      await finalizeCampaign(client, campaign.id, {
+        status: summary.status,
+        send_completed_at: new Date().toISOString(),
+        send_error: errorMessage,
+        total_recipients: summary.totalRecipients,
+        sent_count: summary.sentCount,
+        failed_count: failureCount,
+        send_summary: summary,
+      })
+    } catch (finalizeError) {
+      console.error("[email-campaign-runner] failed to finalize after error", campaign.id, finalizeError)
+    }
+
+    console.error("[email-campaign-runner] campaign failed", campaign.id, errorMessage, error)
     return summary
   }
 }
@@ -783,6 +842,14 @@ async function updateCampaignSchedule(
   summary: CampaignSummary,
   nextScheduledFor: string,
 ) {
+  // Sanitize summary to ensure it can be serialized
+  let sanitizedSummary: Record<string, unknown> | null = null
+  try {
+    sanitizedSummary = JSON.parse(JSON.stringify(summary))
+  } catch {
+    console.warn("[email-campaign-runner] Could not serialize summary for schedule update")
+  }
+
   const { error } = await client
     .from("admin_email_campaigns")
     .update({
@@ -791,13 +858,13 @@ async function updateCampaignSchedule(
       total_recipients: summary.totalRecipients,
       sent_count: summary.sentCount,
       failed_count: summary.failedCount,
-      send_summary: summary,
+      send_summary: sanitizedSummary,
       send_error: null,
       send_completed_at: null,
     })
     .eq("id", campaignId)
   if (error) {
-    throw error
+    throw new Error(`Failed to update campaign schedule: ${error.message || JSON.stringify(error)}`)
   }
 }
 
@@ -836,6 +903,11 @@ async function sendBatch(
     // Get user's language and find appropriate translation
     const userLang = recipient.language as SupportedLanguage
     const translation = translations.get(userLang)
+    
+    // Debug: log language matching (only for first few recipients per batch to avoid spam)
+    if (batchIndex === 0 && recipients.indexOf(recipient) < 3) {
+      console.log(`[email-campaign-runner] Recipient ${recipient.email}: lang=${userLang}, translation_found=${!!translation}`)
+    }
     
     // Use translated content if available, otherwise fall back to default campaign content
     const rawSubject = translation?.subject || campaign.subject
@@ -916,13 +988,29 @@ async function finalizeCampaign(
   campaignId: string,
   payload: Record<string, unknown>,
 ) {
+  // Remove potentially circular or non-serializable data from send_summary
+  if (payload.send_summary && typeof payload.send_summary === 'object') {
+    try {
+      // Ensure send_summary can be serialized to JSON
+      payload.send_summary = JSON.parse(JSON.stringify(payload.send_summary))
+    } catch (_e) {
+      console.warn("[email-campaign-runner] Could not serialize send_summary, removing it")
+      delete payload.send_summary
+    }
+  }
+
   const { error } = await client
     .from("admin_email_campaigns")
     .update(payload)
     .eq("id", campaignId)
+  
   if (error) {
-    console.error("[email-campaign-runner] failed to finalize campaign", campaignId, error)
+    console.error("[email-campaign-runner] failed to finalize campaign", campaignId, JSON.stringify(error))
+    // Throw so the caller knows finalization failed
+    throw new Error(`Failed to finalize campaign: ${error.message || JSON.stringify(error)}`)
   }
+  
+  console.log(`[email-campaign-runner] Campaign ${campaignId} finalized with status: ${payload.status}`)
 }
 
 function renderTemplate(input: string | null | undefined, context: Record<string, string>): string {
@@ -1075,7 +1163,7 @@ function safeParseJson(input: string): unknown {
   }
 }
 
-function formatFromAddress(raw: string, defaultName = "Plant Swipe"): string {
+function formatFromAddress(raw: string, defaultName = "Aphylia"): string {
   if (!raw) return DEFAULT_FROM_EMAIL
   if (raw.includes("<")) return raw
   return `${defaultName} <${raw}>`

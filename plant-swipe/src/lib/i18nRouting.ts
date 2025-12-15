@@ -150,16 +150,17 @@ export function useLanguageNavigate() {
 
 /**
  * Hook to change language and preserve current route
+ * Also syncs the language preference to the user's database profile for email campaigns
  */
 export function useChangeLanguage() {
   const navigate = useNavigate()
   const location = useLocation()
   
-  return (newLang: SupportedLanguage) => {
+  return async (newLang: SupportedLanguage) => {
     const currentPath = removeLanguagePrefix(location.pathname)
     const newPath = addLanguagePrefix(currentPath, newLang)
     
-    // Change i18n language
+    // Change i18n language (immediate UI update)
     i18n.changeLanguage(newLang)
     
     // Save preference to localStorage
@@ -167,5 +168,34 @@ export function useChangeLanguage() {
     
     // Navigate to new path with language prefix
     navigate(newPath, { replace: true })
+    
+    // Sync to database profile so email campaigns use the correct language
+    try {
+      const { supabase } = await import('./supabaseClient')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.id) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ language: newLang })
+          .eq('id', user.id)
+        
+        if (!error) {
+          // Update cached profile in localStorage
+          try {
+            const cached = localStorage.getItem('plantswipe.profile')
+            if (cached) {
+              const profile = JSON.parse(cached)
+              profile.language = newLang
+              localStorage.setItem('plantswipe.profile', JSON.stringify(profile))
+            }
+          } catch {}
+          
+          console.log(`[i18n] Language preference saved to profile: ${newLang}`)
+        }
+      }
+    } catch (err) {
+      console.warn('[i18n] Failed to sync language to database:', err)
+      // localStorage already has the preference, so this is non-critical
+    }
   }
 }

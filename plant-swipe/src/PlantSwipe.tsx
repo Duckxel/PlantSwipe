@@ -4,7 +4,8 @@ import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "
 import { Navigate } from "@/components/i18n/Navigate";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -19,8 +20,9 @@ import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import type { Plant, PlantSeason } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
-import RequireAdmin from "@/pages/RequireAdmin";
+import { RequireEditor } from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
+import { checkEditorAccess } from "@/constants/userRoles";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
 import { getDiscoveryPageImageUrl } from "@/lib/photos";
@@ -46,19 +48,28 @@ const SettingsPageLazy = lazy(() => import("@/pages/SettingsPage"))
 const ContactUsPageLazy = lazy(() => import("@/pages/ContactUsPage"))
 const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
 const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
+const PricingPageLazy = lazy(() => import("@/pages/PricingPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
 const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
 const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
+const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
-type ColorOption = { id: string; name: string; hexCode: string }
+type ColorOption = { 
+  id: string
+  name: string
+  hexCode: string
+  isPrimary: boolean
+  parentIds: string[]
+  translations: Record<string, string>  // language -> translated name
+}
 
 type ExtendedWindow = Window & {
-  requestIdleCallback?: (callback: (...args: any[]) => void, options?: { timeout?: number }) => number
+  requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
   cancelIdleCallback?: (handle: number) => void
 }
 
@@ -108,10 +119,11 @@ export default function PlantSwipe() {
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [usageFilters, setUsageFilters] = useState<string[]>([])
-  const [seasonSectionOpen, setSeasonSectionOpen] = useState(true)
-  const [colorSectionOpen, setColorSectionOpen] = useState(true)
+  const [seasonSectionOpen, setSeasonSectionOpen] = useState(false)
+  const [colorSectionOpen, setColorSectionOpen] = useState(false)
   const [advancedColorsOpen, setAdvancedColorsOpen] = useState(false)
-  const [classificationSectionOpen, setClassificationSectionOpen] = useState(true)
+  const [typeSectionOpen, setTypeSectionOpen] = useState(false)
+  const [usageSectionOpen, setUsageSectionOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -126,8 +138,9 @@ export default function PlantSwipe() {
   const location = useLocation()
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
-  const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
-    pathWithoutLang === "/" ? "discovery" :
+  const currentView: "landing" | "discovery" | "gardens" | "search" | "profile" | "create" =
+    pathWithoutLang === "/" ? "landing" :
+    pathWithoutLang === "/discovery" || pathWithoutLang.startsWith("/discovery/") ? "discovery" :
     pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
     pathWithoutLang.startsWith("/search") ? "search" :
     pathWithoutLang.startsWith("/profile") ? "profile" :
@@ -154,7 +167,9 @@ export default function PlantSwipe() {
           return parsed
         }
       }
-    } catch {}
+    } catch {
+      // Ignore localStorage errors
+    }
     return []
   })
   const [loading, setLoading] = useState(() => {
@@ -163,29 +178,30 @@ export default function PlantSwipe() {
       const cached = localStorage.getItem(`plantswipe.plants.${currentLang}`)
       return !cached
     } catch {
+      // Ignore localStorage errors
       return true
     }
   })
   const [loadError, setLoadError] = useState<string | null>(null)
   const [colorOptions, setColorOptions] = useState<ColorOption[]>([])
 
-  const { singleWordColors, multiWordColors } = React.useMemo(() => {
-    const single: ColorOption[] = []
-    const multi: ColorOption[] = []
+  // Separate colors into primary and advanced based on is_primary field
+  const { primaryColors, advancedColors } = React.useMemo(() => {
+    const primary: ColorOption[] = []
+    const advanced: ColorOption[] = []
 
     colorOptions.forEach((color) => {
       const normalized = (color.name || "").trim()
       const preparedColor = color.name === normalized ? color : { ...color, name: normalized }
-      const hasSingleWord = normalized.length > 0 && !/\s/.test(normalized)
 
-      if (hasSingleWord) {
-        single.push(preparedColor)
+      if (color.isPrimary) {
+        primary.push(preparedColor)
       } else {
-        multi.push(preparedColor)
+        advanced.push(preparedColor)
       }
     })
 
-    return { singleWordColors: single, multiWordColors: multi }
+    return { primaryColors: primary, advancedColors: advanced }
   }, [colorOptions])
   
   const typeOptions = useMemo(() => {
@@ -207,9 +223,9 @@ export default function PlantSwipe() {
 
   // Hydrate liked ids from profile when available
   React.useEffect(() => {
-    const arr = Array.isArray(profile?.liked_plant_ids) ? profile!.liked_plant_ids!.map(String) : []
+    const arr = Array.isArray(profile?.liked_plant_ids) ? profile.liked_plant_ids.map(String) : []
     setLikedIds(arr)
-  }, [profile?.liked_plant_ids])
+  }, [profile])
 
   const loadPlants = React.useCallback(async () => {
     // Only show loading if we don't have plants
@@ -231,7 +247,9 @@ export default function PlantSwipe() {
         if (plantsWithTranslations.length > 0) {
           localStorage.setItem(`plantswipe.plants.${currentLang}`, JSON.stringify(plantsWithTranslations))
         }
-      } catch {}
+      } catch {
+        // Ignore localStorage errors
+      }
       
       ok = true
     } catch (e: unknown) {
@@ -241,20 +259,20 @@ export default function PlantSwipe() {
       setLoading(false)
     }
     return ok
-  }, [currentLang])
+  }, [currentLang, plants.length])
 
 
   React.useEffect(() => {
     loadPlants()
   }, [loadPlants])
 
-  // Load colors from database
+  // Load colors from database with translations
   React.useEffect(() => {
     const loadColors = async () => {
       try {
         const { data, error } = await supabase
           .from('colors')
-          .select('id, name, hex_code')
+          .select('id, name, hex_code, is_primary, parent_ids')
           .order('name', { ascending: true })
 
         if (error) {
@@ -262,11 +280,30 @@ export default function PlantSwipe() {
           return
         }
 
+        // Load translations
+        const { data: translationsData } = await supabase
+          .from('color_translations')
+          .select('color_id, language, name')
+
+        // Build translations map
+        const translationsMap = new Map<string, Record<string, string>>()
+        if (translationsData) {
+          translationsData.forEach((t: { color_id: string; language: string; name: string }) => {
+            if (!translationsMap.has(t.color_id)) {
+              translationsMap.set(t.color_id, {})
+            }
+            translationsMap.get(t.color_id)![t.language] = t.name
+          })
+        }
+
         if (data) {
           setColorOptions(data.map((c) => ({
             id: c.id,
             name: (c.name ?? "").trim(),
-            hexCode: c.hex_code ?? ""
+            hexCode: c.hex_code ?? "",
+            isPrimary: c.is_primary ?? false,
+            parentIds: c.parent_ids ?? [],
+            translations: translationsMap.get(c.id) || {}
           })))
         }
       } catch (e) {
@@ -279,18 +316,25 @@ export default function PlantSwipe() {
 
   React.useEffect(() => {
     if (colorFilter.length === 0) return
-    // Open advanced colors section if any selected color has whitespace
-    const hasMultiWordColor = colorFilter.some((color) => /\s/.test(color.trim()))
-    if (hasMultiWordColor) {
+    // Open advanced colors section if any selected color is not primary
+    const hasAdvancedColor = colorFilter.some((colorName) => {
+      const color = colorOptions.find((c) => c.name === colorName)
+      return color && !color.isPrimary
+    })
+    if (hasAdvancedColor) {
       setAdvancedColorsOpen(true)
     }
-  }, [colorFilter])
+  }, [colorFilter, colorOptions])
 
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
     const onRefresh = () => { loadPlants() }
-    try { window.addEventListener('plants:refresh', onRefresh as EventListener) } catch {}
-    return () => { try { window.removeEventListener('plants:refresh', onRefresh as EventListener) } catch {} }
+    try { window.addEventListener('plants:refresh', onRefresh as EventListener) } catch {
+      // Ignore event listener errors
+    }
+    return () => { try { window.removeEventListener('plants:refresh', onRefresh as EventListener) } catch {
+      // Ignore event listener errors
+    } }
   }, [loadPlants])
 
   // Global presence tracking so Admin can see "currently online" users
@@ -306,23 +350,28 @@ export default function PlantSwipe() {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         if (token) headers.Authorization = `Bearer ${token}`
         const ref = document.referrer || ''
+        const nav = navigator as Navigator & { hardwareConcurrency?: number; deviceMemory?: number }
         const extra = {
           viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 },
-          screen: { w: window.screen?.width || null, h: window.screen?.height || null, colorDepth: (window.screen as any)?.colorDepth || null },
+          screen: { w: window.screen?.width || null, h: window.screen?.height || null, colorDepth: window.screen?.colorDepth || null },
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
           platform: navigator.platform || null,
           vendor: navigator.vendor || null,
-          hardwareConcurrency: (navigator as any).hardwareConcurrency || null,
-          memoryGB: (navigator as any).deviceMemory || null,
+          hardwareConcurrency: nav.hardwareConcurrency || null,
+          memoryGB: nav.deviceMemory || null,
           webgl: (() => {
             try {
               const c = document.createElement('canvas')
               const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | WebGL2RenderingContext | null
               if (!gl) return null
-              const vendor = (gl as any).getParameter?.((gl as any).VENDOR)
-              const renderer = (gl as any).getParameter?.((gl as any).RENDERER)
+              const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
+              const vendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : null
+              const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : null
               return { vendor: vendor ?? null, renderer: renderer ?? null }
-            } catch { return null }
+            } catch {
+              // WebGL not available
+              return null
+            }
           })(),
         }
         await fetch(`${base}/api/track-visit`, {
@@ -333,17 +382,21 @@ export default function PlantSwipe() {
             referrer: ref,
             userId: user?.id || null,
             pageTitle: document.title || null,
-            language: navigator.language || (navigator as any).languages?.[0] || null,
+            language: navigator.language || navigator.languages?.[0] || null,
             // utm removed from server; not sent anymore
             extra,
           }),
           keepalive: true,
         })
-      } catch {}
+      } catch {
+        // Ignore visit tracking errors
+      }
     }
 
     const cancelIdleVisit = scheduleIdleTask(() => {
-      sendVisit(location.pathname + location.search).catch(() => {})
+      sendVisit(location.pathname + location.search).catch(() => {
+        // Ignore errors
+      })
     }, 2000)
 
     return () => { cancelIdleVisit() }
@@ -367,14 +420,18 @@ export default function PlantSwipe() {
             referrer: document.referrer || '',
             userId: user?.id || null,
             pageTitle: document.title || null,
-            language: navigator.language || (navigator as any).languages?.[0] || null,
+            language: navigator.language || navigator.languages?.[0] || null,
             extra: { source: 'heartbeat' },
           }),
           keepalive: true,
         })
-      } catch {}
+      } catch {
+        // Ignore heartbeat errors
+      }
     }
-    timer = setInterval(() => { sendHeartbeat().catch(() => {}) }, HEARTBEAT_MS)
+    timer = setInterval(() => { sendHeartbeat().catch(() => {
+      // Ignore errors
+    }) }, HEARTBEAT_MS)
     return () => { if (timer) clearInterval(timer) }
   }, [location.pathname, location.search, user?.id])
 
@@ -387,7 +444,9 @@ export default function PlantSwipe() {
         anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
         localStorage.setItem('plantswipe.anon_id', anonId)
       }
-    } catch {}
+    } catch {
+      // Ignore localStorage errors
+    }
 
     const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
     const channel = supabase.channel('global-presence', { config: { presence: { key } } })
@@ -404,13 +463,17 @@ export default function PlantSwipe() {
               display_name: profile?.display_name || null,
               online_at: new Date().toISOString(),
             })
-          } catch {}
+          } catch {
+            // Ignore tracking errors
+          }
         }
       })
 
     presenceRef.current = channel
     return () => {
-      try { channel.untrack() } catch {}
+      try { channel.untrack() } catch {
+        // Ignore untrack errors
+      }
       supabase.removeChannel(channel)
     }
   }, [user?.id, profile?.display_name])
@@ -421,15 +484,32 @@ export default function PlantSwipe() {
     const normalizedUsage = usageFilters.map((u) => u.toLowerCase())
     const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
 
+    // Build a map of color IDs that should match for each selected filter
+    // When a primary color is selected, include all its children colors
+    const getMatchingColorNames = (filterColorName: string): string[] => {
+      const filterColor = colorOptions.find((c) => c.name.toLowerCase() === filterColorName)
+      if (!filterColor) return [filterColorName]
+
+      const matchingNames = [filterColorName]
+      
+      // If this is a primary color, include all colors that have it as a parent
+      if (filterColor.isPrimary) {
+        colorOptions.forEach((c) => {
+          if (c.parentIds.includes(filterColor.id)) {
+            matchingNames.push(c.name.toLowerCase())
+          }
+        })
+      }
+
+      return matchingNames
+    }
+
+    // Build expanded color filters including children
+    const expandedColorFilters = normalizedColorFilters.flatMap((f) => getMatchingColorNames(f))
+
     const colorMatches = (colorName: string, normalizedColorFilter: string): boolean => {
       const normalizedColor = (colorName || "").toLowerCase().trim()
       if (!normalizedColor) return false
-
-      const colorFilterHasWhitespace = /\s/.test(normalizedColorFilter)
-
-      if (colorFilterHasWhitespace) {
-        return normalizedColor === normalizedColorFilter
-      }
 
       if (normalizedColor === normalizedColorFilter) {
         return true
@@ -455,10 +535,10 @@ export default function PlantSwipe() {
         .toLowerCase()
         .includes(lowerQuery)
       const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
-      // Match if any of the selected colors matches any of the plant's colors (OR logic)
-      const matchesColor = normalizedColorFilters.length === 0 
+      // Match if any of the selected colors (including children) matches any of the plant's colors (OR logic)
+      const matchesColor = expandedColorFilters.length === 0 
         ? true 
-        : normalizedColorFilters.some((filterColor) => 
+        : expandedColorFilters.some((filterColor) => 
             colors.some((plantColor) => colorMatches(plantColor, filterColor))
           )
       const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
@@ -471,11 +551,13 @@ export default function PlantSwipe() {
         : true
       return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage
     })
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, likedSet])
+  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, likedSet, colorOptions])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
   const swipeList = useMemo(() => {
+    // shuffleEpoch is used to trigger a reshuffle when user completes a cycle
+    void shuffleEpoch
     if (filtered.length === 0) return []
     const shuffleList = (list: Plant[]) => {
       const arr = list.slice()
@@ -563,7 +645,9 @@ export default function PlantSwipe() {
     link.href = href
     try {
       (link as HTMLLinkElement & { fetchPriority?: string }).fetchPriority = "high"
-    } catch {}
+    } catch {
+      // Ignore fetchPriority assignment errors
+    }
     link.setAttribute("fetchpriority", "high")
     link.setAttribute("data-aphylia-preload", "hero")
     document.head.appendChild(link)
@@ -572,7 +656,7 @@ export default function PlantSwipe() {
         link.parentNode.removeChild(link)
       }
     }
-  }, [currentView, heroImageCandidate, index])
+  }, [currentView, heroImageCandidate, index, current])
 
   const handlePass = () => {
     if (swipeList.length === 0) return
@@ -705,7 +789,19 @@ export default function PlantSwipe() {
   const openLogin = React.useCallback(() => { setAuthMode("login"); setAuthOpen(true) }, [])
   const openSignup = React.useCallback(() => { setAuthMode("signup"); setAuthOpen(true) }, [])
   const handleProfileNavigation = React.useCallback(() => { navigate('/profile') }, [navigate])
-  const handleLogoutNavigation = React.useCallback(async () => { await signOut(); navigate('/') }, [signOut, navigate])
+  const handleLogoutNavigation = React.useCallback(async () => {
+    await signOut()
+    // Stay on current page unless it requires authentication
+    // Protected routes that require user to be logged in:
+    const protectedPrefixes = ['/profile', '/friends', '/settings', '/admin', '/create']
+    const isOnProtectedPage = protectedPrefixes.some(prefix => 
+      pathWithoutLang === prefix || pathWithoutLang.startsWith(prefix + '/')
+    ) || pathWithoutLang.match(/^\/plants\/[^/]+\/edit$/)
+    
+    if (isOnProtectedPage) {
+      navigate('/')
+    }
+  }, [signOut, navigate, pathWithoutLang])
 
   const submitAuth = async () => {
     if (authSubmitting) return
@@ -756,6 +852,8 @@ export default function PlantSwipe() {
         }
         console.log('[auth] login ok')
       }
+      // Reset submitting state before closing dialog
+      setAuthSubmitting(false)
       setAuthOpen(false)
     } catch (e: unknown) {
       console.error('[auth] unexpected error', e)
@@ -772,9 +870,16 @@ export default function PlantSwipe() {
     }
   }, [user])
 
+  // Reset form state when dialog closes
   React.useEffect(() => {
     if (!authOpen) {
       setAuthAcceptedTerms(false)
+      setAuthSubmitting(false)
+      setAuthError(null)
+      setAuthEmail("")
+      setAuthPassword("")
+      setAuthPassword2("")
+      setAuthDisplayName("")
     }
   }, [authOpen])
 
@@ -801,9 +906,29 @@ export default function PlantSwipe() {
   )
 
     const FilterControls = () => {
+      // Check if any filters are active
+      const hasActiveFilters = seasonFilter !== null || 
+        colorFilter.length > 0 || 
+        typeFilter !== null || 
+        usageFilters.length > 0 || 
+        onlySeeds || 
+        onlyFavorites
+
+      // Clear all filters function
+      const clearAllFilters = () => {
+        setSeasonFilter(null)
+        setColorFilter([])
+        setTypeFilter(null)
+        setUsageFilters([])
+        setOnlySeeds(false)
+        setOnlyFavorites(false)
+      }
+
       const renderColorOption = (color: ColorOption) => {
         const isActive = colorFilter.includes(color.name)
-        const label = color.name || t("plant.unknownColor", { defaultValue: "Unnamed color" })
+        // Use translated name if available for the current language, fallback to default name
+        const translatedName = color.translations[currentLang] || color.name
+        const label = translatedName || t("plant.unknownColor", { defaultValue: "Unnamed color" })
 
         return (
           <button
@@ -834,6 +959,19 @@ export default function PlantSwipe() {
 
       return (
         <div className="space-y-6">
+          {/* Clear all filters button */}
+          {hasActiveFilters && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearAllFilters}
+              className="w-full rounded-2xl text-sm border-dashed hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+            >
+              <X className="h-4 w-4 mr-2" />
+              {t("plant.clearAllFilters", { defaultValue: "Clear all filters" })}
+            </Button>
+          )}
+
           {/* Sort */}
           <div>
             <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
@@ -849,78 +987,77 @@ export default function PlantSwipe() {
             </select>
           </div>
 
-          {/* Classification */}
+          {/* Type */}
           <div>
             <FilterSectionHeader
-              label={t("plant.classification")}
-              isOpen={classificationSectionOpen}
-              onToggle={() => setClassificationSectionOpen((prev) => !prev)}
+              label={t("plantInfo.classification.type", { defaultValue: "Type" })}
+              isOpen={typeSectionOpen}
+              onToggle={() => setTypeSectionOpen((prev) => !prev)}
             />
-            {classificationSectionOpen && (
-              <div className="mt-3 space-y-4">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                    {t("plantInfo.classification.type", { defaultValue: "Type" })}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {typeOptions.length > 0 ? (
-                      typeOptions.map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => setTypeFilter((current) => (current === option ? null : option))}
-                          className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                            typeFilter === option
-                              ? "bg-black dark:bg-white text-white dark:text-black"
-                              : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                          }`}
-                          aria-pressed={typeFilter === option}
-                        >
-                          {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="text-xs opacity-60">
-                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
-                    {t("plantInfo.sections.usage", { defaultValue: "Usage" })}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {usageOptions.length > 0 ? (
-                      usageOptions.map((option) => {
-                        const isSelected = usageFilters.includes(option)
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() =>
-                              setUsageFilters((current) =>
-                                isSelected ? current.filter((value) => value !== option) : [...current, option]
-                              )
-                            }
-                            className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                              isSelected
-                                ? "bg-emerald-600 dark:bg-emerald-500 text-white"
-                                : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                            }`}
-                            aria-pressed={isSelected}
-                          >
-                            {t(`plant.utility.${option.toLowerCase()}`, { defaultValue: option })}
-                          </button>
-                        )
-                      })
-                    ) : (
-                      <p className="text-xs opacity-60">
-                        {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
-                      </p>
-                    )}
-                  </div>
-                </div>
+            {typeSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {typeOptions.length > 0 ? (
+                  typeOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setTypeFilter((current) => (current === option ? null : option))}
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        typeFilter === option
+                          ? "bg-black dark:bg-white text-white dark:text-black"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={typeFilter === option}
+                    >
+                      {t(`plant.classificationType.${option.toLowerCase()}`, { defaultValue: option })}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-xs opacity-60">
+                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Usage */}
+          <div>
+            <FilterSectionHeader
+              label={t("plantInfo.sections.usage", { defaultValue: "Usage" })}
+              isOpen={usageSectionOpen}
+              onToggle={() => setUsageSectionOpen((prev) => !prev)}
+            />
+            {usageSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {usageOptions.length > 0 ? (
+                  usageOptions.map((option) => {
+                    const isSelected = usageFilters.includes(option)
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() =>
+                          setUsageFilters((current) =>
+                            isSelected ? current.filter((value) => value !== option) : [...current, option]
+                          )
+                        }
+                        className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                          isSelected
+                            ? "bg-emerald-600 dark:bg-emerald-500 text-white"
+                            : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        {t(`plant.utility.${option.toLowerCase()}`, { defaultValue: option })}
+                      </button>
+                    )
+                  })
+                ) : (
+                  <p className="text-xs opacity-60">
+                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -965,15 +1102,15 @@ export default function PlantSwipe() {
                 ) : (
                   <>
                     <div className="flex flex-wrap gap-2">
-                      {singleWordColors.length > 0 ? (
-                        singleWordColors.map(renderColorOption)
+                      {primaryColors.length > 0 ? (
+                        primaryColors.map(renderColorOption)
                       ) : (
                         <p className="text-xs opacity-60">
-                          {t("plant.noSimpleColors", { defaultValue: "No single-word colors available." })}
+                          {t("plant.noPrimaryColors", { defaultValue: "No primary colors available." })}
                         </p>
                       )}
                     </div>
-                    {multiWordColors.length > 0 && (
+                    {advancedColors.length > 0 && (
                       <div className="rounded-2xl border border-dashed border-stone-200 dark:border-[#3e3e42] p-3 bg-white/70 dark:bg-[#2d2d30]/50">
                         <button
                           type="button"
@@ -986,7 +1123,7 @@ export default function PlantSwipe() {
                         </button>
                         {advancedColorsOpen && (
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {multiWordColors.map(renderColorOption)}
+                            {advancedColors.map(renderColorOption)}
                           </div>
                         )}
                       </div>
@@ -1044,6 +1181,102 @@ export default function PlantSwipe() {
       )
     }
 
+    // Landing page has its own layout, skip the app shell
+    // Show landing page for both logged out users AND logged in users visiting "/"
+    const isLandingPage = currentView === "landing"
+
+    if (isLandingPage) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <LandingPageLazy />
+                </Suspense>
+              }
+            />
+            <Route path="*" element={<Navigate to="/discovery" replace />} />
+          </Routes>
+          {/* Auth Dialog for landing page */}
+          <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
+            <DialogContent className="rounded-2xl">
+              <DialogHeader>
+                <DialogTitle>{authMode === 'login' ? t('auth.login') : t('auth.signup')}</DialogTitle>
+                <DialogDescription>
+                  {authMode === 'login' ? t('auth.loginDescription') : t('auth.signupDescription')}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                {authMode === 'signup' && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">{t('auth.displayName')}</Label>
+                    <Input id="name" type="text" placeholder={t('auth.displayNamePlaceholder')} value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
+                  </div>
+                )}
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="email">{t('auth.email')}</Label>
+                  <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="password">{t('auth.password')}</Label>
+                  <Input id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
+                </div>
+                {authMode === 'signup' && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
+                    <Input id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+                  </div>
+                )}
+                {authMode === 'signup' && (
+                  <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                    <input
+                      id="auth-accept-terms"
+                      type="checkbox"
+                      checked={authAcceptedTerms}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
+                      disabled={authSubmitting}
+                      className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                    />
+                    <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                      {t('auth.acceptTermsLabel')}{" "}
+                      <a
+                        href={termsPath}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                      >
+                        {t('auth.termsLinkLabel')}
+                      </a>.
+                    </Label>
+                  </div>
+                )}
+                {authError && <div className="text-sm text-red-600">{authError}</div>}
+                <Button className="w-full rounded-2xl" onClick={submitAuth} disabled={authSubmitting}>
+                  {authSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
+                </Button>
+                <div className="text-center text-sm">
+                  {authMode === 'login' ? (
+                    <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
+                  ) : (
+                    <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
+                  )}
+                </div>
+                <p className="text-[10px] text-center text-stone-400 dark:text-stone-500 mt-2">
+                  This site is protected by reCAPTCHA and the Google{' '}
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </AuthActionsProvider>
+      )
+    }
+
     return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
           <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-24 pt-2 md:px-8 md:pb-8 md:pt-4 overflow-y-visible">
@@ -1064,54 +1297,52 @@ export default function PlantSwipe() {
             onProfile={handleProfileNavigation}
             onLogout={handleLogoutNavigation}
             onLogin={openLogin}
+            onSignup={openSignup}
           />
 
-          {/* Layout: grid only when search view (to avoid narrow column in other views) */}
-        <div
-          className={`max-w-6xl mx-auto mt-6 ${
-            currentView === "search"
-              ? showFilters
+          {/* Layout: grid with sidebar on desktop */}
+          <div
+            className={`max-w-6xl mx-auto mt-6 ${
+              currentView === "search" && showFilters
                 ? "lg:grid lg:grid-cols-[260px_1fr] lg:gap-10"
-                : "lg:grid lg:grid-cols-1"
-              : ""
-          }`}
-        >
-        {/* Sidebar / Filters */}
-          {currentView === "search" && showFilters && (
-            <>
+                : ""
+            }`}
+          >
+            {/* Sidebar / Filters - desktop only */}
+            {currentView === "search" && showFilters && (
               <aside
-                className="hidden lg:block mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start"
+                className="hidden lg:block lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain"
                 aria-label="Filters"
               >
-                <FilterControls />
+                <div className="space-y-6 pr-2">
+                  <FilterControls />
+                </div>
               </aside>
-            </>
-          )}
+            )}
 
-          {/* Main content area */}
-          <main className="min-h-[60vh]" aria-live="polite">
-            {currentView === "search" && (
-              <div className="mb-6 space-y-3">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                      <div className="flex-1">
-                        <Label htmlFor="plant-search-main" className="sr-only">
-                          {t("common.search")}
-                        </Label>
-                        <div className="relative">
-                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-                          <Input
-                            id="plant-search-main"
-                            className="w-full pl-10 pr-4 rounded-2xl h-12"
-                            placeholder={t("plant.searchPlaceholder")}
-                            value={query}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                              setQuery(e.target.value)
-                              setIndex(0)
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
+            {/* Main content area */}
+            <main className="min-h-[60vh]" aria-live="polite">
+              {/* Sticky search bar for search view - sticks to top when scrolled past */}
+              {currentView === "search" && (
+                <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    <div className="flex-1">
+                      <Label htmlFor="plant-search-main" className="sr-only">
+                        {t("common.search")}
+                      </Label>
+                      <SearchInput
+                        id="plant-search-main"
+                        variant="lg"
+                        className="rounded-2xl"
+                        placeholder={t("plant.searchPlaceholder")}
+                        value={query}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          setQuery(e.target.value)
+                          setIndex(0)
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
                       <Button
                         variant="outline"
                         className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
@@ -1138,7 +1369,7 @@ export default function PlantSwipe() {
                             <MessageSquarePlus className="h-4 w-4 mr-2" />
                             {t("requestPlant.button") || "Request Plant"}
                           </Button>
-                          {profile?.is_admin && (
+                          {checkEditorAccess(profile) && (
                             <Button
                               variant="default"
                               className="rounded-2xl w-full lg:w-auto"
@@ -1152,11 +1383,12 @@ export default function PlantSwipe() {
                       )}
                     </div>
                   </div>
-                  <div className={`lg:hidden ${showFilters ? "space-y-6" : "hidden"}`}>
+                  {/* Mobile filter dropdown */}
+                  <div className={`lg:hidden mt-3 ${showFilters ? "max-h-[50vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6" : "hidden"}`}>
                     <FilterControls />
                   </div>
-              </div>
-            )}
+                </div>
+              )}
 
           <Routes>
             <Route
@@ -1228,6 +1460,14 @@ export default function PlantSwipe() {
               }
             />
             <Route
+              path="/contact/bug"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ContactUsPageLazy defaultChannel="bug" />
+                </Suspense>
+              }
+            />
+            <Route
               path="/contact"
               element={
                 <Suspense fallback={routeLoadingFallback}>
@@ -1252,6 +1492,14 @@ export default function PlantSwipe() {
               }
             />
             <Route
+              path="/pricing"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PricingPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
               path="/terms"
               element={
                 <Suspense fallback={routeLoadingFallback}>
@@ -1270,21 +1518,21 @@ export default function PlantSwipe() {
             <Route
               path="/blog/create"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <BlogComposerPageLazy />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/blog/:postId/edit"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <BlogComposerPageLazy />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
@@ -1298,37 +1546,37 @@ export default function PlantSwipe() {
             <Route
               path="/admin/emails/templates/create"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <AdminEmailTemplatePageLazy />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/admin/emails/templates/:id"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <AdminEmailTemplatePageLazy />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/admin/*"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
                     <AdminPage />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/create"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <CreatePlantPageLazy
                       onCancel={() => navigate('/')}
@@ -1340,13 +1588,13 @@ export default function PlantSwipe() {
                       }}
                     />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/create/:id"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <CreatePlantPageLazy
                       onCancel={() => navigate('/')}
@@ -1358,13 +1606,13 @@ export default function PlantSwipe() {
                       }}
                     />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
               path="/plants/:id/edit"
               element={
-                <RequireAdmin>
+                <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <CreatePlantPageLazy
                       onCancel={() => navigate('/search')}
@@ -1376,7 +1624,7 @@ export default function PlantSwipe() {
                       }}
                     />
                   </Suspense>
-                </RequireAdmin>
+                </RequireEditor>
               }
             />
             <Route
@@ -1396,7 +1644,7 @@ export default function PlantSwipe() {
               }
             />
             <Route
-              path="/"
+              path="/discovery"
               element={plants.length > 0 ? (
                 <Suspense fallback={routeLoadingFallback}>
                   <SwipePage
@@ -1431,6 +1679,18 @@ export default function PlantSwipe() {
                   )}
                 </>
               )}
+            />
+            <Route
+              path="/"
+              element={
+                user ? (
+                  <Navigate to="/discovery" replace />
+                ) : (
+                  <Suspense fallback={routeLoadingFallback}>
+                    <LandingPageLazy />
+                  </Suspense>
+                )
+              }
             />
             <Route
               path="/error/:code"

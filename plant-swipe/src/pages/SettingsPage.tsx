@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar } from "lucide-react"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 
@@ -42,6 +42,11 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = React.useState("")
   const [newPassword, setNewPassword] = React.useState("")
   const [confirmPassword, setConfirmPassword] = React.useState("")
+  
+  // UI toggle states
+  const [showEmail, setShowEmail] = React.useState(false)
+  const [showNewEmailForm, setShowNewEmailForm] = React.useState(false)
+  const [showPasswordForm, setShowPasswordForm] = React.useState(false)
   const [isPrivate, setIsPrivate] = React.useState(false)
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
   const [notifyPush, setNotifyPush] = React.useState(true)
@@ -532,98 +537,214 @@ export default function SettingsPage() {
       {/* Account Tab */}
       {activeTab === 'account' && (
         <div className="space-y-6">
-          {/* Email Section */}
+          {/* User Info Section */}
           <Card className={glassCard}>
             <CardHeader>
               <div className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-emerald-600" />
-                <CardTitle>{t('settings.email.title')}</CardTitle>
+                <User className="h-5 w-5 text-emerald-600" />
+                <CardTitle>{t('settings.account.userInfo', { defaultValue: 'Your Information' })}</CardTitle>
               </div>
-              <CardDescription>{t('settings.email.description')}</CardDescription>
+              <CardDescription>{t('settings.account.userInfoDescription', { defaultValue: 'Your profile information' })}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="current-email">{t('settings.email.currentEmail')}</Label>
-                <Input
-                  id="current-email"
-                  type="email"
-                  value={censorEmail(email)}
-                  disabled
-                  className="bg-stone-50 dark:bg-[#252526]"
-                />
+              {/* Avatar and Display Name */}
+              <div className="flex items-center gap-4">
+                {profile?.avatar_url ? (
+                  <img 
+                    src={profile.avatar_url} 
+                    alt={profile?.display_name || ''} 
+                    className="w-16 h-16 rounded-full object-cover border-2 border-emerald-200 dark:border-emerald-700"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                    <User className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold">{profile?.display_name || t('settings.account.noDisplayName', { defaultValue: 'No display name set' })}</h3>
+                  {profile?.username && (
+                    <p className="text-sm text-stone-500 dark:text-stone-400">@{profile.username}</p>
+                  )}
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="new-email">{t('settings.email.newEmail')}</Label>
-                <Input
-                  id="new-email"
-                  type="email"
-                  placeholder={t('settings.email.newEmailPlaceholder')}
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  disabled={saving}
-                />
+
+              {/* User Details Grid */}
+              <div className="grid gap-3 mt-4">
+                {/* Email with reveal toggle */}
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50/80 dark:bg-[#1c1c1f]/80 border border-stone-200/50 dark:border-[#3e3e42]/50">
+                  <Mail className="w-4 h-4 text-stone-500 dark:text-stone-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-stone-500 dark:text-stone-400">{t('settings.email.currentEmail', { defaultValue: 'Email' })}</p>
+                    <p className="text-sm font-medium truncate">{showEmail ? email : censorEmail(email)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowEmail(!showEmail)}
+                    className="p-1.5 rounded-lg hover:bg-stone-200/50 dark:hover:bg-[#3e3e42]/50 transition-colors"
+                    aria-label={showEmail ? t('settings.email.hideEmail', { defaultValue: 'Hide email' }) : t('settings.email.showEmail', { defaultValue: 'Show email' })}
+                  >
+                    {showEmail ? (
+                      <EyeOff className="w-4 h-4 text-stone-500 dark:text-stone-400" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-stone-500 dark:text-stone-400" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Country */}
+                {profile?.country && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50/80 dark:bg-[#1c1c1f]/80 border border-stone-200/50 dark:border-[#3e3e42]/50">
+                    <MapPin className="w-4 h-4 text-stone-500 dark:text-stone-400 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs text-stone-500 dark:text-stone-400">{t('settings.account.country', { defaultValue: 'Country' })}</p>
+                      <p className="text-sm font-medium">{profile.country}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Experience Years */}
+                {profile?.experience_years !== undefined && profile.experience_years !== null && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50/80 dark:bg-[#1c1c1f]/80 border border-stone-200/50 dark:border-[#3e3e42]/50">
+                    <Calendar className="w-4 h-4 text-stone-500 dark:text-stone-400 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs text-stone-500 dark:text-stone-400">{t('settings.account.experience', { defaultValue: 'Gardening Experience' })}</p>
+                      <p className="text-sm font-medium">{profile.experience_years} {profile.experience_years === 1 ? t('settings.account.year', { defaultValue: 'year' }) : t('settings.account.years', { defaultValue: 'years' })}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bio */}
+                {profile?.bio && (
+                  <div className="p-3 rounded-xl bg-stone-50/80 dark:bg-[#1c1c1f]/80 border border-stone-200/50 dark:border-[#3e3e42]/50">
+                    <p className="text-xs text-stone-500 dark:text-stone-400 mb-1">{t('settings.account.bio', { defaultValue: 'Bio' })}</p>
+                    <p className="text-sm">{profile.bio}</p>
+                  </div>
+                )}
+
+                {/* Favorite Plant */}
+                {profile?.favorite_plant && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50/80 dark:bg-[#1c1c1f]/80 border border-stone-200/50 dark:border-[#3e3e42]/50">
+                    <span className="text-base">🌱</span>
+                    <div className="flex-1">
+                      <p className="text-xs text-stone-500 dark:text-stone-400">{t('settings.account.favoritePlant', { defaultValue: 'Favorite Plant' })}</p>
+                      <p className="text-sm font-medium">{profile.favorite_plant}</p>
+                    </div>
+                  </div>
+                )}
               </div>
-              <Button
-                onClick={handleUpdateEmail}
-                disabled={saving || !newEmail || newEmail === email}
-                className="rounded-2xl"
-              >
-                {saving ? t('settings.email.updating') : t('settings.email.update')}
-              </Button>
+
+              <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
+                {t('settings.account.editProfileHint', { defaultValue: 'To edit your profile information, visit your public profile page.' })}
+              </p>
             </CardContent>
           </Card>
 
-          {/* Password Section */}
+          {/* Email Section - Collapsible */}
           <Card className={glassCard}>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Lock className="h-5 w-5 text-emerald-600" />
-                <CardTitle>{t('settings.password.title')}</CardTitle>
+            <CardHeader 
+              className="cursor-pointer select-none"
+              onClick={() => setShowNewEmailForm(!showNewEmailForm)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-emerald-600" />
+                  <CardTitle>{t('settings.email.changeEmail', { defaultValue: 'Change Email' })}</CardTitle>
+                </div>
+                {showNewEmailForm ? (
+                  <ChevronUp className="h-5 w-5 text-stone-500" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-stone-500" />
+                )}
+              </div>
+              <CardDescription>{t('settings.email.description')}</CardDescription>
+            </CardHeader>
+            {showNewEmailForm && (
+              <CardContent className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="new-email">{t('settings.email.newEmail')}</Label>
+                  <Input
+                    id="new-email"
+                    type="email"
+                    placeholder={t('settings.email.newEmailPlaceholder')}
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+                <Button
+                  onClick={handleUpdateEmail}
+                  disabled={saving || !newEmail || newEmail === email}
+                  className="rounded-2xl"
+                >
+                  {saving ? t('settings.email.updating') : t('settings.email.update')}
+                </Button>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* Password Section - Collapsible */}
+          <Card className={glassCard}>
+            <CardHeader 
+              className="cursor-pointer select-none"
+              onClick={() => setShowPasswordForm(!showPasswordForm)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Lock className="h-5 w-5 text-emerald-600" />
+                  <CardTitle>{t('settings.password.title')}</CardTitle>
+                </div>
+                {showPasswordForm ? (
+                  <ChevronUp className="h-5 w-5 text-stone-500" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-stone-500" />
+                )}
               </div>
               <CardDescription>{t('settings.password.description')}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="current-password">{t('settings.password.currentPassword')}</Label>
-                <Input
-                  id="current-password"
-                  type="password"
-                  placeholder={t('settings.password.currentPasswordPlaceholder')}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  disabled={saving}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="new-password">{t('settings.password.newPassword')}</Label>
-                <Input
-                  id="new-password"
-                  type="password"
-                  placeholder={t('settings.password.newPasswordPlaceholder')}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  disabled={saving}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="confirm-password">{t('settings.password.confirmPassword')}</Label>
-                <Input
-                  id="confirm-password"
-                  type="password"
-                  placeholder={t('settings.password.confirmPasswordPlaceholder')}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  disabled={saving}
-                />
-              </div>
-              <Button
-                onClick={handleUpdatePassword}
-                disabled={saving || !currentPassword || !newPassword || newPassword !== confirmPassword}
-                className="rounded-2xl"
-              >
-                {saving ? t('settings.password.updating') : t('settings.password.update')}
-              </Button>
-            </CardContent>
+            {showPasswordForm && (
+              <CardContent className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="current-password">{t('settings.password.currentPassword')}</Label>
+                  <Input
+                    id="current-password"
+                    type="password"
+                    placeholder={t('settings.password.currentPasswordPlaceholder')}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="new-password">{t('settings.password.newPassword')}</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    placeholder={t('settings.password.newPasswordPlaceholder')}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="confirm-password">{t('settings.password.confirmPassword')}</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    placeholder={t('settings.password.confirmPasswordPlaceholder')}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+                <Button
+                  onClick={handleUpdatePassword}
+                  disabled={saving || !currentPassword || !newPassword || newPassword !== confirmPassword}
+                  className="rounded-2xl"
+                >
+                  {saving ? t('settings.password.updating') : t('settings.password.update')}
+                </Button>
+              </CardContent>
+            )}
           </Card>
         </div>
       )}
@@ -750,6 +871,18 @@ export default function SettingsPage() {
                         ? t('settings.notifications.disableBrowser', { defaultValue: 'Disable browser push' })
                         : t('settings.notifications.enableBrowser', { defaultValue: 'Enable browser push' })}
                     </Button>
+                    {/* Re-sync button - helps fix cases where subscription wasn't saved to server */}
+                    {pushSubscribed && pushPermission === 'granted' && (
+                      <Button
+                        onClick={enablePush}
+                        variant="outline"
+                        disabled={pushLoading}
+                        className="rounded-2xl"
+                        title="Re-sync your push subscription with the server"
+                      >
+                        {t('settings.notifications.resync', { defaultValue: 'Re-sync subscription' })}
+                      </Button>
+                    )}
                     <Button
                       onClick={refreshPush}
                       variant="outline"
@@ -759,6 +892,14 @@ export default function SettingsPage() {
                       {t('settings.notifications.refresh', { defaultValue: 'Refresh status' })}
                     </Button>
                   </div>
+                  {/* Help text for troubleshooting */}
+                  {pushSubscribed && pushPermission === 'granted' && (
+                    <p className="text-xs opacity-60 mt-2">
+                      {t('settings.notifications.troubleshootTip', { 
+                        defaultValue: 'Not receiving notifications? Try clicking "Re-sync subscription" to ensure your device is properly registered.' 
+                      })}
+                    </p>
+                  )}
                 </>
               )}
             </CardContent>

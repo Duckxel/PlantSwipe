@@ -1,0 +1,62 @@
+.tiptap-button-text-color {
+  --text-color: currentColor;
+
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &::before {
+    content: "A";
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--text-color);
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background-color: var(--text-color);
+    border-radius: 1px;
+  }
+}
+
+// Round color circle for text color picker
+.tiptap-button-color-circle {
+  --text-color: #000000;
+
+  display: block;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  border-radius: 50%;
+  background-color: var(--text-color);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+
+  &:hover {
+    transform: scale(1.15);
+  }
+}
+
+// Active state indicator when button is active
+button[data-active-state="on"] .tiptap-button-color-circle {
+  box-shadow: 0 0 0 2px var(--text-color), 0 0 0 4px rgba(0, 0, 0, 0.1);
+}
+
+// Dark mode adjustments
+.dark .tiptap-button-color-circle {
+  border-color: rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+}

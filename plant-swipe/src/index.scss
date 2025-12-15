@@ -1,5 +1,5 @@
-@import "./styles/_variables.scss";
-@import "./styles/_keyframe-animations.scss";
+@use "./styles/_variables.scss";
+@use "./styles/_keyframe-animations.scss";
 
 @font-face {
   font-family: "Lavonte";
@@ -149,6 +149,23 @@
       display: none;
     }
   }
+
+  .bg-gradient-radial {
+    background: radial-gradient(circle, var(--tw-gradient-stops));
+  }
+
+  @keyframes float-slow {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+
+  .animate-float-slow {
+    animation: float-slow 4s ease-in-out infinite;
+  }
 }
 
 @layer components {
@@ -159,7 +176,12 @@
 
 .blog-article-content {
   @apply text-stone-700 dark:text-stone-100;
+  
+  /* Inline text colors from the editor are preserved automatically via style attribute */
+  /* No override needed - inline styles have highest specificity */
 }
+
+/* Dark mode text colors inherit from inline styles - no override needed */
 .blog-article-content h1 {
   @apply text-4xl font-bold mt-8 mb-4 text-stone-900 dark:text-stone-50;
 }

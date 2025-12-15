@@ -34,29 +34,32 @@
   &[data-variant="fixed"] {
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 20;
     width: 100%;
     min-height: var(--tt-toolbar-height);
     background: var(--tt-toolbar-bg-color);
     border-bottom: 1px solid var(--tt-toolbar-border-color);
-    padding: 0 0.5rem;
+    padding: 0.375rem 0.5rem;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 
     &::-webkit-scrollbar {
       display: none;
     }
 
     @media (max-width: 480px) {
-      position: absolute;
-      top: auto;
-      height: calc(var(--tt-toolbar-height) + var(--tt-safe-area-bottom));
-      border-top: 1px solid var(--tt-toolbar-border-color);
-      border-bottom: none;
-      padding: 0 0.5rem var(--tt-safe-area-bottom);
+      position: sticky;
+      top: 0;
+      height: auto;
+      min-height: calc(var(--tt-toolbar-height) + var(--tt-safe-area-bottom));
+      border-bottom: 1px solid var(--tt-toolbar-border-color);
+      padding: 0.375rem 0.5rem;
+      padding-bottom: calc(0.375rem + var(--tt-safe-area-bottom));
       flex-wrap: nowrap;
       justify-content: flex-start;
 

@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -17,6 +17,7 @@ interface TopBarProps {
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
+import { checkEditorAccess } from "@/constants/userRoles"
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useLanguageNavigate()
@@ -77,7 +78,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         `}</style>
         <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden overflow-y-visible desktop-drag-region" style={{ paddingTop: '1.5rem', paddingBottom: '0.5rem', marginTop: '0' }}>
           <Link
-            to="/"
+            to={user ? "/discovery" : "/"}
             className="flex-shrink-0 no-underline cursor-pointer"
             style={{ marginTop: '-1.25rem', WebkitTapHighlightColor: 'transparent', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
           >
@@ -90,19 +91,34 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             />
           </Link>
       <Link
-        to="/"
+        to={user ? "/discovery" : "/"}
         className="font-brand text-[1.925rem] md:text-[2.625rem] leading-none font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90 whitespace-nowrap shrink-0"
         style={{ WebkitTapHighlightColor: 'transparent', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       >
         {t('common.appName')}
       </Link>
-      <nav className="ml-4 hidden md:flex gap-2">
-        <NavPill to="/" isActive={pathWithoutLang === '/'} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
-        <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished} />
-        <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+      <nav className="ml-4 hidden md:flex gap-2 items-center">
+        {user ? (
+          // Logged-in navigation: Discovery, Gardens, Encyclopedia (always normal)
+          <>
+            <NavPill to="/discovery" isActive={pathWithoutLang === '/discovery' || pathWithoutLang.startsWith('/discovery/')} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
+            <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished} />
+            <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+          </>
+        ) : (
+          // Logged-out navigation: Features, How it works, FAQ, Encyclopedia, Pricing (same on all pages)
+          <>
+            <NavPillAnchor to="/#features" icon={<LayoutGrid className="h-4 w-4" />} label={t('common.landingFeatures', { defaultValue: 'Features' })} />
+            <NavPillAnchor to="/#how-it-works" icon={<Route className="h-4 w-4" />} label={t('common.landingHowItWorks', { defaultValue: 'How it works' })} />
+            <NavPillAnchor to="/#faq" icon={<HelpCircle className="h-4 w-4" />} label={t('common.landingFaq', { defaultValue: 'FAQ' })} />
+            <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+            <NavPill to="/pricing" isActive={pathWithoutLang === '/pricing'} icon={<CreditCard className="h-4 w-4" />} label={t('common.pricing', { defaultValue: 'Pricing' })} />
+          </>
+        )}
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
         {!user ? (
+          // Logged-out: show Sign up and Login buttons on all pages
           <>
             <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>
               <UserPlus className="h-4 w-4 mr-2" /> {t('common.signup')}
@@ -125,7 +141,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                 style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
                 role="menu"
               >
-                {profile?.is_admin && (
+                {checkEditorAccess(profile) && (
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                     <Shield className="h-4 w-4" /> {t('common.admin')}
                   </button>
@@ -138,6 +154,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                   <Settings className="h-4 w-4" /> {t('common.settings')}
+                </button>
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/pricing') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2 text-emerald-600 dark:text-emerald-400" role="menuitem">
+                  <Crown className="h-4 w-4" /> {t('common.membership', { defaultValue: 'Membership' })}
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
                   <LogOut className="h-4 w-4" /> {t('common.logout')}
@@ -174,6 +193,54 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
           aria-hidden="true"
         />
       )}
+    </div>
+  )
+}
+
+/** NavPillAnchor - exactly like NavPill but for anchor links that navigate to landing page sections */
+function NavPillAnchor({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+  const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
+  
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const [path, hash] = to.split('#')
+    const targetPath = path || '/'
+    
+    // If we're already on the landing page, just scroll to the section
+    if (pathWithoutLang === '/' || pathWithoutLang === '') {
+      const el = document.getElementById(hash)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    } else {
+      // Navigate to landing page with hash
+      navigate(targetPath)
+      // After navigation, scroll to section (need small delay for page to load)
+      setTimeout(() => {
+        const el = document.getElementById(hash)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 100)
+    }
+  }
+
+  // Use exact same styling as NavPill (inactive state)
+  return (
+    <div className="relative inline-block align-middle overflow-visible">
+      <Button
+        asChild
+        variant={'secondary'}
+        className="rounded-2xl bg-white dark:bg-[#252526] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#2d2d30] hover:text-black dark:hover:text-white"
+      >
+        <a href={to} onClick={handleClick} className="no-underline">
+          <span className="inline-flex items-center gap-2">
+            {icon}
+            <span>{label}</span>
+          </span>
+        </a>
+      </Button>
     </div>
   )
 }

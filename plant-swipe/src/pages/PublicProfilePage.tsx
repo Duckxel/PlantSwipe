@@ -1,19 +1,25 @@
 import React from "react"
-import { useParams, Link, useNavigate } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { createPortal } from "react-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, Search as SearchIcon, Loader2, UserCheck } from "lucide-react"
+import { validateUsername } from "@/lib/username"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2 } from "lucide-react"
+import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
+import type { UserRole } from "@/constants/userRoles"
+import { SearchInput } from "@/components/ui/search-input"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { BookmarksSection } from "@/components/profile/BookmarksSection"
+import { PublicGardensSection } from "@/components/profile/PublicGardensSection"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { Link } from "@/components/i18n/Link"
 
 type PublicProfile = {
   id: string
@@ -23,6 +29,7 @@ type PublicProfile = {
   bio: string | null
   avatar_url: string | null
   is_admin?: boolean | null
+  roles?: UserRole[] | null
   joined_at?: string | null
   last_seen_at?: string | null
   is_online?: boolean | null
@@ -56,10 +63,21 @@ type ProfileSuggestion = {
 
 export default function PublicProfilePage() {
   const params = useParams()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const { user, profile, refreshProfile, signOut, deleteAccount } = useAuth()
   const { t } = useTranslation('common')
   const displayParam = String(params.username || '')
+
+  // Handle logout - stay on page unless it requires authentication
+  const handleLogout = React.useCallback(async () => {
+    await signOut()
+    // If viewing /u/_me (which requires auth to resolve), redirect to home
+    // Otherwise stay on the current profile page (public profiles are viewable by anyone)
+    if (displayParam === '_me') {
+      navigate('/')
+    }
+    // For all other profile pages (/u/USERNAME), stay on the page
+  }, [signOut, navigate, displayParam])
 
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -99,7 +117,12 @@ export default function PublicProfilePage() {
           defaultValue: `See shared gardens, stats, and activity from ${preferredDisplayName}.`,
         })
       : fallbackProfileDescription)
-  usePageMetadata({ title: seoTitle, description: seoDescription })
+  usePageMetadata({ 
+    title: seoTitle, 
+    description: seoDescription,
+    image: pp?.avatar_url ?? undefined,
+    url: preferredDisplayName ? `/u/${encodeURIComponent(preferredDisplayName)}` : undefined,
+  })
 
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
@@ -133,7 +156,7 @@ export default function PublicProfilePage() {
           // Look up current user by ID
           const { data: profileData, error: pErr } = await supabase
             .from('profiles')
-            .select('id, display_name, country, bio, avatar_url, is_admin, accent_key, is_private, disable_friend_requests')
+            .select('id, display_name, country, bio, avatar_url, is_admin, roles, accent_key, is_private, disable_friend_requests')
             .eq('id', user.id)
             .maybeSingle()
           if (!pErr && profileData) {
@@ -158,6 +181,26 @@ export default function PublicProfilePage() {
           return
         }
         const userId = String(row.id)
+        
+        // Fetch roles if not already included in the row data
+        let profileRoles: UserRole[] | null = null
+        if (!row.roles) {
+          try {
+            const { data: rolesData } = await supabase
+              .from('profiles')
+              .select('roles')
+              .eq('id', userId)
+              .maybeSingle()
+            if (rolesData && Array.isArray(rolesData.roles)) {
+              profileRoles = rolesData.roles
+            }
+          } catch {}
+        } else if (Array.isArray(row.roles)) {
+          profileRoles = row.roles
+        }
+        // Merge roles into row for use later
+        row = { ...row, roles: profileRoles }
+        
         const profileIsPrivate = Boolean(row.is_private || false)
         const isOwnerViewing = user?.id === userId
         const viewerIsAdmin = Boolean(profile?.is_admin || false)
@@ -244,6 +287,7 @@ export default function PublicProfilePage() {
           bio: row.bio || null,
           avatar_url: row.avatar_url || null,
           is_admin: Boolean(row.is_admin || false),
+          roles: Array.isArray(row.roles) ? row.roles : null,
           joined_at: row.joined_at ? String(row.joined_at) : null,
           last_seen_at: row.last_seen_at ? String(row.last_seen_at) : null,
           is_online: Boolean(row.is_online || false),
@@ -401,6 +445,40 @@ export default function PublicProfilePage() {
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null)
+
+  // Share button state
+  const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'error'>('idle')
+  const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    return () => {
+      if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    }
+  }, [])
+
+  const handleShare = React.useCallback(async () => {
+    if (typeof window === 'undefined') return
+    const shareUrl = window.location.href
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: preferredDisplayName || t('profile.member'),
+          url: shareUrl,
+        })
+        setShareStatus('copied')
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+        setShareStatus('copied')
+      } else {
+        setShareStatus('error')
+      }
+    } catch {
+      // User cancelled or error
+      setShareStatus('error')
+    }
+    if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500)
+  }, [preferredDisplayName, t])
 
   const [editOpen, setEditOpen] = React.useState(false)
   const [editSubmitting, setEditSubmitting] = React.useState(false)
@@ -685,12 +763,12 @@ export default function PublicProfilePage() {
           >
             {t('profile.searchUsers.label')}
           </label>
-            <div className="relative mt-2">
-              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" aria-hidden />
-              <Input
+            <div className="mt-2">
+              <SearchInput
                 id="profile-user-search"
                 value={searchTerm}
                 autoComplete="off"
+                loading={searchLoading}
                 onChange={(event) => {
                   const { value } = event.target
                   setSearchTerm(value)
@@ -704,11 +782,8 @@ export default function PublicProfilePage() {
                   }
                 }}
                 placeholder={t('profile.searchUsers.placeholder')}
-                className="pl-9 md:pl-9 pr-10 rounded-2xl"
+                className="rounded-2xl"
               />
-              {searchLoading && (
-                <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-stone-400" aria-hidden />
-              )}
             </div>
             {searchOpen && !needsMoreInput && (
               <div className="absolute z-40 mt-2 w-full overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-xl dark:border-[#3e3e42] dark:bg-[#252526]">
@@ -805,14 +880,19 @@ export default function PublicProfilePage() {
                   />
                 </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || t('profile.member')}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center">
+                          <span className="text-2xl font-semibold truncate">{pp.display_name || pp.username || t('profile.member')}</span>
+                          <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
+                        </div>
                         {pp.isAdminViewingPrivateNonFriend && (
                           <div title={t('profile.privateProfileViewedByAdmin')}>
                             <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
                           </div>
                         )}
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? t('profile.admin') : t('profile.member')}</span>
+                        {!pp.roles?.length && !pp.is_admin && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full border bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-600">{t('profile.member')}</span>
+                        )}
                       </div>
                   {canViewProfile && (
                     <>
@@ -836,13 +916,29 @@ export default function PublicProfilePage() {
                   )}
                 </div>
                 <div className="ml-auto flex items-center gap-2" ref={anchorRef}>
+                  {/* Share button - always visible */}
+                  <Button 
+                    className="rounded-2xl" 
+                    variant="secondary" 
+                    onClick={handleShare}
+                    aria-label={t('common.share', { defaultValue: 'Share' })}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    {shareStatus === 'copied' ? (
+                      <span className="ml-1.5 text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
+                    ) : shareStatus === 'error' ? (
+                      <span className="ml-1.5 text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
+                    ) : (
+                      <span className="hidden sm:inline ml-1.5 text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
+                    )}
+                  </Button>
                   {isOwner ? (
                     <>
                       <Button className="rounded-2xl" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
                       {menuOpen && menuPos && createPortal(
                         <div ref={menuRef} className="w-40 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await signOut(); navigate('/') }}>{t('profile.logout')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await handleLogout() }}>{t('profile.logout')}</button>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>{t('profile.deleteAccount')}</button>
                         </div>,
                         document.body
@@ -989,7 +1085,9 @@ export default function PublicProfilePage() {
             </Card>
           </div>
           
-          <BookmarksSection userId={pp.id} isOwner={isOwner} />
+          <PublicGardensSection userId={pp.id} isOwner={isOwner} />
+          
+          <BookmarksSection userId={pp.id} isOwner={isOwner} isFriend={friendStatus === 'friends'} userIsPrivate={pp.is_private || false} />
             </>
           )}
 
@@ -1013,9 +1111,15 @@ export default function PublicProfilePage() {
                 setEditError(null)
                 setEditSubmitting(true)
                 try {
-                  // Ensure display name unique and valid
-                  const dn = (vals.display_name || '').trim()
-                  if (dn.length === 0) { setEditError(t('profile.editProfile.displayNameRequired')); return }
+                  // Validate and normalize display name (username)
+                  const validationResult = validateUsername(vals.display_name || '')
+                  if (!validationResult.valid) {
+                    setEditError(validationResult.error || t('profile.editProfile.invalidDisplayName'))
+                    return
+                  }
+                  const dn = validationResult.normalized!
+                  
+                  // Check display name uniqueness (case-insensitive, using normalized lowercase)
                   const nameCheck = await supabase
                     .from('profiles')
                     .select('id')

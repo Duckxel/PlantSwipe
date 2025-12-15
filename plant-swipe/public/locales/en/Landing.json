@@ -1,0 +1,201 @@
+{
+  "nav": {
+    "features": "Features",
+    "howItWorks": "How it works",
+    "pricing": "Pricing",
+    "faq": "FAQ",
+    "login": "Log in",
+    "getStarted": "Get started",
+    "backToApp": "Back to App"
+  },
+  "hero": {
+    "badge": "Your companion for happier plants",
+    "title": "Know your plants.",
+    "titleHighlight": "Learn how to care",
+    "titleEnd": "for them.",
+    "description": "Aphylia is a smart plant & garden app that tracks care schedules, sends timely reminders, and teaches you everything about your green companions.",
+    "ctaDownload": "Download Aphylia",
+    "ctaTryBrowser": "Try it in your browser",
+    "socialProof": "Built for plant lovers, beginners and experts alike."
+  },
+  "heroCard": {
+    "plantName": "Monstera deliciosa",
+    "plantSubname": "Swiss Cheese Plant",
+    "waterFrequency": "Every 7 days",
+    "lightLevel": "Bright indirect",
+    "nextReminder": "Next reminder",
+    "waterIn": "Water in 2 days",
+    "careLogged": "Care logged!"
+  },
+  "features": {
+    "title": "Everything your garden needs, in one app.",
+    "subtitle": "From tracking watering schedules to identifying unknown species, Aphylia has you covered.",
+    "smartLibrary": {
+      "title": "Smart Plant Library",
+      "description": "Access a comprehensive database with detailed care info—sunlight needs, watering schedules, soil preferences, and toxicity warnings."
+    },
+    "careReminders": {
+      "title": "Care Reminders",
+      "description": "Never forget to water, mist, or fertilize. Get personalized notifications based on each plant's unique needs."
+    },
+    "collections": {
+      "title": "Collections & Bookmarks",
+      "description": "Organize plants by room, garden, or mood. Create custom collections and save your favorites for quick access."
+    },
+    "plantId": {
+      "title": "Visual Plant ID",
+      "description": "Snap a photo and let Aphylia identify your mystery plant. Get instant care recommendations."
+    },
+    "journal": {
+      "title": "Garden Journal",
+      "description": "Track growth milestones, log repotting dates, add notes, and document your plant journey with photos."
+    },
+    "pwa": {
+      "title": "Cross-Device Sync",
+      "description": "Works beautifully on mobile and desktop. Your data syncs seamlessly across all your devices."
+    }
+  },
+  "howItWorks": {
+    "title": "From seedling to jungle, in 3 steps.",
+    "subtitle": "Getting started is simple. Set up once, and Aphylia handles the rest.",
+    "step1": {
+      "title": "Add your plants",
+      "description": "Search our library or snap a photo to identify and add plants to your collection."
+    },
+    "step2": {
+      "title": "Set your conditions",
+      "description": "Tell us about your space—light levels, humidity, and location—for tailored advice."
+    },
+    "step3": {
+      "title": "Let Aphylia remind you",
+      "description": "Sit back while we send timely reminders for watering, feeding, and more."
+    }
+  },
+  "showcase": {
+    "title": "Designed for your shelf, balcony, or jungle.",
+    "subtitle": "Whether you have one succulent or a hundred tropicals, Aphylia adapts to your style.",
+    "dashboardPreview": "Dashboard Preview",
+    "dashboardTitle": "Your garden at a glance",
+    "dashboardDescription": "See all your plants, upcoming tasks, and care history in one beautiful dashboard.",
+    "wateringReminder": "Watering Reminder",
+    "wateringText": "Your Pothos needs water today",
+    "lightCheck": "Light Check",
+    "lightText": "Move Fern to brighter spot",
+    "toxicityAlert": "Toxicity Alert",
+    "petWarning": "Pet Warning",
+    "petWarningText": "Dieffenbachia is toxic to cats"
+  },
+  "testimonials": {
+    "title": "Loved by plant people.",
+    "subtitle": "Join thousands of happy gardeners growing healthier plants with Aphylia.",
+    "items": [
+      {
+        "name": "Sarah M.",
+        "role": "Plant Parent",
+        "quote": "Aphylia saved my monstera! The reminders are a lifesaver for someone as forgetful as me."
+      },
+      {
+        "name": "James K.",
+        "role": "Urban Gardener",
+        "quote": "Finally an app that understands balcony gardening. The light recommendations are spot on."
+      },
+      {
+        "name": "Mia T.",
+        "role": "Succulent Collector",
+        "quote": "I've tried many plant apps, but Aphylia's journal feature is perfect for tracking my 50+ succulents."
+      },
+      {
+        "name": "David L.",
+        "role": "Beginner",
+        "quote": "As a complete newbie, the plant ID feature taught me so much about caring for my first plants."
+      }
+    ]
+  },
+  "pricingSection": {
+    "title": "Start for free. Grow as you grow.",
+    "subtitle": "Choose a plan that matches your garden size. Upgrade anytime.",
+    "free": {
+      "name": "Free",
+      "price": "0",
+      "description": "Perfect for getting started",
+      "features": [
+        "Up to 5 gardens",
+        "Unlimited plants per garden",
+        "Basic care reminders",
+        "Plant library access",
+        "Community support"
+      ],
+      "cta": "Get started free"
+    },
+    "pro": {
+      "name": "Plus",
+      "price": "5",
+      "description": "For serious plant parents",
+      "features": [
+        "Unlimited gardens",
+        "Plant identification",
+        "Advanced analytics",
+        "Export garden data",
+        "Priority support",
+        "Early access to features"
+      ],
+      "cta": "Start Plus",
+      "popular": "Most Popular"
+    },
+    "club": {
+      "name": "Garden Club",
+      "price": "9.99",
+      "description": "For families & communities",
+      "features": [
+        "Everything in Plus",
+        "Up to 5 members",
+        "Shared gardens",
+        "Collaborative journals",
+        "Priority support"
+      ],
+      "cta": "Join the Club"
+    }
+  },
+  "faq": {
+    "title": "Frequently asked questions",
+    "subtitle": "Everything you need to know about Aphylia.",
+    "items": [
+      {
+        "q": "Is Aphylia free to use?",
+        "a": "Yes! Our free plan lets you track up to 5 gardens with unlimited plants and basic reminders. Upgrade anytime for unlimited gardens and advanced features."
+      },
+      {
+        "q": "Can I sync across devices?",
+        "a": "Yes. Create an account and your garden syncs seamlessly between your phone, tablet, and computer."
+      },
+      {
+        "q": "How accurate is the plant identification?",
+        "a": "Our system identifies thousands of common houseplants and garden species with high accuracy. If unsure, it suggests similar matches."
+      },
+      {
+        "q": "Is my data private?",
+        "a": "Your privacy is our priority. We never sell your data. All garden data is encrypted and only accessible to you."
+      },
+      {
+        "q": "Can I cancel my subscription anytime?",
+        "a": "Yes, cancel anytime from your settings. You'll keep Plus features until the end of your billing period."
+      }
+    ],
+    "supportTitle": "We're here to answer your questions",
+    "supportSubtitle": "Let us know any question you have",
+    "supportButton": "Contact Support"
+  },
+  "finalCta": {
+    "title": "Ready to grow happier plants?",
+    "subtitle": "Join thousands of plant lovers who trust Aphylia to keep their gardens thriving.",
+    "ctaDownload": "Download Aphylia",
+    "ctaDocs": "View docs"
+  },
+  "footer": {
+    "about": "About",
+    "blog": "Blog",
+    "terms": "Terms",
+    "contact": "Contact",
+    "allRightsReserved": "All rights reserved."
+  }
+}

@@ -2,11 +2,12 @@ import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut } from "lucide-react"
+import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, LayoutGrid, HelpCircle, LogIn, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { useTranslation } from "react-i18next"
+import { checkEditorAccess } from "@/constants/userRoles"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 interface MobileNavBarProps {
@@ -14,6 +15,7 @@ interface MobileNavBarProps {
   onProfile?: () => void | Promise<void>
   onLogout?: () => void | Promise<void>
   onLogin?: () => void
+  onSignup?: () => void
 }
 
 const MOBILE_NAV_HOST_ATTR = "data-mobile-nav-root"
@@ -65,7 +67,7 @@ const useMobileNavHost = () => {
   return host
 }
 
-const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin }) => {
+const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin, onSignup }) => {
   const host = useMobileNavHost()
   const pathWithoutLang = usePathWithoutLanguage()
   const navigate = useLanguageNavigate()
@@ -73,6 +75,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "mobile" })
   const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
+  const [guestMenuOpen, setGuestMenuOpen] = React.useState(false)
   const navRef = React.useRef<HTMLElement | null>(null)
 
   React.useEffect(() => {
@@ -83,11 +86,12 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     }
   }, [])
   
-  const currentView: "discovery" | "gardens" | "search" | "create" | "profile" =
-    pathWithoutLang === "/" ? "discovery" :
+  const currentView: "discovery" | "gardens" | "search" | "create" | "profile" | "pricing" =
+    pathWithoutLang === "/discovery" || pathWithoutLang.startsWith("/discovery/") ? "discovery" :
     pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
     pathWithoutLang.startsWith("/search") ? "search" :
     pathWithoutLang.startsWith("/create") ? "create" :
+    pathWithoutLang === "/pricing" ? "pricing" :
     pathWithoutLang.startsWith("/profile") || pathWithoutLang.startsWith("/u/") || pathWithoutLang.startsWith("/friends") || pathWithoutLang.startsWith("/settings") ? "profile" :
     "discovery"
 
@@ -114,58 +118,73 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             </Button>
           </div>
         )}
-        {/* Icon-only nav items */}
+        {/* Icon-only nav items - different for logged in vs logged out */}
         <div className="flex items-center justify-around gap-8">
-          <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'discovery' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-            <Link to="/" aria-label="Discover" className="no-underline flex items-center justify-center">
-              <Sparkles className="h-6 w-6" />
-            </Link>
-          </Button>
-          <div className="relative overflow-visible">
-            <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-            <Link to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
-                <Sprout className="h-6 w-6" />
-              </Link>
-            </Button>
-            {hasUnfinished && (
-              <span
-                className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#252526]"
-                aria-hidden="true"
-              />
-            )}
-          </div>
-          <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-            <Link to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
-              <Search className="h-6 w-6" />
-            </Link>
-          </Button>
           {user ? (
-            <Button
-              variant={"secondary"}
-              size={"icon"}
-              className={currentView === 'profile' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}
-              onClick={() => setProfileMenuOpen(true)}
-              aria-label="Profile"
-            >
-              <User className="h-6 w-6" />
-            </Button>
+            // Logged-in navigation: Discovery, Gardens, Search, Profile (always normal)
+            <>
+              <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'discovery' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                <Link to="/discovery" aria-label="Discover" className="no-underline flex items-center justify-center">
+                  <Sparkles className="h-6 w-6" />
+                </Link>
+              </Button>
+              <div className="relative overflow-visible">
+                <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                  <Link to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
+                    <Sprout className="h-6 w-6" />
+                  </Link>
+                </Button>
+                {hasUnfinished && (
+                  <span
+                    className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#252526]"
+                    aria-hidden="true"
+                  />
+                )}
+              </div>
+              <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                <Link to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
+                  <Search className="h-6 w-6" />
+                </Link>
+              </Button>
+              <Button
+                variant={"secondary"}
+                size={"icon"}
+                className={currentView === 'profile' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}
+                onClick={() => setProfileMenuOpen(true)}
+                aria-label="Profile"
+              >
+                <User className="h-6 w-6" />
+              </Button>
+            </>
           ) : (
+            // Logged-out navigation: Features, FAQ, Encyclopedia, Login (all pages)
+            <>
+              <MobileNavAnchorButton 
+                to="/#features" 
+                icon={<LayoutGrid className="h-6 w-6" />} 
+                label={t('common.landingFeatures', { defaultValue: 'Features' })}
+              />
+              <MobileNavAnchorButton 
+                to="/#faq" 
+                icon={<HelpCircle className="h-6 w-6" />} 
+                label={t('common.landingFaq', { defaultValue: 'FAQ' })}
+              />
+              <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
+                <Link to="/search" aria-label={t('common.encyclopedia')} className="no-underline flex items-center justify-center">
+                  <Search className="h-6 w-6" />
+                </Link>
+              </Button>
               <Button
                 variant={"secondary"}
                 size={"icon"}
                 className="h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"
                 type="button"
-                onClick={() => {
-                  if (onLogin) {
-                    onLogin()
-                  } else {
-                    navigate('/')
-                  }
-                }}
+                onClick={() => setGuestMenuOpen(true)}
                 aria-label={t('common.login')}
               >
                 <User className="h-6 w-6" />
               </Button>
+            </>
           )}
         </div>
       </div>
@@ -176,7 +195,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             <SheetTitle>{label}</SheetTitle>
           </SheetHeader>
           <div className="mt-6 space-y-2">
-            {profile?.is_admin && (
+            {checkEditorAccess(profile) && (
               <button
                 onClick={() => {
                   setProfileMenuOpen(false)
@@ -225,6 +244,16 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             <button
               onClick={() => {
                 setProfileMenuOpen(false)
+                navigate("/pricing")
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3 text-emerald-600 dark:text-emerald-400"
+            >
+              <Crown className="h-5 w-5" />
+              <span>{t("common.membership", { defaultValue: "Membership" })}</span>
+            </button>
+            <button
+              onClick={() => {
+                setProfileMenuOpen(false)
                 if (onLogout) {
                   onLogout()
                 }
@@ -237,6 +266,40 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
           </div>
         </SheetContent>
       </Sheet>
+      {/* Guest menu for non-logged-in users */}
+      <Sheet open={guestMenuOpen} onOpenChange={setGuestMenuOpen}>
+        <SheetContent side="bottom" className="rounded-t-3xl">
+          <SheetHeader>
+            <SheetTitle>{t("common.welcome", { defaultValue: "Welcome" })}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-2">
+            <button
+              onClick={() => {
+                setGuestMenuOpen(false)
+                if (onLogin) {
+                  onLogin()
+                }
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
+            >
+              <LogIn className="h-5 w-5" />
+              <span>{t("common.login")}</span>
+            </button>
+            <button
+              onClick={() => {
+                setGuestMenuOpen(false)
+                if (onSignup) {
+                  onSignup()
+                }
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3 text-emerald-600 dark:text-emerald-400"
+            >
+              <UserPlus className="h-5 w-5" />
+              <span>{t("common.signup")}</span>
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   )
 
@@ -245,6 +308,47 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   }
 
   return navMarkup
+}
+
+/** MobileNavAnchorButton - for anchor links that navigate to landing page sections */
+function MobileNavAnchorButton({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+  const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
+  
+  const handleClick = () => {
+    const [path, hash] = to.split('#')
+    const targetPath = path || '/'
+    
+    // If we're already on the landing page, just scroll to the section
+    if (pathWithoutLang === '/' || pathWithoutLang === '') {
+      const el = document.getElementById(hash)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    } else {
+      // Navigate to landing page with hash
+      navigate(targetPath)
+      // After navigation, scroll to section (need small delay for page to load)
+      setTimeout(() => {
+        const el = document.getElementById(hash)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 100)
+    }
+  }
+
+  return (
+    <Button
+      variant="secondary"
+      size="icon"
+      className="h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"
+      onClick={handleClick}
+      aria-label={label}
+    >
+      {icon}
+    </Button>
+  )
 }
 
 export const MobileNavBar = React.memo(MobileNavBarComponent)

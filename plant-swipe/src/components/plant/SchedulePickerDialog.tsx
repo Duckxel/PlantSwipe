@@ -31,7 +31,7 @@ export function SchedulePickerDialog(props: {
   const [error, setError] = React.useState<string | null>(null)
 
   const [weeklyDays, setWeeklyDays] = React.useState<number[]>([])
-  const [monthlyDays, setMonthlyDays] = React.useState<number[]>([])
+  const [_monthlyDays, setMonthlyDays] = React.useState<number[]>([])
   const [yearlyDays, setYearlyDays] = React.useState<string[]>([])
   const [monthlyNthWeekdays, setMonthlyNthWeekdays] = React.useState<string[]>([])
 
@@ -125,7 +125,7 @@ export function SchedulePickerDialog(props: {
     })
   }
 
-  const toggleMonthDay = (d: number) => {
+  const _toggleMonthDay = (d: number) => {
     setMonthlyDays((cur) => {
       if (cur.includes(d)) return cur.filter((x) => x !== d)
       if (disabledMore) return cur
@@ -341,7 +341,7 @@ function WeekPicker({ selectedNumbers, onToggleNumber, disabledMore }: { selecte
   )
 }
 
-function MonthPicker({ selected, onToggle, disabledMore }: { selected: number[]; onToggle: (d: number) => void; disabledMore: boolean }) {
+function _MonthPicker({ selected, onToggle, disabledMore }: { selected: number[]; onToggle: (d: number) => void; disabledMore: boolean }) {
   const days = Array.from({ length: 31 }, (_, i) => i + 1)
   return (
     <div className="grid grid-cols-7 gap-2">

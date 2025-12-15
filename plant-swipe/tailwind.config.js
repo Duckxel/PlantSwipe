@@ -7,6 +7,20 @@ module.exports = {
     		fontFamily: {
     			brand: ['"Lavonte"', 'ui-serif', 'Georgia', 'serif'],
     		},
+    		animation: {
+    			'pulse-subtle': 'pulse-subtle 2s ease-in-out infinite',
+    			'shimmer': 'shimmer 2s linear infinite',
+    		},
+    		keyframes: {
+    			'pulse-subtle': {
+    				'0%, 100%': { opacity: '1', transform: 'scale(1)' },
+    				'50%': { opacity: '0.85', transform: 'scale(1.05)' },
+    			},
+    			'shimmer': {
+    				'0%': { backgroundPosition: '-200% 0' },
+    				'100%': { backgroundPosition: '200% 0' },
+    			},
+    		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',

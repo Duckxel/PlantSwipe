@@ -10,13 +10,15 @@ import type { TFunction } from "i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles, ChevronDown, ChevronUp } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Leaf } from "lucide-react"
+import { SearchInput } from "@/components/ui/search-input"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 
 export type PlantProfileFormProps = {
   value: Plant
   onChange: (plant: Plant) => void
   colorSuggestions?: PlantColor[]
+  companionSuggestions?: string[]
   categoryProgress?: CategoryProgress
 }
 
@@ -136,12 +138,22 @@ const TagInput: React.FC<{ value: string[]; onChange: (v: string[]) => void; pla
   )
 }
 
-const CompanionSelector: React.FC<{ value: string[]; onChange: (ids: string[]) => void }> = ({ value, onChange }) => {
-  const [companions, setCompanions] = React.useState<{ id: string; name: string }[]>([])
+const CompanionSelector: React.FC<{ 
+  value: string[]; 
+  onChange: (ids: string[]) => void;
+  suggestions?: string[];
+  showSuggestions?: boolean;
+  onToggleSuggestions?: () => void;
+  currentPlantId?: string;
+}> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId }) => {
+  const { t } = useTranslation('common')
+  const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
-  const [results, setResults] = React.useState<{ id: string; name: string }[]>([])
+  const [results, setResults] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
 
   React.useEffect(() => {
     setCompanions((prev) => prev.filter((c) => value.includes(c.id)))
@@ -151,31 +163,97 @@ const CompanionSelector: React.FC<{ value: string[]; onChange: (ids: string[]) =
     const missing = value.filter((id) => !companions.find((c) => c.id === id))
     if (!missing.length) return
     const loadMissing = async () => {
-      const { data } = await supabase.from('plants').select('id,name').in('id', missing)
-      if (data) {
-        setCompanions((prev) => [...prev, ...data.map((p) => ({ id: p.id as string, name: (p as any).name as string }))])
+      const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', missing)
+      if (plantsData) {
+        // Also fetch images
+        const { data: imagesData } = await supabase
+          .from('plant_images')
+          .select('plant_id, link')
+          .in('plant_id', missing)
+          .eq('use', 'primary')
+        
+        const imageMap = new Map<string, string>()
+        if (imagesData) {
+          imagesData.forEach((img) => {
+            if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+          })
+        }
+        
+        setCompanions((prev) => [...prev, ...plantsData.map((p) => ({ 
+          id: p.id as string, 
+          name: (p as any).name as string,
+          imageUrl: imageMap.get(p.id as string)
+        }))])
       }
     }
     loadMissing()
   }, [companions, value])
 
-  const searchPlants = async () => {
+  const searchPlants = async (searchTerm?: string) => {
     setLoading(true)
-    const query = supabase.from('plants').select('id,name').order('name').limit(20)
-    if (search.trim()) query.ilike('name', `%${search.trim()}%`)
-    const { data } = await query
-    setResults((data || []).map((p) => ({ id: p.id as string, name: (p as any).name as string })))
+    const term = searchTerm ?? search
+    const query = supabase.from('plants').select('id,name').order('name').limit(30)
+    if (term.trim()) query.ilike('name', `%${term.trim()}%`)
+    const { data: plantsData } = await query
+    
+    if (plantsData) {
+      // Fetch images for results
+      const ids = plantsData.map(p => p.id)
+      const { data: imagesData } = await supabase
+        .from('plant_images')
+        .select('plant_id, link')
+        .in('plant_id', ids)
+        .eq('use', 'primary')
+      
+      const imageMap = new Map<string, string>()
+      if (imagesData) {
+        imagesData.forEach((img) => {
+          if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+        })
+      }
+      
+      setResults(plantsData.map((p) => ({ 
+        id: p.id as string, 
+        name: (p as any).name as string,
+        imageUrl: imageMap.get(p.id as string)
+      })))
+    }
     setLoading(false)
   }
 
   React.useEffect(() => {
-    if (open) searchPlants()
+    if (open) {
+      searchPlants()
+      setSelectedIds(new Set())
+    }
   }, [open])
 
-  const addCompanion = (plant: { id: string; name: string }) => {
-    if (value.includes(plant.id)) { setOpen(false); return }
-    onChange([...value, plant.id])
-    setCompanions((prev) => [...prev, plant])
+  const toggleSelect = (id: string) => {
+    // Prevent selecting current plant as its own companion
+    if (id === currentPlantId) return
+    
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const addSelectedCompanions = () => {
+    const newIds = Array.from(selectedIds).filter(id => !value.includes(id) && id !== currentPlantId)
+    if (newIds.length === 0) {
+      setOpen(false)
+      return
+    }
+    
+    const newCompanions = results.filter(r => newIds.includes(r.id))
+    onChange([...value, ...newIds])
+    setCompanions(prev => [...prev, ...newCompanions])
+    setSelectedIds(new Set())
     setOpen(false)
   }
 
@@ -184,44 +262,254 @@ const CompanionSelector: React.FC<{ value: string[]; onChange: (ids: string[]) =
     setCompanions((prev) => prev.filter((c) => c.id !== id))
   }
 
+  // Search for a suggested companion by name and add it
+  const addSuggestedCompanion = async (suggestedName: string) => {
+    setSuggestionSearching(suggestedName)
+    try {
+      let query = supabase.from('plants').select('id,name').ilike('name', suggestedName).limit(1)
+      let { data } = await query
+      
+      if (!data?.length) {
+        query = supabase.from('plants').select('id,name').ilike('name', `%${suggestedName}%`).limit(1)
+        const result = await query
+        data = result.data
+      }
+      
+      if (data?.length) {
+        const plantId = data[0].id as string
+        // Prevent adding current plant as its own companion
+        if (plantId === currentPlantId) return
+        
+        if (!value.includes(plantId)) {
+          // Fetch image
+          const { data: imgData } = await supabase
+            .from('plant_images')
+            .select('link')
+            .eq('plant_id', plantId)
+            .eq('use', 'primary')
+            .limit(1)
+          
+          const plant = { 
+            id: plantId, 
+            name: (data[0] as any).name as string,
+            imageUrl: imgData?.[0]?.link
+          }
+          onChange([...value, plant.id])
+          setCompanions((prev) => [...prev, plant])
+        }
+      }
+    } finally {
+      setSuggestionSearching(null)
+    }
+  }
+
+  const isSuggestionAdded = (suggestedName: string) => {
+    return companions.some(c => c.name.toLowerCase() === suggestedName.toLowerCase())
+  }
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      searchPlants()
+    }
+  }
+
   return (
-    <div className="grid gap-2">
-      <div className="flex flex-wrap gap-2">
-        {value.length === 0 && <span className="text-sm text-muted-foreground">No companions added yet.</span>}
-        {companions.map((c) => (
-          <span key={c.id} className="px-2 py-1 bg-stone-100 dark:bg-[#2d2d30] rounded text-sm flex items-center gap-1">
-            {c.name || c.id}
-            <button type="button" className="text-red-600" onClick={() => removeCompanion(c.id)}>×</button>
-          </span>
-        ))}
-      </div>
+    <div className="grid gap-3">
+      {/* AI Suggestions Section */}
+      {suggestions && suggestions.length > 0 && (
+        <div className="mb-2">
+          <button
+            type="button"
+            className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
+            onClick={onToggleSuggestions}
+          >
+            <Sparkles className="h-4 w-4" />
+            {showSuggestions
+              ? t('plantAdmin.hideCompanionSuggestions', 'Hide AI suggestions')
+              : t('plantAdmin.showCompanionSuggestions', 'Show AI suggestions')}
+          </button>
+          {showSuggestions && (
+            <div className="mt-2 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner space-y-3">
+              <div className="text-xs text-muted-foreground">
+                {t('plantAdmin.companionSuggestionsReview', 'Click Add to link suggested plants. Not all may exist in the database.')}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map((suggestedName, idx) => {
+                  const alreadyAdded = isSuggestionAdded(suggestedName)
+                  const isSearching = suggestionSearching === suggestedName
+                  return (
+                    <button
+                      key={`${suggestedName}-${idx}`}
+                      type="button"
+                      disabled={alreadyAdded || isSearching}
+                      onClick={() => addSuggestedCompanion(suggestedName)}
+                      className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
+                        alreadyAdded 
+                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 cursor-default'
+                          : 'bg-white dark:bg-[#1a1a1a] border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200'
+                      }`}
+                    >
+                      {isSearching ? (
+                        <span className="animate-spin h-3 w-3 border-2 border-emerald-500 border-t-transparent rounded-full" />
+                      ) : alreadyAdded ? (
+                        <span className="text-emerald-600">✓</span>
+                      ) : (
+                        <span className="text-emerald-500">+</span>
+                      )}
+                      {suggestedName}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Current Companions - Enhanced Grid */}
+      {value.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+          {companions.map((c) => (
+            <div 
+              key={c.id} 
+              className="relative group rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1a1a1a] overflow-hidden"
+            >
+              <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
+                {c.imageUrl ? (
+                  <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-stone-400">
+                    <Leaf className="h-8 w-8" />
+                  </div>
+                )}
+              </div>
+              <div className="p-2">
+                <p className="text-sm font-medium truncate text-stone-900 dark:text-stone-100">{c.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeCompanion(c.id)}
+                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold shadow-md"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground py-4 text-center border border-dashed border-stone-300 dark:border-stone-700 rounded-xl">
+          {t('plantAdmin.noCompanions', 'No companion or related plants added yet.')}
+        </div>
+      )}
+      
+      {/* Add Button */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button type="button" variant="outline">Add Companion</Button>
+          <Button type="button" variant="outline" className="w-full">
+            <span className="mr-2">+</span>
+            {t('plantAdmin.addCompanionBtn', 'Add Companion / Related Plants')}
+          </Button>
         </DialogTrigger>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Select a companion plant</DialogTitle>
+            <DialogTitle>{t('plantAdmin.selectCompanionTitle', 'Select Companion & Related Plants')}</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              {t('plantAdmin.selectCompanionDesc', 'Select multiple plants to add as companions or related varieties.')}
+            </p>
           </DialogHeader>
-          <div className="flex gap-2 items-center">
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search plants by name" />
-            <Button type="button" onClick={searchPlants} disabled={loading}>{loading ? 'Searching...' : 'Search'}</Button>
+          
+          <div className="flex gap-2 items-center py-2">
+            <SearchInput 
+              value={search} 
+              onChange={(e) => setSearch(e.target.value)} 
+              onKeyDown={handleSearchKeyDown}
+              placeholder={t('plantAdmin.searchPlantsPlaceholder', 'Search plants by name...')} 
+              loading={loading} 
+              className="flex-1" 
+            />
+            <Button type="button" onClick={() => searchPlants()} disabled={loading}>
+              {loading ? t('plantAdmin.searchingBtn', 'Searching...') : t('plantAdmin.searchBtn', 'Search')}
+            </Button>
           </div>
-          <div className="max-h-80 overflow-y-auto space-y-2 mt-3">
-            {(results || []).map((plant) => (
-              <button
-                key={plant.id}
-                type="button"
-                className="w-full text-left rounded border px-3 py-2 hover:bg-muted"
-                onClick={() => addCompanion(plant)}
-              >
-                <div className="font-semibold">{plant.name}</div>
-                <div className="text-xs text-muted-foreground">{plant.id}</div>
-              </button>
-            ))}
+          
+          {/* Selection summary */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center justify-between py-2 px-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
+              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                {selectedIds.size} plant{selectedIds.size > 1 ? 's' : ''} selected
+              </span>
+              <Button type="button" size="sm" onClick={addSelectedCompanions}>
+                Add Selected
+              </Button>
+            </div>
+          )}
+          
+          {/* Results Grid */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 py-2">
+              {results.map((plant) => {
+                const isSelected = selectedIds.has(plant.id)
+                const isAlreadyAdded = value.includes(plant.id)
+                const isCurrentPlant = plant.id === currentPlantId
+                const isDisabled = isAlreadyAdded || isCurrentPlant
+                
+                return (
+                  <button
+                    key={plant.id}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => toggleSelect(plant.id)}
+                    className={`relative text-left rounded-xl border overflow-hidden transition-all ${
+                      isDisabled
+                        ? 'opacity-50 cursor-not-allowed border-stone-200 dark:border-stone-700'
+                        : isSelected
+                        ? 'border-emerald-500 ring-2 ring-emerald-500/50 bg-emerald-50 dark:bg-emerald-900/30'
+                        : 'border-stone-200 dark:border-stone-700 hover:border-emerald-300 dark:hover:border-emerald-600'
+                    }`}
+                  >
+                    <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
+                      {plant.imageUrl ? (
+                        <img src={plant.imageUrl} alt={plant.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-stone-400">
+                          <Leaf className="h-6 w-6" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2">
+                      <p className="text-sm font-medium truncate">{plant.name}</p>
+                      {isCurrentPlant && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">Current plant</p>
+                      )}
+                      {isAlreadyAdded && !isCurrentPlant && (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">Already added</p>
+                      )}
+                    </div>
+                    {isSelected && (
+                      <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                        ✓
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
             {!results.length && !loading && (
-              <div className="text-sm text-muted-foreground">No plants found.</div>
+              <div className="text-sm text-muted-foreground text-center py-8">
+                {t('plantAdmin.noPlantsFound', 'No plants found. Try a different search term.')}
+              </div>
             )}
+          </div>
+          
+          {/* Footer */}
+          <div className="flex justify-end gap-2 pt-3 border-t">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={addSelectedCompanions} disabled={selectedIds.size === 0}>
+              Add {selectedIds.size > 0 ? `(${selectedIds.size})` : ''} Selected
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -825,6 +1113,11 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
   const [previewErrors, setPreviewErrors] = React.useState<Record<string, boolean>>({})
   const [isCollapsed, setIsCollapsed] = React.useState<boolean>(true)
 
+  // Count images by type
+  const primaryCount = list.filter((img) => img.use === "primary").length
+  const discoveryCount = list.filter((img) => img.use === "discovery").length
+  const otherCount = list.filter((img) => img.use === "other" || !img.use).length
+
   const getPreviewKey = (img: PlantImage, idx: number) => img.id || img.link || `idx-${idx}`
 
   const updateImage = (idx: number, patch: Partial<PlantImage>) => {
@@ -845,6 +1138,7 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
     onChange(
       list.map((img, i) => {
         if (i === idx) return { ...img, use }
+        // Enforce only 1 Primary and 1 Discovery - convert existing to "other"
         if (use === "primary" && img.use === "primary") return { ...img, use: "other" }
         if (use === "discovery" && img.use === "discovery") return { ...img, use: "other" }
         return img
@@ -886,7 +1180,9 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
           </button>
           {list.length > 0 && (
-            <span className="text-xs text-muted-foreground">({list.length})</span>
+            <span className="text-xs text-muted-foreground">
+              ({list.length} total: {primaryCount > 0 ? `${primaryCount} Primary` : ''}{primaryCount > 0 && discoveryCount > 0 ? ', ' : ''}{discoveryCount > 0 ? `${discoveryCount} Discovery` : ''}{(primaryCount > 0 || discoveryCount > 0) && otherCount > 0 ? ', ' : ''}{otherCount > 0 ? `${otherCount} Other` : ''})
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -945,7 +1241,7 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
               })}
             </div>
           )}
-          <p className="text-xs text-muted-foreground mt-2">Click to expand and edit images. Primary appears on detail pages; Discovery on list cards.</p>
+          <p className="text-xs text-muted-foreground mt-2">Click to expand and edit images. Only 1 Primary (detail pages) and 1 Discovery (list cards) allowed. Add unlimited Other images for the gallery.</p>
         </div>
       ) : (
         // Expanded view: Show full editor
@@ -1009,10 +1305,10 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {img.use === 'primary'
-                          ? 'Shown as the hero/detail image.'
+                          ? 'Hero/detail image (only 1 allowed).'
                           : img.use === 'discovery'
-                            ? 'Used in discovery cards and lists.'
-                            : 'Supports the gallery.'}
+                            ? 'Discovery cards/lists (only 1 allowed).'
+                            : 'Gallery image (unlimited).'}
                       </p>
                     </div>
                   </div>
@@ -1039,115 +1335,534 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
   )
 }
 
+interface ColorWithMeta extends PlantColor {
+  isPrimary?: boolean
+}
+
+// Helper functions for color manipulation
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  if (!result) {
+    const shortResult = /^#?([a-f\d])([a-f\d])([a-f\d])$/i.exec(hex)
+    if (shortResult) {
+      return {
+        r: parseInt(shortResult[1] + shortResult[1], 16),
+        g: parseInt(shortResult[2] + shortResult[2], 16),
+        b: parseInt(shortResult[3] + shortResult[3], 16),
+      }
+    }
+    return null
+  }
+  return {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16),
+  }
+}
+
+function getHue(hex: string): number {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return 999
+  const r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min
+  let hue = 0
+  if (delta !== 0) {
+    if (max === r) hue = ((g - b) / delta) % 6
+    else if (max === g) hue = (b - r) / delta + 2
+    else hue = (r - g) / delta + 4
+    hue = Math.round(hue * 60)
+    if (hue < 0) hue += 360
+  }
+  return hue
+}
+
+function colorDistance(hex1: string, hex2: string): number {
+  const rgb1 = hexToRgb(hex1), rgb2 = hexToRgb(hex2)
+  if (!rgb1 || !rgb2) return Infinity
+  const dr = rgb1.r - rgb2.r, dg = rgb1.g - rgb2.g, db = rgb1.b - rgb2.b
+  return Math.sqrt(dr * dr + dg * dg + db * db)
+}
+
+function isValidHex(hex: string): boolean {
+  return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(hex)
+}
+
+function getContrastColor(hex: string): string {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return '#000000'
+  const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255
+  return luminance > 0.5 ? '#000000' : '#ffffff'
+}
+
 function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v: PlantColor[]) => void }) {
   const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
-  const [available, setAvailable] = React.useState<PlantColor[]>([])
+  const [allColors, setAllColors] = React.useState<ColorWithMeta[]>([])
+  const [primaryColors, setPrimaryColors] = React.useState<ColorWithMeta[]>([])
   const [loading, setLoading] = React.useState(false)
   const [search, setSearch] = React.useState("")
+  const [mode, setMode] = React.useState<'pick' | 'create'>('pick')
+  
+  // Create mode state
   const [insertName, setInsertName] = React.useState("")
   const [insertHex, setInsertHex] = React.useState("#")
+  const [insertIsPrimary, setInsertIsPrimary] = React.useState(false)
+  const [insertParentIds, setInsertParentIds] = React.useState<string[]>([])
   const [inserting, setInserting] = React.useState(false)
 
-  const loadColors = React.useCallback(async (term?: string) => {
+  // Load all colors once when dialog opens
+  const loadColors = React.useCallback(async () => {
     setLoading(true)
-    const query = supabase.from('colors').select('id,name,hex_code').order('name')
-    if (term?.trim()) query.ilike('name', `%${term.trim()}%`)
-    const { data } = await query
-    setAvailable((data || []).map((row) => ({ id: row.id as string, name: row.name as string, hexCode: (row as any).hex_code as string | undefined })))
+    const { data } = await supabase.from('colors').select('id,name,hex_code,is_primary')
+    const mapped = (data || []).map((row) => ({ 
+      id: row.id as string, 
+      name: row.name as string, 
+      hexCode: (row as any).hex_code as string | undefined,
+      isPrimary: row.is_primary as boolean
+    }))
+    setAllColors(mapped)
+    setPrimaryColors(mapped.filter(c => c.isPrimary))
     setLoading(false)
   }, [])
 
   React.useEffect(() => {
-    if (open) loadColors(search)
-  }, [open, search, loadColors])
+    if (open) loadColors()
+  }, [open, loadColors])
 
-  const alreadyAdded = (candidate: PlantColor) => (colors || []).some((c) => (c.id && candidate.id && c.id === candidate.id) || c.name.toLowerCase() === candidate.name.toLowerCase())
+  // Filter and sort colors based on search
+  const filteredColors = React.useMemo(() => {
+    let result = allColors
+    const query = search.trim().toLowerCase()
+    
+    if (query) {
+      // Check if search looks like a hex code
+      const isHexSearch = query.startsWith('#') || /^[a-f0-9]{3,6}$/i.test(query)
+      
+      if (isHexSearch) {
+        const searchHex = normalizeHex(query)
+        if (isValidHex(searchHex)) {
+          // Sort by color distance for approximate hex match
+          result = [...allColors]
+            .map(c => ({ color: c, distance: c.hexCode ? colorDistance(searchHex, c.hexCode) : Infinity }))
+            .sort((a, b) => a.distance - b.distance)
+            .map(item => item.color)
+        }
+      } else {
+        // Name search
+        result = allColors.filter(c => c.name.toLowerCase().includes(query))
+      }
+    }
+    
+    // Sort by hue if not searching by hex
+    if (!query || !query.startsWith('#')) {
+      result = [...result].sort((a, b) => {
+        const hueA = a.hexCode ? getHue(a.hexCode) : 999
+        const hueB = b.hexCode ? getHue(b.hexCode) : 999
+        return hueA - hueB
+      })
+    }
+    
+    return result
+  }, [allColors, search])
+
+  // Similar colors for create mode
+  const similarColors = React.useMemo(() => {
+    const hex = normalizeHex(insertHex)
+    if (!isValidHex(hex)) return []
+    return allColors
+      .filter(c => c.hexCode && isValidHex(c.hexCode))
+      .map(c => ({ color: c, distance: colorDistance(hex, c.hexCode!) }))
+      .filter(item => item.distance < 80 && item.distance > 0)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 6)
+      .map(item => item.color)
+  }, [allColors, insertHex])
+
+  const alreadyAdded = (candidate: PlantColor) => 
+    (colors || []).some((c) => (c.id && candidate.id && c.id === candidate.id) || c.name.toLowerCase() === candidate.name.toLowerCase())
 
   const addColor = (c: PlantColor) => {
-    if (alreadyAdded(c)) { setOpen(false); return }
+    if (alreadyAdded(c)) return
     onChange([...(colors || []), { id: c.id, name: c.name, hexCode: c.hexCode }])
     setOpen(false)
+    setSearch("")
+  }
+
+  const toggleParent = (parentId: string) => {
+    setInsertParentIds(prev => 
+      prev.includes(parentId) ? prev.filter(id => id !== parentId) : [...prev, parentId]
+    )
+  }
+
+  const autoTranslateColor = async (colorId: string, colorName: string) => {
+    try {
+      const { translateText } = await import('@/lib/deepl')
+      const { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } = await import('@/lib/i18n')
+      const translations: { color_id: string; language: string; name: string }[] = []
+      for (const lang of SUPPORTED_LANGUAGES) {
+        if (lang === DEFAULT_LANGUAGE) continue
+        try {
+          const translated = await translateText(colorName, lang, DEFAULT_LANGUAGE)
+          if (translated && translated !== colorName) {
+            translations.push({ color_id: colorId, language: lang, name: translated })
+          }
+        } catch (e) { console.error(`Failed to translate to ${lang}:`, e) }
+      }
+      if (translations.length > 0) {
+        await supabase.from('color_translations').upsert(translations, { onConflict: 'color_id,language' })
+      }
+    } catch (e) { console.error('Auto-translate failed:', e) }
   }
 
   const handleInsert = async () => {
     if (!insertName.trim()) return
+    if (!insertIsPrimary && insertParentIds.length === 0) return
+    
     setInserting(true)
-    const payload = { name: insertName.trim(), hex_code: normalizeHex(insertHex) || null }
+    const payload = { 
+      name: insertName.trim(), 
+      hex_code: normalizeHex(insertHex) || null,
+      is_primary: insertIsPrimary,
+      parent_ids: insertIsPrimary ? [] : insertParentIds
+    }
     const { data, error } = await supabase.from('colors').insert(payload).select('id,name,hex_code').maybeSingle()
+    
+    if (!error && data) {
+      const newColor: PlantColor = { id: data.id, name: data.name, hexCode: (data as any).hex_code || normalizeHex(insertHex) }
+      autoTranslateColor(data.id, insertName.trim())
+      setAllColors(prev => [...prev, { ...newColor, isPrimary: insertIsPrimary }])
+      if (!alreadyAdded(newColor)) onChange([...(colors || []), newColor])
+      setInsertName("")
+      setInsertHex("#")
+      setInsertIsPrimary(false)
+      setInsertParentIds([])
+      setMode('pick')
+      setOpen(false)
+    }
     setInserting(false)
-    if (error) return
-    const newColor: PlantColor = { id: data?.id, name: data?.name ?? insertName.trim(), hexCode: (data as any)?.hex_code || normalizeHex(insertHex) }
-    setAvailable((prev) => [...prev, newColor])
-    if (!alreadyAdded(newColor)) onChange([...(colors || []), newColor])
+  }
+
+  const resetAndClose = () => {
+    setOpen(false)
+    setSearch("")
+    setMode('pick')
     setInsertName("")
     setInsertHex("#")
-    setOpen(false)
+    setInsertIsPrimary(false)
+    setInsertParentIds([])
   }
 
   return (
     <div className="grid gap-3">
+      {/* Selected colors display */}
       <div className="flex flex-wrap gap-2">
         {(colors || []).map((c, idx) => (
-          <span key={`${c.name}-${idx}`} className="px-2 py-1 rounded bg-stone-100 dark:bg-[#2d2d30] text-sm flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full border" style={{ backgroundColor: c.hexCode || "transparent" }} />
-            {c.name}
-            <button type="button" className="text-red-600" onClick={() => onChange(colors.filter((_, i) => i !== idx))}>×</button>
+          <span 
+            key={`${c.name}-${idx}`} 
+            className="group px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2 border transition-all hover:shadow-sm"
+            style={{ 
+              backgroundColor: c.hexCode ? `${c.hexCode}20` : undefined,
+              borderColor: c.hexCode || '#e5e7eb'
+            }}
+          >
+            <span 
+              className="w-4 h-4 rounded-full border shadow-sm" 
+              style={{ backgroundColor: c.hexCode || "transparent" }} 
+            />
+            <span className="font-medium">{c.name}</span>
+            <button 
+              type="button" 
+              className="opacity-50 hover:opacity-100 hover:text-red-600 transition-opacity" 
+              onClick={() => onChange(colors.filter((_, i) => i !== idx))}
+            >
+              ×
+            </button>
           </span>
         ))}
       </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button type="button" variant="outline">{t('plantAdmin.colors.addColorButton', 'Add color')}</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+
+      <Dialog open={open} onOpenChange={(v) => v ? setOpen(true) : resetAndClose()}>
+        <DialogTrigger asChild>
+          <Button type="button" variant="outline" className="w-full">
+            <span className="w-4 h-4 rounded-full bg-gradient-to-br from-red-400 via-green-400 to-blue-400 mr-2" />
+            {t('plantAdmin.colors.addColorButton', 'Add color')}
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+          {/* Header */}
+          <div className="p-4 pb-3 border-b">
             <DialogHeader>
-              <DialogTitle>{t('plantAdmin.colors.dialogTitle', 'Select or add a color')}</DialogTitle>
+              <DialogTitle className="text-lg">
+                {mode === 'pick' 
+                  ? t('plantAdmin.colors.dialogTitle', 'Select a color') 
+                  : t('plantAdmin.colors.createTitle', 'Create new color')}
+              </DialogTitle>
             </DialogHeader>
-            <div className="grid gap-3">
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('plantAdmin.colors.searchPlaceholder', 'Search colors by name')} />
-              <div className="max-h-64 overflow-auto border rounded p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {loading ? <div className="col-span-full text-center text-sm text-muted-foreground">{t('plantAdmin.colors.loading', 'Loading colors...')}</div> : (
-                (available || []).map((c) => (
-                  <button
-                    key={c.id || c.name}
-                    type="button"
-                    onClick={() => addColor(c)}
-                    className="flex items-center gap-3 rounded border p-2 hover:bg-muted"
-                  >
-                    <span className="w-6 h-6 rounded-full border" style={{ backgroundColor: c.hexCode || "transparent" }} />
-                    <span className="text-left">
-                      <div className="font-medium text-sm">{c.name}</div>
-                        <div className="text-xs text-muted-foreground">{c.hexCode || t('plantAdmin.colors.noHex', 'No hex')}</div>
-                    </span>
-                  </button>
-                ))
-              )}
-              {!loading && (available || []).length === 0 && (
-                  <div className="col-span-full text-center text-sm text-muted-foreground">{t('plantAdmin.colors.empty', 'No colors found.')}</div>
-              )}
-            </div>
-            <div className="grid gap-2 border-t pt-3">
-                <div className="font-medium text-sm">{t('plantAdmin.colors.insertHeading', 'Insert a new color')}</div>
-              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-center">
-                  <Input value={insertName} onChange={(e) => setInsertName(e.target.value)} placeholder={t('plantAdmin.colors.colorNamePlaceholder', 'Color name')} />
-                <div className="flex items-center gap-2">
-                    <Input value={insertHex} onChange={(e) => setInsertHex(e.target.value)} placeholder={t('plantAdmin.colors.hexPlaceholder', '#hexcode')} />
-                  <span className="w-8 h-8 rounded border" style={{ backgroundColor: normalizeHex(insertHex) || "transparent" }} />
-                </div>
-                  <Button type="button" onClick={handleInsert} disabled={inserting || !insertName.trim()}>
-                    {inserting ? t('plantAdmin.colors.saving', 'Saving...') : t('plantAdmin.colors.insertButton', 'Insert')}
-                  </Button>
-              </div>
+            
+            {/* Mode toggle */}
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => setMode('pick')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                  mode === 'pick' 
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' 
+                    : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
+                }`}
+              >
+                Pick existing
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('create')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                  mode === 'create' 
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' 
+                    : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
+                }`}
+              >
+                Create new
+              </button>
             </div>
           </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {mode === 'pick' ? (
+              <div className="space-y-4">
+                {/* Search */}
+                <div className="relative">
+                  <SearchInput 
+                    value={search} 
+                    onChange={(e) => setSearch(e.target.value)} 
+                    placeholder={t('plantAdmin.colors.searchPlaceholder', 'Search by name or hex code (e.g., #ff0000)')}
+                    className="w-full"
+                  />
+                  {search && (
+                    <button 
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                {/* Color grid */}
+                {loading ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {t('plantAdmin.colors.loading', 'Loading colors...')}
+                  </div>
+                ) : filteredColors.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {t('plantAdmin.colors.empty', 'No colors found.')}
+                    <button 
+                      type="button"
+                      onClick={() => setMode('create')}
+                      className="block mx-auto mt-2 text-emerald-600 hover:underline"
+                    >
+                      Create a new color
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                    {filteredColors.map((c) => {
+                      const isAdded = alreadyAdded(c)
+                      return (
+                        <button
+                          key={c.id || c.name}
+                          type="button"
+                          onClick={() => !isAdded && addColor(c)}
+                          disabled={isAdded}
+                          className={`group relative aspect-square rounded-xl overflow-hidden transition-all ${
+                            isAdded 
+                              ? 'opacity-50 cursor-not-allowed ring-2 ring-emerald-500' 
+                              : 'hover:scale-105 hover:shadow-lg hover:z-10'
+                          }`}
+                          title={`${c.name}${c.hexCode ? ` (${c.hexCode})` : ''}`}
+                        >
+                          {/* Color fill */}
+                          <div 
+                            className="absolute inset-0"
+                            style={{ backgroundColor: c.hexCode || '#e5e7eb' }}
+                          />
+                          
+                          {/* Hover overlay with name */}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end justify-center p-1">
+                            <span 
+                              className="text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity text-center leading-tight truncate w-full px-1"
+                              style={{ color: c.hexCode ? getContrastColor(c.hexCode) : '#000' }}
+                            >
+                              {c.name}
+                            </span>
+                          </div>
+                          
+                          {/* Primary indicator */}
+                          {c.isPrimary && (
+                            <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-white" />
+                          )}
+                          
+                          {/* Added checkmark */}
+                          {isAdded && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                              <span className="text-white text-lg">✓</span>
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Create mode */
+              <div className="space-y-4">
+                {/* Name and Hex inputs */}
+                <div className="grid gap-3">
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Color Name *</label>
+                    <Input 
+                      value={insertName} 
+                      onChange={(e) => setInsertName(e.target.value)} 
+                      placeholder="e.g., Emerald Green"
+                      className="w-full"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Hex Code</label>
+                    <div className="flex gap-2">
+                      <Input 
+                        value={insertHex} 
+                        onChange={(e) => setInsertHex(e.target.value)} 
+                        placeholder="#00ff00"
+                        className="flex-1 font-mono"
+                      />
+                      <div 
+                        className="w-12 h-10 rounded-lg border-2 shadow-inner flex-shrink-0 transition-colors"
+                        style={{ 
+                          backgroundColor: isValidHex(normalizeHex(insertHex)) ? normalizeHex(insertHex) : '#f5f5f5',
+                          borderColor: isValidHex(normalizeHex(insertHex)) ? normalizeHex(insertHex) : '#e5e7eb'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Similar colors warning */}
+                {similarColors.length > 0 && (
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-2">
+                      Similar colors already exist:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {similarColors.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            addColor(c)
+                            setMode('pick')
+                          }}
+                          className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white dark:bg-stone-800 border hover:border-emerald-500 transition-colors"
+                        >
+                          <span 
+                            className="w-5 h-5 rounded-full border shadow-sm" 
+                            style={{ backgroundColor: c.hexCode || 'transparent' }}
+                          />
+                          <span className="text-sm">{c.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Primary toggle */}
+                <label className="flex items-center gap-3 p-3 rounded-lg bg-stone-50 dark:bg-stone-800/50 cursor-pointer">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={insertIsPrimary}
+                      onChange={(e) => {
+                        setInsertIsPrimary(e.target.checked)
+                        if (e.target.checked) setInsertParentIds([])
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className={`w-10 h-6 rounded-full transition-colors ${insertIsPrimary ? 'bg-amber-500' : 'bg-stone-300 dark:bg-stone-600'}`} />
+                    <div className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${insertIsPrimary ? 'translate-x-4' : ''}`} />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium">Primary Color</span>
+                    <p className="text-xs text-muted-foreground">Basic colors like Red, Blue, Green</p>
+                  </div>
+                </label>
+
+                {/* Parent selection */}
+                {!insertIsPrimary && (
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">
+                      Parent Colors * <span className="text-muted-foreground font-normal">(required)</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2 p-3 rounded-lg border bg-stone-50 dark:bg-stone-800/50">
+                      {primaryColors.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">No primary colors available</span>
+                      ) : (
+                        primaryColors.map((parent) => (
+                          <button
+                            key={parent.id}
+                            type="button"
+                            onClick={() => toggleParent(parent.id!)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                              insertParentIds.includes(parent.id!)
+                                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500'
+                                : 'bg-white dark:bg-stone-700 hover:bg-stone-100 dark:hover:bg-stone-600 border'
+                            }`}
+                          >
+                            <span 
+                              className="w-4 h-4 rounded-full border shadow-sm" 
+                              style={{ backgroundColor: parent.hexCode || 'transparent' }} 
+                            />
+                            {parent.name}
+                            {insertParentIds.includes(parent.id!) && <span>✓</span>}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    {!insertIsPrimary && insertParentIds.length === 0 && insertName.trim() && (
+                      <p className="text-xs text-amber-600 mt-1">Select at least one parent color</p>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  Color will be auto-translated to all supported languages
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer for create mode */}
+          {mode === 'create' && (
+            <div className="p-4 border-t bg-stone-50 dark:bg-stone-900">
+              <Button 
+                type="button" 
+                onClick={handleInsert} 
+                disabled={inserting || !insertName.trim() || (!insertIsPrimary && insertParentIds.length === 0)}
+                className="w-full"
+              >
+                {inserting ? 'Creating...' : 'Create Color'}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, categoryProgress }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
     basics: null,
@@ -1162,6 +1877,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
   })
   const [selectedCategory, setSelectedCategory] = React.useState<PlantFormCategory>('identity')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
+  const [showCompanionRecommendations, setShowCompanionRecommendations] = React.useState(false)
   const categoryLabels: Record<PlantFormCategory, string> = {
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
@@ -1183,6 +1899,13 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
       setShowColorRecommendations(false)
     }
   }, [colorSuggestions?.length])
+  React.useEffect(() => {
+    if (companionSuggestions?.length) {
+      setShowCompanionRecommendations(true)
+    } else {
+      setShowCompanionRecommendations(false)
+    }
+  }, [companionSuggestions?.length])
   const addSuggestedColor = React.useCallback(
     (suggestion: PlantColor | { name?: string; hexCode?: string; hex?: string; label?: string }) => {
       const current = value.identity?.colors || []
@@ -1392,7 +2115,25 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
-                      {fieldGroups[cat].map((f) => renderField(value, setPath, f, t))}
+                      {fieldGroups[cat].map((f) => {
+                        // Skip companions field in miscellaneous - we handle it specially below
+                        if (cat === 'miscellaneous' && f.key === 'miscellaneous.companions') return null
+                        return renderField(value, setPath, f, t)
+                      })}
+                    {cat === 'miscellaneous' && (
+                      <div className="md:col-span-2">
+                        <Label>{t('plantAdmin.fields.miscellaneous.companions.label', 'Companion & Related Plants')}</Label>
+                        <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.miscellaneous.companions.description', 'Plants that grow well together or are related varieties (e.g., Rose / Rose Iceberg)')}</p>
+                        <CompanionSelector 
+                          value={Array.isArray(value.miscellaneous?.companions) ? value.miscellaneous.companions : []} 
+                          onChange={(v) => setPath('miscellaneous.companions', v)}
+                          suggestions={companionSuggestions}
+                          showSuggestions={showCompanionRecommendations}
+                          onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
+                          currentPlantId={value.id}
+                        />
+                      </div>
+                    )}
                     {cat === 'identity' && (
                       <div className="md:col-span-2">
                         {colorSuggestions?.length ? (

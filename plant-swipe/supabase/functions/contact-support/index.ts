@@ -22,10 +22,12 @@ const BUSINESS_EMAILS = parseEmailList(
   getFirstEnv("CONTACT_BUSINESS_EMAIL", "BUSINESS_EMAIL_TO", "BUSINESS_EMAIL", "CONTACT_EMAIL_TO"),
   DEFAULT_BUSINESS_EMAIL,
 )
+const BUG_EMAILS = ["dev@aphylia.app"]
 
 const RECIPIENT_EMAILS = {
   support: SUPPORT_EMAILS,
   business: BUSINESS_EMAILS,
+  bug: BUG_EMAILS,
 } as const
 type Audience = keyof typeof RECIPIENT_EMAILS
 
@@ -46,7 +48,16 @@ const contactSchema = z.object({
   subject: z.string().trim().min(3).max(150),
   message: z.string().trim().min(10).max(4000),
   submittedAt: z.string().optional(),
-  audience: z.enum(["support", "business"]).optional(),
+  audience: z.enum(["support", "business", "bug"]).optional(),
+  screenshotUrl: z.string().optional(),
+  attachments: z
+    .array(
+      z.object({
+        filename: z.string(),
+        content: z.string(), // Base64
+      }),
+    )
+    .optional(),
 })
 
 const corsHeaders: Record<string, string> = {
@@ -123,7 +134,8 @@ serve(async (req) => {
     })
   }
 
-    const { name, email, subject, message, submittedAt, audience: parsedAudience } = parsed.data
+    const { name, email, subject, message, submittedAt, audience: parsedAudience, attachments, screenshotUrl } =
+      parsed.data
     const audience: Audience = parsedAudience ?? "support"
     const recipientEmails = RECIPIENT_EMAILS[audience]
 
@@ -176,6 +188,8 @@ serve(async (req) => {
       <p><strong>Audience:</strong> ${escapeHtml(audience)}</p>
       <p><strong>Delivered to:</strong> ${escapeHtml(recipientEmails.join(", "))}</p>
     ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
+    ${screenshotUrl ? `<p><strong>Screenshot:</strong> <a href="${escapeHtml(screenshotUrl)}" target="_blank">View Screenshot</a></p>` : ""}
+    ${screenshotUrl ? `<div style="margin:12px 0;"><img src="${escapeHtml(screenshotUrl)}" style="max-width:100%;border:1px solid #ddd;border-radius:8px;" alt="Bug report screenshot" /></div>` : ""}
     <hr style="margin:16px 0;" />
     <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
   `
@@ -194,6 +208,7 @@ serve(async (req) => {
           subject: finalSubject,
           text: plainBody,
           html: htmlBody,
+          attachments,
           tags: [
             { name: "source", value: "contact-form" },
             { name: "audience", value: audience },

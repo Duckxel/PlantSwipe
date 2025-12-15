@@ -61,7 +61,7 @@ export default defineConfig({
         display: 'standalone',
         display_override: ['window-controls-overlay', 'standalone'],
         scope,
-        start_url: scope,
+        start_url: scope === '/' ? '/discovery' : `${scope}discovery`,
         orientation: 'portrait-primary',
         categories: ['productivity', 'lifestyle', 'utilities'],
         // Cleared for general audiences today, while remaining flexible enough for
@@ -93,6 +93,11 @@ export default defineConfig({
   envPrefix: ['VITE_'],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   build: {
+    // Disable sourcemaps in production to reduce memory usage
+    sourcemap: false,
+    // Use esbuild for minification (faster and uses less memory than terser)
+    minify: 'esbuild',
+    // Reduce memory by limiting concurrent operations
     rollupOptions: {
       output: {
         manualChunks: {
@@ -103,8 +108,12 @@ export default defineConfig({
           'ui-components': ['@radix-ui/react-dialog', '@radix-ui/react-label', '@radix-ui/react-slot'],
         },
       },
+      // Reduce memory pressure during build
+      maxParallelFileOps: 2,
     },
     chunkSizeWarningLimit: 1000,
+    // Target modern browsers to reduce output size
+    target: 'es2020',
   },
   server: {
     host: process.env.VITE_DEV_HOST || '127.0.0.1',

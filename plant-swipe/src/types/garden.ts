@@ -2,6 +2,8 @@ export type GardenRole = "owner" | "member"
 
 export type WaterFreqUnit = 'day' | 'week' | 'month' | 'year'
 
+export type GardenPrivacy = 'public' | 'friends_only' | 'private'
+
 export interface Garden {
   id: string
   name: string
@@ -9,6 +11,13 @@ export interface Garden {
   createdBy: string
   createdAt: string
   streak?: number
+  privacy: GardenPrivacy
+  locationCity?: string | null
+  locationCountry?: string | null
+  locationTimezone?: string | null
+  locationLat?: number | null
+  locationLon?: number | null
+  preferredLanguage?: string | null
 }
 
 export interface GardenMember {
@@ -19,7 +28,10 @@ export interface GardenMember {
   displayName?: string | null
   email?: string | null
   accentKey?: string | null
+  avatarUrl?: string | null
 }
+
+export type PlantHealthStatus = 'thriving' | 'healthy' | 'okay' | 'struggling' | 'critical'
 
 export interface GardenPlant {
   id: string
@@ -32,6 +44,9 @@ export interface GardenPlant {
   overrideWaterFreqUnit?: WaterFreqUnit | null
   overrideWaterFreqValue?: number | null
   plantsOnHand?: number | null
+  healthStatus?: PlantHealthStatus | null
+  notes?: string | null
+  lastHealthUpdate?: string | null
 }
 
 export type GardenPlantEventType = "water" | "fertilize" | "prune" | "harvest" | "note"

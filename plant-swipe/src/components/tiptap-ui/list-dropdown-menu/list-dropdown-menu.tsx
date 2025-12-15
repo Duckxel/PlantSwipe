@@ -98,7 +98,7 @@ export function ListDropdownMenu({
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" portal={portal}>
+      <DropdownMenuContent align="start" portal={portal} sideOffset={8} collisionPadding={8}>
         <Card>
           <CardBody>
             <ButtonGroup>

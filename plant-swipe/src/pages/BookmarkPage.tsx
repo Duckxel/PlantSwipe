@@ -1,5 +1,5 @@
 import React from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/context/AuthContext'
@@ -12,12 +12,15 @@ import { CreateBookmarkDialog } from '@/components/profile/CreateBookmarkDialog'
 import { AddPlantToBookmarkDialog } from '@/components/profile/AddPlantToBookmarkDialog'
 import { rarityTone } from '@/constants/badges'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { Link } from '@/components/i18n/Link'
+import { useLanguageNavigate, useLanguage } from '@/lib/i18nRouting'
 
 export const BookmarkPage = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const { t } = useTranslation('common')
   const { user } = useAuth()
+  const currentLang = useLanguage()
   
   const [bookmark, setBookmark] = React.useState<Bookmark | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -33,7 +36,7 @@ export const BookmarkPage = () => {
     if (!id) return
     setLoading(true)
     try {
-      const data = await getBookmarkDetails(id)
+      const data = await getBookmarkDetails(id, currentLang)
       setBookmark(data)
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('common.error')
@@ -41,7 +44,7 @@ export const BookmarkPage = () => {
     } finally {
       setLoading(false)
     }
-  }, [id, t])
+  }, [id, t, currentLang])
 
   React.useEffect(() => {
     fetchBookmark()

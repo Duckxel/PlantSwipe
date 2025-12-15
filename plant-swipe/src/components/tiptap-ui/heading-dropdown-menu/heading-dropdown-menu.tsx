@@ -8,6 +8,7 @@ import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Tiptap UI ---
 import { HeadingButton } from "@/components/tiptap-ui/heading-button"
+import { ParagraphButton } from "@/components/tiptap-ui/paragraph-button"
 import type { UseHeadingDropdownMenuConfig } from "@/components/tiptap-ui/heading-dropdown-menu"
 import { useHeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu"
 
@@ -21,10 +22,11 @@ import {
   DropdownMenuItem,
 } from "@/components/tiptap-ui-primitive/dropdown-menu"
 import { Card, CardBody } from "@/components/tiptap-ui-primitive/card"
+import { Separator } from "@/components/tiptap-ui-primitive/separator"
 
 export interface HeadingDropdownMenuProps
   extends Omit<ButtonProps, "type">,
-    UseHeadingDropdownMenuConfig {
+  UseHeadingDropdownMenuConfig {
   /**
    * Whether to render the dropdown menu in a portal
    * @default false
@@ -99,9 +101,19 @@ export const HeadingDropdownMenu = forwardRef<
           </Button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="start" portal={portal}>
+        <DropdownMenuContent align="start" portal={portal} sideOffset={8} collisionPadding={8}>
           <Card>
             <CardBody>
+              <ButtonGroup>
+                <DropdownMenuItem asChild>
+                  <ParagraphButton
+                    editor={editor}
+                    text="Normal text"
+                    showTooltip={false}
+                  />
+                </DropdownMenuItem>
+              </ButtonGroup>
+              <Separator style={{ margin: "4px 0" }} />
               <ButtonGroup>
                 {levels.map((level) => (
                   <DropdownMenuItem key={`heading-${level}`} asChild>

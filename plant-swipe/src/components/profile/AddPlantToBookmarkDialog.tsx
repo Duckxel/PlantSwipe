@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, Plus, Loader2, Check } from 'lucide-react'
+import { Plus, Loader2, Check } from 'lucide-react'
+import { SearchInput } from '@/components/ui/search-input'
 import { useTranslation } from 'react-i18next'
 import type { Plant } from '@/types/plant'
 import { loadPlantPreviews } from '@/lib/plantTranslationLoader'
@@ -82,15 +82,12 @@ export const AddPlantToBookmarkDialog: React.FC<AddPlantToBookmarkDialogProps> =
         </DialogHeader>
         
         <div className="px-4 sm:px-6 pb-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-            <Input 
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder={t('plant.searchPlaceholder', { defaultValue: 'Search plants...' })}
-              className="pl-9 rounded-xl"
-            />
-          </div>
+          <SearchInput 
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder={t('plant.searchPlaceholder', { defaultValue: 'Search plants...' })}
+            className="rounded-xl"
+          />
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 pt-2 space-y-2">

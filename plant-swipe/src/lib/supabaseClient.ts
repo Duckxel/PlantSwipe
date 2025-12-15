@@ -32,8 +32,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     heartbeatIntervalMs: 30000,
   },
   global: {
-    // Add timeout to prevent hanging requests
-    fetch: (url, options = {}) => {
+    // Add timeout to prevent hanging requests, but respect existing signals
+    fetch: (url, options: RequestInit = {}) => {
+      // If caller already provided a signal, don't add our own timeout
+      // This prevents "signal is aborted without a reason" errors
+      if (options.signal) {
+        return fetch(url, options)
+      }
+      
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
       
@@ -52,12 +58,14 @@ export type ProfileRow = {
   display_name: string | null
   liked_plant_ids: string[] | null
   is_admin?: boolean | null
+  roles?: string[] | null // User roles: admin, editor, pro, merchant, creator, vip, plus
   username?: string | null
   country?: string | null
   bio?: string | null
   favorite_plant?: string | null
   avatar_url?: string | null
   timezone?: string | null
+  language?: string | null
   experience_years?: number | null
   accent_key?: string | null
   is_private?: boolean | null
@@ -135,4 +143,14 @@ export type GardenTransactionRow = {
   notes: string | null
 }
 
+export type PlantStockRow = {
+  id: string
+  plant_id: string
+  quantity: number
+  price: number
+  is_available: boolean
+  updated_at: string
+  updated_by: string | null
+  created_at: string
+}
 

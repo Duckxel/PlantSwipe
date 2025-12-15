@@ -22,19 +22,23 @@ drop policy if exists "Service role only" on public.admin_secrets;
 create policy "Service role only" on public.admin_secrets for all using (false);
 
 -- ========== Helper: Invoke Edge Function ==========
+-- Drop first to allow return type change (uuid -> bigint to match net.http_post)
+drop function if exists public.invoke_edge_function(text, jsonb);
+
 create or replace function public.invoke_edge_function(
   function_name text,
   payload jsonb default '{}'::jsonb
-) returns uuid as $$
+) returns bigint as $$
 declare
   project_url text;
   service_key text;
-  request_id uuid;
+  request_id bigint;
 begin
   select value into project_url from public.admin_secrets where key = 'SUPABASE_URL';
   select value into service_key from public.admin_secrets where key = 'SUPABASE_SERVICE_ROLE_KEY';
 
   if project_url is null or service_key is null then
+    raise warning '[invoke_edge_function] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in admin_secrets';
     return null;
   end if;
 
@@ -47,6 +51,7 @@ begin
     url := project_url || '/' || function_name,
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
+      'apikey', service_key,
       'Authorization', 'Bearer ' || service_key
     ),
     body := payload
@@ -80,6 +85,7 @@ do $$ declare
     'plant_images',
     'colors',
     'plant_colors',
+    'color_translations',
     'translation_languages',
     'plant_translations',
     'requested_plants',
@@ -92,6 +98,8 @@ do $$ declare
     'admin_email_template_versions',
     'admin_email_campaigns',
     'admin_campaign_sends',
+    'admin_email_triggers',
+    'admin_automatic_email_sends',
     -- Gardens
     'gardens',
     'garden_members',
@@ -121,8 +129,19 @@ do $$ declare
     'profile_admin_notes',
     -- Notifications
     'notification_campaigns',
+    'notification_templates',
+    'notification_template_translations',
+    'notification_automations',
     'user_notifications',
-    'user_push_subscriptions'
+    'user_push_subscriptions',
+    -- Analytics & AI Advice
+    'garden_ai_advice',
+    'garden_analytics_snapshots',
+    'garden_user_activity',
+    'garden_plant_images',
+    -- Journal
+    'garden_journal_entries',
+    'garden_journal_photos'
   ];
   rec record;
 begin
@@ -167,6 +186,10 @@ alter table if exists public.profiles add column if not exists language text def
 -- Notification preferences: push notifications and email campaigns (default to true/enabled)
 alter table if exists public.profiles add column if not exists notify_push boolean default true;
 alter table if exists public.profiles add column if not exists notify_email boolean default true;
+-- User roles: admin, editor, pro, merchant, creator, vip, plus
+alter table if exists public.profiles add column if not exists roles text[] default '{}';
+-- Create GIN index for efficient role queries
+create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin
@@ -293,88 +316,93 @@ do $$ begin
   end;
 end $$;
 
-  -- ========== Plants (catalog) ==========
+-- ========== Plants base table ==========
+-- ARCHITECTURE NOTE: As of 2024, ALL translatable content is stored ONLY in plant_translations.
+-- This table contains ONLY non-translatable base data. No translatable columns exist here
+-- except for 'name' which is the canonical English name used for unique constraint.
+--
+-- NAME HANDLING:
+--   plants.name = canonical English name (unique constraint)
+--   plant_translations.name = displayed name for each language (including English)
+--   When saving in English, BOTH plants.name AND plant_translations.name are updated
+--
+-- COMPANIONS: The companions array stores plant IDs (not names) for stable references.
+--
+-- NON-TRANSLATABLE FIELDS (stored in this table):
+--   id, name (canonical English), plant_type, utility, comestible_part, fruit_type
+--   spiked, scent, multicolor, bicolor
+--   temperature_max, temperature_min, temperature_ideal, hygrometry
+--   watering_type, division, soil, mulching, nutrition_need, fertilizer
+--   sowing_month, flowering_month, fruiting_month
+--   height_cm, wingspan_cm, tutoring, sow_type, separation_cm, transplanting
+--   infusion, aromatherapy, spice_mixes
+--   melliferous, polenizer, be_fertilizer, conservation_status
+--   pests, diseases, companions
+--   status, admin_commentary, created_by, created_time, updated_by, updated_time
+--
+-- TRANSLATABLE FIELDS (stored ONLY in plant_translations):
+--   name, given_names, scientific_name, family, overview
+--   promotion_month, life_cycle, season, foliage_persistance
+--   toxicity_human, toxicity_pets, allergens, symbolism
+--   living_space, composition, maintenance_level
+--   origin, habitat, level_sun
+--   advice_soil, advice_mulching, advice_fertilizer
+--   advice_tutoring, advice_sowing, cut
+--   advice_medicinal, advice_infusion, nutritional_intake, recipes_ideas
+--   ground_effect, source_name, source_url, tags
+
 create table if not exists public.plants (
   id text primary key,
-  -- Plant primary name (unique)
+  -- Canonical English name (unique constraint). When saving in English, this AND
+  -- plant_translations.name (language='en') are both updated.
   name text not null,
+  -- Non-translatable classification fields
   plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')),
   utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']),
   comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']),
   fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']),
-  -- Identity
-  given_names text[] not null default '{}',
-  scientific_name text,
-  family text,
-  overview text,
-  promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december')),
-  life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic')),
-  season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']),
-  foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent')),
+  -- Non-translatable identity fields
   spiked boolean default false,
-  toxicity_human text check (toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic')),
-  toxicity_pets text check (toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic')),
-  allergens text[] not null default '{}',
   scent boolean default false,
-  symbolism text[] not null default '{}',
-  living_space text check (living_space in ('indoor','outdoor','both')),
-  composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']),
-  maintenance_level text check (maintenance_level in ('none','low','moderate','heavy')),
   multicolor boolean default false,
   bicolor boolean default false,
-  -- Plant care
-  origin text[] not null default '{}',
-  habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']),
+  -- Non-translatable plant care fields
   temperature_max integer,
   temperature_min integer,
   temperature_ideal integer,
-  level_sun text check (level_sun in ('low light','shade','partial sun','full sun')),
   hygrometry integer,
   watering_type text[] not null default '{}'::text[] check (watering_type <@ array['surface','buried','hose','drop','drench']),
   division text[] not null default '{}'::text[] check (division <@ array['seed','cutting','division','layering','grafting','tissue separation','bulb separation']),
   soil text[] not null default '{}'::text[] check (soil <@ array['vermiculite','perlite','sphagnum moss','rock wool','sand','gravel','potting soil','peat','clay pebbles','coconut fiber','bark','wood chips']),
-  advice_soil text,
   mulching text[] not null default '{}'::text[] check (mulching <@ array['wood chips','bark','green manure','cocoa bean hulls','buckwheat hulls','cereal straw','hemp straw','woven fabric','pozzolana','crushed slate','clay pellets']),
-  advice_mulching text,
   nutrition_need text[] not null default '{}'::text[] check (nutrition_need <@ array['nitrogen','phosphorus','potassium','calcium','magnesium','sulfur','iron','boron','manganese','molybene','chlorine','copper','zinc','nitrate','phosphate']),
   fertilizer text[] not null default '{}'::text[] check (fertilizer <@ array['granular fertilizer','liquid fertilizer','meat flour','fish flour','crushed bones','crushed horns','slurry','manure','animal excrement','sea fertilizer','yurals','wine','guano','coffee grounds','banana peel','eggshell','vegetable cooking water','urine','grass clippings','vegetable waste','natural mulch']),
-  advice_fertilizer text,
-  -- Growth
+  -- Non-translatable growth fields
   sowing_month text[] not null default '{}'::text[] check (sowing_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
   flowering_month text[] not null default '{}'::text[] check (flowering_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
   fruiting_month text[] not null default '{}'::text[] check (fruiting_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
   height_cm integer,
   wingspan_cm integer,
   tutoring boolean default false,
-  advice_tutoring text,
   sow_type text[] not null default '{}'::text[] check (sow_type <@ array['direct','indoor','row','hill','broadcast','seed tray','cell','pot']),
   separation_cm integer,
   transplanting boolean,
-  advice_sowing text,
-  cut text,
-  -- Usage
-  advice_medicinal text,
-  nutritional_intake text[] not null default '{}',
+  -- Non-translatable usage fields
   infusion boolean default false,
-  advice_infusion text,
-  recipes_ideas text[] not null default '{}',
   aromatherapy boolean default false,
   spice_mixes text[] not null default '{}',
-  -- Ecology
+  -- Non-translatable ecology fields
   melliferous boolean default false,
   polenizer text[] not null default '{}'::text[] check (polenizer <@ array['bee','wasp','ant','butterfly','bird','mosquito','fly','beetle','ladybug','stagbeetle','cockchafer','dungbeetle','weevil']),
   be_fertilizer boolean default false,
-  ground_effect text,
   conservation_status text check (conservation_status in ('safe','at risk','vulnerable','endangered','critically endangered','extinct')),
-  -- Danger
+  -- Non-translatable danger fields
   pests text[] not null default '{}',
   diseases text[] not null default '{}',
-  -- Miscellaneous
+  -- Non-translatable miscellaneous fields
+  -- companions stores plant IDs (not names) for stable references
   companions text[] not null default '{}',
-  tags text[] not null default '{}',
-  source_name text,
-  source_url text,
-  -- Meta
+  -- Meta (non-translatable)
   status text check (status in ('in progres','rework','review','approved')),
   admin_commentary text,
   created_by text,
@@ -382,7 +410,14 @@ create table if not exists public.plants (
   updated_by text,
   updated_time timestamptz not null default now()
 );
+
+-- Unique constraint on name - canonical English name for the plant
 create unique index if not exists plants_name_unique on public.plants (lower(name));
+
+-- Drop the scientific_name unique constraint if it exists
+-- Multiple plants can have the same scientific name (different cultivars, varieties, etc.)
+drop index if exists plants_scientific_name_unique;
+alter table if exists public.plants drop constraint if exists plants_scientific_name_unique;
 
 -- Ensure meta columns exist on older deployments (add columns before referencing them)
 alter table if exists public.plants add column if not exists status text check (status in ('in progres','rework','review','approved'));
@@ -727,9 +762,19 @@ create table if not exists public.plant_images (
   link text not null,
   use text not null default 'other' check (use in ('primary','discovery','other')),
   created_at timestamptz not null default now(),
-  unique (link)
+  -- Allow same image URL to be used by different plants (composite unique)
+  unique (plant_id, link)
 );
-create unique index if not exists plant_images_use_unique on public.plant_images (plant_id, use);
+-- Drop the old global link uniqueness constraint if it exists (migration)
+alter table if exists public.plant_images drop constraint if exists plant_images_link_key;
+-- Ensure composite uniqueness on (plant_id, link)
+create unique index if not exists plant_images_plant_link_unique on public.plant_images (plant_id, link);
+-- Drop old use uniqueness constraint that may have been created without the WHERE clause
+-- This is needed because CREATE INDEX IF NOT EXISTS won't update an existing index
+drop index if exists public.plant_images_use_unique;
+-- Keep uniqueness on (plant_id, use) ONLY for primary/discovery images
+-- This allows unlimited 'other' images per plant, but only 1 primary and 1 discovery
+create unique index plant_images_use_unique on public.plant_images (plant_id, use) where use in ('primary', 'discovery');
 alter table public.plant_images enable row level security;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_images' and policyname='plant_images_select') then
@@ -746,17 +791,57 @@ end $$;
 create table if not exists public.colors (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
-  hex_code text not null unique,
-  created_at timestamptz not null default now()
+  hex_code text,
+  is_primary boolean not null default false,
+  parent_ids uuid[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
+
+-- Add new columns if they don't exist (for existing databases)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='colors' and column_name='is_primary') then
+    alter table public.colors add column is_primary boolean not null default false;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='colors' and column_name='parent_ids') then
+    alter table public.colors add column parent_ids uuid[] not null default '{}';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='colors' and column_name='updated_at') then
+    alter table public.colors add column updated_at timestamptz not null default now();
+  end if;
+  -- Make hex_code nullable (it was previously not null unique, but we want to allow colors without hex)
+  alter table public.colors alter column hex_code drop not null;
+exception when others then null;
+end $$;
+
+-- Drop the unique constraint on hex_code if it exists (allow multiple colors with same hex or null hex)
+do $$ begin
+  alter table public.colors drop constraint if exists colors_hex_code_key;
+exception when others then null;
+end $$;
+
 create table if not exists public.plant_colors (
   plant_id text not null references public.plants(id) on delete cascade,
   color_id uuid not null references public.colors(id) on delete cascade,
   added_at timestamptz not null default now(),
   primary key (plant_id, color_id)
 );
+
+-- ========== Color translations ==========
+create table if not exists public.color_translations (
+  id uuid primary key default gen_random_uuid(),
+  color_id uuid not null references public.colors(id) on delete cascade,
+  language text not null,
+  name text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (color_id, language)
+);
+
 alter table public.colors enable row level security;
 alter table public.plant_colors enable row level security;
+alter table public.color_translations enable row level security;
+
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='colors' and policyname='colors_read_all') then
     drop policy colors_read_all on public.colors;
@@ -774,7 +859,22 @@ do $$ begin
     drop policy plant_colors_read on public.plant_colors;
   end if;
   create policy plant_colors_read on public.plant_colors for select to authenticated, anon using (true);
+  -- Color translations policies
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='color_translations' and policyname='color_translations_read_all') then
+    drop policy color_translations_read_all on public.color_translations;
+  end if;
+  create policy color_translations_read_all on public.color_translations for select to authenticated, anon using (true);
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='color_translations' and policyname='color_translations_modify') then
+    drop policy color_translations_modify on public.color_translations;
+  end if;
+  create policy color_translations_modify on public.color_translations for all to authenticated using (true) with check (true);
 end $$;
+
+-- Create index for faster parent lookups
+create index if not exists idx_colors_parent_ids on public.colors using gin (parent_ids);
+create index if not exists idx_colors_is_primary on public.colors (is_primary) where is_primary = true;
+create index if not exists idx_color_translations_color_id on public.color_translations (color_id);
+create index if not exists idx_color_translations_language on public.color_translations (language);
 
 -- Language catalog for translations
 create table if not exists public.translation_languages (
@@ -801,15 +901,45 @@ do $$ begin
 end $$;
 
 -- ========== Plant translations (multi-language support) ==========
+-- ARCHITECTURE NOTE: As of 2024, ALL translatable content is stored in plant_translations
+-- for ALL languages INCLUDING English. The plants table contains only non-translatable
+-- base data (IDs, booleans, numbers, timestamps). English is treated as a translation
+-- just like French or any other language.
+--
+-- Translatable fields (in plant_translations for ALL languages):
+--   name, given_names, scientific_name, family, overview
+--   promotion_month, life_cycle, season, foliage_persistance
+--   toxicity_human, toxicity_pets, allergens, symbolism
+--   living_space, composition, maintenance_level
+--   origin, habitat, level_sun
+--   advice_soil, advice_mulching, advice_fertilizer
+--   advice_tutoring, advice_sowing, advice_medicinal, advice_infusion
+--   ground_effect, cut, nutritional_intake, recipes_ideas
+--   source_name, source_url, tags
+--
+-- Non-translatable fields (in plants table only):
+--   id, plant_type, utility, comestible_part, fruit_type
+--   spiked, scent, multicolor, bicolor
+--   temperature_max, temperature_min, temperature_ideal, hygrometry
+--   watering_type, division, soil, mulching, nutrition_need, fertilizer
+--   sowing_month, flowering_month, fruiting_month
+--   height_cm, wingspan_cm, tutoring, sow_type, separation_cm, transplanting
+--   infusion, aromatherapy, spice_mixes
+--   melliferous, polenizer, be_fertilizer, conservation_status
+--   pests, diseases, companions
+--   status, admin_commentary, created_by, created_time, updated_by, updated_time
+
 create table if not exists public.plant_translations (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
   language text not null references public.translation_languages(code),
+  -- Core translatable fields
   name text not null,
-  overview text,
-  family text,
   given_names text[] not null default '{}',
   scientific_name text,
+  family text,
+  overview text,
+  -- Identity translatable fields
   promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december')),
   life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic')),
   season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']),
@@ -821,18 +951,29 @@ create table if not exists public.plant_translations (
   living_space text check (living_space in ('indoor','outdoor','both')),
   composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']),
   maintenance_level text check (maintenance_level in ('none','low','moderate','heavy')),
+  -- Care translatable fields
   origin text[] not null default '{}',
   habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']),
+  level_sun text check (level_sun in ('low light','shade','partial sun','full sun')),
   advice_soil text,
   advice_mulching text,
   advice_fertilizer text,
+  -- Growth translatable fields
   advice_tutoring text,
   advice_sowing text,
+  cut text,
+  -- Usage translatable fields
   advice_medicinal text,
   advice_infusion text,
+  nutritional_intake text[] not null default '{}',
+  recipes_ideas text[] not null default '{}',
+  -- Ecology translatable fields
   ground_effect text,
+  -- Miscellaneous translatable fields
   source_name text,
   source_url text,
+  tags text[] not null default '{}',
+  -- Timestamps
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (plant_id, language)
@@ -853,23 +994,176 @@ alter table if exists public.plant_translations drop column if exists care;
 alter table if exists public.plant_translations drop column if exists planting;
 alter table if exists public.plant_translations drop column if exists problems;
 
+-- Translatable text fields only in plant_translations
 alter table if exists public.plant_translations add column if not exists overview text;
-alter table if exists public.plant_translations add column if not exists family text;
 alter table if exists public.plant_translations add column if not exists given_names text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists scientific_name text;
-alter table if exists public.plant_translations add column if not exists promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december'));
-alter table if exists public.plant_translations add column if not exists life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic'));
-alter table if exists public.plant_translations add column if not exists season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']);
-alter table if exists public.plant_translations add column if not exists foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent'));
-alter table if exists public.plant_translations add column if not exists toxicity_human text check (toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
-alter table if exists public.plant_translations add column if not exists toxicity_pets text check (toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
 alter table if exists public.plant_translations add column if not exists allergens text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists symbolism text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists living_space text check (living_space in ('indoor','outdoor','both'));
-alter table if exists public.plant_translations add column if not exists composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']);
-alter table if exists public.plant_translations add column if not exists maintenance_level text check (maintenance_level in ('none','low','moderate','heavy'));
 alter table if exists public.plant_translations add column if not exists origin text[] not null default '{}';
-alter table if exists public.plant_translations add column if not exists habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']);
+
+-- The following are NOT translated - they stay only in plants table (enums/Latin names)
+-- Migrate data from plant_translations to plants before dropping columns
+do $$
+begin
+  -- Migrate scientific_name from plant_translations to plants (prefer English, then any)
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'scientific_name') then
+    update public.plants p set scientific_name = pt.scientific_name
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.scientific_name is not null and (p.scientific_name is null or trim(p.scientific_name) = '');
+    
+    update public.plants p set scientific_name = pt.scientific_name
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.scientific_name is not null and (p.scientific_name is null or trim(p.scientific_name) = '');
+  end if;
+  
+  -- Migrate promotion_month from plant_translations to plants (prefer English, then any)
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'promotion_month') then
+    update public.plants p set promotion_month = pt.promotion_month
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.promotion_month is not null and p.promotion_month is null;
+    
+    update public.plants p set promotion_month = pt.promotion_month
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.promotion_month is not null and p.promotion_month is null;
+  end if;
+  
+  -- Migrate level_sun from plant_translations to plants (prefer English, then any)
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'level_sun') then
+    update public.plants p set level_sun = pt.level_sun
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.level_sun is not null and p.level_sun is null;
+    
+    update public.plants p set level_sun = pt.level_sun
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.level_sun is not null and p.level_sun is null;
+  end if;
+  
+  -- Migrate habitat from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'habitat') then
+    update public.plants p set habitat = pt.habitat
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.habitat is not null and array_length(pt.habitat, 1) > 0 and (p.habitat is null or array_length(p.habitat, 1) = 0);
+    
+    update public.plants p set habitat = pt.habitat
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.habitat is not null and array_length(pt.habitat, 1) > 0 and (p.habitat is null or array_length(p.habitat, 1) = 0);
+  end if;
+  
+  -- Migrate family from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'family') then
+    update public.plants p set family = pt.family
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.family is not null and (p.family is null or trim(p.family) = '');
+    
+    update public.plants p set family = pt.family
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.family is not null and (p.family is null or trim(p.family) = '');
+  end if;
+  
+  -- Migrate life_cycle from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'life_cycle') then
+    update public.plants p set life_cycle = pt.life_cycle
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.life_cycle is not null and p.life_cycle is null;
+    
+    update public.plants p set life_cycle = pt.life_cycle
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.life_cycle is not null and p.life_cycle is null;
+  end if;
+  
+  -- Migrate season from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'season') then
+    update public.plants p set season = pt.season
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.season is not null and array_length(pt.season, 1) > 0 and (p.season is null or array_length(p.season, 1) = 0);
+    
+    update public.plants p set season = pt.season
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.season is not null and array_length(pt.season, 1) > 0 and (p.season is null or array_length(p.season, 1) = 0);
+  end if;
+  
+  -- Migrate foliage_persistance from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'foliage_persistance') then
+    update public.plants p set foliage_persistance = pt.foliage_persistance
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.foliage_persistance is not null and p.foliage_persistance is null;
+    
+    update public.plants p set foliage_persistance = pt.foliage_persistance
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.foliage_persistance is not null and p.foliage_persistance is null;
+  end if;
+  
+  -- Migrate toxicity_human from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'toxicity_human') then
+    update public.plants p set toxicity_human = pt.toxicity_human
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.toxicity_human is not null and p.toxicity_human is null;
+    
+    update public.plants p set toxicity_human = pt.toxicity_human
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.toxicity_human is not null and p.toxicity_human is null;
+  end if;
+  
+  -- Migrate toxicity_pets from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'toxicity_pets') then
+    update public.plants p set toxicity_pets = pt.toxicity_pets
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.toxicity_pets is not null and p.toxicity_pets is null;
+    
+    update public.plants p set toxicity_pets = pt.toxicity_pets
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.toxicity_pets is not null and p.toxicity_pets is null;
+  end if;
+  
+  -- Migrate living_space from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'living_space') then
+    update public.plants p set living_space = pt.living_space
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.living_space is not null and p.living_space is null;
+    
+    update public.plants p set living_space = pt.living_space
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.living_space is not null and p.living_space is null;
+  end if;
+  
+  -- Migrate composition from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'composition') then
+    update public.plants p set composition = pt.composition
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.composition is not null and array_length(pt.composition, 1) > 0 and (p.composition is null or array_length(p.composition, 1) = 0);
+    
+    update public.plants p set composition = pt.composition
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.composition is not null and array_length(pt.composition, 1) > 0 and (p.composition is null or array_length(p.composition, 1) = 0);
+  end if;
+  
+  -- Migrate maintenance_level from plant_translations to plants
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plant_translations' and column_name = 'maintenance_level') then
+    update public.plants p set maintenance_level = pt.maintenance_level
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.language = 'en' and pt.maintenance_level is not null and p.maintenance_level is null;
+    
+    update public.plants p set maintenance_level = pt.maintenance_level
+    from public.plant_translations pt
+    where p.id = pt.plant_id and pt.maintenance_level is not null and p.maintenance_level is null;
+  end if;
+end $$;
+
+-- Now drop the non-translatable columns from plant_translations
+alter table if exists public.plant_translations drop column if exists scientific_name;
+alter table if exists public.plant_translations drop column if exists promotion_month;
+alter table if exists public.plant_translations drop column if exists level_sun;
+alter table if exists public.plant_translations drop column if exists habitat;
+alter table if exists public.plant_translations drop column if exists family;
+alter table if exists public.plant_translations drop column if exists life_cycle;
+alter table if exists public.plant_translations drop column if exists season;
+alter table if exists public.plant_translations drop column if exists foliage_persistance;
+alter table if exists public.plant_translations drop column if exists toxicity_human;
+alter table if exists public.plant_translations drop column if exists toxicity_pets;
+alter table if exists public.plant_translations drop column if exists living_space;
+alter table if exists public.plant_translations drop column if exists composition;
+alter table if exists public.plant_translations drop column if exists maintenance_level;
+-- habitat is NOT translated - it stays only in plants table (dropped above)
 alter table if exists public.plant_translations add column if not exists advice_soil text;
 alter table if exists public.plant_translations add column if not exists advice_mulching text;
 alter table if exists public.plant_translations add column if not exists advice_fertilizer text;
@@ -917,6 +1211,114 @@ alter table if exists public.plant_translations add column if not exists tags te
 alter table if exists public.plant_translations add column if not exists nutritional_intake text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists recipes_ideas text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists cut text;
+-- level_sun is NOT translated - it stays only in plants table (dropped above)
+
+-- ========== Migrate English data from plants to plant_translations ==========
+-- This migration ensures all plants have English translations in the new architecture
+-- where ALL translatable fields (including English) are stored in plant_translations.
+-- This is idempotent - it only creates translations for plants that don't have one yet.
+-- NOTE: scientific_name, promotion_month, habitat, and level_sun are NOT migrated here
+-- because they stay in the plants table only (not translated).
+do $$
+declare
+  migrated_count integer := 0;
+begin
+  -- Insert English translations for plants that don't have one yet
+  -- NOTE: The following columns are NOT included because they stay in plants table only (not translated):
+  -- scientific_name, promotion_month, level_sun, habitat, family, life_cycle, season,
+  -- foliage_persistance, toxicity_human, toxicity_pets, living_space, composition, maintenance_level
+  with inserted as (
+    insert into public.plant_translations (
+      plant_id,
+      language,
+      name,
+      given_names,
+      overview,
+      allergens,
+      symbolism,
+      origin,
+      advice_soil,
+      advice_mulching,
+      advice_fertilizer,
+      advice_tutoring,
+      advice_sowing,
+      cut,
+      advice_medicinal,
+      advice_infusion,
+      nutritional_intake,
+      recipes_ideas,
+      ground_effect,
+      source_name,
+      source_url,
+      tags
+    )
+    select
+      p.id,
+      'en',
+      p.name,
+      coalesce(p.given_names, '{}'),
+      p.overview,
+      coalesce(p.allergens, '{}'),
+      coalesce(p.symbolism, '{}'),
+      coalesce(p.origin, '{}'),
+      p.advice_soil,
+      p.advice_mulching,
+      p.advice_fertilizer,
+      p.advice_tutoring,
+      p.advice_sowing,
+      p.cut,
+      p.advice_medicinal,
+      p.advice_infusion,
+      coalesce(p.nutritional_intake, '{}'),
+      coalesce(p.recipes_ideas, '{}'),
+      p.ground_effect,
+      p.source_name,
+      p.source_url,
+      coalesce(p.tags, '{}')
+    from public.plants p
+    where not exists (
+      select 1 from public.plant_translations pt 
+      where pt.plant_id = p.id and pt.language = 'en'
+    )
+    returning 1
+  )
+  select count(*) into migrated_count from inserted;
+  
+  if migrated_count > 0 then
+    raise notice '[plant_translations] Migrated % plants to English translations', migrated_count;
+  end if;
+end $$;
+
+-- ========== Remove translatable columns from plants table ==========
+-- These columns have been migrated to plant_translations and are no longer needed
+-- in the plants table. Only 'name' is kept as the canonical English name.
+-- 
+-- The following columns stay in plants table (NOT translated - they are enums, Latin names, or non-text):
+--   promotion_month, scientific_name, family, life_cycle, season, foliage_persistance,
+--   toxicity_human, toxicity_pets, living_space, composition, maintenance_level,
+--   habitat, level_sun
+--
+-- The following columns ARE translated and only exist in plant_translations:
+alter table if exists public.plants drop column if exists given_names;
+alter table if exists public.plants drop column if exists overview;
+alter table if exists public.plants drop column if exists allergens;
+alter table if exists public.plants drop column if exists symbolism;
+alter table if exists public.plants drop column if exists origin;
+-- habitat and level_sun are enums - NOT translated, stay in plants table
+alter table if exists public.plants drop column if exists advice_soil;
+alter table if exists public.plants drop column if exists advice_mulching;
+alter table if exists public.plants drop column if exists advice_fertilizer;
+alter table if exists public.plants drop column if exists advice_tutoring;
+alter table if exists public.plants drop column if exists advice_sowing;
+alter table if exists public.plants drop column if exists cut;
+alter table if exists public.plants drop column if exists advice_medicinal;
+alter table if exists public.plants drop column if exists nutritional_intake;
+alter table if exists public.plants drop column if exists advice_infusion;
+alter table if exists public.plants drop column if exists recipes_ideas;
+alter table if exists public.plants drop column if exists ground_effect;
+alter table if exists public.plants drop column if exists source_name;
+alter table if exists public.plants drop column if exists source_url;
+alter table if exists public.plants drop column if exists tags;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;
@@ -1208,8 +1610,50 @@ create table if not exists public.gardens (
   cover_image_url text,
   created_by uuid not null references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
-  streak integer not null default 0
+  streak integer not null default 0,
+  privacy text not null default 'public' check (privacy in ('public', 'friends_only', 'private')),
+  -- Location for weather and contextual advice
+  location_city text,
+  location_country text,
+  location_timezone text,
+  location_lat numeric,
+  location_lon numeric
 );
+
+-- Migration: Add location columns to existing gardens
+alter table if exists public.gardens add column if not exists location_city text;
+alter table if exists public.gardens add column if not exists location_country text;
+alter table if exists public.gardens add column if not exists location_timezone text;
+alter table if exists public.gardens add column if not exists location_lat numeric;
+alter table if exists public.gardens add column if not exists location_lon numeric;
+
+-- Migration: Add/migrate privacy column (for existing databases)
+do $$
+begin
+  -- If old is_public column exists, migrate data
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'gardens' and column_name = 'is_public'
+  ) then
+    -- Add privacy column if it doesn't exist
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'gardens' and column_name = 'privacy'
+    ) then
+      alter table public.gardens add column privacy text not null default 'public' check (privacy in ('public', 'friends_only', 'private'));
+      -- Migrate data: is_public=true -> 'public', is_public=false -> 'private'
+      update public.gardens set privacy = case when is_public then 'public' else 'private' end;
+    end if;
+    -- Drop old column
+    alter table public.gardens drop column if exists is_public;
+  elsif not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'gardens' and column_name = 'privacy'
+  ) then
+    -- Fresh install without is_public, just add privacy
+    alter table public.gardens add column privacy text not null default 'public' check (privacy in ('public', 'friends_only', 'private'));
+  end if;
+end $$;
 
 create table if not exists public.garden_members (
   garden_id uuid not null references public.gardens(id) on delete cascade,
@@ -1257,6 +1701,12 @@ alter table if exists public.garden_plants
   add column if not exists override_water_freq_value integer;
 alter table if exists public.garden_plants
   add column if not exists sort_index integer;
+alter table if exists public.garden_plants
+  add column if not exists health_status text check (health_status in ('thriving','healthy','okay','struggling','critical'));
+alter table if exists public.garden_plants
+  add column if not exists notes text;
+alter table if exists public.garden_plants
+  add column if not exists last_health_update timestamptz;
 
 create table if not exists public.garden_plant_events (
   id uuid primary key default gen_random_uuid(),
@@ -1489,45 +1939,39 @@ alter table public.garden_members enable row level security;
 alter table public.garden_plants enable row level security;
 
 -- Garden plants policies
-do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plants' and policyname='gp_select') then
-    create policy gp_select on public.garden_plants for select to authenticated
-      using (
-        exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-        or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-      );
-  end if;
-end $$;
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plants' and policyname='gp_iud') then
-    drop policy gp_iud on public.garden_plants;
-  end if;
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plants' and policyname='gp_insert') then
-    create policy gp_insert on public.garden_plants for insert to authenticated
-      with check (
-        exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-        or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-      );
-  end if;
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plants' and policyname='gp_update') then
-    create policy gp_update on public.garden_plants for update to authenticated
-      using (
-        exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-        or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-      )
-      with check (
-        exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-        or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-      );
-  end if;
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plants' and policyname='gp_delete') then
-    create policy gp_delete on public.garden_plants for delete to authenticated
-      using (
-        exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-        or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-      );
-  end if;
-end $$;
+-- Drop and recreate to ensure policies are always up-to-date
+drop policy if exists gp_iud on public.garden_plants;
+drop policy if exists gp_select on public.garden_plants;
+create policy gp_select on public.garden_plants for select to authenticated
+  using (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plants.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+drop policy if exists gp_insert on public.garden_plants;
+create policy gp_insert on public.garden_plants for insert to authenticated
+  with check (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plants.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+drop policy if exists gp_update on public.garden_plants;
+create policy gp_update on public.garden_plants for update to authenticated
+  using (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plants.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  )
+  with check (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plants.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+drop policy if exists gp_delete on public.garden_plants;
+create policy gp_delete on public.garden_plants for delete to authenticated
+  using (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plants.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
 alter table public.garden_plant_events enable row level security;
 alter table public.garden_inventory enable row level security;
 alter table public.garden_instance_inventory enable row level security;
@@ -2070,105 +2514,93 @@ do $$ begin
 end $$;
 
 -- Task tables policies
-do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_select') then
-  create policy gpt_select on public.garden_plant_tasks for select to authenticated
-    using (
-      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    );
-  end if;
-end $$;
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_iud') then
-    drop policy gpt_iud on public.garden_plant_tasks;
-  end if;
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_insert') then
-  create policy gpt_insert on public.garden_plant_tasks for insert to authenticated
-    with check (
-      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    );
-  end if;
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_update') then
-  create policy gpt_update on public.garden_plant_tasks for update to authenticated
-    using (
-      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    )
-    with check (
-      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    );
-  end if;
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_delete') then
-  create policy gpt_delete on public.garden_plant_tasks for delete to authenticated
-    using (
-      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    );
-  end if;
-end $$;
+-- Drop and recreate to ensure policies are always up-to-date
+drop policy if exists gpt_iud on public.garden_plant_tasks;
+drop policy if exists gpt_select on public.garden_plant_tasks;
+create policy gpt_select on public.garden_plant_tasks for select to authenticated
+  using (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plant_tasks.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
 
-do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_select') then
-  create policy gpto_select on public.garden_plant_task_occurrences for select to authenticated
-    using (
-      exists (
-        select 1 from public.garden_plants gp
-        join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
-      )
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    );
-  end if;
-end $$;
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_iud') then
-    drop policy gpto_iud on public.garden_plant_task_occurrences;
-  end if;
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_insert') then
-  create policy gpto_insert on public.garden_plant_task_occurrences for insert to authenticated
-    with check (
-      exists (
-        select 1 from public.garden_plants gp
-        join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
-      )
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    );
-  end if;
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_update') then
-  create policy gpto_update on public.garden_plant_task_occurrences for update to authenticated
-    using (
-      exists (
-        select 1 from public.garden_plants gp
-        join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
-      )
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+drop policy if exists gpt_insert on public.garden_plant_tasks;
+create policy gpt_insert on public.garden_plant_tasks for insert to authenticated
+  with check (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plant_tasks.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+drop policy if exists gpt_update on public.garden_plant_tasks;
+create policy gpt_update on public.garden_plant_tasks for update to authenticated
+  using (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plant_tasks.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  )
+  with check (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plant_tasks.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+drop policy if exists gpt_delete on public.garden_plant_tasks;
+create policy gpt_delete on public.garden_plant_tasks for delete to authenticated
+  using (
+    exists (select 1 from public.garden_members gm where gm.garden_id = garden_plant_tasks.garden_id and gm.user_id = (select auth.uid()))
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+-- garden_plant_task_occurrences policies
+drop policy if exists gpto_iud on public.garden_plant_task_occurrences;
+drop policy if exists gpto_select on public.garden_plant_task_occurrences;
+create policy gpto_select on public.garden_plant_task_occurrences for select to authenticated
+  using (
+    exists (
+      select 1 from public.garden_plants gp
+      join public.garden_members gm on gm.garden_id = gp.garden_id
+      where gp.id = garden_plant_task_occurrences.garden_plant_id and gm.user_id = (select auth.uid())
     )
-    with check (
-      exists (
-        select 1 from public.garden_plants gp
-        join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
-      )
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    );
-  end if;
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_delete') then
-  create policy gpto_delete on public.garden_plant_task_occurrences for delete to authenticated
-    using (
-      exists (
-        select 1 from public.garden_plants gp
-        join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
-      )
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    );
-  end if;
-end $$;
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+drop policy if exists gpto_insert on public.garden_plant_task_occurrences;
+create policy gpto_insert on public.garden_plant_task_occurrences for insert to authenticated
+  with check (
+    exists (
+      select 1 from public.garden_plants gp
+      join public.garden_members gm on gm.garden_id = gp.garden_id
+      where gp.id = garden_plant_task_occurrences.garden_plant_id and gm.user_id = (select auth.uid())
+    )
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+drop policy if exists gpto_update on public.garden_plant_task_occurrences;
+create policy gpto_update on public.garden_plant_task_occurrences for update to authenticated
+  using (
+    exists (
+      select 1 from public.garden_plants gp
+      join public.garden_members gm on gm.garden_id = gp.garden_id
+      where gp.id = garden_plant_task_occurrences.garden_plant_id and gm.user_id = (select auth.uid())
+    )
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  )
+  with check (
+    exists (
+      select 1 from public.garden_plants gp
+      join public.garden_members gm on gm.garden_id = gp.garden_id
+      where gp.id = garden_plant_task_occurrences.garden_plant_id and gm.user_id = (select auth.uid())
+    )
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+drop policy if exists gpto_delete on public.garden_plant_task_occurrences;
+create policy gpto_delete on public.garden_plant_task_occurrences for delete to authenticated
+  using (
+    exists (
+      select 1 from public.garden_plants gp
+      join public.garden_members gm on gm.garden_id = gp.garden_id
+      where gp.id = garden_plant_task_occurrences.garden_plant_id and gm.user_id = (select auth.uid())
+    )
+    or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
 
 -- ========== RPCs used by the app ==========
 -- Public profile fetch by display name (safe columns only) with admin flag, joined_at, and presence
@@ -2183,6 +2615,7 @@ returns table(
   avatar_url text,
   accent_key text,
   is_admin boolean,
+  roles text[],
   is_private boolean,
   disable_friend_requests boolean,
   joined_at timestamptz,
@@ -2195,7 +2628,7 @@ security definer
 set search_path = public
 as $$
   with base as (
-    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests
+    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.roles, '{}') as roles, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests
     from public.profiles p
     where lower(p.display_name) = lower(_name)
     limit 1
@@ -2218,6 +2651,7 @@ as $$
          b.avatar_url,
          b.accent_key,
          b.is_admin,
+         b.roles,
          b.is_private,
          b.disable_friend_requests,
          a.joined_at,
@@ -2762,12 +3196,12 @@ $$;
 -- Drop and recreate to allow return type changes
 drop function if exists public.get_profiles_for_garden(uuid) cascade;
 create function public.get_profiles_for_garden(_garden_id uuid)
-returns table(user_id uuid, display_name text, email text, accent_key text)
+returns table(user_id uuid, display_name text, email text, accent_key text, avatar_url text)
 language sql
 security definer
 set search_path = public
 as $$
-  select p.id as user_id, p.display_name, u.email, p.accent_key
+  select p.id as user_id, p.display_name, u.email, p.accent_key, p.avatar_url
   from public.garden_members gm
   join public.profiles p on p.id = gm.user_id
   join auth.users u on u.id = gm.user_id
@@ -3679,6 +4113,7 @@ alter table public.admin_email_campaigns add column if not exists created_by uui
 alter table public.admin_email_campaigns add column if not exists updated_by uuid references public.profiles(id) on delete set null;
 alter table public.admin_email_campaigns add column if not exists test_mode boolean default false;
 alter table public.admin_email_campaigns add column if not exists test_email text;
+alter table public.admin_email_campaigns add column if not exists send_summary jsonb;
 
 alter table public.admin_email_campaigns enable row level security;
 
@@ -3713,6 +4148,77 @@ do $$ begin
   create policy acs_admin_all on public.admin_campaign_sends for all to authenticated
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Admin Automatic Email Triggers (configuration for automatic emails like welcome emails)
+create table if not exists public.admin_email_triggers (
+  id uuid primary key default gen_random_uuid(),
+  trigger_type text not null unique, -- e.g., 'WELCOME_EMAIL', 'PASSWORD_RESET', etc.
+  display_name text not null,        -- e.g., 'New User Welcome Email'
+  description text,                  -- e.g., 'Sent when a new user creates an account'
+  is_enabled boolean default false,  -- Whether this trigger is active
+  template_id uuid references public.admin_email_templates(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Insert default trigger types
+insert into public.admin_email_triggers (trigger_type, display_name, description, is_enabled)
+values 
+  ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false)
+on conflict (trigger_type) do nothing;
+
+alter table public.admin_email_triggers enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_email_triggers' and policyname='aetrig_admin_all') then
+    drop policy aetrig_admin_all on public.admin_email_triggers;
+  end if;
+  create policy aetrig_admin_all on public.admin_email_triggers for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Allow service role to read triggers (for edge functions)
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_email_triggers' and policyname='aetrig_service_select') then
+    drop policy aetrig_service_select on public.admin_email_triggers;
+  end if;
+  create policy aetrig_service_select on public.admin_email_triggers for select to service_role using (true);
+end $$;
+
+-- Tracking table for automatic email sends (to prevent duplicates)
+create table if not exists public.admin_automatic_email_sends (
+  id uuid primary key default gen_random_uuid(),
+  trigger_type text not null,
+  user_id uuid references auth.users(id) on delete cascade,
+  template_id uuid references public.admin_email_templates(id) on delete set null,
+  sent_at timestamptz default now(),
+  status text default 'sent',
+  error text,
+  unique(trigger_type, user_id)
+);
+
+create index if not exists idx_admin_auto_sends_trigger_user 
+  on public.admin_automatic_email_sends(trigger_type, user_id);
+
+alter table public.admin_automatic_email_sends enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_automatic_email_sends' and policyname='aaes_admin_all') then
+    drop policy aaes_admin_all on public.admin_automatic_email_sends;
+  end if;
+  create policy aaes_admin_all on public.admin_automatic_email_sends for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Allow service role full access (for edge functions)
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_automatic_email_sends' and policyname='aaes_service_all') then
+    drop policy aaes_service_all on public.admin_automatic_email_sends;
+  end if;
+  create policy aaes_service_all on public.admin_automatic_email_sends for all to service_role using (true) with check (true);
 end $$;
 
 -- Function to check if a user is eligible for a timezone-aware campaign
@@ -3802,13 +4308,41 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare v_actor uuid := (select auth.uid()); v_name text; begin
+declare v_actor uuid := (select auth.uid()); v_name text; v_email text; begin
   select display_name into v_name from public.profiles where id = v_actor;
+  -- Fallback to email username if display_name is not set
+  if v_name is null or v_name = '' then
+    select email into v_email from auth.users where id = v_actor;
+    v_name := coalesce(split_part(v_email, '@', 1), 'User');
+  end if;
   insert into public.garden_activity_logs (garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at)
   values (_garden_id, v_actor, v_name, nullif(_actor_color,''), _kind, _message, nullif(_plant_name,''), nullif(_task_name,''), now());
 end; $$;
 
 grant execute on function public.log_garden_activity(uuid, text, text, text, text, text) to anon, authenticated;
+
+-- Fix existing activity logs with null actor_name by populating from profiles/auth.users
+do $$
+declare r record; v_name text; begin
+  for r in (
+    select id, actor_id from public.garden_activity_logs
+    where actor_id is not null and (actor_name is null or actor_name = '')
+  ) loop
+    -- Try display_name first
+    select display_name into v_name from public.profiles where id = r.actor_id;
+    -- Fallback to email username
+    if v_name is null or v_name = '' then
+      select split_part(email, '@', 1) into v_name from auth.users where id = r.actor_id;
+    end if;
+    -- Update if we found a name
+    if v_name is not null and v_name <> '' then
+      update public.garden_activity_logs set actor_name = v_name where id = r.id;
+    end if;
+  end loop;
+exception when others then
+  -- Ignore errors (table might not exist yet during first run)
+  null;
+end $$;
 
 -- ========== Realtime support indexes (merged from 999_realtime_indexes.sql) ==========
 -- Keep these idempotent to safely re-run during sync
@@ -3852,6 +4386,12 @@ end $$;
 -- Replace non-unique index with a unique index to enforce idempotency
 drop index if exists gpto_task_due_idx;
 create unique index if not exists gpto_task_due_unq on public.garden_plant_task_occurrences (task_id, due_at);
+
+-- Performance index for date range queries on task occurrences (speeds up daily/weekly progress queries)
+create index if not exists idx_gpto_due_at_task on public.garden_plant_task_occurrences (due_at, task_id);
+
+-- Composite index for garden plants lookup by garden (speeds up species count and plant listing)
+create index if not exists idx_garden_plants_garden_sort on public.garden_plants (garden_id, sort_index NULLS LAST);
 
 -- ========== Friends system ==========
 -- Friend requests table
@@ -5516,6 +6056,117 @@ do $$ begin
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- ========== Notification Templates (reusable message templates with variations) ==========
+create table if not exists public.notification_templates (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  message_variants text[] not null default '{}',
+  randomize boolean not null default true,
+  is_active boolean not null default true,
+  usage_count integer not null default 0,
+  created_by uuid references public.profiles(id),
+  updated_by uuid references public.profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists notification_templates_active_idx
+  on public.notification_templates (is_active)
+  where is_active = true;
+alter table public.notification_templates enable row level security;
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='notification_templates' and policyname='notification_templates_admins'
+  ) then
+    drop policy notification_templates_admins on public.notification_templates;
+  end if;
+  create policy notification_templates_admins on public.notification_templates
+    for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Notification Template Translations (stores translated message variants for each language)
+create table if not exists public.notification_template_translations (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references public.notification_templates(id) on delete cascade,
+  language text not null references public.translation_languages(code),
+  message_variants text[] not null default '{}',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(template_id, language)
+);
+
+create index if not exists ntt_template_lang_idx on public.notification_template_translations (template_id, language);
+
+alter table public.notification_template_translations enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='notification_template_translations' and policyname='ntt_admin_all') then
+    drop policy ntt_admin_all on public.notification_template_translations;
+  end if;
+  create policy ntt_admin_all on public.notification_template_translations for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Add template_id to notification_campaigns
+alter table public.notification_campaigns add column if not exists template_id uuid references public.notification_templates(id) on delete set null;
+
+-- ========== Notification Automations (recurring automated notifications) ==========
+create table if not exists public.notification_automations (
+  id uuid primary key default gen_random_uuid(),
+  trigger_type text not null unique check (trigger_type in ('weekly_inactive_reminder', 'daily_task_reminder', 'journal_continue_reminder')),
+  display_name text not null,
+  description text,
+  is_enabled boolean not null default false,
+  template_id uuid references public.notification_templates(id) on delete set null,
+  send_hour integer not null default 9 check (send_hour >= 0 and send_hour <= 23),
+  cta_url text,
+  last_run_at timestamptz,
+  last_run_summary jsonb,
+  created_by uuid references public.profiles(id),
+  updated_by uuid references public.profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists notification_automations_enabled_idx
+  on public.notification_automations (is_enabled)
+  where is_enabled = true;
+alter table public.notification_automations enable row level security;
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='notification_automations' and policyname='notification_automations_admins'
+  ) then
+    drop policy notification_automations_admins on public.notification_automations;
+  end if;
+  create policy notification_automations_admins on public.notification_automations
+    for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Seed default automation triggers (only insert if they don't exist - never overwrite user settings)
+do $$
+begin
+  -- Weekly Inactive User Reminder
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('weekly_inactive_reminder', 'Weekly Inactive User Reminder', 'Sends a reminder to users who have been inactive for 7+ days', 10)
+  on conflict (trigger_type) do nothing;
+  
+  -- Daily Remaining Task Reminder
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('daily_task_reminder', 'Daily Remaining Task Reminder', 'Sends a reminder about incomplete tasks for today', 18)
+  on conflict (trigger_type) do nothing;
+  
+  -- Journal Continue Reminder
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('journal_continue_reminder', 'Journal Continue Reminder', 'Encourages users who wrote in their journal yesterday to continue', 9)
+  on conflict (trigger_type) do nothing;
+end $$;
+
 create table if not exists public.user_notifications (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid references public.notification_campaigns(id) on delete set null,
@@ -5534,10 +6185,48 @@ create table if not exists public.user_notifications (
   cancelled_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+-- Add automation_id column if it doesn't exist (for existing tables)
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'user_notifications' 
+    and column_name = 'automation_id'
+  ) then
+    alter table public.user_notifications 
+      add column automation_id uuid references public.notification_automations(id) on delete set null;
+  end if;
+end $$;
+
 create index if not exists user_notifications_user_idx on public.user_notifications (user_id, scheduled_for desc);
 create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);
+
+-- Create automation indexes only if column exists
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'user_notifications' 
+    and column_name = 'automation_id'
+  ) then
+    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_automation_idx') then
+      create index user_notifications_automation_idx on public.user_notifications (automation_id);
+    end if;
+    -- Index for looking up automation notifications by user and date
+    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_automation_user_idx') then
+      create index user_notifications_automation_user_idx 
+        on public.user_notifications (automation_id, user_id, scheduled_for)
+        where automation_id is not null;
+    end if;
+  end if;
+end $$;
+
 create unique index if not exists user_notifications_unique_delivery
-  on public.user_notifications (campaign_id, iteration, user_id);
+  on public.user_notifications (campaign_id, iteration, user_id)
+  where campaign_id is not null;
 grant select, insert, update, delete on public.user_notifications to authenticated;
 alter table public.user_notifications enable row level security;
 do $$ begin
@@ -5858,3 +6547,599 @@ create trigger on_auth_user_created_bookmark
 -- insert into public.bookmarks (user_id, name, visibility)
 -- select id, 'Default', 'public' from auth.users
 -- where not exists (select 1 from public.bookmarks where user_id = auth.users.id);
+
+-- ========== Garden Analytics & AI Advice ==========
+
+-- Weekly AI-generated gardener advice stored per garden
+create table if not exists public.garden_ai_advice (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  week_start date not null,
+  advice_text text not null,
+  advice_summary text,
+  focus_areas text[] not null default '{}',
+  plant_specific_tips jsonb not null default '[]'::jsonb,
+  improvement_score integer check (improvement_score >= 0 and improvement_score <= 100),
+  images_analyzed text[] not null default '{}',
+  model_used text,
+  tokens_used integer,
+  generated_at timestamptz not null default now(),
+  unique (garden_id, week_start)
+);
+
+alter table if exists public.garden_ai_advice add column if not exists advice_summary text;
+alter table if exists public.garden_ai_advice add column if not exists focus_areas text[] not null default '{}';
+alter table if exists public.garden_ai_advice add column if not exists plant_specific_tips jsonb not null default '[]'::jsonb;
+alter table if exists public.garden_ai_advice add column if not exists improvement_score integer check (improvement_score >= 0 and improvement_score <= 100);
+alter table if exists public.garden_ai_advice add column if not exists images_analyzed text[] not null default '{}';
+alter table if exists public.garden_ai_advice add column if not exists model_used text;
+alter table if exists public.garden_ai_advice add column if not exists tokens_used integer;
+
+create index if not exists gaia_garden_week_idx on public.garden_ai_advice (garden_id, week_start desc);
+
+alter table public.garden_ai_advice enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_ai_advice' and policyname='gaia_select') then
+    drop policy gaia_select on public.garden_ai_advice;
+  end if;
+  create policy gaia_select on public.garden_ai_advice for select to authenticated
+    using (
+      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_ai_advice' and policyname='gaia_insert') then
+    drop policy gaia_insert on public.garden_ai_advice;
+  end if;
+  create policy gaia_insert on public.garden_ai_advice for insert to authenticated
+    with check (
+      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_ai_advice' and policyname='gaia_update') then
+    drop policy gaia_update on public.garden_ai_advice;
+  end if;
+  create policy gaia_update on public.garden_ai_advice for update to authenticated
+    using (
+      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    )
+    with check (
+      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Garden analytics snapshots - stores daily/weekly aggregates for historical charts
+create table if not exists public.garden_analytics_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  snapshot_date date not null,
+  snapshot_type text not null check (snapshot_type in ('daily', 'weekly', 'monthly')),
+  -- Task metrics
+  tasks_due integer not null default 0,
+  tasks_completed integer not null default 0,
+  tasks_water integer not null default 0,
+  tasks_fertilize integer not null default 0,
+  tasks_harvest integer not null default 0,
+  tasks_cut integer not null default 0,
+  tasks_custom integer not null default 0,
+  -- Plant metrics
+  plants_count integer not null default 0,
+  species_count integer not null default 0,
+  plants_added integer not null default 0,
+  plants_removed integer not null default 0,
+  -- Member activity metrics
+  active_members integer not null default 0,
+  total_actions integer not null default 0,
+  -- Streak and health
+  streak_maintained boolean not null default false,
+  completion_rate numeric(5,2) not null default 0,
+  -- Member breakdown (for multi-member gardens)
+  member_actions jsonb not null default '{}'::jsonb,
+  -- Metadata
+  created_at timestamptz not null default now(),
+  unique (garden_id, snapshot_date, snapshot_type)
+);
+
+alter table if exists public.garden_analytics_snapshots add column if not exists tasks_water integer not null default 0;
+alter table if exists public.garden_analytics_snapshots add column if not exists tasks_fertilize integer not null default 0;
+alter table if exists public.garden_analytics_snapshots add column if not exists tasks_harvest integer not null default 0;
+alter table if exists public.garden_analytics_snapshots add column if not exists tasks_cut integer not null default 0;
+alter table if exists public.garden_analytics_snapshots add column if not exists tasks_custom integer not null default 0;
+alter table if exists public.garden_analytics_snapshots add column if not exists plants_added integer not null default 0;
+alter table if exists public.garden_analytics_snapshots add column if not exists plants_removed integer not null default 0;
+alter table if exists public.garden_analytics_snapshots add column if not exists active_members integer not null default 0;
+alter table if exists public.garden_analytics_snapshots add column if not exists total_actions integer not null default 0;
+alter table if exists public.garden_analytics_snapshots add column if not exists member_actions jsonb not null default '{}'::jsonb;
+
+create index if not exists gas_garden_date_type_idx on public.garden_analytics_snapshots (garden_id, snapshot_date desc, snapshot_type);
+
+alter table public.garden_analytics_snapshots enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_analytics_snapshots' and policyname='gas_select') then
+    drop policy gas_select on public.garden_analytics_snapshots;
+  end if;
+  create policy gas_select on public.garden_analytics_snapshots for select to authenticated
+    using (
+      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_analytics_snapshots' and policyname='gas_insert') then
+    drop policy gas_insert on public.garden_analytics_snapshots;
+  end if;
+  create policy gas_insert on public.garden_analytics_snapshots for insert to authenticated
+    with check (
+      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- User activity tracking for detailed analytics
+create table if not exists public.garden_user_activity (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  activity_date date not null,
+  activity_type text not null check (activity_type in ('task_complete', 'plant_add', 'plant_remove', 'task_create', 'task_edit', 'note', 'visit', 'share')),
+  activity_count integer not null default 1,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (garden_id, user_id, activity_date, activity_type)
+);
+
+create index if not exists gua_garden_date_idx on public.garden_user_activity (garden_id, activity_date desc);
+create index if not exists gua_user_date_idx on public.garden_user_activity (user_id, activity_date desc);
+
+alter table public.garden_user_activity enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_user_activity' and policyname='gua_select') then
+    drop policy gua_select on public.garden_user_activity;
+  end if;
+  create policy gua_select on public.garden_user_activity for select to authenticated
+    using (
+      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_user_activity' and policyname='gua_insert') then
+    drop policy gua_insert on public.garden_user_activity;
+  end if;
+  create policy gua_insert on public.garden_user_activity for insert to authenticated
+    with check (
+      user_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_user_activity' and policyname='gua_update') then
+    drop policy gua_update on public.garden_user_activity;
+  end if;
+  create policy gua_update on public.garden_user_activity for update to authenticated
+    using (
+      user_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    )
+    with check (
+      user_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Helper function to track user activity (upserts the count for the day)
+create or replace function public.track_garden_activity(
+  _garden_id uuid,
+  _activity_type text,
+  _metadata jsonb default '{}'::jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := (select auth.uid());
+  v_today date := current_date;
+begin
+  insert into public.garden_user_activity (garden_id, user_id, activity_date, activity_type, activity_count, metadata)
+  values (_garden_id, v_user, v_today, _activity_type, 1, _metadata)
+  on conflict (garden_id, user_id, activity_date, activity_type)
+  do update set
+    activity_count = garden_user_activity.activity_count + 1,
+    metadata = garden_user_activity.metadata || _metadata;
+end;
+$$;
+
+grant execute on function public.track_garden_activity(uuid, text, jsonb) to authenticated;
+
+-- Helper function to compute analytics for a garden on a specific date
+create or replace function public.compute_garden_daily_analytics(
+  _garden_id uuid,
+  _date date
+)
+returns table (
+  tasks_due integer,
+  tasks_completed integer,
+  tasks_water integer,
+  tasks_fertilize integer,
+  tasks_harvest integer,
+  tasks_cut integer,
+  tasks_custom integer,
+  plants_count integer,
+  species_count integer,
+  active_members integer,
+  total_actions integer,
+  completion_rate numeric
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_tasks_due integer := 0;
+  v_tasks_completed integer := 0;
+  v_tasks_water integer := 0;
+  v_tasks_fertilize integer := 0;
+  v_tasks_harvest integer := 0;
+  v_tasks_cut integer := 0;
+  v_tasks_custom integer := 0;
+  v_plants_count integer := 0;
+  v_species_count integer := 0;
+  v_active_members integer := 0;
+  v_total_actions integer := 0;
+  v_completion_rate numeric := 0;
+  v_date_start timestamptz;
+  v_date_end timestamptz;
+begin
+  v_date_start := (_date || 'T00:00:00.000Z')::timestamptz;
+  v_date_end := (_date || 'T23:59:59.999Z')::timestamptz;
+
+  -- Get task occurrences for the date
+  select
+    coalesce(sum(o.required_count), 0)::integer,
+    coalesce(sum(least(o.completed_count, o.required_count)), 0)::integer,
+    coalesce(sum(case when t.type = 'water' then o.required_count else 0 end), 0)::integer,
+    coalesce(sum(case when t.type = 'fertilize' then o.required_count else 0 end), 0)::integer,
+    coalesce(sum(case when t.type = 'harvest' then o.required_count else 0 end), 0)::integer,
+    coalesce(sum(case when t.type = 'cut' then o.required_count else 0 end), 0)::integer,
+    coalesce(sum(case when t.type = 'custom' then o.required_count else 0 end), 0)::integer
+  into v_tasks_due, v_tasks_completed, v_tasks_water, v_tasks_fertilize, v_tasks_harvest, v_tasks_cut, v_tasks_custom
+  from public.garden_plant_task_occurrences o
+  join public.garden_plant_tasks t on t.id = o.task_id
+  where t.garden_id = _garden_id
+    and o.due_at >= v_date_start
+    and o.due_at <= v_date_end;
+
+  -- Get plant counts
+  select count(distinct id)::integer, count(distinct plant_id)::integer
+  into v_plants_count, v_species_count
+  from public.garden_plants
+  where garden_id = _garden_id;
+
+  -- Get active members (users who completed tasks or logged activity on this date)
+  select count(distinct user_id)::integer
+  into v_active_members
+  from public.garden_user_activity
+  where garden_id = _garden_id and activity_date = _date;
+
+  -- Get total actions
+  select coalesce(sum(activity_count), 0)::integer
+  into v_total_actions
+  from public.garden_user_activity
+  where garden_id = _garden_id and activity_date = _date;
+
+  -- Compute completion rate
+  if v_tasks_due > 0 then
+    v_completion_rate := round((v_tasks_completed::numeric / v_tasks_due::numeric) * 100, 2);
+  else
+    v_completion_rate := 100.00;
+  end if;
+
+  return query select
+    v_tasks_due,
+    v_tasks_completed,
+    v_tasks_water,
+    v_tasks_fertilize,
+    v_tasks_harvest,
+    v_tasks_cut,
+    v_tasks_custom,
+    v_plants_count,
+    v_species_count,
+    v_active_members,
+    v_total_actions,
+    v_completion_rate;
+end;
+$$;
+
+grant execute on function public.compute_garden_daily_analytics(uuid, date) to authenticated;
+
+-- Custom plant images table for user-uploaded photos of their garden plants
+create table if not exists public.garden_plant_images (
+  id uuid primary key default gen_random_uuid(),
+  garden_plant_id uuid not null references public.garden_plants(id) on delete cascade,
+  image_url text not null,
+  caption text,
+  taken_at timestamptz,
+  uploaded_by uuid references auth.users(id) on delete set null,
+  uploaded_at timestamptz not null default now()
+);
+
+create index if not exists gpi_garden_plant_idx on public.garden_plant_images (garden_plant_id, uploaded_at desc);
+
+alter table public.garden_plant_images enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_images' and policyname='gpi_select') then
+    drop policy gpi_select on public.garden_plant_images;
+  end if;
+  create policy gpi_select on public.garden_plant_images for select to authenticated
+    using (
+      exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_images' and policyname='gpi_insert') then
+    drop policy gpi_insert on public.garden_plant_images;
+  end if;
+  create policy gpi_insert on public.garden_plant_images for insert to authenticated
+    with check (
+      exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_images' and policyname='gpi_delete') then
+    drop policy gpi_delete on public.garden_plant_images;
+  end if;
+  create policy gpi_delete on public.garden_plant_images for delete to authenticated
+    using (
+      uploaded_by = (select auth.uid())
+      or exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid()) and gm.role = 'owner'
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Add garden_ai_advice and garden_analytics_snapshots and garden_user_activity and garden_plant_images to allowed tables
+-- (This is handled by the whitelist at the top of the file - update the allowed_tables array if needed)
+
+-- ========== Garden Journal System ==========
+-- Journal entries for daily observations, notes, and reflections
+create table if not exists public.garden_journal_entries (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  entry_date date not null,
+  title text,
+  content text not null,
+  mood text check (mood is null or mood in ('blooming', 'thriving', 'sprouting', 'resting', 'wilting')),
+  weather_snapshot jsonb default '{}'::jsonb,
+  -- Metadata
+  plants_mentioned uuid[] default '{}',
+  tags text[] default '{}',
+  is_private boolean not null default false,
+  -- AI feedback
+  ai_feedback text,
+  ai_feedback_generated_at timestamptz,
+  -- Timestamps
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists gje_garden_date_idx on public.garden_journal_entries (garden_id, entry_date desc);
+create index if not exists gje_user_date_idx on public.garden_journal_entries (user_id, entry_date desc);
+
+alter table public.garden_journal_entries enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_entries' and policyname='gje_select') then
+    drop policy gje_select on public.garden_journal_entries;
+  end if;
+  create policy gje_select on public.garden_journal_entries for select to authenticated
+    using (
+      -- Own entries
+      user_id = (select auth.uid())
+      -- Other members can see non-private entries
+      or (
+        not is_private
+        and exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      )
+      -- Admins can see all
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_entries' and policyname='gje_insert') then
+    drop policy gje_insert on public.garden_journal_entries;
+  end if;
+  create policy gje_insert on public.garden_journal_entries for insert to authenticated
+    with check (
+      user_id = (select auth.uid())
+      and exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_entries' and policyname='gje_update') then
+    drop policy gje_update on public.garden_journal_entries;
+  end if;
+  create policy gje_update on public.garden_journal_entries for update to authenticated
+    using (user_id = (select auth.uid()))
+    with check (user_id = (select auth.uid()));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_entries' and policyname='gje_delete') then
+    drop policy gje_delete on public.garden_journal_entries;
+  end if;
+  create policy gje_delete on public.garden_journal_entries for delete to authenticated
+    using (
+      user_id = (select auth.uid())
+      or exists (
+        select 1 from public.garden_members gm 
+        where gm.garden_id = garden_id and gm.user_id = (select auth.uid()) and gm.role = 'owner'
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Journal photos - attached to journal entries
+-- Stored in: PHOTO/{garden_id}/journal/{entry_id}/{filename}
+create table if not exists public.garden_journal_photos (
+  id uuid primary key default gen_random_uuid(),
+  entry_id uuid not null references public.garden_journal_entries(id) on delete cascade,
+  garden_plant_id uuid references public.garden_plants(id) on delete set null,
+  image_url text not null,
+  thumbnail_url text,
+  caption text,
+  -- Plant health observation
+  plant_health text check (plant_health is null or plant_health in ('thriving', 'healthy', 'okay', 'struggling', 'critical')),
+  observations text,
+  -- Timestamps
+  taken_at timestamptz,
+  uploaded_at timestamptz not null default now()
+);
+
+create index if not exists gjp_entry_idx on public.garden_journal_photos (entry_id, uploaded_at desc);
+create index if not exists gjp_plant_idx on public.garden_journal_photos (garden_plant_id, uploaded_at desc);
+
+alter table public.garden_journal_photos enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_photos' and policyname='gjp_select') then
+    drop policy gjp_select on public.garden_journal_photos;
+  end if;
+  create policy gjp_select on public.garden_journal_photos for select to authenticated
+    using (
+      exists (
+        select 1 from public.garden_journal_entries e
+        join public.garden_members gm on gm.garden_id = e.garden_id
+        where e.id = entry_id and (
+          e.user_id = (select auth.uid())
+          or (not e.is_private and gm.user_id = (select auth.uid()))
+        )
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_photos' and policyname='gjp_insert') then
+    drop policy gjp_insert on public.garden_journal_photos;
+  end if;
+  create policy gjp_insert on public.garden_journal_photos for insert to authenticated
+    with check (
+      exists (
+        select 1 from public.garden_journal_entries e
+        where e.id = entry_id and e.user_id = (select auth.uid())
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_journal_photos' and policyname='gjp_delete') then
+    drop policy gjp_delete on public.garden_journal_photos;
+  end if;
+  create policy gjp_delete on public.garden_journal_photos for delete to authenticated
+    using (
+      exists (
+        select 1 from public.garden_journal_entries e
+        where e.id = entry_id and e.user_id = (select auth.uid())
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Add weather and context columns to garden_ai_advice
+alter table if exists public.garden_ai_advice add column if not exists weather_context jsonb default '{}'::jsonb;
+alter table if exists public.garden_ai_advice add column if not exists journal_context jsonb default '{}'::jsonb;
+alter table if exists public.garden_ai_advice add column if not exists avg_completion_time text;
+alter table if exists public.garden_ai_advice add column if not exists location_context jsonb default '{}'::jsonb;
+
+-- Add translations column to store translated versions of advice (keyed by language code)
+-- Structure: { "fr": { "adviceText": "...", "adviceSummary": "...", "focusAreas": [...], ... }, ... }
+alter table if exists public.garden_ai_advice add column if not exists translations jsonb default '{}'::jsonb;
+
+-- Add language preference to gardens for advice translation
+alter table if exists public.gardens add column if not exists preferred_language text default 'en';
+
+-- ========== Plant Stocks Management ==========
+-- Table to manage plant seed/plant availability, quantity, and pricing for the shop
+create table if not exists public.plant_stocks (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  quantity integer not null default 0 check (quantity >= 0),
+  price numeric(10,2) not null default 0.00 check (price >= 0),
+  is_available boolean not null default false,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique(plant_id)
+);
+
+create index if not exists plant_stocks_plant_id_idx on public.plant_stocks(plant_id);
+create index if not exists plant_stocks_available_idx on public.plant_stocks(is_available) where is_available = true;
+
+alter table public.plant_stocks enable row level security;
+
+-- Anyone can read plant stocks (for shop display)
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_select_all') then
+    drop policy plant_stocks_select_all on public.plant_stocks;
+  end if;
+  create policy plant_stocks_select_all on public.plant_stocks for select to authenticated using (true);
+end $$;
+
+-- Only admins can insert/update/delete plant stocks
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_insert_admin') then
+    drop policy plant_stocks_insert_admin on public.plant_stocks;
+  end if;
+  create policy plant_stocks_insert_admin on public.plant_stocks for insert to authenticated
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_update_admin') then
+    drop policy plant_stocks_update_admin on public.plant_stocks;
+  end if;
+  create policy plant_stocks_update_admin on public.plant_stocks for update to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_stocks' and policyname='plant_stocks_delete_admin') then
+    drop policy plant_stocks_delete_admin on public.plant_stocks;
+  end if;
+  create policy plant_stocks_delete_admin on public.plant_stocks for delete to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;

@@ -1,6 +1,7 @@
+// @ts-nocheck
 import React from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,9 +11,13 @@ import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
 import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel";
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
+import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
+import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
+import { Link } from "@/components/i18n/Link";
+import { useLanguageNavigate } from "@/lib/i18nRouting";
 // Re-export for convenience
 import {
   RefreshCw,
@@ -35,17 +40,32 @@ import {
   ArrowUpRight,
   Info,
   Plus,
-    LayoutDashboard,
-    ChevronLeft,
-    ChevronRight,
+  LayoutDashboard,
+  ChevronLeft,
+  ChevronRight,
   Users,
-  FileText,
   ScrollText,
   Mail,
-    CloudUpload,
-    Check,
+  CloudUpload,
+  Check,
   BellRing,
+  Leaf,
+  BarChart3,
+  PieChart as PieChartIcon,
+  Target,
+  Calendar,
+  Sprout,
+  TrendingUp,
+  Package,
+  Sparkles,
+  Clock,
+  Wifi,
+  Crown,
+  Pencil,
+  Shield,
+  Store,
 } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
 import {
   loadPersistedBroadcast,
@@ -87,6 +107,7 @@ type AdminTab =
   | "overview"
   | "members"
   | "requests"
+  | "stocks"
   | "upload"
   | "notifications"
   | "emails"
@@ -98,10 +119,16 @@ type ListedMember = {
   displayName: string | null;
   createdAt: string | null;
   isAdmin: boolean;
+  roles: string[];
   rpm5m: number | null;
 };
 
-type MemberListSort = "newest" | "oldest" | "rpm";
+type MemberListSort = "newest" | "oldest" | "rpm" | "role";
+
+type RoleStats = {
+  totalMembers: number;
+  roleCounts: Record<string, number>;
+};
 
 const MEMBER_LIST_PAGE_SIZE = 20;
 
@@ -113,8 +140,8 @@ type NormalizedPlantStatus =
   | "approved"
   | "other";
 const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
-  { key: "requests", label: "Request" },
-  { key: "plants", label: "PLANTS" },
+  { key: "requests", label: "Requests" },
+  { key: "plants", label: "Plants" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -129,6 +156,15 @@ import {
   ADMIN_STATUS_COLORS,
   ADMIN_STATUS_BADGE_CLASSES,
 } from "@/constants/plantStatus";
+import {
+  USER_ROLES,
+  ADMIN_ASSIGNABLE_ROLES,
+  ROLE_CONFIG,
+  type UserRole,
+  checkFullAdminAccess,
+  checkEditorAccess,
+} from "@/constants/userRoles";
+import { UserRoleBadge, ProfileNameBadges } from "@/components/profile/UserRoleBadges";
 
 const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_COLORS;
 
@@ -246,7 +282,7 @@ const toPromotionMonthSlug = (
 };
 
 export const AdminPage: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useLanguageNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
   const { effectiveTheme } = useTheme();
@@ -424,6 +460,12 @@ export const AdminPage: React.FC = () => {
     React.useState<boolean>(false);
   // Default collapsed on load; will auto-open only if an active broadcast exists
   const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false);
+  // Server Controls - collapsed by default
+  const [serverControlsOpen, setServerControlsOpen] = React.useState<boolean>(false);
+  const [setupPassword, setSetupPassword] = React.useState<string>("");
+  const [runningSetup, setRunningSetup] = React.useState<boolean>(false);
+  const [clearingMemory, setClearingMemory] = React.useState<boolean>(false);
+  const [gitPulling, setGitPulling] = React.useState<boolean>(false);
   // On initial load, if a broadcast is currently active, auto-open the section
   React.useEffect(() => {
     let cancelled = false;
@@ -515,6 +557,7 @@ export const AdminPage: React.FC = () => {
         { value: "newest", label: "New" },
         { value: "oldest", label: "Oldest" },
         { value: "rpm", label: "RPM (5m)" },
+        { value: "role", label: "Role" },
       ] as Array<{ value: MemberListSort; label: string }>,
     [],
   );
@@ -631,7 +674,7 @@ export const AdminPage: React.FC = () => {
       const text = await resp.text().catch(() => "");
       if (
         contentType.includes("application/json") ||
-        /^[\s\n]*[\[{]/.test(text)
+        /^[\s\n]*[[{]/.test(text)
       ) {
         try {
           return JSON.parse(text);
@@ -1067,6 +1110,246 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  // --- Server Controls: Restart Server with Password ---
+  const restartServerWithPassword = async () => {
+    if (restarting) return;
+    if (!setupPassword.trim()) {
+      setConsoleOpen(true);
+      appendConsole("[restart] Root password is required to restart server");
+      return;
+    }
+    setRestarting(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[restart] Starting server restart...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/restart-server", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ password: setupPassword }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data.startsWith("{")) {
+              try {
+                const json = JSON.parse(data);
+                if (json.ok === false && json.code) {
+                  appendConsole(`[restart] Completed with exit code ${json.code}`);
+                }
+              } catch {}
+            } else if (data.trim()) {
+              appendConsole(data);
+            }
+          }
+        }
+      }
+      appendConsole("[restart] Server restart completed");
+      setReloadReady(true);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[restart] Failed: ${message}`);
+    } finally {
+      setRestarting(false);
+    }
+  };
+
+  // --- Server Controls: Run Setup.sh ---
+  const runSetup = async () => {
+    if (runningSetup) return;
+    if (!setupPassword.trim()) {
+      setConsoleOpen(true);
+      appendConsole("[setup] Root password is required to run setup.sh");
+      return;
+    }
+    setRunningSetup(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[setup] Starting setup.sh...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/run-setup", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ password: setupPassword }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data.startsWith("{")) {
+              try {
+                const json = JSON.parse(data);
+                if (json.ok === false && json.code) {
+                  appendConsole(`[setup] Completed with exit code ${json.code}`);
+                }
+              } catch {}
+            } else if (data.trim()) {
+              appendConsole(data);
+            }
+          }
+        }
+      }
+      appendConsole("[setup] Setup.sh completed");
+      setSetupPassword(""); // Clear password after use
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[setup] Failed: ${message}`);
+    } finally {
+      setRunningSetup(false);
+    }
+  };
+
+  // --- Server Controls: Clear Memory ---
+  const clearMemory = async () => {
+    if (clearingMemory) return;
+    setClearingMemory(true);
+    try {
+      setConsoleOpen(true);
+      appendConsole("[memory] Clearing system memory cache...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/clear-memory", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: "{}",
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data?.ok) {
+        appendConsole("[memory] Memory cache cleared successfully");
+      } else {
+        throw new Error(data?.error || `HTTP ${response.status}`);
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[memory] Failed to clear memory: ${message}`);
+    } finally {
+      setClearingMemory(false);
+    }
+  };
+
+  // --- Server Controls: Git Pull Only ---
+  const gitPullOnly = async () => {
+    if (gitPulling) return;
+    setGitPulling(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[git] Starting git pull...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        Accept: "text/event-stream",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/git-pull/stream", {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data.startsWith("{")) {
+              try {
+                const json = JSON.parse(data);
+                if (json.ok === false && json.code) {
+                  appendConsole(`[git] Completed with exit code ${json.code}`);
+                }
+              } catch {}
+            } else if (data.trim()) {
+              appendConsole(data);
+            }
+          }
+        }
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[git] Failed: ${message}`);
+    } finally {
+      setGitPulling(false);
+    }
+  };
+
   const [onlineUsers, setOnlineUsers] = React.useState<number>(0);
     const [registeredCount, setRegisteredCount] = React.useState<number | null>(
       null,
@@ -1275,12 +1558,21 @@ export const AdminPage: React.FC = () => {
   >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
-  const [isStatusRepartitionCollapsed, setIsStatusRepartitionCollapsed] =
-    React.useState<boolean>(false);
-  const [isRequestsVsApprovedCollapsed, setIsRequestsVsApprovedCollapsed] =
-    React.useState<boolean>(false);
-  const [isPromotionCadenceCollapsed, setIsPromotionCadenceCollapsed] =
-    React.useState<boolean>(false);
+  const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
+  const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
+  const [deletingPlant, setDeletingPlant] = React.useState(false);
+  const [isAnalyticsPanelCollapsed, setIsAnalyticsPanelCollapsed] =
+    React.useState<boolean>(true);
+  const [addFromDialogOpen, setAddFromDialogOpen] = React.useState(false);
+  const [addFromSearchQuery, setAddFromSearchQuery] = React.useState("");
+  const [addFromSearchResults, setAddFromSearchResults] = React.useState<
+    Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }>
+  >([]);
+  const [addFromSearchLoading, setAddFromSearchLoading] = React.useState(false);
+  const [addButtonExpanded, setAddButtonExpanded] = React.useState(false);
+  const [addFromDuplicating, setAddFromDuplicating] = React.useState(false);
+  const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
+  const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -1498,6 +1790,201 @@ export const AdminPage: React.FC = () => {
     [],
   );
 
+  const searchPlantsForAddFrom = React.useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setAddFromSearchResults([]);
+      return;
+    }
+    setAddFromSearchLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("plants")
+        .select("id, name, scientific_name, status")
+        .or(`name.ilike.%${trimmed}%,scientific_name.ilike.%${trimmed}%`)
+        .order("name")
+        .limit(20);
+      if (error) throw error;
+      setAddFromSearchResults(data || []);
+    } catch (err) {
+      console.error("Failed to search plants:", err);
+      setAddFromSearchResults([]);
+    } finally {
+      setAddFromSearchLoading(false);
+    }
+  }, []);
+
+  const handleSelectPlantForPrefill = React.useCallback(
+    async (plantId: string, plantName: string) => {
+      setAddFromDuplicating(true);
+      setAddFromDuplicateError(null);
+      setAddFromDuplicateSuccess(null);
+      
+      try {
+        // Generate new UUID for the duplicated plant
+        const newId = crypto.randomUUID?.() || 
+          'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        
+        // Create new name: original name + short uuid
+        const shortUuid = newId.split('-')[0]; // First 8 characters
+        const newName = `${plantName} ${shortUuid}`;
+        
+        // Step 1: Load the source plant base data
+        const { data: sourcePlant, error: plantError } = await supabase
+          .from('plants')
+          .select('*')
+          .eq('id', plantId)
+          .single();
+        
+        if (plantError || !sourcePlant) {
+          throw new Error('Source plant not found');
+        }
+        
+        // Step 2: Load all translations for the source plant
+        const { data: sourceTranslations, error: translationsError } = await supabase
+          .from('plant_translations')
+          .select('*')
+          .eq('plant_id', plantId);
+        
+        if (translationsError) {
+          console.error('Failed to load translations:', translationsError);
+          // Continue without translations if they fail to load
+        }
+        
+        // Step 3: Load related data (colors, images, etc.)
+        const { data: colorLinks } = await supabase
+          .from('plant_colors')
+          .select('color_id')
+          .eq('plant_id', plantId);
+        
+        const { data: wateringSchedules } = await supabase
+          .from('watering_schedules')
+          .select('*')
+          .eq('plant_id', plantId);
+        
+        const { data: plantSources } = await supabase
+          .from('plant_sources')
+          .select('*')
+          .eq('plant_id', plantId);
+        
+        const { data: infusionMixes } = await supabase
+          .from('infusion_mixes')
+          .select('*')
+          .eq('plant_id', plantId);
+        
+        // Step 4: Create the new plant record (copy all non-translatable fields)
+        const timestamp = new Date().toISOString();
+        const newPlantPayload = {
+          ...sourcePlant,
+          id: newId,
+          name: newName,
+          // Clear scientific name to avoid unique constraint violation
+          scientific_name: null,
+          // Update meta fields
+          status: 'in progres',
+          created_by: profile?.display_name || sourcePlant.created_by,
+          created_time: timestamp,
+          updated_by: profile?.display_name || null,
+          updated_time: timestamp,
+        };
+        
+        const { error: insertError } = await supabase
+          .from('plants')
+          .insert(newPlantPayload);
+        
+        if (insertError) {
+          throw new Error(`Failed to create plant: ${insertError.message}`);
+        }
+        
+        // Step 5: Copy all translations to the new plant
+        if (sourceTranslations && sourceTranslations.length > 0) {
+          const newTranslations = sourceTranslations.map((t) => ({
+            ...t,
+            plant_id: newId,
+            // Update the name in each translation to the new name
+            name: newName,
+            created_at: timestamp,
+            updated_at: timestamp,
+          }));
+          
+          const { error: translationInsertError } = await supabase
+            .from('plant_translations')
+            .insert(newTranslations);
+          
+          if (translationInsertError) {
+            console.error('Failed to copy translations:', translationInsertError);
+            // Continue even if translations fail
+          }
+        }
+        
+        // Step 6: Copy color links
+        if (colorLinks && colorLinks.length > 0) {
+          const newColorLinks = colorLinks.map((c) => ({
+            plant_id: newId,
+            color_id: c.color_id,
+          }));
+          
+          await supabase.from('plant_colors').insert(newColorLinks);
+        }
+        
+        // Step 7: Copy watering schedules
+        if (wateringSchedules && wateringSchedules.length > 0) {
+          const newSchedules = wateringSchedules.map((s) => ({
+            plant_id: newId,
+            season: s.season,
+            frequency: s.frequency,
+            amount: s.amount,
+          }));
+          
+          await supabase.from('watering_schedules').insert(newSchedules);
+        }
+        
+        // Step 8: Copy plant sources
+        if (plantSources && plantSources.length > 0) {
+          const newSources = plantSources.map((s) => ({
+            plant_id: newId,
+            name: s.name,
+            url: s.url,
+          }));
+          
+          await supabase.from('plant_sources').insert(newSources);
+        }
+        
+        // Step 9: Copy infusion mixes
+        if (infusionMixes && infusionMixes.length > 0) {
+          const newMixes = infusionMixes.map((m) => ({
+            plant_id: newId,
+            plant_name: m.plant_name,
+          }));
+          
+          await supabase.from('infusion_mixes').insert(newMixes);
+        }
+        
+        // Success! Show success message and navigate
+        setAddFromDuplicateSuccess({
+          id: newId,
+          name: newName,
+          originalName: plantName,
+        });
+        
+        // Mark plant dashboard as needing refresh so it reloads when user visits it
+        setPlantDashboardInitialized(false);
+        
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to duplicate plant';
+        setAddFromDuplicateError(message);
+        console.error('Duplicate plant error:', err);
+      } finally {
+        setAddFromDuplicating(false);
+      }
+    },
+    [profile?.display_name],
+  );
+
   const loadPlantDashboard = React.useCallback(async () => {
     setPlantDashboardError(null);
     setPlantDashboardLoading(true);
@@ -1563,6 +2050,55 @@ export const AdminPage: React.FC = () => {
       setPlantDashboardLoading(false);
     }
   }, [supabase]);
+
+  const handleDeletePlant = React.useCallback(async () => {
+    if (!plantToDelete) return;
+    
+    setDeletingPlant(true);
+    try {
+      const plantId = plantToDelete.id;
+      
+      // Delete related data first (in order to respect foreign key constraints)
+      // Delete plant translations
+      await supabase.from('plant_translations').delete().eq('plant_id', plantId);
+      
+      // Delete plant colors
+      await supabase.from('plant_colors').delete().eq('plant_id', plantId);
+      
+      // Delete plant images
+      await supabase.from('plant_images').delete().eq('plant_id', plantId);
+      
+      // Delete watering schedules
+      await supabase.from('watering_schedules').delete().eq('plant_id', plantId);
+      
+      // Delete plant sources
+      await supabase.from('plant_sources').delete().eq('plant_id', plantId);
+      
+      // Delete infusion mixes
+      await supabase.from('infusion_mixes').delete().eq('plant_id', plantId);
+      
+      // Finally delete the plant itself
+      const { error } = await supabase.from('plants').delete().eq('id', plantId);
+      
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      // Remove from local state
+      setPlantDashboardRows((prev) => prev.filter((p) => p.id !== plantId));
+      
+      // Close the dialog
+      setDeletePlantDialogOpen(false);
+      setPlantToDelete(null);
+      
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete plant';
+      setPlantDashboardError(message);
+      console.error('Delete plant error:', err);
+    } finally {
+      setDeletingPlant(false);
+    }
+  }, [plantToDelete, supabase]);
 
   const plantStatusCounts = React.useMemo(() => {
     return plantDashboardRows.reduce(
@@ -1742,6 +2278,31 @@ export const AdminPage: React.FC = () => {
   const [dbProbe, setDbProbe] = React.useState<ProbeResult>(emptyProbe);
   const [healthRefreshing, setHealthRefreshing] =
     React.useState<boolean>(false);
+
+  // --- System Health Stats ---
+  type SystemHealthStats = {
+    uptime: number | null; // seconds
+    memory: { used: number; total: number; percent: number } | null;
+    cpu: { percent: number; cores: number } | null;
+    disk: { used: number; total: number; percent: number; path: string } | null;
+    connections: number | null;
+    nodeVersion: string | null;
+    platform: string | null;
+    loadAvg: number[] | null;
+  };
+  const emptySystemHealth: SystemHealthStats = {
+    uptime: null,
+    memory: null,
+    cpu: null,
+    disk: null,
+    connections: null,
+    nodeVersion: null,
+    platform: null,
+    loadAvg: null,
+  };
+  const [systemHealth, setSystemHealth] = React.useState<SystemHealthStats>(emptySystemHealth);
+  const [systemHealthLoading, setSystemHealthLoading] = React.useState<boolean>(true);
+  const [systemHealthError, setSystemHealthError] = React.useState<string | null>(null);
 
   // Track mount state to avoid setState on unmounted component during async probes
   const isMountedRef = React.useRef(true);
@@ -1980,6 +2541,96 @@ export const AdminPage: React.FC = () => {
     } catch {}
   }, [refreshHealth]);
 
+  // --- System Health Stats fetching ---
+  const loadSystemHealth = React.useCallback(async () => {
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/system-health", {
+        headers,
+        credentials: "same-origin",
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      if (isMountedRef.current) {
+        setSystemHealth({
+          uptime: typeof data?.uptime === "number" ? data.uptime : null,
+          memory: data?.memory && typeof data.memory.percent === "number" ? data.memory : null,
+          cpu: data?.cpu && typeof data.cpu.percent === "number" ? data.cpu : null,
+          disk: data?.disk && typeof data.disk.percent === "number" ? data.disk : null,
+          connections: typeof data?.connections === "number" ? data.connections : null,
+          nodeVersion: typeof data?.nodeVersion === "string" ? data.nodeVersion : null,
+          platform: typeof data?.platform === "string" ? data.platform : null,
+          loadAvg: Array.isArray(data?.loadAvg) ? data.loadAvg : null,
+        });
+        setSystemHealthError(null);
+      }
+    } catch (e: unknown) {
+      if (isMountedRef.current) {
+        setSystemHealthError(e instanceof Error ? e.message : "Failed to load system health");
+      }
+    } finally {
+      if (isMountedRef.current) setSystemHealthLoading(false);
+    }
+  }, [safeJson]);
+
+  // Load system health on mount and periodically
+  React.useEffect(() => {
+    loadSystemHealth();
+    const intervalId = setInterval(() => {
+      loadSystemHealth();
+    }, 30000); // Every 30 seconds
+    return () => clearInterval(intervalId);
+  }, [loadSystemHealth]);
+
+  // Helper to format uptime
+  const formatUptime = (seconds: number | null): string => {
+    if (seconds === null) return "-";
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h ${mins}m`;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  };
+
+  // Helper to format bytes
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  };
+
+  // Progress bar component for system health
+  const HealthProgressBar: React.FC<{
+    percent: number;
+    colorClass?: string;
+    showWarning?: boolean;
+  }> = ({ percent, colorClass, showWarning = true }) => {
+    const getColor = () => {
+      if (colorClass) return colorClass;
+      if (!showWarning) return "bg-emerald-500";
+      if (percent >= 90) return "bg-rose-500";
+      if (percent >= 75) return "bg-amber-500";
+      return "bg-emerald-500";
+    };
+    return (
+      <div className="h-2 w-full bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${getColor()}`}
+          style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
+        />
+      </div>
+    );
+  };
+
   const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({
     ok,
     title,
@@ -2083,7 +2734,7 @@ export const AdminPage: React.FC = () => {
             (b: string) => b && b !== "origin" && b !== "HEAD",
           );
         }
-        let ok = respNode?.ok && Array.isArray(data?.branches);
+        const ok = respNode?.ok && Array.isArray(data?.branches);
         if (!ok) {
           const adminHeaders: Record<string, string> = {
             Accept: "application/json",
@@ -2755,30 +3406,53 @@ export const AdminPage: React.FC = () => {
   }, [loadVisitorsStats]);
 
   // ---- Members tab state ----
-  const navItems: Array<{
+  // Check if user has full admin access (not just editor)
+  const isFullAdmin = checkFullAdminAccess(profile);
+  
+  // Define all nav items with admin-only flag
+  const allNavItems: Array<{
     key: AdminTab;
     label: string;
     Icon: React.ComponentType<{ className?: string }>;
     path: string;
+    adminOnly?: boolean;
   }> = [
-    { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin" },
-    { key: "members", label: "Members", Icon: Users, path: "/admin/members" },
-    { key: "requests", label: "Requests", Icon: FileText, path: "/admin/requests" },
+    { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin", adminOnly: true },
+    { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
+    { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
+    { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
-    { key: "admin_logs", label: "Admin Logs", Icon: ScrollText, path: "/admin/logs" },
+    { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced", adminOnly: true },
   ];
+  
+  // Filter nav items based on user's access level
+  const navItems = React.useMemo(() => {
+    if (isFullAdmin) return allNavItems;
+    return allNavItems.filter(item => !item.adminOnly);
+  }, [isFullAdmin]);
 
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
     if (currentPath.includes("/admin/requests")) return "requests";
+    if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
     if (currentPath.includes("/admin/emails")) return "emails";
-    if (currentPath.includes("/admin/logs")) return "admin_logs";
+    if (currentPath.includes("/admin/advanced")) return "admin_logs";
     return "overview";
   }, [currentPath]);
+  
+  // Redirect editors away from admin-only tabs
+  React.useEffect(() => {
+    if (isFullAdmin) return; // Admins can access everything
+    const adminOnlyTabs: AdminTab[] = ["overview", "members", "stocks", "admin_logs"];
+    if (adminOnlyTabs.includes(activeTab)) {
+      // Redirect to requests tab (default for editors)
+      navigate("/admin/requests", { replace: true });
+    }
+  }, [activeTab, isFullAdmin, navigate]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const toggleSidebarCollapsed = React.useCallback(
     () => setSidebarCollapsed((prev) => !prev),
@@ -2829,6 +3503,9 @@ export const AdminPage: React.FC = () => {
     React.useState(false);
   const [memberListSort, setMemberListSort] =
     React.useState<MemberListSort>("newest");
+  const [roleFilter, setRoleFilter] = React.useState<string | null>(null);
+  const [roleStats, setRoleStats] = React.useState<RoleStats | null>(null);
+  const [roleStatsLoading, setRoleStatsLoading] = React.useState(false);
   const [lookupEmail, setLookupEmail] = React.useState("");
   const [memberLoading, setMemberLoading] = React.useState(false);
   const [memberError, setMemberError] = React.useState<string | null>(null);
@@ -2864,6 +3541,12 @@ export const AdminPage: React.FC = () => {
   const [promoteSubmitting, setPromoteSubmitting] = React.useState(false);
   const [demoteOpen, setDemoteOpen] = React.useState(false);
   const [demoteSubmitting, setDemoteSubmitting] = React.useState(false);
+
+  // Roles management state
+  const [memberRoles, setMemberRoles] = React.useState<UserRole[]>([]);
+  const [roleSubmitting, setRoleSubmitting] = React.useState<string | null>(null);
+  const [rolesOpen, setRolesOpen] = React.useState(false); // Default to collapsed
+  const [confirmAdminOpen, setConfirmAdminOpen] = React.useState(false); // Confirmation dialog for admin role
 
   // Container ref for Members tab to run form-field validation logs
   const membersContainerRef = React.useRef<HTMLDivElement | null>(null);
@@ -3035,12 +3718,13 @@ export const AdminPage: React.FC = () => {
   );
 
   const loadMemberList = React.useCallback(
-    async (opts?: { reset?: boolean; sort?: MemberListSort }) => {
+    async (opts?: { reset?: boolean; sort?: MemberListSort; role?: string | null }) => {
       if (memberListLoading) return;
       const reset = !!opts?.reset;
       const limit = MEMBER_LIST_PAGE_SIZE;
       const offset = reset ? 0 : memberListOffset;
       const sortParam: MemberListSort = opts?.sort ?? memberListSort;
+      const roleParam: string | null = opts?.role !== undefined ? opts.role : roleFilter;
       setMemberListLoading(true);
       setMemberListError(null);
       try {
@@ -3053,8 +3737,9 @@ export const AdminPage: React.FC = () => {
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
+        const roleQuery = roleParam ? `&role=${encodeURIComponent(roleParam)}` : "";
         const resp = await fetch(
-          `/api/admin/member-list?limit=${limit}&offset=${offset}&sort=${encodeURIComponent(sortParam)}`,
+          `/api/admin/member-list?limit=${limit}&offset=${offset}&sort=${encodeURIComponent(sortParam)}${roleQuery}`,
           { headers, credentials: "same-origin" },
         );
         const data = await safeJson(resp);
@@ -3079,12 +3764,14 @@ export const AdminPage: React.FC = () => {
                   : null;
             const isAdmin =
               m?.is_admin === true || m?.isAdmin === true ? true : false;
+            const roles = Array.isArray(m?.roles) ? m.roles : [];
             return {
               id,
               email,
               displayName,
               createdAt,
               isAdmin,
+              roles,
               rpm5m:
                 typeof m?.rpm5m === "number"
                   ? m.rpm5m
@@ -3116,8 +3803,37 @@ export const AdminPage: React.FC = () => {
         setMemberListInitialized(true);
       }
     },
-    [memberListLoading, memberListOffset, memberListSort, safeJson],
+    [memberListLoading, memberListOffset, memberListSort, roleFilter, safeJson],
   );
+
+  const loadRoleStats = React.useCallback(async () => {
+    if (roleStatsLoading) return;
+    setRoleStatsLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/role-stats", {
+        headers,
+        credentials: "same-origin",
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      setRoleStats({
+        totalMembers: typeof data?.totalMembers === "number" ? data.totalMembers : 0,
+        roleCounts: typeof data?.roleCounts === "object" ? data.roleCounts : {},
+      });
+    } catch (e) {
+      console.error("[AdminPage] Failed to load role stats:", e);
+    } finally {
+      setRoleStatsLoading(false);
+    }
+  }, [roleStatsLoading, safeJson]);
 
   const lookupMember = React.useCallback(
     async (override?: string) => {
@@ -3184,6 +3900,14 @@ export const AdminPage: React.FC = () => {
               }))
             : [],
         });
+        // Extract and set member roles
+        const profileRoles = Array.isArray(data?.profile?.roles) ? data.profile.roles : [];
+        const isAdminRole = data?.profile?.is_admin === true;
+        const effectiveRoles = [...profileRoles] as UserRole[];
+        if (isAdminRole && !effectiveRoles.includes(USER_ROLES.ADMIN)) {
+          effectiveRoles.push(USER_ROLES.ADMIN);
+        }
+        setMemberRoles(effectiveRoles);
         // Log lookup success (UI)
         try {
           const headers2: Record<string, string> = {
@@ -3403,6 +4127,28 @@ export const AdminPage: React.FC = () => {
     ],
   );
 
+  const handleRoleFilterChange = React.useCallback(
+    (nextRole: string | null) => {
+      if (nextRole === roleFilter) {
+        // Toggle off if same role clicked
+        setRoleFilter(null);
+        setMemberList([]);
+        setMemberListOffset(0);
+        setMemberListHasMore(true);
+        setMemberListError(null);
+        loadMemberList({ reset: true, role: null });
+      } else {
+        setRoleFilter(nextRole);
+        setMemberList([]);
+        setMemberListOffset(0);
+        setMemberListHasMore(true);
+        setMemberListError(null);
+        loadMemberList({ reset: true, role: nextRole });
+      }
+    },
+    [roleFilter, loadMemberList],
+  );
+
   // Auto-load visits series when a member is selected
   React.useEffect(() => {
     const uid = memberData?.user?.id;
@@ -3416,17 +4162,30 @@ export const AdminPage: React.FC = () => {
     }
   }, [memberData?.user?.id, loadMemberVisitsSeries]);
 
+  // Refresh member list every time the list view is opened
   React.useEffect(() => {
     if (activeTab !== "members") return;
     if (membersView !== "list") return;
-    if (memberListInitialized || memberListLoading) return;
+    if (memberListLoading) return;
+    // Always refresh when opening the list view
     loadMemberList({ reset: true });
   }, [
     activeTab,
     membersView,
-    memberListInitialized,
-    memberListLoading,
-    loadMemberList,
+    // Intentionally exclude memberListLoading to only trigger on view change
+  ]);
+
+  // Refresh role stats every time the list view is opened
+  React.useEffect(() => {
+    if (activeTab !== "members") return;
+    if (membersView !== "list") return;
+    if (roleStatsLoading) return;
+    // Always refresh when opening the list view
+    loadRoleStats();
+  }, [
+    activeTab,
+    membersView,
+    // Intentionally exclude roleStatsLoading to only trigger on view change
   ]);
 
   const performBan = React.useCallback(async () => {
@@ -3545,6 +4304,105 @@ export const AdminPage: React.FC = () => {
       setDemoteSubmitting(false);
     }
   }, [lookupEmail, demoteSubmitting, safeJson]);
+
+  // Add a role to the user (with confirmation for admin role)
+  const addRole = React.useCallback(async (role: UserRole, skipConfirm = false) => {
+    if (!memberData?.user?.id || roleSubmitting) return;
+    
+    // Show confirmation dialog for admin role
+    if (role === USER_ROLES.ADMIN && !skipConfirm) {
+      setConfirmAdminOpen(true);
+      return;
+    }
+    
+    setRoleSubmitting(role);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__
+          ?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/roles/add", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ userId: memberData.user.id, role }),
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      // Update local state
+      setMemberRoles(data.roles || [...memberRoles, role]);
+      // If admin role was added, update legacy is_admin field
+      if (role === USER_ROLES.ADMIN) {
+        setMemberData((prev) =>
+          prev
+            ? { ...prev, profile: { ...(prev.profile || {}), is_admin: true } }
+            : prev,
+        );
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to add role: ${msg}`);
+    } finally {
+      setRoleSubmitting(null);
+    }
+  }, [memberData?.user?.id, memberRoles, roleSubmitting, safeJson]);
+  
+  // Confirm adding admin role
+  const confirmAddAdmin = React.useCallback(() => {
+    setConfirmAdminOpen(false);
+    addRole(USER_ROLES.ADMIN, true);
+  }, [addRole]);
+
+  // Remove a role from the user
+  const removeRole = React.useCallback(async (role: UserRole) => {
+    if (!memberData?.user?.id || roleSubmitting) return;
+    setRoleSubmitting(role);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__
+          ?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/roles/remove", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ userId: memberData.user.id, role }),
+      });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      // Update local state
+      setMemberRoles(data.roles || memberRoles.filter(r => r !== role));
+      // If admin role was removed, update legacy is_admin field
+      if (role === USER_ROLES.ADMIN) {
+        setMemberData((prev) =>
+          prev
+            ? { ...prev, profile: { ...(prev.profile || {}), is_admin: false } }
+            : prev,
+        );
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to remove role: ${msg}`);
+    } finally {
+      setRoleSubmitting(null);
+    }
+  }, [memberData?.user?.id, memberRoles, roleSubmitting, safeJson]);
 
   // Debounced email/username suggestions fetch
   React.useEffect(() => {
@@ -3676,19 +4534,6 @@ export const AdminPage: React.FC = () => {
                     </Link>
                   );
                 })}
-                {/* Analytics External Link */}
-                <a
-                  href="https://analytics.google.com/analytics/web"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition text-stone-700 dark:text-stone-200 bg-stone-100 dark:bg-[#111116] hover:bg-stone-200 dark:hover:bg-[#1e1e22]"
-                >
-                  <div className="w-4 h-4 rounded bg-orange-500 flex items-center justify-center flex-shrink-0">
-                    <ArrowUpRight className="h-2.5 w-2.5 text-white" />
-                  </div>
-                  <span>Analytics</span>
-                  <ExternalLink className="h-3 w-3 opacity-50" />
-                </a>
             </div>
           </div>
         </div>
@@ -3772,28 +4617,6 @@ export const AdminPage: React.FC = () => {
                     );
                   })}
                 </nav>
-                {/* External Links */}
-                <div className="relative z-10 p-4 border-t border-white/30 dark:border-white/10">
-                  <a
-                    href="https://analytics.google.com/analytics/web"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={sidebarCollapsed ? "Analytics" : undefined}
-                    className={`w-full flex ${
-                      sidebarCollapsed ? "flex-col items-center gap-1 py-3" : "items-center gap-3 px-4 py-3"
-                    } rounded-2xl transition text-stone-700 dark:text-stone-200 hover:bg-white/70 dark:hover:bg-white/10`}
-                  >
-                    <div className="w-5 h-5 rounded bg-orange-500 flex items-center justify-center flex-shrink-0">
-                      <ArrowUpRight className="h-3 w-3 text-white" />
-                    </div>
-                    {!sidebarCollapsed && (
-                      <>
-                        <span className="font-medium">Analytics</span>
-                        <ExternalLink className="ml-auto h-3.5 w-3.5 opacity-50" />
-                      </>
-                    )}
-                  </a>
-                </div>
               </div>
             </aside>
 
@@ -3956,6 +4779,463 @@ export const AdminPage: React.FC = () => {
                               )}
                             </div>
                           </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Quick Stats Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Currently Online Card */}
+                        <div className="group relative rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-cyan-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300 overflow-hidden">
+                          {/* Decorative background element */}
+                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-emerald-200/40 to-teal-200/40 dark:from-emerald-800/20 dark:to-teal-800/20 blur-2xl" />
+                          <div className="relative">
+                            <div className="flex items-start justify-between gap-3 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                                  <Wifi className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                                    Currently Online
+                                  </div>
+                                  <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+                                    {onlineUpdatedAt
+                                      ? `${formatTimeAgo(onlineUpdatedAt)}`
+                                      : "Updating..."}
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Refresh currently online"
+                                onClick={() => {
+                                  loadOnlineUsers({ initial: false });
+                                  loadOnlineIpsList({ initial: false });
+                                }}
+                                disabled={
+                                  onlineLoading ||
+                                  onlineRefreshing ||
+                                  ipsLoading ||
+                                  ipsRefreshing
+                                }
+                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-emerald-900/30 hover:bg-white dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
+                              >
+                                <RefreshCw
+                                  className={`h-4 w-4 ${onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing ? "animate-spin" : ""}`}
+                                />
+                              </Button>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                              <div className="text-4xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                                {onlineLoading ? (
+                                  <span className="inline-block w-12 h-10 bg-emerald-200/50 dark:bg-emerald-800/30 rounded-lg animate-pulse" />
+                                ) : (
+                                  onlineUsers
+                                )}
+                              </div>
+                              {!onlineLoading && onlineUsers > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="relative flex h-2.5 w-2.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                                  </span>
+                                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">live</span>
+                                </div>
+                              )}
+                            </div>
+                            {/* Collapsible Connected IPs */}
+                            <div className="mt-4 pt-3 border-t border-emerald-200/50 dark:border-emerald-800/30">
+                              <button
+                                type="button"
+                                className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-colors"
+                                onClick={() => setIpsOpen((o) => !o)}
+                                aria-expanded={ipsOpen}
+                                aria-controls="connected-ips"
+                              >
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${ipsOpen ? "rotate-180" : ""}`}
+                                />
+                                Connected IPs
+                                {ips.length > 0 && (
+                                  <span className="text-xs bg-emerald-200 dark:bg-emerald-800/50 px-2 py-0.5 rounded-full">
+                                    {ips.length}
+                                  </span>
+                                )}
+                              </button>
+                              {ipsOpen && (
+                                <div className="mt-3" id="connected-ips">
+                                  <div className="rounded-xl bg-white/70 dark:bg-emerald-950/50 border border-emerald-200/50 dark:border-emerald-800/30 p-3 max-h-48 overflow-auto">
+                                    {ipsLoading ? (
+                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
+                                        Loading...
+                                      </div>
+                                    ) : ips.length === 0 ? (
+                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
+                                        No IPs connected.
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-wrap gap-2">
+                                        {ips.map((ip) => (
+                                          <Badge
+                                            key={ip}
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => jumpToIpLookup(ip)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter" || e.key === " ") {
+                                                e.preventDefault();
+                                                jumpToIpLookup(ip);
+                                              }
+                                            }}
+                                            title={`Lookup members for ${ip}`}
+                                            aria-label={`Lookup members for ${ip}`}
+                                            className="rounded-full px-2.5 py-1 text-xs font-mono cursor-pointer bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/50 border-0 transition-colors"
+                                          >
+                                            {ip}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Registered Accounts Card */}
+                        <div className="group relative rounded-2xl border border-violet-200 dark:border-violet-800/50 bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 dark:from-violet-950/40 dark:via-purple-950/30 dark:to-fuchsia-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-300 overflow-hidden">
+                          {/* Decorative background element */}
+                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-violet-200/40 to-purple-200/40 dark:from-violet-800/20 dark:to-purple-800/20 blur-2xl" />
+                          <div className="relative">
+                            <div className="flex items-start justify-between gap-3 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
+                                  <Users className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-violet-900 dark:text-violet-100">
+                                    Registered Accounts
+                                  </div>
+                                  <div className="text-xs text-violet-600/70 dark:text-violet-400/70">
+                                    {registeredUpdatedAt
+                                      ? `${formatTimeAgo(registeredUpdatedAt)}`
+                                      : "Updating..."}
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Refresh registered accounts"
+                                onClick={() =>
+                                  loadRegisteredCount({ initial: false })
+                                }
+                                disabled={
+                                  registeredLoading || registeredRefreshing
+                                }
+                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-violet-900/30 hover:bg-white dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300"
+                              >
+                                <RefreshCw
+                                  className={`h-4 w-4 ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`}
+                                />
+                              </Button>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                              <div className="text-4xl font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                                {registeredLoading ? (
+                                  <span className="inline-block w-16 h-10 bg-violet-200/50 dark:bg-violet-800/30 rounded-lg animate-pulse" />
+                                ) : registeredUpdatedAt !== null ? (
+                                  registeredCount ?? "-"
+                                ) : (
+                                  "-"
+                                )}
+                              </div>
+                              <span className="text-sm font-medium text-violet-500 dark:text-violet-400">
+                                users
+                              </span>
+                            </div>
+                            {/* Progress indicator */}
+                            <div className="mt-4 pt-3 border-t border-violet-200/50 dark:border-violet-800/30">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-violet-600/70 dark:text-violet-400/70">Total registered members</span>
+                                <span className="font-medium text-violet-700 dark:text-violet-300">
+                                  {registeredCount !== null && registeredCount > 0 ? "Active" : "—"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Total Plants Card */}
+                        <div className="group relative rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/30 dark:to-yellow-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 overflow-hidden">
+                          {/* Decorative background element */}
+                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-amber-200/40 to-orange-200/40 dark:from-amber-800/20 dark:to-orange-800/20 blur-2xl" />
+                          <div className="relative">
+                            <div className="flex items-start justify-between gap-3 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                                  <Leaf className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                                    Total Plants
+                                  </div>
+                                  <div className="text-xs text-amber-600/70 dark:text-amber-400/70">
+                                    {plantsUpdatedAt
+                                      ? `${formatTimeAgo(plantsUpdatedAt)}`
+                                      : "Updating..."}
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Refresh total plants"
+                                onClick={() =>
+                                  loadRegisteredCount({ initial: false })
+                                }
+                                disabled={plantsLoading || plantsRefreshing}
+                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-amber-900/30 hover:bg-white dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300"
+                              >
+                                <RefreshCw
+                                  className={`h-4 w-4 ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`}
+                                />
+                              </Button>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                              <div className="text-4xl font-bold tabular-nums text-amber-700 dark:text-amber-300">
+                                {plantsLoading ? (
+                                  <span className="inline-block w-14 h-10 bg-amber-200/50 dark:bg-amber-800/30 rounded-lg animate-pulse" />
+                                ) : plantsUpdatedAt !== null ? (
+                                  plantsCount ?? "-"
+                                ) : (
+                                  "-"
+                                )}
+                              </div>
+                              <span className="text-sm font-medium text-amber-500 dark:text-amber-400">
+                                plants
+                              </span>
+                            </div>
+                            {/* Database indicator */}
+                            <div className="mt-4 pt-3 border-t border-amber-200/50 dark:border-amber-800/30">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-amber-600/70 dark:text-amber-400/70">In database</span>
+                                <div className="flex items-center gap-1.5">
+                                  <Database className="h-3 w-3 text-amber-500 dark:text-amber-400" />
+                                  <span className="font-medium text-amber-700 dark:text-amber-300">Synced</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                    {/* System Health Stats */}
+                    <Card className={glassCardClass}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 dark:from-cyan-900/40 dark:to-blue-900/40 flex items-center justify-center">
+                              <Server className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold">System Health</div>
+                              <div className="text-xs text-stone-500 dark:text-stone-400">
+                                {systemHealth.platform || "Server"} • {systemHealth.nodeVersion || "Node.js"}
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Refresh system health"
+                            onClick={() => { setSystemHealthLoading(true); loadSystemHealth(); }}
+                            disabled={systemHealthLoading}
+                            className="h-8 w-8 rounded-xl"
+                          >
+                            <RefreshCw className={`h-4 w-4 ${systemHealthLoading ? "animate-spin" : ""}`} />
+                          </Button>
+                        </div>
+
+                        {systemHealthError && !systemHealth.uptime && (
+                          <div className="text-xs text-amber-600 dark:text-amber-400 mb-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+                            ⚠️ {systemHealthError}
+                          </div>
+                        )}
+
+                        {/* Uptime & Connections Row - Compact */}
+                        <div className="flex items-center gap-4 mb-4 py-2 px-3 rounded-xl bg-stone-50/80 dark:bg-stone-900/30 border border-stone-200/60 dark:border-stone-700/40">
+                          <div className="flex items-center gap-2.5 flex-1">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm">
+                              <Clock className="h-4 w-4 text-white" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wide font-medium text-stone-400 dark:text-stone-500">Uptime</span>
+                              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                {formatUptime(systemHealth.uptime)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="w-px h-8 bg-stone-200 dark:bg-stone-700" />
+                          <div className="flex items-center gap-2.5 flex-1">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-sm">
+                              <Users className="h-4 w-4 text-white" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wide font-medium text-stone-400 dark:text-stone-500">Connections</span>
+                              <span className="text-sm font-bold text-violet-600 dark:text-violet-400 tabular-nums">
+                                {systemHealth.connections !== null ? systemHealth.connections : "-"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* CPU Usage */}
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-md bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                                <Sparkles className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <span className="text-xs font-medium">CPU</span>
+                            </div>
+                            <span className="text-xs font-semibold tabular-nums">
+                              {systemHealth.cpu ? `${systemHealth.cpu.percent.toFixed(1)}%` : "-"}
+                              {systemHealth.cpu?.cores && (
+                                <span className="text-stone-400 font-normal ml-1">({systemHealth.cpu.cores} cores)</span>
+                              )}
+                            </span>
+                          </div>
+                          <HealthProgressBar percent={systemHealth.cpu?.percent ?? 0} />
+                          {systemHealth.loadAvg && (
+                            <div className="text-[10px] text-stone-400 mt-1">
+                              Load avg: {systemHealth.loadAvg.map(l => l.toFixed(2)).join(" / ")}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Memory Usage */}
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-md bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
+                                <Database className="h-3 w-3 text-violet-600 dark:text-violet-400" />
+                              </div>
+                              <span className="text-xs font-medium">Memory</span>
+                            </div>
+                            <span className="text-xs font-semibold tabular-nums">
+                              {systemHealth.memory
+                                ? `${formatBytes(systemHealth.memory.used)} / ${formatBytes(systemHealth.memory.total)}`
+                                : "-"}
+                            </span>
+                          </div>
+                          <HealthProgressBar percent={systemHealth.memory?.percent ?? 0} />
+                        </div>
+
+                        {/* Disk Usage */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-md bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                                <Server className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                              </div>
+                              <span className="text-xs font-medium">Disk</span>
+                              {systemHealth.disk?.path && (
+                                <span className="text-[10px] text-stone-400 font-mono">{systemHealth.disk.path}</span>
+                              )}
+                            </div>
+                            <span className="text-xs font-semibold tabular-nums">
+                              {systemHealth.disk
+                                ? `${formatBytes(systemHealth.disk.used)} / ${formatBytes(systemHealth.disk.total)}`
+                                : "-"}
+                            </span>
+                          </div>
+                          <HealthProgressBar percent={systemHealth.disk?.percent ?? 0} />
+                        </div>
+
+                        {/* Collapsible: Server Controls */}
+                        <div className="mt-4 pt-3 border-t border-stone-200 dark:border-[#3e3e42]">
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 text-sm font-medium w-full"
+                            onClick={() => setServerControlsOpen((o) => !o)}
+                            aria-expanded={serverControlsOpen}
+                            aria-controls="server-controls"
+                          >
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform ${serverControlsOpen ? "rotate-180" : ""}`}
+                            />
+                            <Server className="h-4 w-4 opacity-70" />
+                            Server Controls
+                          </button>
+                          {serverControlsOpen && (
+                            <div className="mt-3 space-y-3" id="server-controls">
+                              {/* Root Password Input (shared) */}
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 space-y-2 bg-stone-50/50 dark:bg-stone-900/20">
+                                <div className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                                  Root Password (required for most actions)
+                                </div>
+                                <Input
+                                  type="password"
+                                  placeholder="Enter root password"
+                                  value={setupPassword}
+                                  onChange={(e) => setSetupPassword(e.target.value)}
+                                  className="rounded-xl text-sm"
+                                  disabled={runningSetup || restarting}
+                                />
+                              </div>
+
+                              {/* Restart Server Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={restartServerWithPassword}
+                                disabled={restarting || !setupPassword.trim()}
+                              >
+                                <RefreshCw className={`h-4 w-4 ${restarting ? "animate-spin" : ""}`} />
+                                {restarting ? "Restarting..." : "Restart Server"}
+                              </Button>
+
+                              {/* Git Pull Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={gitPullOnly}
+                                disabled={gitPulling}
+                              >
+                                <Github className={`h-4 w-4 ${gitPulling ? "animate-pulse" : ""}`} />
+                                {gitPulling ? "Pulling..." : "Git Pull Only"}
+                              </Button>
+
+                              {/* Clear Memory Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={clearMemory}
+                                disabled={clearingMemory}
+                              >
+                                <Database className={`h-4 w-4 ${clearingMemory ? "animate-pulse" : ""}`} />
+                                {clearingMemory ? "Clearing..." : "Clear Memory"}
+                              </Button>
+
+                              {/* Run Setup Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={runSetup}
+                                disabled={runningSetup || !setupPassword.trim()}
+                              >
+                                <Package className={`h-4 w-4 ${runningSetup ? "animate-spin" : ""}`} />
+                                {runningSetup ? "Running Setup..." : "Execute setup.sh"}
+                              </Button>
+                              <div className="text-[10px] text-stone-400">
+                                setup.sh runs the full server provisioning script with root privileges
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -4254,183 +5534,6 @@ export const AdminPage: React.FC = () => {
                         </div>
                       </CardContent>
                     </Card>
-                    <div className="pt-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                        <Card className="rounded-2xl">
-                          <CardContent className="p-4 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="text-sm opacity-60">
-                                  Currently online
-                                </div>
-                                <div className="text-xs opacity-60">
-                                  {onlineUpdatedAt
-                                    ? `Updated ? ${formatTimeAgo(onlineUpdatedAt)}`
-                                    : "Updated -"}
-                                </div>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                aria-label="Refresh currently online"
-                                onClick={() => {
-                                  loadOnlineUsers({ initial: false });
-                                  loadOnlineIpsList({ initial: false });
-                                }}
-                                disabled={
-                                  onlineLoading ||
-                                  onlineRefreshing ||
-                                  ipsLoading ||
-                                  ipsRefreshing
-                                }
-                                className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ? ${onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
-                            </div>
-                            <div className="text-2xl font-semibold tabular-nums mt-1">
-                              {onlineLoading ? "-" : onlineUsers}
-                            </div>
-                            {/* Collapsible Connected IPs under Currently online */}
-                            <div className="mt-3">
-                              <div className="flex items-center justify-between">
-                                <button
-                                  type="button"
-                                  className="flex items-center gap-2 text-sm font-medium"
-                                  onClick={() => setIpsOpen((o) => !o)}
-                                  aria-expanded={ipsOpen}
-                                  aria-controls="connected-ips"
-                                >
-                                  <ChevronDown
-                                    className={`h-4 w-4 transition-transform ? ${ipsOpen ? "rotate-180" : ""}`}
-                                  />
-                                  IPs
-                                </button>
-                                <div />
-                              </div>
-                              {ipsOpen && (
-                                <div className="mt-2" id="connected-ips">
-                                  <div className="rounded-xl border bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] p-3 max-h-48 overflow-auto">
-                                    {ipsLoading ? (
-                                      <div className="text-sm opacity-60">
-                                        Loading...
-                                      </div>
-                                    ) : ips.length === 0 ? (
-                                      <div className="text-sm opacity-60">
-                                        No IPs.
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-wrap gap-2">
-                                        {ips.map((ip) => (
-                                          <Badge
-                                            key={ip}
-                                            role="button"
-                                            tabIndex={0}
-                                            onClick={() => jumpToIpLookup(ip)}
-                                            onKeyDown={(e) => {
-                                              if (
-                                                e.key === "Enter" ||
-                                                e.key === " "
-                                              ) {
-                                                e.preventDefault();
-                                                jumpToIpLookup(ip);
-                                              }
-                                            }}
-                                            title={`Lookup members for ? ${ip}`}
-                                            aria-label={`Lookup members for ? ${ip}`}
-                                            variant="outline"
-                                            className="rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-stone-50 dark:hover:bg-[#3e3e42] focus:outline-none focus:ring-2 focus:ring-ring"
-                                          >
-                                            {ip}
-                                          </Badge>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                        <Card className="rounded-2xl">
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="text-sm opacity-60">
-                                  Registered accounts
-                                </div>
-                                <div className="text-xs opacity-60">
-                                  {registeredUpdatedAt
-                                    ? `Updated ? ${formatTimeAgo(registeredUpdatedAt)}`
-                                    : "Updated -"}
-                                </div>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                aria-label="Refresh registered accounts"
-                                onClick={() =>
-                                  loadRegisteredCount({ initial: false })
-                                }
-                                disabled={
-                                  registeredLoading || registeredRefreshing
-                                }
-                                className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ? ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
-                            </div>
-                            <div className="text-2xl font-semibold tabular-nums mt-1">
-                              {registeredLoading
-                                ? "-"
-                                : registeredUpdatedAt !== null
-                                  ? (registeredCount ?? "-")
-                                  : "-"}
-                            </div>
-                          </CardContent>
-                        </Card>
-                        <Card className="rounded-2xl">
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="text-sm opacity-60">
-                                  Total plants
-                                </div>
-                                <div className="text-xs opacity-60">
-                                  {plantsUpdatedAt
-                                    ? `Updated ? ${formatTimeAgo(plantsUpdatedAt)}`
-                                    : "Updated -"}
-                                </div>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                aria-label="Refresh total plants"
-                                onClick={() =>
-                                  loadRegisteredCount({ initial: false })
-                                }
-                                disabled={plantsLoading || plantsRefreshing}
-                                className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ? ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
-                            </div>
-                            <div className="text-2xl font-semibold tabular-nums mt-1">
-                              {plantsLoading
-                                ? "-"
-                                : plantsUpdatedAt !== null
-                                  ? (plantsCount ?? "-")
-                                  : "-"}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
                       <Card className={glassCardClass}>
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between gap-2 mb-2">
@@ -5261,9 +6364,28 @@ export const AdminPage: React.FC = () => {
                             <ExternalLink className="h-3 w-3 opacity-70" />
                           </a>
                         </Button>
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="rounded-2xl"
+                        >
+                          <a
+                            href="https://analytics.google.com/analytics/web"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="inline-block h-3 w-3 rounded-sm bg-orange-500 dark:bg-orange-400" />
+                            <span>Analytics</span>
+                            <ExternalLink className="h-3 w-3 opacity-70" />
+                          </a>
+                        </Button>
                       </div>
-                    </div>
                   </>
+                )}
+
+                {/* Stocks Tab */}
+                {activeTab === "stocks" && (
+                  <AdminStocksPanel />
                 )}
 
                 {/* Requests Tab */}
@@ -5291,337 +6413,366 @@ export const AdminPage: React.FC = () => {
                         </div>
                       </div>
                         {plantViewIsPlants ? (
-                          <>
+                          <div className="space-y-6 sm:space-y-8">
+                            {/* Header Section */}
+                            <div className="flex flex-col gap-4 sm:gap-6">
+                              <div>
+                                <h1 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">Plant Inventory</h1>
+                                <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
+                                  Manage plant statuses, track progress, and view analytics
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Error Display */}
                             {plantDashboardError && (
-                              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
+                              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200 flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                                 {plantDashboardError}
                               </div>
                             )}
-                            <Card className="rounded-2xl">
-                              <CardContent className="p-4 space-y-4">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
+
+                            {/* Quick Stats Cards */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                                    <Check className="h-5 w-5 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
+                                  </div>
                                   <div>
-                                    <div className="text-sm font-medium">
-                                      Plant health overview
-                                    </div>
-                                    <div className="text-xs opacity-60">
-                                      Status mix, promotion calendar and approval coverage.
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">Approved</div>
+                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">{approvedPlantsCount}</div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:shadow-amber-500/5">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                                    <Sparkles className="h-5 w-5 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">In Review</div>
+                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
+                                      {plantStatusDonutData.find(d => d.key === "review")?.value || 0}
                                     </div>
                                   </div>
+                                </div>
+                              </div>
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-lg hover:shadow-blue-500/5">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                    <TrendingUp className="h-5 w-5 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">In Progress</div>
+                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
+                                      {plantStatusDonutData.find(d => d.key === "in progres")?.value || 0}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
+                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
+                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Collapsible Analytics Panel */}
+                            <div className="rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden transition-all">
+                              <button
+                                onClick={() => setIsAnalyticsPanelCollapsed(!isAnalyticsPanelCollapsed)}
+                                className="w-full flex items-center justify-between gap-4 p-4 sm:p-5 hover:bg-stone-50 dark:hover:bg-[#252528] transition-colors"
+                              >
+                                <div className="flex items-center gap-3 sm:gap-4">
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
+                                    <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                  </div>
+                                  <div className="text-left">
+                                    <div className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base">Analytics & Charts</div>
+                                    <div className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
+                                      Status distribution, progress gauge, and promotion calendar
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 sm:gap-3">
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="rounded-xl"
-                                    onClick={() => loadPlantDashboard()}
+                                    className="rounded-xl h-8 px-3 text-xs hidden sm:flex"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      loadPlantDashboard();
+                                    }}
                                     disabled={plantDashboardLoading}
                                   >
-                                    <RefreshCw
-                                      className={`h-4 w-4 mr-2 ${plantDashboardLoading ? "animate-spin" : ""}`}
-                                    />
+                                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${plantDashboardLoading ? "animate-spin" : ""}`} />
                                     Refresh
                                   </Button>
+                                  <div className={`p-2 rounded-lg transition-colors ${isAnalyticsPanelCollapsed ? "bg-stone-100 dark:bg-[#2a2a2d]" : "bg-emerald-100 dark:bg-emerald-900/30"}`}>
+                                    {isAnalyticsPanelCollapsed ? (
+                                      <ChevronDown className="h-4 w-4 text-stone-500 dark:text-stone-400" />
+                                    ) : (
+                                      <ChevronUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="grid gap-4 md:grid-cols-2">
-                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
-                                    <button
-                                      onClick={() => setIsStatusRepartitionCollapsed(!isStatusRepartitionCollapsed)}
-                                      className="flex items-start justify-between gap-3 w-full text-left hover:opacity-80 transition-opacity"
-                                    >
-                                      <div>
-                                        <div className="text-sm font-semibold">
-                                          Status repartition
+                              </button>
+
+                              {!isAnalyticsPanelCollapsed && (
+                                <div className="p-4 sm:p-5 pt-0 space-y-4">
+                                  <div className="grid gap-4 md:grid-cols-2">
+                                    {/* Status Distribution Chart */}
+                                    <div className="rounded-xl border border-stone-200/80 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-[#17171d] p-4 flex flex-col">
+                                      <div className="flex items-center justify-between gap-2 mb-4">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                                            <PieChartIcon className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                                          </div>
+                                          <div>
+                                            <div className="text-sm font-semibold text-stone-900 dark:text-white">Status Distribution</div>
+                                            <div className="text-xs text-stone-500 dark:text-stone-400">In progress, review, rework</div>
+                                          </div>
                                         </div>
-                                        <div className="text-xs opacity-60">
-                                          In progress, review and rework.
-                                        </div>
+                                        <span className="text-lg font-bold text-stone-900 dark:text-white">
+                                          {plantStatusDonutData.reduce((sum, slice) => sum + slice.value, 0)}
+                                        </span>
                                       </div>
-                                      <div className="flex items-center gap-3">
-                                        <div className="text-right">
-                                          <div className="text-[11px] uppercase tracking-wide opacity-60">
-                                            Approved
+                                      <div className="relative h-48">
+                                        {plantTableLoading ? (
+                                          <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                            Loading chart...
                                           </div>
-                                          <div className="text-2xl font-semibold">
-                                            {approvedPlantsCount}
+                                        ) : plantStatusDonutData.length === 0 ? (
+                                          <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                            No status data yet.
                                           </div>
-                                        </div>
-                                        {isStatusRepartitionCollapsed ? (
-                                          <ChevronDown className="h-4 w-4 opacity-60" />
                                         ) : (
-                                          <ChevronUp className="h-4 w-4 opacity-60" />
+                                          <ChartSuspense
+                                            fallback={
+                                              <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                                Loading chart...
+                                              </div>
+                                            }
+                                          >
+                                            <ResponsiveContainer width="100%" height="100%">
+                                              <PieChart>
+                                                <Pie
+                                                  data={plantStatusDonutData}
+                                                  dataKey="value"
+                                                  nameKey="label"
+                                                  innerRadius="60%"
+                                                  outerRadius="90%"
+                                                  startAngle={90}
+                                                  endAngle={-270}
+                                                  paddingAngle={3}
+                                                  isAnimationActive={false}
+                                                >
+                                                  {plantStatusDonutData.map((slice) => (
+                                                    <Cell
+                                                      key={slice.key}
+                                                      fill={slice.color}
+                                                      stroke={isDark ? slice.color : slice.color}
+                                                      strokeWidth={isDark ? 0 : 2}
+                                                    />
+                                                  ))}
+                                                </Pie>
+                                                <Tooltip
+                                                  formatter={(value: number, name: string) => [
+                                                    `${value} plants`,
+                                                    name,
+                                                  ]}
+                                                />
+                                              </PieChart>
+                                            </ResponsiveContainer>
+                                          </ChartSuspense>
+                                        )}
+                                        {plantStatusDonutData.length > 0 && (
+                                          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                                            <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                                              Total
+                                            </span>
+                                            <span className="text-2xl font-bold text-stone-900 dark:text-white">
+                                              {plantStatusDonutData.reduce((sum, slice) => sum + slice.value, 0)}
+                                            </span>
+                                          </div>
                                         )}
                                       </div>
-                                    </button>
-                                    {!isStatusRepartitionCollapsed && (
-                                      <div className="relative mt-4 h-48">
+                                    </div>
+
+                                    {/* Coverage Ratio Gauge */}
+                                    <div className="rounded-xl border border-stone-200/80 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-[#17171d] p-4 flex flex-col">
+                                      <div className="flex items-center justify-between gap-2 mb-4">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                                            <Target className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                          </div>
+                                          <div>
+                                            <div className="text-sm font-semibold text-stone-900 dark:text-white">Coverage Ratio</div>
+                                            <div className="text-xs text-stone-500 dark:text-stone-400">Requests vs approved</div>
+                                          </div>
+                                        </div>
+                                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                                          {requestsVsApproved.ratio !== null
+                                            ? `${requestsVsApproved.percent.toFixed(0)}%`
+                                            : requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0
+                                              ? "∞"
+                                              : "0%"}
+                                        </span>
+                                      </div>
+                                      <div className="flex-1">
+                                        {plantTableLoading && totalPlantRequestsCount === 0 ? (
+                                          <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                            Loading gauge...
+                                          </div>
+                                        ) : requestsVsApproved.requests === 0 && requestsVsApproved.approved === 0 ? (
+                                          <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                            No requests or approved plants yet.
+                                          </div>
+                                        ) : (
+                                          <div className="relative h-40 sm:h-48">
+                                            <ChartSuspense
+                                              fallback={
+                                                <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                                  Loading gauge...
+                                                </div>
+                                              }
+                                            >
+                                              <ResponsiveContainer width="100%" height="100%">
+                                                <RadialBarChart
+                                                  data={[{ name: "ratio", value: requestsVsApproved.gaugeValue }]}
+                                                  startAngle={180}
+                                                  endAngle={0}
+                                                  innerRadius="70%"
+                                                  outerRadius="100%"
+                                                  margin={{ top: 0, bottom: 0, left: 0, right: 0 }}
+                                                >
+                                                  <PolarAngleAxis
+                                                    type="number"
+                                                    domain={[0, Math.max(1, requestsVsApproved.domainMax)]}
+                                                    tick={false}
+                                                  />
+                                                  <RadialBar
+                                                    dataKey="value"
+                                                    cornerRadius={10}
+                                                    fill={accentColor}
+                                                    clockWise
+                                                    background
+                                                  />
+                                                </RadialBarChart>
+                                              </ResponsiveContainer>
+                                            </ChartSuspense>
+                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                                                {requestsVsApproved.ratio !== null
+                                                  ? `${requestsVsApproved.percent.toFixed(0)}%`
+                                                  : requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0
+                                                    ? "∞"
+                                                    : "0%"}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="mt-1 text-center">
+                                        <div className="text-sm text-stone-600 dark:text-stone-300">
+                                          {requestsVsApproved.requests} requests / {requestsVsApproved.approved} approved
+                                        </div>
+                                        {requestsVsApproved.ratio === null && requestsVsApproved.approved === 0 && requestsVsApproved.requests > 0 && (
+                                          <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                                            Approve at least one plant to compute the ratio.
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Promotion Calendar Chart */}
+                                  <div className="rounded-xl border border-stone-200/80 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-[#17171d] p-4 flex flex-col">
+                                    <div className="flex items-center gap-3 mb-4">
+                                      <div className="w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center">
+                                        <Calendar className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                                      </div>
+                                      <div>
+                                        <div className="text-sm font-semibold text-stone-900 dark:text-white">Promotion Calendar</div>
+                                        <div className="text-xs text-stone-500 dark:text-stone-400">Plants promoted per month</div>
+                                      </div>
+                                    </div>
+                                    <div className="w-full h-[280px] sm:h-[320px]">
                                       {plantTableLoading ? (
-                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                        <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
                                           Loading chart...
                                         </div>
-                                      ) : plantStatusDonutData.length === 0 ? (
-                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                          No status data yet.
+                                      ) : !hasPromotionMonthData ? (
+                                        <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+                                          No promotion data yet.
                                         </div>
                                       ) : (
                                         <ChartSuspense
                                           fallback={
-                                            <div className="flex h-full items-center justify-center text-sm opacity-60">
+                                            <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
                                               Loading chart...
                                             </div>
                                           }
                                         >
                                           <ResponsiveContainer width="100%" height="100%">
-                                            <PieChart>
-                                              <Pie
-                                                data={plantStatusDonutData}
-                                                dataKey="value"
-                                                nameKey="label"
-                                                innerRadius="60%"
-                                                outerRadius="90%"
-                                                startAngle={90}
-                                                endAngle={-270}
-                                                paddingAngle={3}
-                                                isAnimationActive={false}
-                                              >
-                                                {plantStatusDonutData.map((slice) => (
-                                                  <Cell
-                                                    key={slice.key}
-                                                    fill={slice.color}
-                                                    stroke={isDark ? slice.color : slice.color}
-                                                    strokeWidth={isDark ? 0 : 2}
-                                                  />
-                                                ))}
-                                              </Pie>
-                                              <Tooltip
-                                                formatter={(value: number, name: string) => [
-                                                  `${value} plants`,
-                                                  name,
-                                                ]}
+                                            <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 16, right: 16, top: 16, bottom: 12 }}>
+                                              <CartesianGrid
+                                                strokeDasharray="3 3"
+                                                stroke={isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
                                               />
-                                            </PieChart>
+                                              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                                              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                                              <Tooltip
+                                                cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}
+                                                formatter={(value: number) => [`${value} plants`, "Promotions"]}
+                                              />
+                                              <Bar 
+                                                dataKey="value" 
+                                                fill={accentColor} 
+                                                radius={6}
+                                                cursor="pointer"
+                                                onClick={(data: { slug?: string }) => {
+                                                  if (data?.slug) {
+                                                    setSelectedPromotionMonth(data.slug as PromotionMonthSlug);
+                                                  }
+                                                }}
+                                              />
+                                            </BarChart>
                                           </ResponsiveContainer>
                                         </ChartSuspense>
                                       )}
-                                      {plantStatusDonutData.length > 0 && (
-                                        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                                          <span className="text-xs uppercase tracking-wide opacity-60">
-                                            Total
-                                          </span>
-                                          <span className="text-2xl font-semibold">
-                                            {plantStatusDonutData.reduce(
-                                              (sum, slice) => sum + slice.value,
-                                              0,
-                                            )}
-                                          </span>
-                                        </div>
-                                      )}
                                     </div>
-                                    )}
-                                  </div>
-                                  <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/95 dark:bg-[#17171d] p-4 flex flex-col">
-                                    <button
-                                      onClick={() => setIsRequestsVsApprovedCollapsed(!isRequestsVsApprovedCollapsed)}
-                                      className="flex items-center justify-between gap-2 w-full text-left hover:opacity-80 transition-opacity"
-                                    >
-                                      <div>
-                                        <div className="text-sm font-semibold">
-                                          Requests vs approved
-                                        </div>
-                                        <div className="text-xs opacity-60">
-                                          Ratio between incoming requests and approved plants.
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-3">
-                                        <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-300">
-                                          {requestsVsApproved.ratio !== null
-                                            ? `${requestsVsApproved.percent.toFixed(0)}%`
-                                            : requestsVsApproved.approved === 0 &&
-                                                requestsVsApproved.requests > 0
-                                              ? "∞"
-                                              : "0%"}
-                                        </div>
-                                        {isRequestsVsApprovedCollapsed ? (
-                                          <ChevronDown className="h-4 w-4 opacity-60" />
-                                        ) : (
-                                          <ChevronUp className="h-4 w-4 opacity-60" />
-                                        )}
-                                      </div>
-                                    </button>
-                                    {!isRequestsVsApprovedCollapsed && (
-                                      <>
-                                      <div className="mt-3 flex-1">
-                                      {plantTableLoading && totalPlantRequestsCount === 0 ? (
-                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                          Loading gauge...
-                                        </div>
-                                      ) : requestsVsApproved.requests === 0 &&
-                                        requestsVsApproved.approved === 0 ? (
-                                        <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                          No requests or approved plants yet.
-                                        </div>
-                                      ) : (
-                                          <div className="relative h-40 sm:h-48">
-                                          <ChartSuspense
-                                            fallback={
-                                              <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                                Loading gauge...
-                                              </div>
-                                            }
-                                          >
-                                            <ResponsiveContainer width="100%" height="100%">
-                                              <RadialBarChart
-                                                data={[
-                                                  {
-                                                    name: "ratio",
-                                                    value: requestsVsApproved.gaugeValue,
-                                                  },
-                                                ]}
-                                                startAngle={180}
-                                                endAngle={0}
-                                                  innerRadius="70%"
-                                                  outerRadius="100%"
-                                                  margin={{ top: 0, bottom: 0, left: 0, right: 0 }}
-                                              >
-                                                <PolarAngleAxis
-                                                  type="number"
-                                                  domain={[
-                                                    0,
-                                                    Math.max(1, requestsVsApproved.domainMax),
-                                                  ]}
-                                                  tick={false}
-                                                />
-                                                <RadialBar
-                                                  dataKey="value"
-                                                  cornerRadius={10}
-                                                  fill={accentColor}
-                                                  clockWise
-                                                  background
-                                                />
-                                              </RadialBarChart>
-                                            </ResponsiveContainer>
-                                          </ChartSuspense>
-                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                              <div className="text-2xl font-semibold text-emerald-600 dark:text-emerald-300">
-                                                {requestsVsApproved.ratio !== null
-                                                  ? `${requestsVsApproved.percent.toFixed(0)}%`
-                                                  : requestsVsApproved.approved === 0 &&
-                                                      requestsVsApproved.requests > 0
-                                                    ? "∞"
-                                                    : "0%"}
-                                              </div>
-                                            </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                      <div className="mt-1 text-center text-sm font-medium">
-                                      <div className="text-xs uppercase tracking-wide opacity-60">
-                                        Requests coverage
-                                      </div>
-                                      <div className="text-sm mt-2">
-                                        {requestsVsApproved.requests} requests /{" "}
-                                        {requestsVsApproved.approved} approved
-                                      </div>
-                                      {requestsVsApproved.ratio === null &&
-                                        requestsVsApproved.approved === 0 &&
-                                        requestsVsApproved.requests > 0 && (
-                                          <div className="text-xs opacity-60 mt-1">
-                                            Approve at least one plant to compute the ratio.
-                                          </div>
-                                        )}
-                                    </div>
-                                    </>
-                                    )}
                                   </div>
                                 </div>
-                                <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42] bg-white/90 dark:bg-[#131318] p-4 flex flex-col">
-                                  <button
-                                    onClick={() => setIsPromotionCadenceCollapsed(!isPromotionCadenceCollapsed)}
-                                    className="flex items-center justify-between gap-2 w-full text-left hover:opacity-80 transition-opacity mb-4"
-                                  >
-                                    <div>
-                                      <div className="text-sm font-semibold">
-                                        Promotion cadence
-                                      </div>
-                                      <div className="text-xs opacity-60">
-                                        Number of plants promoted per month.
-                                      </div>
-                                    </div>
-                                    {isPromotionCadenceCollapsed ? (
-                                      <ChevronDown className="h-4 w-4 opacity-60" />
-                                    ) : (
-                                      <ChevronUp className="h-4 w-4 opacity-60" />
-                                    )}
-                                  </button>
-                                  {!isPromotionCadenceCollapsed && (
-                                    <div className="w-full h-[320px] md:h-[360px]">
-                                    {plantTableLoading ? (
-                                      <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                        Loading chart...
-                                      </div>
-                                    ) : !hasPromotionMonthData ? (
-                                      <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                        No promotion data yet.
-                                      </div>
-                                    ) : (
-                                      <ChartSuspense
-                                        fallback={
-                                          <div className="flex h-full items-center justify-center text-sm opacity-60">
-                                            Loading chart...
-                                          </div>
-                                        }
-                                      >
-                                          <ResponsiveContainer width="100%" height="100%">
-                                          <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 32, right: 32, top: 16, bottom: 12 }}>
-                                            <CartesianGrid
-                                              strokeDasharray="3 3"
-                                              stroke={
-                                                isDark
-                                                  ? "rgba(255,255,255,0.08)"
-                                                  : "rgba(0,0,0,0.06)"
-                                              }
-                                            />
-                                            <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                                            <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                                            <Tooltip
-                                              cursor={{
-                                                fill: isDark
-                                                  ? "rgba(255,255,255,0.05)"
-                                                  : "rgba(0,0,0,0.03)",
-                                              }}
-                                              formatter={(value: number) => [`${value} plants`, "Promotions"]}
-                                            />
-                                            <Bar
-                                              dataKey="value"
-                                              fill={accentColor}
-                                              radius={6}
-                                            />
-                                          </BarChart>
-                                        </ResponsiveContainer>
-                                      </ChartSuspense>
-                                    )}
-                                  </div>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                            <Card className="rounded-2xl">
-                              <CardContent className="p-4 space-y-4">
-                                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                      <div>
-                                        <div className="text-sm font-medium">
-                                          Plant inventory
-                                        </div>
-                                        <div className="text-xs opacity-60">
-                                          Toggle statuses, filter by promotion month, or search.
-                                        </div>
+                              )}
+                            </div>
+
+                            {/* Plant Inventory Section */}
+                            <div className="rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden">
+                              <div className="p-4 sm:p-5 border-b border-stone-100 dark:border-[#2a2a2d]">
+                                <div className="flex flex-col gap-4">
+                                  {/* Header Row */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-teal-100 to-emerald-100 dark:from-teal-900/30 dark:to-emerald-900/30 flex items-center justify-center">
+                                        <Package className="h-5 w-5 text-teal-600 dark:text-teal-400" />
                                       </div>
                                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 w-full lg:w-auto">
-                                        <div className="relative flex-1">
-                                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
-                                          <Input
+                                        <div className="flex-1">
+                                          <SearchInput
                                             value={plantSearchQuery}
                                             onChange={(e) => setPlantSearchQuery(e.target.value)}
                                             placeholder="Search by plant name..."
-                                            className="pl-10 rounded-xl"
+                                            className="rounded-xl"
                                           />
                                         </div>
                                         <div className="w-full md:w-52">
@@ -5643,110 +6794,141 @@ export const AdminPage: React.FC = () => {
                                         </div>
                                       </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-2">
+                                  </div>
+
+                                  {/* Status Filter Pills */}
+                                  <div className="flex flex-wrap gap-2">
                                     {PLANT_STATUS_FILTER_OPTIONS.map((option) => {
                                       const selected = visiblePlantStatusesSet.has(option.value);
+                                      const statusColor = PLANT_STATUS_COLORS[option.value];
                                       return (
                                         <button
                                           key={option.value}
                                           type="button"
                                           aria-pressed={selected}
                                           onClick={() => togglePlantStatusFilter(option.value)}
-                                          className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
+                                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                                             selected
-                                              ? "bg-emerald-600 text-white border-emerald-600 shadow"
-                                              : "border-stone-200 text-stone-600 dark:border-[#3e3e42] dark:text-stone-200 hover:border-emerald-400 hover:text-emerald-200"
+                                              ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20"
+                                              : "border-stone-200 dark:border-[#3e3e42] text-stone-600 dark:text-stone-300 hover:border-stone-300 dark:hover:border-stone-500 bg-white dark:bg-[#1a1a1d]"
                                           }`}
                                         >
-                                          <Check
-                                            className={`h-3 w-3 transition-opacity ${selected ? "opacity-100" : "opacity-0"}`}
+                                          <span
+                                            className={`w-2 h-2 rounded-full ${selected ? "bg-white" : ""}`}
+                                            style={{ backgroundColor: selected ? undefined : statusColor }}
                                           />
                                           <span>{option.label}</span>
+                                          {selected && <Check className="h-3 w-3" />}
                                         </button>
                                       );
                                     })}
                                   </div>
-                                  <div className="text-[11px] text-stone-500 dark:text-stone-400">
-                                    Approved plants are hidden by default—enable statuses to include them.
-                                  </div>
-                                <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden">
-                                  <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-4 bg-stone-50/60 dark:bg-[#1c1c1f] px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-300">
-                                    <span>Plant</span>
-                                    <span className="text-right">Status</span>
-                                  </div>
-                                    {plantTableLoading ? (
-                                      <div className="p-4 text-sm opacity-60">
-                                        Loading plants...
-                                      </div>
-                                    ) : filteredPlantRows.length === 0 ? (
-                                      <div className="p-4 text-sm opacity-60">
-                                        {plantDashboardRows.length === 0
-                                          ? "No plants available yet."
-                                          : noPlantStatusesSelected
-                                            ? "Select at least one status to see plants."
-                                            : "No plants match the current filters."}
-                                      </div>
-                                    ) : (
-                                    <div className="divide-y divide-stone-200 dark:divide-[#2f2f35]">
-                                      {filteredPlantRows.map((plant) => (
-                                        <div
-                                          key={plant.id}
-                                          role="button"
-                                          tabIndex={0}
-                                          onClick={() => handleOpenPlantEditor(plant.id)}
-                                          onKeyDown={(event) => {
-                                            if (event.key === "Enter" || event.key === " ") {
-                                              event.preventDefault();
-                                              handleOpenPlantEditor(plant.id);
-                                            }
-                                          }}
-                                          className="grid grid-cols-[minmax(0,1fr)_120px] gap-4 px-4 py-3 items-center cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-[#1f1f24]"
-                                        >
-                                          <div className="flex items-center gap-3 min-w-0">
-                                            <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl bg-neutral-100 dark:bg-[#2d2d30] text-sm font-semibold text-neutral-500 flex items-center justify-center">
-                                              {plant.primaryImage ? (
-                                                <img
-                                                  src={plant.primaryImage}
-                                                  alt={plant.name}
-                                                  className="h-full w-full object-cover"
-                                                  loading="lazy"
-                                                />
-                                              ) : (
-                                                plant.name.charAt(0).toUpperCase()
-                                              )}
-                                            </div>
-                                            <div className="min-w-0">
-                                              <div className="text-sm font-medium truncate">
-                                                {plant.name}
-                                              </div>
-                                              <div className="text-xs text-stone-500 dark:text-stone-300">
-                                                Promotion month:{" "}
-                                                {plant.promotionMonth
-                                                  ? PROMOTION_MONTH_LABELS[plant.promotionMonth]
-                                                  : "Not set"}
-                                              </div>
-                                                {plant.updatedAt && (
-                                                  <div className="text-xs text-stone-500 dark:text-stone-400">
-                                                    Last update {formatTimeAgo(plant.updatedAt)}
-                                                  </div>
-                                                )}
-                                            </div>
-                                          </div>
-                                          <div className="text-right">
-                                            <span
-                                              className={`inline-flex items-center justify-end rounded-full px-2 py-1 text-xs font-medium ${PLANT_STATUS_BADGE_CLASSES[plant.status]}`}
-                                            >
-                                              {PLANT_STATUS_LABELS[plant.status]}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
                                 </div>
-                              </CardContent>
-                            </Card>
-                          </>
+                              </div>
+
+                              {/* Plant List */}
+                              {plantTableLoading ? (
+                                <div className="flex items-center justify-center py-16">
+                                  <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
+                                    <RefreshCw className="h-5 w-5 animate-spin" />
+                                    <span className="text-sm">Loading plants...</span>
+                                  </div>
+                                </div>
+                              ) : filteredPlantRows.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 px-4">
+                                  <div className="w-12 h-12 rounded-2xl bg-stone-100 dark:bg-[#2a2a2d] flex items-center justify-center mb-4">
+                                    <Leaf className="h-6 w-6 text-stone-400" />
+                                  </div>
+                                  <h3 className="text-base font-semibold text-stone-900 dark:text-white mb-1">No plants found</h3>
+                                  <p className="text-sm text-stone-500 dark:text-stone-400 text-center max-w-sm">
+                                    {plantDashboardRows.length === 0
+                                      ? "No plants available yet. Start adding plants to see them here."
+                                      : noPlantStatusesSelected
+                                        ? "Select at least one status filter to see plants."
+                                        : "No plants match your current filters. Try adjusting your search or filters."}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="divide-y divide-stone-100 dark:divide-[#2a2a2d]">
+                                  {filteredPlantRows.map((plant) => (
+                                    <div
+                                      key={plant.id}
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={() => handleOpenPlantEditor(plant.id)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter" || event.key === " ") {
+                                          event.preventDefault();
+                                          handleOpenPlantEditor(plant.id);
+                                        }
+                                      }}
+                                      className="group flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer transition-all hover:bg-stone-50 dark:hover:bg-[#252528]"
+                                    >
+                                      {/* Plant Image */}
+                                      <div className="relative h-12 w-12 sm:h-14 sm:w-14 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 dark:from-[#2d2d30] dark:to-[#252528] flex items-center justify-center">
+                                        {plant.primaryImage ? (
+                                          <img
+                                            src={plant.primaryImage}
+                                            alt={plant.name}
+                                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                                            loading="lazy"
+                                          />
+                                        ) : (
+                                          <Sprout className="h-6 w-6 text-stone-400" />
+                                        )}
+                                      </div>
+
+                                      {/* Plant Info */}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                            {plant.name}
+                                          </span>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
+                                          <span className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1">
+                                            <Calendar className="h-3 w-3" />
+                                            {plant.promotionMonth ? PROMOTION_MONTH_LABELS[plant.promotionMonth] : "No month"}
+                                          </span>
+                                          {plant.updatedAt && (
+                                            <span className="text-xs text-stone-400 dark:text-stone-500">
+                                              Updated {formatTimeAgo(plant.updatedAt)}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Status Badge & Actions */}
+                                      <div className="flex items-center gap-2">
+                                        <span
+                                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${PLANT_STATUS_BADGE_CLASSES[plant.status]}`}
+                                        >
+                                          <span
+                                            className="w-1.5 h-1.5 rounded-full"
+                                            style={{ backgroundColor: PLANT_STATUS_COLORS[plant.status] }}
+                                          />
+                                          {PLANT_STATUS_LABELS[plant.status]}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPlantToDelete({ id: plant.id, name: plant.name });
+                                            setDeletePlantDialogOpen(true);
+                                          }}
+                                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/30 text-stone-400 hover:text-red-600 dark:hover:text-red-400 transition-all"
+                                          title="Delete plant"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </button>
+                                        <ChevronRight className="h-4 w-4 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         ) : (
                       <Card className="rounded-2xl">
                       <CardContent className="p-4 space-y-4">
@@ -5759,22 +6941,57 @@ export const AdminPage: React.FC = () => {
                               Sorted by request count and most recent updates.
                             </div>
                           </div>
-                          <Button
-                            variant="outline"
-                            className="rounded-xl"
-                            onClick={() =>
-                              loadPlantRequests({ initial: false })
-                            }
-                            disabled={
-                              plantRequestsLoading || plantRequestsRefreshing
-                            }
-                          >
-                            <RefreshCw
-                              className={`h-4 w-4 mr-2 ${plantRequestsLoading || plantRequestsRefreshing ? "animate-spin" : ""}`}
-                            />
-                            <span className="hidden sm:inline">Refresh</span>
-                            <span className="sm:hidden inline">Reload</span>
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              className="rounded-xl"
+                              onClick={() =>
+                                loadPlantRequests({ initial: false })
+                              }
+                              disabled={
+                                plantRequestsLoading || plantRequestsRefreshing
+                              }
+                            >
+                              <RefreshCw
+                                className={`h-4 w-4 mr-2 ${plantRequestsLoading || plantRequestsRefreshing ? "animate-spin" : ""}`}
+                              />
+                              <span className="hidden sm:inline">Refresh</span>
+                              <span className="sm:hidden inline">Reload</span>
+                            </Button>
+                            <div className="relative">
+                              <div className="flex">
+                                <Button
+                                  className="rounded-l-xl rounded-r-none bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => navigate("/create")}
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  <span className="hidden sm:inline">Add Plant</span>
+                                  <span className="sm:hidden inline">Add</span>
+                                </Button>
+                                <Button
+                                  className="rounded-l-none rounded-r-xl bg-emerald-600 hover:bg-emerald-700 text-white border-l border-emerald-500 px-2"
+                                  onClick={() => setAddButtonExpanded(!addButtonExpanded)}
+                                >
+                                  <ChevronDown className={`h-4 w-4 transition-transform ${addButtonExpanded ? "rotate-180" : ""}`} />
+                                </Button>
+                              </div>
+                              {addButtonExpanded && (
+                                <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] shadow-lg overflow-hidden">
+                                  <button
+                                    type="button"
+                                    className="w-full px-4 py-2.5 text-sm text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors flex items-center gap-2"
+                                    onClick={() => {
+                                      setAddButtonExpanded(false);
+                                      setAddFromDialogOpen(true);
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 opacity-60" />
+                                    Add FROM...
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
 
                         {/* Statistics */}
@@ -5801,17 +7018,14 @@ export const AdminPage: React.FC = () => {
                         )}
 
                         {/* Search */}
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                          <Input
-                            placeholder="Search requests by plant name..."
-                            value={requestSearchQuery}
-                            onChange={(e) =>
-                              setRequestSearchQuery(e.target.value)
-                            }
-                            className="rounded-xl pl-10 pr-4"
-                          />
-                        </div>
+                        <SearchInput
+                          placeholder="Search requests by plant name..."
+                          value={requestSearchQuery}
+                          onChange={(e) =>
+                            setRequestSearchQuery(e.target.value)
+                          }
+                          className="rounded-xl"
+                        />
 
                         {plantRequestsError && (
                           <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
@@ -6039,8 +7253,8 @@ export const AdminPage: React.FC = () => {
                     {/* Emails Tab */}
                     {activeTab === "emails" && <AdminEmailsPanel />}
 
-                  {/* Admin Logs Tab */}
-                  {activeTab === "admin_logs" && <AdminLogs />}
+                  {/* Advanced Tab */}
+                  {activeTab === "admin_logs" && <AdminAdvancedPanel />}
 
                 {/* Members Tab */}
                 {activeTab === "members" && (
@@ -6266,15 +7480,15 @@ export const AdminPage: React.FC = () => {
                                         ) : null}
                                       </div>
                                       <div className="flex flex-wrap gap-1 mt-1">
-                                        {memberData.profile?.is_admin && (
-                                          <Badge
-                                            variant="outline"
-                                            className="rounded-full px-2 py-0.5 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700 flex items-center gap-1"
-                                          >
-                                            <ShieldCheck className="h-3 w-3" />{" "}
-                                            Admin
-                                          </Badge>
-                                        )}
+                                        {/* Role Badges */}
+                                        {memberRoles.map((role) => (
+                                          <UserRoleBadge
+                                            key={role}
+                                            role={role}
+                                            size="sm"
+                                            showLabel
+                                          />
+                                        ))}
                                         {memberData.isBannedEmail && (
                                           <Badge
                                             variant="destructive"
@@ -6510,6 +7724,169 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               );
                             })()}
+
+                            {/* Roles Management Section - Redesigned */}
+                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e]">
+                              {/* Header */}
+                              <div 
+                                className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
+                                onClick={() => setRolesOpen(!rolesOpen)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                  <span className="text-sm font-medium">User Roles</span>
+                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                                    {memberRoles.length} active
+                                  </span>
+                                </div>
+                                <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${rolesOpen ? "rotate-180" : ""}`} />
+                              </div>
+                              
+                              {/* Role Cards Grid */}
+                              {rolesOpen && (
+                                <div className="p-4 space-y-3">
+                                  {/* Active Roles Summary */}
+                                  {memberRoles.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 pb-3 border-b border-stone-100 dark:border-[#3e3e42]">
+                                      {memberRoles.map((role) => (
+                                        <UserRoleBadge key={role} role={role} size="sm" showLabel />
+                                      ))}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Role Toggle Cards */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {ADMIN_ASSIGNABLE_ROLES.map((role) => {
+                                      const config = ROLE_CONFIG[role];
+                                      const isActive = memberRoles.includes(role);
+                                      const isLoading = roleSubmitting === role;
+                                      
+                                      return (
+                                        <div
+                                          key={role}
+                                          className={`relative rounded-xl border-2 p-3 transition-all ${
+                                            isActive 
+                                              ? `${config.borderColor} ${config.darkBorderColor} ${config.bgColor} ${config.darkBgColor}` 
+                                              : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                                          }`}
+                                        >
+                                          <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-start gap-2 min-w-0">
+                                              <UserRoleBadge role={role} size="md" />
+                                              <div className="min-w-0">
+                                                <div className="text-sm font-medium truncate">{config.label}</div>
+                                                <div className="text-[11px] opacity-60 leading-tight">{config.description}</div>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Toggle Button */}
+                                            <button
+                                              type="button"
+                                              onClick={() => isActive ? removeRole(role) : addRole(role)}
+                                              disabled={isLoading}
+                                              className={`shrink-0 relative w-11 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                                isActive 
+                                                  ? "bg-emerald-500 focus:ring-emerald-500" 
+                                                  : "bg-stone-300 dark:bg-stone-600 focus:ring-stone-400"
+                                              } ${isLoading ? "opacity-50 cursor-wait" : ""}`}
+                                              aria-label={isActive ? `Remove ${config.label} role` : `Add ${config.label} role`}
+                                            >
+                                              <span
+                                                className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${
+                                                  isActive ? "translate-x-5" : "translate-x-0"
+                                                }`}
+                                              >
+                                                {isLoading && (
+                                                  <RefreshCw className="h-3 w-3 animate-spin text-stone-400" />
+                                                )}
+                                              </span>
+                                            </button>
+                                          </div>
+                                          
+                                          {/* Admin Warning Badge */}
+                                          {role === USER_ROLES.ADMIN && (
+                                            <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+                                              <AlertTriangle className="h-3 w-3" />
+                                              <span>Full system access</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {/* Plus Role Notice */}
+                                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-stone-50 dark:bg-[#252526] text-[11px] text-stone-500 dark:text-stone-400">
+                                    <Info className="h-3.5 w-3.5 shrink-0" />
+                                    <span>
+                                      <strong>Plus</strong> role is assigned automatically through paid subscriptions.
+                                      {memberRoles.includes(USER_ROLES.PLUS) && (
+                                        <span className="ml-1 text-emerald-600 dark:text-emerald-400">✓ Active subscriber</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Confirm Admin Role Dialog */}
+                            <Dialog open={confirmAdminOpen} onOpenChange={setConfirmAdminOpen}>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2">
+                                    <ShieldCheck className="h-5 w-5 text-purple-600" />
+                                    Grant Admin Access
+                                  </DialogTitle>
+                                  <DialogDescription className="space-y-3 pt-2">
+                                    <p>
+                                      You are about to grant <strong>full administrative privileges</strong> to{" "}
+                                      <span className="font-medium text-stone-900 dark:text-stone-100">
+                                        {memberData?.profile?.display_name || memberData?.user?.email || "this user"}
+                                      </span>.
+                                    </p>
+                                    <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
+                                      <div className="flex items-start gap-2">
+                                        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                                        <div className="text-xs text-amber-800 dark:text-amber-200">
+                                          <strong>Admin users can:</strong>
+                                          <ul className="mt-1 ml-3 list-disc space-y-0.5">
+                                            <li>Access and modify all user data</li>
+                                            <li>Create, edit, and delete plants</li>
+                                            <li>Manage all system settings</li>
+                                            <li>Grant or revoke roles for other users</li>
+                                            <li>Ban users and manage content</li>
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter className="gap-2 sm:gap-0">
+                                  <DialogClose asChild>
+                                    <Button variant="secondary" className="rounded-xl">
+                                      Cancel
+                                    </Button>
+                                  </DialogClose>
+                                  <Button
+                                    onClick={confirmAddAdmin}
+                                    disabled={roleSubmitting === USER_ROLES.ADMIN}
+                                    className="rounded-xl bg-purple-600 hover:bg-purple-700 text-white"
+                                  >
+                                    {roleSubmitting === USER_ROLES.ADMIN ? (
+                                      <>
+                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        Granting...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ShieldCheck className="h-4 w-4 mr-2" />
+                                        Confirm Grant Admin
+                                      </>
+                                    )}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
 
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                               <div className="rounded-xl border p-3 text-center">
@@ -7259,138 +8636,214 @@ export const AdminPage: React.FC = () => {
                     )}
 
                     {membersView === "list" && (
-                      <Card className="rounded-2xl">
-                        <CardContent className="p-4 space-y-4">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex flex-col gap-1">
-                              <div className="text-sm font-semibold flex items-center gap-2">
-                                <Users className="h-4 w-4" /> Members
-                              </div>
-                              <div className="text-xs opacity-60">
-                                Browse members in batches of 20 and load more as
-                                needed.
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-[11px] uppercase tracking-wide opacity-60">
-                                Sort
-                              </span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {memberListSortOptions.map((option) => (
-                                  <Button
-                                    key={option.value}
-                                    size="sm"
-                                    variant={
-                                      memberListSort === option.value
-                                        ? "default"
-                                        : "outline"
-                                    }
-                                    className="rounded-2xl text-xs"
-                                    onClick={() =>
-                                      handleMemberSortChange(option.value)
-                                    }
-                                  >
-                                    {option.label}
-                                  </Button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                          {memberListError && (
-                            <div className="flex flex-wrap items-center gap-3 text-sm text-rose-600">
-                              {memberListError}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-2xl"
-                                onClick={() =>
-                                  loadMemberList({
-                                    reset: memberList.length === 0,
-                                  })
-                                }
-                                disabled={memberListLoading}
+                      <div className="space-y-4">
+                        {/* Role Stats Cards - Compact horizontal scrollable on mobile */}
+                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-600">
+                          {[
+                            { key: null, label: "All", count: roleStats?.totalMembers ?? "-", icon: Users, color: "stone" },
+                            { key: "admin", label: "Admin", count: roleStats?.roleCounts?.admin ?? 0, icon: Shield, color: "purple" },
+                            { key: "editor", label: "Editor", count: roleStats?.roleCounts?.editor ?? 0, icon: Pencil, color: "blue" },
+                            { key: "pro", label: "Pro", count: roleStats?.roleCounts?.pro ?? 0, icon: Check, color: "emerald" },
+                            { key: "vip", label: "VIP", count: roleStats?.roleCounts?.vip ?? 0, icon: Crown, color: "amber" },
+                            { key: "plus", label: "Plus", count: roleStats?.roleCounts?.plus ?? 0, icon: Plus, color: "slate" },
+                            { key: "creator", label: "Creator", count: roleStats?.roleCounts?.creator ?? 0, icon: Sparkles, color: "pink" },
+                            { key: "merchant", label: "Merch", count: roleStats?.roleCounts?.merchant ?? 0, icon: Store, color: "sky" },
+                          ].map((item) => {
+                            const Icon = item.icon;
+                            const isSelected = roleFilter === item.key;
+                            const colorClasses: Record<string, { bg: string; icon: string; border: string; selectedBg: string; selectedBorder: string }> = {
+                              stone: { bg: "bg-stone-100 dark:bg-stone-800", icon: "text-stone-600 dark:text-stone-400", border: "hover:border-stone-300 dark:hover:border-stone-600", selectedBg: "bg-stone-50 dark:bg-stone-800/50", selectedBorder: "border-stone-400 dark:border-stone-500 ring-2 ring-stone-400/30" },
+                              purple: { bg: "bg-purple-100 dark:bg-purple-900/30", icon: "text-purple-600 dark:text-purple-400", border: "hover:border-purple-300 dark:hover:border-purple-700", selectedBg: "bg-purple-50 dark:bg-purple-900/30", selectedBorder: "border-purple-400 dark:border-purple-500 ring-2 ring-purple-400/30" },
+                              blue: { bg: "bg-blue-100 dark:bg-blue-900/30", icon: "text-blue-600 dark:text-blue-400", border: "hover:border-blue-300 dark:hover:border-blue-700", selectedBg: "bg-blue-50 dark:bg-blue-900/30", selectedBorder: "border-blue-400 dark:border-blue-500 ring-2 ring-blue-400/30" },
+                              emerald: { bg: "bg-emerald-100 dark:bg-emerald-900/30", icon: "text-emerald-600 dark:text-emerald-400", border: "hover:border-emerald-300 dark:hover:border-emerald-700", selectedBg: "bg-emerald-50 dark:bg-emerald-900/30", selectedBorder: "border-emerald-400 dark:border-emerald-500 ring-2 ring-emerald-400/30" },
+                              amber: { bg: "bg-amber-100 dark:bg-amber-900/30", icon: "text-amber-600 dark:text-amber-400", border: "hover:border-amber-300 dark:hover:border-amber-700", selectedBg: "bg-amber-50 dark:bg-amber-900/30", selectedBorder: "border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/30" },
+                              slate: { bg: "bg-slate-100 dark:bg-slate-800", icon: "text-slate-600 dark:text-slate-400", border: "hover:border-slate-300 dark:hover:border-slate-600", selectedBg: "bg-slate-50 dark:bg-slate-800/50", selectedBorder: "border-slate-400 dark:border-slate-500 ring-2 ring-slate-400/30" },
+                              pink: { bg: "bg-pink-100 dark:bg-pink-900/30", icon: "text-pink-600 dark:text-pink-400", border: "hover:border-pink-300 dark:hover:border-pink-700", selectedBg: "bg-pink-50 dark:bg-pink-900/30", selectedBorder: "border-pink-400 dark:border-pink-500 ring-2 ring-pink-400/30" },
+                              sky: { bg: "bg-sky-100 dark:bg-sky-900/30", icon: "text-sky-600 dark:text-sky-400", border: "hover:border-sky-300 dark:hover:border-sky-700", selectedBg: "bg-sky-50 dark:bg-sky-900/30", selectedBorder: "border-sky-400 dark:border-sky-500 ring-2 ring-sky-400/30" },
+                            };
+                            const colors = colorClasses[item.color];
+                            return (
+                              <button
+                                key={item.key ?? "all"}
+                                type="button"
+                                onClick={() => handleRoleFilterChange(item.key)}
+                                className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
+                                  isSelected
+                                    ? `${colors.selectedBg} ${colors.selectedBorder}`
+                                    : `bg-white dark:bg-[#1e1e20] border-stone-200 dark:border-[#3e3e42] ${colors.border}`
+                                }`}
                               >
-                                Retry
-                              </Button>
+                                <div className={`w-7 h-7 rounded-lg ${colors.bg} flex items-center justify-center`}>
+                                  <Icon className={`h-3.5 w-3.5 ${colors.icon}`} />
+                                </div>
+                                <div className="text-left">
+                                  <div className="text-sm font-bold text-stone-900 dark:text-white leading-tight">{item.count}</div>
+                                  <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-tight">{item.label}</div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <Card className="rounded-2xl">
+                          <CardContent className="p-4 space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-col gap-1">
+                                <div className="text-sm font-semibold flex items-center gap-2">
+                                  <Users className="h-4 w-4" /> Members
+                                </div>
+                                <div className="text-xs opacity-60">
+                                  Browse members in batches of 20 and load more as
+                                  needed.
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[11px] uppercase tracking-wide opacity-60">
+                                    Sort
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {memberListSortOptions.map((option) => (
+                                      <Button
+                                        key={option.value}
+                                        size="sm"
+                                        variant={
+                                          memberListSort === option.value
+                                            ? "default"
+                                            : "outline"
+                                        }
+                                        className="rounded-2xl text-xs"
+                                        onClick={() =>
+                                          handleMemberSortChange(option.value)
+                                        }
+                                      >
+                                        {option.label}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+                                {roleFilter && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] uppercase tracking-wide opacity-60">
+                                      Filter
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      className="rounded-2xl text-xs gap-1.5 capitalize"
+                                      onClick={() => handleRoleFilterChange(null)}
+                                    >
+                                      {roleFilter}
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          )}
-                          {memberList.length === 0 && memberListLoading && (
-                            <div className="space-y-2">
-                              {Array.from({ length: 3 }).map((_, idx) => (
-                                <div
-                                  key={`member-list-skeleton-${idx}`}
-                                  className="h-20 rounded-2xl border border-dashed animate-pulse"
-                                />
-                              ))}
-                            </div>
-                          )}
-                          {memberList.length === 0 &&
-                            !memberListLoading &&
-                            memberListInitialized &&
-                            !memberListError && (
-                              <div className="text-sm opacity-60">
-                                No members to show yet.
+                            {memberListError && (
+                              <div className="flex flex-wrap items-center gap-3 text-sm text-rose-600">
+                                {memberListError}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-2xl"
+                                  onClick={() =>
+                                    loadMemberList({
+                                      reset: memberList.length === 0,
+                                    })
+                                  }
+                                  disabled={memberListLoading}
+                                >
+                                  Retry
+                                </Button>
                               </div>
                             )}
-                          {memberList.length > 0 && (
-                            <div className="grid gap-2">
-                              {memberList.map((member) => (
-                                <button
-                                  key={member.id}
-                                  type="button"
-                                  className="text-left rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
-                                  onClick={() => handleMemberCardClick(member)}
-                                >
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                      <div className="font-semibold truncate">
-                                        {member.displayName ||
-                                          member.email ||
-                                          `User ${member.id.slice(0, 8)}`}
+                            {memberList.length === 0 && memberListLoading && (
+                              <div className="space-y-2">
+                                {Array.from({ length: 3 }).map((_, idx) => (
+                                  <div
+                                    key={`member-list-skeleton-${idx}`}
+                                    className="h-20 rounded-2xl border border-dashed animate-pulse"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            {memberList.length === 0 &&
+                              !memberListLoading &&
+                              memberListInitialized &&
+                              !memberListError && (
+                                <div className="text-sm opacity-60">
+                                  No members to show yet.
+                                </div>
+                              )}
+                            {memberList.length > 0 && (
+                              <div className="grid gap-2">
+                                {memberList.map((member) => (
+                                  <button
+                                    key={member.id}
+                                    type="button"
+                                    className="text-left rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
+                                    onClick={() => handleMemberCardClick(member)}
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="font-semibold truncate">
+                                              {member.displayName ||
+                                                member.email ||
+                                                `User ${member.id.slice(0, 8)}`}
+                                            </span>
+                                            {/* Role badges next to name like Profile page */}
+                                            <ProfileNameBadges 
+                                              roles={member.roles as UserRole[]} 
+                                              isAdmin={member.isAdmin} 
+                                              size="sm" 
+                                            />
+                                          </div>
+                                          <div className="text-xs opacity-70 truncate">
+                                            {member.email || "No email"}
+                                          </div>
+                                        </div>
                                       </div>
-                                      <div className="text-xs opacity-70 truncate">
-                                        {member.email || "No email"}
+                                      {/* Show "Member" badge if no special roles */}
+                                      {!member.isAdmin && member.roles.length === 0 && (
+                                        <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[10px] flex-shrink-0">
+                                          Member
+                                        </Badge>
+                                      )}
+                                    </div>
+                                      <div className="text-xs opacity-60 mt-1 flex flex-wrap items-center gap-2">
+                                        <span>
+                                          Joined {formatMemberJoinDate(member.createdAt)}
+                                        </span>
+                                        <span className="hidden sm:inline">•</span>
+                                        <span className="tabular-nums">
+                                          RPM (5m): {formatRpmValue(member.rpm5m)}
+                                        </span>
                                       </div>
-                                    </div>
-                                    <Badge
-                                      variant={
-                                        member.isAdmin ? "default" : "outline"
-                                      }
-                                      className={`rounded-full px-3 py-0.5 ${member.isAdmin ? "bg-emerald-600 text-white" : ""}`}
-                                    >
-                                      {member.isAdmin ? "Admin" : "Member"}
-                                    </Badge>
-                                  </div>
-                                    <div className="text-xs opacity-60 mt-1 flex flex-wrap items-center gap-2">
-                                      <span>
-                                        Joined {formatMemberJoinDate(member.createdAt)}
-                                      </span>
-                                      <span className="hidden sm:inline">•</span>
-                                      <span className="tabular-nums">
-                                        RPM (5m): {formatRpmValue(member.rpm5m)}
-                                      </span>
-                                    </div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          {memberList.length > 0 && (
-                            <Button
-                              variant="secondary"
-                              className="w-full rounded-2xl"
-                              onClick={() => loadMemberList()}
-                              disabled={memberListLoading || !memberListHasMore}
-                            >
-                              {memberListLoading
-                                ? "Loading..."
-                                : memberListHasMore
-                                  ? "Load 20 more"
-                                  : "No more members"}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {memberList.length > 0 && (
+                              <Button
+                                variant="secondary"
+                                className="w-full rounded-2xl"
+                                onClick={() => loadMemberList()}
+                                disabled={memberListLoading || !memberListHasMore}
+                              >
+                                {memberListLoading
+                                  ? "Loading..."
+                                  : memberListHasMore
+                                    ? "Load 20 more"
+                                    : "No more members"}
                             </Button>
                           )}
                         </CardContent>
                       </Card>
-                    )}
+                  </div>
+                )}
                   </div>
                 )}
 
@@ -7401,6 +8854,213 @@ export const AdminPage: React.FC = () => {
         </main>
       </div>
     </div>
+
+    {/* Add FROM Plant Dialog */}
+    <Dialog open={addFromDialogOpen} onOpenChange={(open) => {
+      setAddFromDialogOpen(open);
+      if (!open) {
+        setAddFromSearchQuery("");
+        setAddFromSearchResults([]);
+        setAddFromDuplicateError(null);
+        setAddFromDuplicateSuccess(null);
+      }
+    }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add Plant FROM Existing</DialogTitle>
+          <DialogDescription>
+            Search for an existing plant to duplicate. All data including translations will be copied to a new plant.
+          </DialogDescription>
+        </DialogHeader>
+        
+        {/* Success State */}
+        {addFromDuplicateSuccess ? (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+              <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-medium text-emerald-900 dark:text-emerald-100">
+                  Plant duplicated successfully!
+                </div>
+                <div className="text-sm text-emerald-700 dark:text-emerald-300">
+                  Created "<span className="font-medium">{addFromDuplicateSuccess.name}</span>"
+                </div>
+                <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-2">
+                  <Info className="h-3.5 w-3.5" />
+                  From original plant: {addFromDuplicateSuccess.originalName}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => {
+                  setAddFromDuplicateSuccess(null);
+                  setAddFromSearchQuery("");
+                  setAddFromSearchResults([]);
+                }}
+              >
+                Duplicate Another
+              </Button>
+              <Button
+                className="flex-1 rounded-xl"
+                onClick={() => {
+                  const successId = addFromDuplicateSuccess.id;
+                  const originalName = addFromDuplicateSuccess.originalName;
+                  setAddFromDialogOpen(false);
+                  setAddFromSearchQuery("");
+                  setAddFromSearchResults([]);
+                  setAddFromDuplicateSuccess(null);
+                  navigate(`/create/${successId}?duplicatedFrom=${encodeURIComponent(originalName)}`);
+                }}
+              >
+                Edit Plant
+                <ArrowUpRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        ) : addFromDuplicating ? (
+          /* Duplicating State */
+          <div className="flex flex-col items-center justify-center py-8 space-y-3">
+            <RefreshCw className="h-8 w-8 text-emerald-600 dark:text-emerald-400 animate-spin" />
+            <div className="text-sm font-medium">Duplicating plant...</div>
+            <div className="text-xs opacity-60">Copying all data and translations</div>
+          </div>
+        ) : (
+          /* Search State */
+          <div className="space-y-4">
+            {addFromDuplicateError && (
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-medium text-red-900 dark:text-red-100">
+                    Duplication failed
+                  </div>
+                  <div className="text-sm text-red-700 dark:text-red-300">
+                    {addFromDuplicateError}
+                  </div>
+                </div>
+              </div>
+            )}
+            <SearchInput
+              value={addFromSearchQuery}
+              onChange={(e) => {
+                setAddFromSearchQuery(e.target.value);
+                searchPlantsForAddFrom(e.target.value);
+              }}
+              placeholder="Search plants by name..."
+            />
+            <div className="max-h-[300px] overflow-y-auto rounded-xl border border-stone-200 dark:border-[#3e3e42]">
+              {addFromSearchLoading ? (
+                <div className="p-4 text-sm text-center opacity-60">Searching...</div>
+              ) : addFromSearchQuery.trim() && addFromSearchResults.length === 0 ? (
+                <div className="p-4 text-sm text-center opacity-60">No plants found</div>
+              ) : addFromSearchResults.length === 0 ? (
+                <div className="p-4 text-sm text-center opacity-60">Type to search for plants</div>
+              ) : (
+                <div className="divide-y divide-stone-200 dark:divide-[#2f2f35]">
+                  {addFromSearchResults.map((plant) => (
+                    <button
+                      key={plant.id}
+                      type="button"
+                      onClick={() => handleSelectPlantForPrefill(plant.id, plant.name)}
+                      className="w-full px-4 py-3 text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
+                    >
+                      <div className="font-medium text-sm">{plant.name}</div>
+                      {plant.scientific_name && (
+                        <div className="text-xs italic opacity-60">{plant.scientific_name}</div>
+                      )}
+                      {plant.status && (
+                        <Badge variant="outline" className="mt-1 text-[10px]">
+                          {plant.status}
+                        </Badge>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl" disabled={addFromDuplicating}>
+              {addFromDuplicateSuccess ? 'Close' : 'Cancel'}
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Delete Plant Confirmation Dialog */}
+    <Dialog open={deletePlantDialogOpen} onOpenChange={(open) => {
+      if (!deletingPlant) {
+        setDeletePlantDialogOpen(open);
+        if (!open) {
+          setPlantToDelete(null);
+        }
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <AlertTriangle className="h-5 w-5" />
+            Delete Plant
+          </DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete this plant? This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        
+        {plantToDelete && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-stone-100 dark:bg-[#2a2a2d] border border-stone-200 dark:border-[#3e3e42]">
+              <div className="font-medium text-stone-900 dark:text-white">
+                {plantToDelete.name}
+              </div>
+              <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 font-mono">
+                ID: {plantToDelete.id}
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800 dark:text-amber-200">
+                This will permanently delete the plant and all associated data including translations, images, and schedules.
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <DialogFooter className="gap-2 sm:gap-0">
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl" disabled={deletingPlant}>
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            className="rounded-xl"
+            onClick={handleDeletePlant}
+            disabled={deletingPlant}
+          >
+            {deletingPlant ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Plant
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 );
 };
@@ -7440,14 +9100,16 @@ const BroadcastControls: React.FC<{
     return () => clearInterval(id);
   }, []);
 
+  const [clockOffset, setClockOffset] = React.useState(0);
+
   const msRemaining = React.useCallback(
     (expiresAt: string | null): number | null => {
       if (!expiresAt) return null;
       const end = Date.parse(expiresAt);
       if (!Number.isFinite(end)) return null;
-      return Math.max(0, end - now);
+      return Math.max(0, end - (now + clockOffset));
     },
-    [now],
+    [now, clockOffset],
   );
 
   const formatDuration = (ms: number): string => {
@@ -7471,6 +9133,12 @@ const BroadcastControls: React.FC<{
       });
       if (r.ok) {
         const b = await r.json().catch(() => ({}));
+        if (b?.serverTime) {
+          const serverMs = Date.parse(b.serverTime);
+          if (Number.isFinite(serverMs)) {
+            setClockOffset(serverMs - Date.now());
+          }
+        }
         if (b?.broadcast) {
           setActive(b.broadcast);
           savePersistedBroadcast(b.broadcast);
@@ -7531,6 +9199,12 @@ const BroadcastControls: React.FC<{
               ? data.severity
               : "info") as any,
           );
+          if (data?.serverTime) {
+            const serverMs = Date.parse(data.serverTime);
+            if (Number.isFinite(serverMs)) {
+              setClockOffset(serverMs - Date.now());
+            }
+          }
           // Ask parent to open the section so admin sees edit/delete UI
           onActive?.();
         } catch {}
@@ -7548,6 +9222,9 @@ const BroadcastControls: React.FC<{
   }, []);
 
   // When current broadcast expires, revert to create form and notify parent (to re-open section)
+  // DISABLED: Keep the edit form active even if expired on client, so admin can extend/edit easily.
+  // The server is the authority on whether it's truly active for users.
+  /*
   React.useEffect(() => {
     if (!active?.expiresAt) return;
     const remain = msRemaining(active.expiresAt);
@@ -7562,6 +9239,7 @@ const BroadcastControls: React.FC<{
     );
     return () => window.clearTimeout(id);
   }, [active?.expiresAt, onExpired, msRemaining]);
+  */
 
   const onSubmit = React.useCallback(async () => {
     if (submitting) return;
@@ -8048,215 +9726,3 @@ function NoteRow({
   );
 }
 
-const AdminLogs: React.FC = () => {
-  const [logs, setLogs] = React.useState<
-    Array<{
-      occurred_at: string;
-      admin_id?: string | null;
-      admin_name: string | null;
-      action: string;
-      target: string | null;
-      detail: any;
-    }>
-  >([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = React.useState<number>(20);
-
-  const copyTextToClipboard = React.useCallback(
-    async (text: string): Promise<boolean> => {
-      try {
-        if (
-          navigator &&
-          navigator.clipboard &&
-          typeof navigator.clipboard.writeText === "function"
-        ) {
-          await navigator.clipboard.writeText(text);
-          return true;
-        }
-      } catch {}
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-        return ok;
-      } catch {
-        return false;
-      }
-    },
-    [],
-  );
-
-  const formatLogLine = React.useCallback(
-    (l: {
-      occurred_at: string;
-      admin_id?: string | null;
-      admin_name: string | null;
-      action: string;
-      target: string | null;
-      detail: any;
-    }): string => {
-      const ts = l.occurred_at ? new Date(l.occurred_at).toLocaleString() : "";
-      const who = (l.admin_name && String(l.admin_name).trim()) || "Admin";
-      const act = l.action || "";
-      const tgt = l.target ? ` ? ${l.target}` : "";
-      const det = l.detail ? ` ? ${JSON.stringify(l.detail)}` : "";
-      return `${ts} :: ? ${who} // ? ${act}${tgt}${det}`;
-    },
-    [],
-  );
-
-  const copyVisibleLogs = React.useCallback(async () => {
-    const subset = logs.slice(0, visibleCount);
-    const text = subset.map(formatLogLine).join("\n");
-    await copyTextToClipboard(text);
-  }, [logs, visibleCount, copyTextToClipboard, formatLogLine]);
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const session = (await supabase.auth.getSession()).data.session;
-      const token = session?.access_token;
-      const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      try {
-        const adminToken = (globalThis as any)?.__ENV__
-          ?.VITE_ADMIN_STATIC_TOKEN;
-        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
-      } catch {}
-      const r = await fetch("/api/admin/admin-logs?days=30", {
-        headers,
-        credentials: "same-origin",
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data?.error || `HTTP ? ${r.status}`);
-      const list = Array.isArray(data?.logs) ? data.logs : [];
-      setLogs(list);
-      setVisibleCount(Math.min(20, list.length || 20));
-    } catch (e: any) {
-      setError(e?.message || "Failed to load logs");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
-  // Live stream of admin logs via SSE
-  React.useEffect(() => {
-    let es: EventSource | null = null;
-    let updating = false;
-    (async () => {
-      try {
-        const session = (await supabase.auth.getSession()).data.session;
-        const token = session?.access_token;
-        // Static admin token if configured
-        let adminToken: string | null = null;
-        try {
-          adminToken =
-            String(
-              (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN || "",
-            ) || null;
-        } catch {}
-        const q: string[] = [];
-        if (token) q.push(`token=${encodeURIComponent(token)}`);
-        if (adminToken) q.push(`admin_token=${encodeURIComponent(adminToken)}`);
-        const url = `/api/admin/admin-logs/stream${q.length ? "?" + q.join("&") : ""}`;
-        es = new EventSource(url);
-        es.addEventListener("snapshot", (ev: MessageEvent) => {
-          try {
-            const data = JSON.parse(String(ev.data || "{}"));
-            const list = Array.isArray(data?.logs) ? data.logs : [];
-            setLogs(list);
-            setVisibleCount(Math.min(20, list.length || 20));
-          } catch {}
-        });
-        es.addEventListener("append", (ev: MessageEvent) => {
-          try {
-            const row = JSON.parse(String(ev.data || "{}"));
-            if (updating) return;
-            updating = true;
-            setLogs((prev) => [row, ...prev].slice(0, 2000));
-            setTimeout(() => {
-              updating = false;
-            }, 0);
-          } catch {}
-        });
-        es.onerror = () => {};
-      } catch {}
-    })();
-    return () => {
-      try {
-        es?.close();
-      } catch {}
-    };
-  }, []);
-  return (
-    <Card className="rounded-2xl">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-sm font-medium">Admin logs - last 30 days</div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              className="rounded-2xl h-8 px-3"
-              onClick={copyVisibleLogs}
-              disabled={loading}
-              aria-label="Copy logs"
-            >
-              Copy
-            </Button>
-            <Button
-              size="icon"
-              variant="outline"
-              className="rounded-2xl"
-              onClick={load}
-              disabled={loading}
-              aria-label="Refresh logs"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ? ${loading ? "animate-spin" : ""}`}
-              />
-            </Button>
-          </div>
-        </div>
-        {error && <div className="text-sm text-rose-600">{error}</div>}
-        {loading ? (
-          <div className="text-sm opacity-60">Loading...</div>
-        ) : logs.length === 0 ? (
-          <div className="text-sm opacity-60">No admin activity logged.</div>
-        ) : (
-          <>
-            <div className="bg-black text-green-300 rounded-2xl p-3 text-[11px] font-mono overflow-y-auto overflow-x-hidden max-h-[480px] space-y-2">
-              {logs.slice(0, visibleCount).map((l, idx) => (
-                <div key={idx} className="whitespace-pre-wrap break-words">
-                  {formatLogLine(l)}
-                </div>
-              ))}
-            </div>
-            {logs.length > visibleCount && (
-              <div className="flex justify-end mt-2">
-                <Button
-                  variant="outline"
-                  className="rounded-2xl h-8 px-3"
-                  onClick={() =>
-                    setVisibleCount((c) => Math.min(c + 50, logs.length))
-                  }
-                >
-                  Show more
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-};

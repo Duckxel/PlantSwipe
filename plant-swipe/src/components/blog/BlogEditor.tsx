@@ -15,6 +15,8 @@ import Subscript from "@tiptap/extension-subscript"
 import { Selection } from "@tiptap/extensions"
 import Image from "@tiptap/extension-image"
 import GapCursor from "@tiptap/extension-gapcursor"
+import { TextStyle } from "@tiptap/extension-text-style"
+import { Color } from "@tiptap/extension-color"
 import type { Extension, JSONContent } from "@tiptap/core"
 
 import { cn } from "@/lib/utils"
@@ -40,6 +42,11 @@ import {
   ColorHighlightPopoverButton,
   ColorHighlightPopoverContent,
 } from "@/components/tiptap-ui/color-highlight-popover"
+import {
+  TextColorPopover,
+  TextColorPopoverButton,
+  TextColorPopoverContent,
+} from "@/components/tiptap-ui/text-color-popover"
 import { LinkPopover, LinkButton, LinkContent } from "@/components/tiptap-ui/link-popover"
 import { MarkButton } from "@/components/tiptap-ui/mark-button"
 import { TextAlignButton } from "@/components/tiptap-ui/text-align-button"
@@ -53,6 +60,7 @@ import { SensitiveCodeButton } from "@/components/tiptap-ui/sensitive-code-butto
 import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
 import { LinkIcon } from "@/components/tiptap-icons/link-icon"
+import { TypeIcon } from "@/components/tiptap-icons/type-icon"
 
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint"
 import { useWindowSize } from "@/hooks/use-window-size"
@@ -77,10 +85,13 @@ type BlogEditorProps = {
   initialHtml?: string | null
   initialDocument?: JSONContent | null
   className?: string
+  editorContentClassName?: string
   uploadFolder: string
   onUpdate?: (payload: { html: string; doc: JSONContent | null; plainText: string }) => void
   extraExtensions?: Extension[]
   toolbarAppend?: ReactNode
+  /** Use 'embedded' variant when editor is inside another container with borders */
+  variant?: "default" | "embedded"
 }
 
 const DEFAULT_CONTENT =
@@ -89,8 +100,9 @@ const DEFAULT_CONTENT =
 const MainToolbarContent: React.FC<{
   onHighlighterClick: () => void
   onLinkClick: () => void
+  onTextColorClick: () => void
   isMobile: boolean
-}> = ({ onHighlighterClick, onLinkClick, isMobile }) => (
+}> = ({ onHighlighterClick, onLinkClick, onTextColorClick, isMobile }) => (
   <>
     <Spacer />
 
@@ -102,8 +114,8 @@ const MainToolbarContent: React.FC<{
     <ToolbarSeparator />
 
     <ToolbarGroup>
-      <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal={isMobile} />
-      <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} portal={isMobile} />
+      <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal />
+      <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} portal />
       <BlockquoteButton />
       <CodeBlockButton />
     </ToolbarGroup>
@@ -116,6 +128,11 @@ const MainToolbarContent: React.FC<{
       <MarkButton type="strike" />
       <MarkButton type="code" />
       <MarkButton type="underline" />
+      {!isMobile ? (
+        <TextColorPopover />
+      ) : (
+        <TextColorPopoverButton onClick={onTextColorClick} />
+      )}
       {!isMobile ? (
         <ColorHighlightPopover />
       ) : (
@@ -153,14 +170,14 @@ const MainToolbarContent: React.FC<{
       <EmailButtonButton />
       <EmailCardButton />
       <SensitiveCodeButton />
-      <DividerDropdownMenu portal={isMobile} />
+      <DividerDropdownMenu portal />
     </ToolbarGroup>
 
   </>
 )
 
 const MobileToolbarContent: React.FC<{
-  type: "highlighter" | "link"
+  type: "highlighter" | "link" | "textcolor"
   onBack: () => void
 }> = ({ type, onBack }) => (
   <>
@@ -169,6 +186,8 @@ const MobileToolbarContent: React.FC<{
         <ArrowLeftIcon className="tiptap-button-icon" />
         {type === "highlighter" ? (
           <HighlighterIcon className="tiptap-button-icon" />
+        ) : type === "textcolor" ? (
+          <TypeIcon className="tiptap-button-icon" />
         ) : (
           <LinkIcon className="tiptap-button-icon" />
         )}
@@ -177,16 +196,22 @@ const MobileToolbarContent: React.FC<{
 
     <ToolbarSeparator />
 
-    {type === "highlighter" ? <ColorHighlightPopoverContent /> : <LinkContent />}
+    {type === "highlighter" ? (
+      <ColorHighlightPopoverContent />
+    ) : type === "textcolor" ? (
+      <TextColorPopoverContent />
+    ) : (
+      <LinkContent />
+    )}
   </>
 )
 
 export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
-  ({ initialHtml, initialDocument, className, uploadFolder, onUpdate, extraExtensions, toolbarAppend }, ref) => {
+  ({ initialHtml, initialDocument, className, editorContentClassName, uploadFolder, onUpdate, extraExtensions, toolbarAppend, variant = "default" }, ref) => {
     const isMobile = useIsBreakpoint()
     const { height } = useWindowSize()
     const toolbarRef = useRef<HTMLDivElement>(null)
-    const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">("main")
+    const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link" | "textcolor">("main")
     const [wordCount, setWordCount] = useState(0)
     const uploadFolderRef = useRef(uploadFolder)
     uploadFolderRef.current = uploadFolder
@@ -204,7 +229,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           autocomplete: "off",
           autocorrect: "off",
           autocapitalize: "off",
-          class: "simple-editor",
+          class: cn("simple-editor", editorContentClassName),
         },
       },
       extensions: [
@@ -212,6 +237,10 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           horizontalRule: false,
           heading: { levels: [1, 2, 3, 4] },
           dropcursor: { color: "#34d399", width: 2 },
+          // We define these extensions manually with custom config below
+          link: false,
+          underline: false,
+          gapcursor: false,
         }),
         Placeholder.configure({
           placeholder: 'Type "/" for quick commands or start writing…',
@@ -225,6 +254,8 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
         TaskList,
         TaskItem.configure({ nested: true }),
         Highlight.configure({ multicolor: true }),
+        TextStyle,
+        Color,
         CharacterCount.configure({ limit: 30000 }),
         Typography,
         Superscript,
@@ -304,21 +335,28 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
       setWordCount(editor.storage?.characterCount?.words?.() ?? 0)
     }, [editor])
 
+    const isEmbedded = variant === "embedded"
+
     return (
       <div
         className={cn(
-          "rounded-3xl border border-stone-200/80 bg-white/90 p-0 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f11]",
+          "relative",
+          !isEmbedded && "rounded-3xl border border-stone-200/80 bg-white/90 p-0 shadow-sm dark:border-[#3e3e42] dark:bg-[#0f0f11]",
           className,
         )}
       >
         <EditorContext.Provider value={{ editor }}>
           <Toolbar
             ref={toolbarRef}
+            className={cn(
+              "sticky top-0 z-20 bg-white/95 backdrop-blur-sm dark:bg-[#0f0f11]/95",
+              !isEmbedded && "rounded-t-3xl"
+            )}
             style={
               isMobile
                 ? ({
-                    bottom: `calc(100% - ${height - rect.y}px)`,
-                  } as React.CSSProperties)
+                  bottom: `calc(100% - ${height - rect.y}px)`,
+                } as React.CSSProperties)
                 : undefined
             }
           >
@@ -326,11 +364,12 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
               <MainToolbarContent
                 onHighlighterClick={() => setMobileView("highlighter")}
                 onLinkClick={() => setMobileView("link")}
+                onTextColorClick={() => setMobileView("textcolor")}
                 isMobile={isMobile}
               />
             ) : (
               <MobileToolbarContent
-                type={mobileView === "highlighter" ? "highlighter" : "link"}
+                type={mobileView}
                 onBack={() => setMobileView("main")}
               />
             )}
@@ -342,10 +381,12 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           <EditorContent editor={editor} role="presentation" className="simple-editor-content" />
         </EditorContext.Provider>
 
-        <div className="flex items-center justify-between border-t border-stone-200 px-4 py-3 text-xs text-stone-500 dark:border-[#3e3e42] dark:text-stone-400">
-          <span>Use "/" for quick commands · Drag blocks to rearrange</span>
-          <span>{wordCount} words</span>
-        </div>
+        {!isEmbedded && (
+          <div className="flex items-center justify-between border-t border-stone-200 px-4 py-3 text-xs text-stone-500 dark:border-[#3e3e42] dark:text-stone-400">
+            <span>Use "/" for quick commands · Drag blocks to rearrange</span>
+            <span>{wordCount} words</span>
+          </div>
+        )}
       </div>
     )
   },

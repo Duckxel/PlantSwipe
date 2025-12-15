@@ -8,7 +8,7 @@ import { useLanguageNavigate, removeLanguagePrefix } from "@/lib/i18nRouting";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { SearchInput } from "@/components/ui/search-input";
 import {
   Dialog,
   DialogContent,
@@ -16,12 +16,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { PlantDetails } from "@/components/plant/PlantDetails";
-import { Info, ArrowUpRight, UploadCloud, Loader2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2 } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
-import type { Garden } from "@/types/garden";
+import { getUserBookmarks, getBookmarkDetails } from "@/lib/bookmarks";
+import type { Bookmark as BookmarkType } from "@/types/bookmark";
+import { motion } from "framer-motion";
+import type { Garden, GardenPrivacy } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import {
   getGarden,
@@ -29,6 +36,7 @@ import {
   getGardenMembers,
   addMemberByNameOrEmail,
   deleteGardenPlant,
+  deleteGarden,
   addPlantToGarden,
   fetchServerNowISO,
   upsertGardenTask,
@@ -51,6 +59,7 @@ import {
   getGardenWeeklyStatsCached,
   getGardenTodayProgressUltraFast,
   refreshGardenTaskCache,
+  updateGardenPrivacy,
 } from "@/lib/gardens";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -64,8 +73,15 @@ import { useLanguage } from "@/lib/i18nRouting";
 import { mergePlantWithTranslation } from "@/lib/plantTranslationLoader";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
+import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSection";
+import { GardenJournalSection } from "@/components/garden/GardenJournalSection";
+import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
+import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLanguageEditor";
+import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
+import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
+import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 
-type TabKey = "overview" | "plants" | "routine" | "settings";
+type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
 
 const getMaxScheduleSelections = (period: "week" | "month" | "year") =>
   period === "week" ? 7 : period === "month" ? 12 : 52;
@@ -99,6 +115,7 @@ export const GardenDashboardPage: React.FC = () => {
       role: "owner" | "member";
       joinedAt?: string;
       accentKey?: string | null;
+      avatarUrl?: string | null;
     }>
   >([]);
   const [loading, setLoading] = React.useState(true);
@@ -143,11 +160,36 @@ export const GardenDashboardPage: React.FC = () => {
   const [dueThisWeekByPlant, setDueThisWeekByPlant] = React.useState<
     Record<string, number[]>
   >({});
-  const [instanceCounts, setInstanceCounts] = React.useState<
+  const [weekTaskOccurrences, setWeekTaskOccurrences] = React.useState<
+    Array<{
+      id: string;
+      taskId: string;
+      gardenPlantId: string;
+      dueAt: string;
+      requiredCount: number;
+      completedCount: number;
+      completedAt: string | null;
+      taskType: "water" | "fertilize" | "harvest" | "cut" | "custom";
+      taskEmoji?: string | null;
+      dayIndex: number;
+    }>
+  >([]);
+  const [_instanceCounts, setInstanceCounts] = React.useState<
     Record<string, number>
   >({});
-  const [totalOnHand, setTotalOnHand] = React.useState(0);
-  const [speciesOnHand, setSpeciesOnHand] = React.useState(0);
+  // Derive totalOnHand and speciesOnHand from plants to avoid flashing
+  // (previously these were useState that got updated multiple times during load)
+  const { totalOnHand, speciesOnHand } = React.useMemo(() => {
+    let total = 0;
+    const seenSpecies = new Set<string>();
+    for (const gp of plants) {
+      const c = Number(gp.plantsOnHand || 0);
+      total += c;
+      if (gp.plantId) seenSpecies.add(String(gp.plantId));
+    }
+    return { totalOnHand: total, speciesOnHand: seenSpecies.size };
+  }, [plants]);
+  const [isFriendOfMember, setIsFriendOfMember] = React.useState(false);
 
   const [addOpen, setAddOpen] = React.useState(false);
   const [plantQuery, setPlantQuery] = React.useState("");
@@ -183,6 +225,46 @@ export const GardenDashboardPage: React.FC = () => {
   >(undefined);
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
 
+  // Bookmark import state
+  const [bookmarkDialogOpen, setBookmarkDialogOpen] = React.useState(false);
+  const [userBookmarks, setUserBookmarks] = React.useState<BookmarkType[]>([]);
+  const [bookmarksLoading, setBookmarksLoading] = React.useState(false);
+  const [importingFromBookmark, setImportingFromBookmark] = React.useState(false);
+
+  // Share button state
+  const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'error'>('idle');
+  const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current);
+    };
+  }, []);
+
+  const handleShare = React.useCallback(async () => {
+    if (typeof window === 'undefined' || !garden) return;
+    const shareUrl = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: garden.name,
+          url: shareUrl,
+        });
+        setShareStatus('copied');
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareStatus('copied');
+      } else {
+        setShareStatus('error');
+      }
+    } catch {
+      // User cancelled or error
+      setShareStatus('error');
+    }
+    if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current);
+    shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500);
+  }, [garden]);
+
   React.useEffect(() => {
     if (addDetailsOpen) {
       const t = setTimeout(() => {
@@ -209,9 +291,9 @@ export const GardenDashboardPage: React.FC = () => {
     Set<string>
   >(new Set());
 
-  const [infoPlant, setInfoPlant] = React.useState<Plant | null>(null);
+  const [_infoPlant, _setInfoPlant] = React.useState<Plant | null>(null);
   // Favorites (liked plants)
-  const [likedIds, setLikedIds] = React.useState<string[]>([]);
+  const [_likedIds, setLikedIds] = React.useState<string[]>([]);
   React.useEffect(() => {
     const arr = Array.isArray((profile as any)?.liked_plant_ids)
       ? ((profile as any).liked_plant_ids as any[]).map(String)
@@ -222,13 +304,13 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false);
   // Track if any modal is open to pause reloads
   const anyModalOpen =
-    addOpen || addDetailsOpen || scheduleOpen || taskOpen || inviteOpen;
+    addOpen || addDetailsOpen || scheduleOpen || taskOpen || inviteOpen || bookmarkDialogOpen;
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
   const lastReloadRef = React.useRef<number>(0);
   const pendingReloadRef = React.useRef<boolean>(false);
-  const [inviteEmail, setInviteEmail] = React.useState("");
+  const [_inviteEmail, _setInviteEmail] = React.useState("");
   const [inviteAny, setInviteAny] = React.useState("");
   const [inviteError, setInviteError] = React.useState<string | null>(null);
   const [friends, setFriends] = React.useState<
@@ -314,6 +396,8 @@ export const GardenDashboardPage: React.FC = () => {
         let hydratedPlants: any[] | null = null;
         let gpsLocal: any[] | null = null;
         let hydrated = false;
+        let hydratedGarden = false;
+        let hydratedMembers = false;
         try {
           const session = (await supabase.auth.getSession()).data.session;
           const token = session?.access_token;
@@ -328,7 +412,7 @@ export const GardenDashboardPage: React.FC = () => {
           if (resp.ok) {
             const data = await resp.json().catch(() => ({}));
             if (data?.ok) {
-              if (data.garden)
+              if (data.garden) {
                 setGarden({
                   id: String(data.garden.id),
                   name: String(data.garden.name),
@@ -336,12 +420,26 @@ export const GardenDashboardPage: React.FC = () => {
                   createdBy: String(data.garden.createdBy || ""),
                   createdAt: String(data.garden.createdAt || ""),
                   streak: Number(data.garden.streak || 0),
-                } as any);
-              if (Array.isArray(data.plants)) {
-                setPlants(data.plants);
-                hydratedPlants = data.plants;
+                  privacy: data.garden.privacy || 'public',
+                  locationCity: data.garden.locationCity || null,
+                  locationCountry: data.garden.locationCountry || null,
+                  locationTimezone: data.garden.locationTimezone || null,
+                  locationLat: data.garden.locationLat || null,
+                  locationLon: data.garden.locationLon || null,
+                  preferredLanguage: data.garden.preferredLanguage || null,
+                });
+                hydratedGarden = true;
               }
-              if (Array.isArray(data.members))
+              if (Array.isArray(data.plants)) {
+                // If server returned empty plants, don't mark as hydrated for plants
+                // This allows fallback to direct supabase query which may have correct RLS
+                if (data.plants.length > 0) {
+                  setPlants(data.plants);
+                  hydratedPlants = data.plants;
+                }
+                // Note: Empty plants from server is handled silently - fallback query will fetch them
+              }
+              if (Array.isArray(data.members) && data.members.length > 0) {
                 setMembers(
                   data.members.map((m: any) => ({
                     userId: String(m.userId || m.user_id),
@@ -349,22 +447,51 @@ export const GardenDashboardPage: React.FC = () => {
                     email: m.email ?? null,
                     role: m.role,
                     joinedAt: m.joinedAt ?? m.joined_at ?? null,
-                    accentKey: m.accentKey ?? null,
+                    accentKey: m.accentKey ?? m.accent_key ?? null,
+                    avatarUrl: m.avatarUrl ?? m.avatar_url ?? null,
                   })),
                 );
+                hydratedMembers = true;
+              }
               if (data.serverNow) {
                 const todayIso = String(data.serverNow).slice(0, 10);
                 setServerToday(todayIso);
                 serverTodayRef.current = todayIso;
               }
-              hydrated = true;
+              // Use pre-calculated stats from server if available (avoids additional round-trips)
+              if (data.todayProgress && typeof data.todayProgress.due === 'number') {
+                const { due, completed } = data.todayProgress;
+                const today = String(data.serverNow || '').slice(0, 10);
+                if (today) {
+                  setDailyStats((prev) => {
+                    const existing = prev.find(d => d.date === today);
+                    if (existing) {
+                      return prev.map(d => 
+                        d.date === today ? { ...d, due, completed, success: due === 0 || completed >= due } : d
+                      );
+                    }
+                    return [...prev, { date: today, due, completed, success: due === 0 || completed >= due }];
+                  });
+                }
+              }
+              // totalOnHand and speciesOnHand are now derived via useMemo from plants state
+              // Mark as fully hydrated if we got all data
+              hydrated = hydratedGarden && hydratedMembers && hydratedPlants !== null && hydratedPlants.length > 0;
             }
           }
         } catch {}
 
         let gardenCreatedDayIso: string | null = null;
         let todayLocal: string | null = null;
-        if (!hydrated) {
+        
+        // If server returned 0 plants but we got garden/members, only fetch plants
+        if (hydratedGarden && hydratedMembers && (hydratedPlants === null || hydratedPlants.length === 0)) {
+          const gpsRaw = await getGardenPlants(id, currentLang);
+          gpsLocal = gpsRaw;
+          setPlants(gpsRaw);
+          hydratedPlants = gpsRaw;
+        } else if (!hydrated) {
+          // Full fallback - fetch everything
           const [g0, gpsRaw, ms, nowIso] = await Promise.all([
             getGarden(id),
             getGardenPlants(id, currentLang),
@@ -378,6 +505,7 @@ export const GardenDashboardPage: React.FC = () => {
             : null;
           gpsLocal = gpsRaw;
           setPlants(gpsRaw);
+          hydratedPlants = gpsRaw;
           setMembers(
             ms.map((m) => ({
               userId: m.userId,
@@ -386,6 +514,7 @@ export const GardenDashboardPage: React.FC = () => {
               role: m.role,
               joinedAt: (m as any).joinedAt,
               accentKey: (m as any).accentKey ?? null,
+              avatarUrl: (m as any).avatarUrl ?? null,
             })),
           );
           todayLocal = nowIso.slice(0, 10);
@@ -440,7 +569,7 @@ export const GardenDashboardPage: React.FC = () => {
         // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
         const start = new Date(today);
         start.setDate(start.getDate() - 29);
-        const startIso = start.toISOString().slice(0, 10);
+        const _startIso = start.toISOString().slice(0, 10);
         // Defer heavy computations; garden_tasks fetched later for stats
         // Compute current week (Mon-Sun) in UTC based on server 'today'
         const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`);
@@ -549,15 +678,32 @@ export const GardenDashboardPage: React.FC = () => {
             setWeekCounts(totals);
 
             const dueMapSets: Record<string, Set<number>> = {};
+            const taskEmojiById: Record<string, string | null> = {};
+            for (const t of allTasks) taskEmojiById[t.id] = (t as any).emoji || null;
+            const enrichedWeekOccs: typeof weekTaskOccurrences = [];
             for (const o of weekOccs) {
               const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
               const remaining = Math.max(
                 0,
                 Number(o.requiredCount || 1) - Number(o.completedCount || 0),
               );
+              const idx = weekDaysIso.indexOf(dayIso);
+              if (idx >= 0) {
+                enrichedWeekOccs.push({
+                  id: o.id,
+                  taskId: o.taskId,
+                  gardenPlantId: o.gardenPlantId,
+                  dueAt: o.dueAt,
+                  requiredCount: o.requiredCount,
+                  completedCount: o.completedCount,
+                  completedAt: o.completedAt || null,
+                  taskType: tById[o.taskId] || "custom",
+                  taskEmoji: taskEmojiById[o.taskId],
+                  dayIndex: idx,
+                });
+              }
               if (remaining <= 0) continue;
               if (dayIso <= today) continue;
-              const idx = weekDaysIso.indexOf(dayIso);
               if (idx >= 0) {
                 const pid = String(o.gardenPlantId);
                 if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>();
@@ -570,6 +716,7 @@ export const GardenDashboardPage: React.FC = () => {
                 (a, b) => a - b,
               );
             setDueThisWeekByPlant(dueMapNext);
+            setWeekTaskOccurrences(enrichedWeekOccs);
           }
 
           const dueTodaySet = new Set<string>();
@@ -601,25 +748,16 @@ export const GardenDashboardPage: React.FC = () => {
         }
 
         // Load inventory counts for display
-        // Compute per-instance counts and totals from garden_plants instances, not species-level inventory
+        // Compute per-instance counts from garden_plants instances
         const perInstanceCounts: Record<string, number> = {};
-        let total = 0;
-        let species = 0;
-        const seenSpecies = new Set<string>();
         const plantsLocal = (hydratedPlants ?? gpsLocal ?? plants) as any[];
         for (const gp of plantsLocal) {
           const c = Number(gp.plantsOnHand || 0);
           perInstanceCounts[String(gp.plantId)] =
             (perInstanceCounts[String(gp.plantId)] || 0) + c;
-          total += c;
-          if (c > 0 && !seenSpecies.has(String(gp.plantId))) {
-            seenSpecies.add(String(gp.plantId));
-            species += 1;
-          }
         }
         setInstanceCounts(perInstanceCounts);
-        setTotalOnHand(total);
-        setSpeciesOnHand(species);
+        // totalOnHand and speciesOnHand are derived via useMemo from plants state
         // Build last-30-days success using garden_tasks (fast, no occurrences)
         try {
             const statsStart = new Date(today);
@@ -651,10 +789,19 @@ export const GardenDashboardPage: React.FC = () => {
               return days.map((day) => {
                 const cached = prevByDate.get(day.date);
                 if (!cached) return day;
+                const finalDue = cached.due ?? day.due;
+                const finalCompleted = cached.completed ?? day.completed;
+                // Compute success from merged due/completed when we have cached task data
+                // When no tasks are due (finalDue === 0), day is automatically successful
+                // Otherwise check if garden_tasks recorded success or compute from completion
+                const computedSuccess = finalDue === 0 || finalCompleted >= finalDue;
+                // Use computed success if we have cached task data, otherwise prefer cached success over garden_tasks
+                const finalSuccess = cached.due !== undefined ? computedSuccess : (cached.success ?? day.success);
                 return {
                   ...day,
-                  due: cached.due ?? day.due,
-                  completed: cached.completed ?? day.completed,
+                  due: finalDue,
+                  completed: finalCompleted,
+                  success: finalSuccess,
                 };
               });
             });
@@ -682,17 +829,17 @@ export const GardenDashboardPage: React.FC = () => {
       const todayValue = todayOverride ?? serverTodayRef.current ?? serverToday;
       if (!id || !todayValue) return;
 
-      const needsRoutineData = tab === "routine";
+      const needsTasksData = tab === "tasks" || tab === "overview"; // Tasks widget on overview + tasks tab
       const needsPlantsData = tab === "plants";
-      const shouldRun = opts?.force || needsRoutineData || needsPlantsData;
+      const shouldRun = opts?.force || needsTasksData || needsPlantsData;
       if (!shouldRun) return;
 
       if (heavyLoadingRef.current) return;
 
       setHeavyLoading(true);
       try {
-        let weekDaysIso: string[] = [];
-        if (needsRoutineData) {
+        const weekDaysIso: string[] = [];
+        if (needsTasksData) {
           const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`);
           const anchorUTC = parseUTC(todayValue);
           const dayUTC = anchorUTC.getUTCDay();
@@ -710,7 +857,7 @@ export const GardenDashboardPage: React.FC = () => {
 
         const [allTasks] = await Promise.all([
           listGardenTasks(id),
-          needsRoutineData && weekDaysIso.length === 7
+          needsTasksData && weekDaysIso.length === 7
             ? (async () => {
                 const weekStartIso = `${
                   weekDaysIso[0] || today
@@ -776,7 +923,7 @@ export const GardenDashboardPage: React.FC = () => {
 
         setTodayTaskOccurrences(occsDetailed as any);
 
-        if (needsPlantsData || needsRoutineData) {
+        if (needsPlantsData || needsTasksData) {
           const taskCountMap: Record<string, number> = {};
           for (const t of allTasks)
             taskCountMap[t.gardenPlantId] =
@@ -811,12 +958,13 @@ export const GardenDashboardPage: React.FC = () => {
               ),
             0,
           );
+          const success = reqDone === 0 || compDone >= reqDone;
           return prev.map((d) =>
-            d.date === today ? { ...d, due: reqDone, completed: compDone } : d,
+            d.date === today ? { ...d, due: reqDone, completed: compDone, success } : d,
           );
         });
 
-        if (needsRoutineData && weekDaysIso.length === 7) {
+        if (needsTasksData && weekDaysIso.length === 7) {
           const cachedWeekStats = await getGardenWeeklyStatsCached(
             id,
             weekDaysIso[0],
@@ -841,15 +989,36 @@ export const GardenDashboardPage: React.FC = () => {
               weekEndIso,
             );
             const dueMapSets: Record<string, Set<number>> = {};
+            const tByIdCached: Record<string, "water" | "fertilize" | "harvest" | "cut" | "custom"> = {};
+            const taskEmojiByCached: Record<string, string | null> = {};
+            for (const t of allTasks) {
+              tByIdCached[t.id] = t.type as any;
+              taskEmojiByCached[t.id] = (t as any).emoji || null;
+            }
+            const enrichedWeekOccsCached: typeof weekTaskOccurrences = [];
             for (const o of weekOccs) {
               const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
               const remaining = Math.max(
                 0,
                 Number(o.requiredCount || 1) - Number(o.completedCount || 0),
               );
+              const idx = weekDaysIso.indexOf(dayIso);
+              if (idx >= 0) {
+                enrichedWeekOccsCached.push({
+                  id: o.id,
+                  taskId: o.taskId,
+                  gardenPlantId: o.gardenPlantId,
+                  dueAt: o.dueAt,
+                  requiredCount: o.requiredCount,
+                  completedCount: o.completedCount,
+                  completedAt: o.completedAt || null,
+                  taskType: tByIdCached[o.taskId] || "custom",
+                  taskEmoji: taskEmojiByCached[o.taskId],
+                  dayIndex: idx,
+                });
+              }
               if (remaining <= 0) continue;
               if (dayIso <= today) continue;
-              const idx = weekDaysIso.indexOf(dayIso);
               if (idx >= 0) {
                 const pid = String(o.gardenPlantId);
                 if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>();
@@ -862,6 +1031,7 @@ export const GardenDashboardPage: React.FC = () => {
                 (a, b) => a - b,
               );
             setDueThisWeekByPlant(dueMapNext);
+            setWeekTaskOccurrences(enrichedWeekOccsCached);
           } else {
             const loadWeekData = async () => {
               const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
@@ -889,7 +1059,12 @@ export const GardenDashboardPage: React.FC = () => {
                 string,
                 "water" | "fertilize" | "harvest" | "cut" | "custom"
               > = {};
-              for (const t of allTasks) tById[t.id] = t.type as any;
+              const taskEmojiByIdLoad: Record<string, string | null> = {};
+              for (const t of allTasks) {
+                tById[t.id] = t.type as any;
+                taskEmojiByIdLoad[t.id] = (t as any).emoji || null;
+              }
+              const enrichedWeekOccsLoad: typeof weekTaskOccurrences = [];
               for (const o of weekOccs) {
                 const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
                 const idx = weekDaysIso.indexOf(dayIso);
@@ -897,6 +1072,18 @@ export const GardenDashboardPage: React.FC = () => {
                   const typ = tById[o.taskId] || "custom";
                   const inc = Math.max(1, Number(o.requiredCount || 1));
                   (typeCounts as any)[typ][idx] += inc;
+                  enrichedWeekOccsLoad.push({
+                    id: o.id,
+                    taskId: o.taskId,
+                    gardenPlantId: o.gardenPlantId,
+                    dueAt: o.dueAt,
+                    requiredCount: o.requiredCount,
+                    completedCount: o.completedCount,
+                    completedAt: o.completedAt || null,
+                    taskType: typ,
+                    taskEmoji: taskEmojiByIdLoad[o.taskId],
+                    dayIndex: idx,
+                  });
                 }
               }
               const totals = weekDaysIso.map(
@@ -931,6 +1118,7 @@ export const GardenDashboardPage: React.FC = () => {
                   (a, b) => a - b,
                 );
               setDueThisWeekByPlant(dueMapNext);
+              setWeekTaskOccurrences(enrichedWeekOccsLoad);
 
               refreshGardenTaskCache(id, today).catch(() => {});
             };
@@ -945,7 +1133,7 @@ export const GardenDashboardPage: React.FC = () => {
           }
         }
 
-        if (needsPlantsData || needsRoutineData) {
+        if (needsPlantsData || needsTasksData) {
           const occsForDueToday =
             cachedOccs && cachedOccs.length > 0
               ? cachedOccs
@@ -1059,7 +1247,7 @@ export const GardenDashboardPage: React.FC = () => {
             setTodayTaskOccurrences((prev) => {
               // Replace with new data but preserve object references for unchanged items to avoid re-renders
               const prevMap = new Map(prev.map((o) => [o.id, o]));
-              const newMap = new Map(occsWithType.map((o) => [o.id, o]));
+              const _newMap = new Map(occsWithType.map((o) => [o.id, o]));
               const result: any[] = [];
 
               // Use new data order, but keep existing object references when data hasn't changed
@@ -1118,7 +1306,7 @@ export const GardenDashboardPage: React.FC = () => {
               return next;
             });
 
-            if (tab === "routine" && today) {
+            if ((tab === "overview" || tab === "tasks") && today) {
               const weekOccs = await listOccurrencesForTasks(
                 allTasks.map((t) => t.id),
                 weekStartIso,
@@ -1141,7 +1329,12 @@ export const GardenDashboardPage: React.FC = () => {
                 string,
                 "water" | "fertilize" | "harvest" | "cut" | "custom"
               > = {};
-              for (const t of allTasks) tById[t.id] = t.type as any;
+              const taskEmojiByIdRefresh: Record<string, string | null> = {};
+              for (const t of allTasks) {
+                tById[t.id] = t.type as any;
+                taskEmojiByIdRefresh[t.id] = (t as any).emoji || null;
+              }
+              const enrichedWeekOccsRefresh: typeof weekTaskOccurrences = [];
               for (const o of weekOccs) {
                 const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
                 const idx = weekDays.indexOf(dayIso);
@@ -1149,6 +1342,18 @@ export const GardenDashboardPage: React.FC = () => {
                   const typ = tById[o.taskId] || "custom";
                   const inc = Math.max(1, Number(o.requiredCount || 1));
                   (typeCounts as any)[typ][idx] += inc;
+                  enrichedWeekOccsRefresh.push({
+                    id: o.id,
+                    taskId: o.taskId,
+                    gardenPlantId: o.gardenPlantId,
+                    dueAt: o.dueAt,
+                    requiredCount: o.requiredCount,
+                    completedCount: o.completedCount,
+                    completedAt: o.completedAt || null,
+                    taskType: typ,
+                    taskEmoji: taskEmojiByIdRefresh[o.taskId],
+                    dayIndex: idx,
+                  });
                 }
               }
               const totals = weekDays.map(
@@ -1184,6 +1389,7 @@ export const GardenDashboardPage: React.FC = () => {
                   (a, b) => a - b,
                 );
               setDueThisWeekByPlant(dueMapNext);
+              setWeekTaskOccurrences(enrichedWeekOccsRefresh);
             }
 
             // Update daily stats for today only
@@ -1202,9 +1408,10 @@ export const GardenDashboardPage: React.FC = () => {
                     ),
                   0,
                 );
+                const success = reqDone === 0 || compDone >= reqDone;
                 return prev.map((d) =>
                   d.date === today
-                    ? { ...d, due: reqDone, completed: compDone }
+                    ? { ...d, due: reqDone, completed: compDone, success }
                     : d,
                 );
               });
@@ -1241,22 +1448,13 @@ export const GardenDashboardPage: React.FC = () => {
 
           // Update inventory counts
           const perInstanceCounts: Record<string, number> = {};
-          let total = 0;
-          let species = 0;
-          const seenSpecies = new Set<string>();
           for (const gp of gpsRaw) {
             const c = Number(gp.plantsOnHand || 0);
             perInstanceCounts[String(gp.plantId)] =
               (perInstanceCounts[String(gp.plantId)] || 0) + c;
-            total += c;
-            if (c > 0 && !seenSpecies.has(String(gp.plantId))) {
-              seenSpecies.add(String(gp.plantId));
-              species += 1;
-            }
           }
           setInstanceCounts(perInstanceCounts);
-          setTotalOnHand(total);
-          setSpeciesOnHand(species);
+          // totalOnHand and speciesOnHand are derived via useMemo from plants state
         }
 
         if (kind === "members" || kind === "general") {
@@ -1270,6 +1468,7 @@ export const GardenDashboardPage: React.FC = () => {
               role: m.role,
               joinedAt: (m as any).joinedAt,
               accentKey: (m as any).accentKey ?? null,
+              avatarUrl: (m as any).avatarUrl ?? null,
             })),
           );
         }
@@ -1307,6 +1506,21 @@ export const GardenDashboardPage: React.FC = () => {
       currentLang,
     ],
   );
+
+  // Simple callback to refresh just the garden data (for settings updates like location)
+  const refreshGarden = React.useCallback(async () => {
+    if (!id) return;
+    try {
+      console.log("[GardenDashboard] Refreshing garden data...");
+      const g = await getGarden(id);
+      if (g) {
+        console.log("[GardenDashboard] Garden refreshed:", g.locationCity, g.locationCountry);
+        setGarden(g);
+      }
+    } catch (e) {
+      console.warn("[GardenDashboard] Failed to refresh garden:", e);
+    }
+  }, [id]);
 
   const scheduleReload = React.useCallback(() => {
     const executeReload = async () => {
@@ -1365,14 +1579,56 @@ export const GardenDashboardPage: React.FC = () => {
       return self?.role === "owner";
     }, [members, currentUserId, profile?.is_admin]);
 
+    // Check if current user is a member of this garden
+    const isMember = React.useMemo(() => {
+      if (!currentUserId) return false;
+      return members.some((m) => m.userId === currentUserId);
+    }, [members, currentUserId]);
+
+    // Can view garden content (member, admin, or public garden)
+    const canViewFullGarden = React.useMemo(() => {
+      if (profile?.is_admin) return true;
+      if (isMember) return true;
+      return false;
+    }, [isMember, profile?.is_admin]);
+
+    // Can view at least the overview (based on privacy setting)
+    const canViewOverview = React.useMemo(() => {
+      if (profile?.is_admin) return true;
+      if (isMember) return true;
+      const privacy = garden?.privacy || 'public';
+      if (privacy === 'public') return true;
+      if (privacy === 'friends_only' && isFriendOfMember) return true;
+      return false;
+    }, [isMember, garden?.privacy, profile?.is_admin, isFriendOfMember]);
+
     React.useEffect(() => {
       load();
     }, [load]);
 
+    // Check if viewer is a friend of any garden member (for friends_only privacy)
+    React.useEffect(() => {
+      if (!user?.id || isMember || members.length === 0) {
+        setIsFriendOfMember(false);
+        return;
+      }
+      const checkFriends = async () => {
+        const memberIds = members.map(m => m.userId);
+        // Check if current user is friends with any member
+        const { data: friendships } = await supabase
+          .from('friends')
+          .select('friend_id')
+          .eq('user_id', user.id)
+          .in('friend_id', memberIds);
+        setIsFriendOfMember(Boolean(friendships && friendships.length > 0));
+      };
+      checkFriends();
+    }, [user?.id, members, isMember]);
+
     // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
     React.useEffect(() => {
       if (loading || !id || !serverToday) return;
-      if (tab !== "routine" && tab !== "plants") return;
+      if (tab !== "overview" && tab !== "plants" && tab !== "tasks") return;
       // Use requestIdleCallback to defer heavy loading until browser is idle
       const loadFn = () => {
         loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
@@ -1634,7 +1890,7 @@ export const GardenDashboardPage: React.FC = () => {
         return;
       }
 
-      // Load translations for current language
+      // Load translations for ALL languages (including English)
       const plantIds = fullPlants.map((p: any) => p.id);
       const { data: translations } = await supabase
         .from("plant_translations")
@@ -1642,7 +1898,6 @@ export const GardenDashboardPage: React.FC = () => {
         .eq("language", currentLang)
         .in("plant_id", plantIds);
 
-      // Create translation map
       const translationMap = new Map();
       if (translations) {
         translations.forEach((t: any) => {
@@ -1924,7 +2179,79 @@ export const GardenDashboardPage: React.FC = () => {
     }
   };
 
-  const openEditSchedule = async (gardenPlant: any) => {
+  // Fetch user bookmarks when dialog opens
+  const openBookmarkDialog = React.useCallback(async () => {
+    if (!user?.id) return;
+    setBookmarkDialogOpen(true);
+    setBookmarksLoading(true);
+    try {
+      const bookmarks = await getUserBookmarks(user.id);
+      setUserBookmarks(bookmarks);
+    } catch (e) {
+      console.error("Failed to fetch bookmarks:", e);
+      setUserBookmarks([]);
+    } finally {
+      setBookmarksLoading(false);
+    }
+  }, [user?.id]);
+
+  // Import all plants from a bookmark
+  const importPlantsFromBookmark = React.useCallback(async (bookmarkId: string) => {
+    if (!id || !user?.id) return;
+    setImportingFromBookmark(true);
+    try {
+      // Fetch bookmark details with full plant data (with translations)
+      const bookmark = await getBookmarkDetails(bookmarkId, currentLang);
+      const items = bookmark.items || [];
+      
+      if (items.length === 0) {
+        setBookmarkDialogOpen(false);
+        setImportingFromBookmark(false);
+        return;
+      }
+
+      let importedCount = 0;
+      for (const item of items) {
+        if (!item.plant_id) continue;
+        try {
+          // Add each plant with plantsOnHand = 1
+          await addPlantToGarden({
+            gardenId: id,
+            plantId: item.plant_id,
+            plantsOnHand: 1,
+          });
+          importedCount++;
+        } catch (e) {
+          // Skip plants that fail (e.g., duplicates if there's a constraint)
+          console.error(`Failed to add plant ${item.plant_id}:`, e);
+        }
+      }
+
+      // Log activity
+      try {
+        const actorColorCss = getActorColorCss();
+        await logGardenActivity({
+          gardenId: id,
+          kind: "plant_added" as any,
+          message: `imported ${importedCount} plant(s) from bookmark "${bookmark.name}"`,
+          actorColor: actorColorCss || null,
+        });
+        setActivityRev((r) => r + 1);
+      } catch {}
+
+      // Close dialog and refresh
+      setBookmarkDialogOpen(false);
+      setImportingFromBookmark(false);
+      emitGardenRealtime("plants");
+      await load();
+    } catch (e: any) {
+      console.error("Failed to import plants from bookmark:", e);
+      setError(e?.message || t("gardenDashboard.plantsSection.importFailed"));
+      setImportingFromBookmark(false);
+    }
+  }, [id, user?.id, t]);
+
+  const _openEditSchedule = async (gardenPlant: any) => {
     try {
       const schedule = await getGardenPlantSchedule(gardenPlant.id);
       const period = (schedule?.period ||
@@ -1956,7 +2283,7 @@ export const GardenDashboardPage: React.FC = () => {
       setScheduleLockYear(false);
       setScheduleAllowedPeriods([period]);
       setScheduleOpen(true);
-    } catch (e) {
+    } catch (_e) {
       // Fallback: open with inferred defaults
       const period = (gardenPlant.overrideWaterFreqUnit ||
         gardenPlant.plant?.waterFreqPeriod ||
@@ -2025,10 +2352,10 @@ export const GardenDashboardPage: React.FC = () => {
         });
       }
       await load({ silent: true, preserveHeavy: true });
-      if (tab === "routine") {
+      if (tab === "overview" || tab === "tasks") {
         await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
       }
-      if (id) navigate(`/garden/${id}/plants`);
+      if (id) navigate(`/garden/${id}/tasks`);
       emitGardenRealtime("tasks");
     } catch (e: any) {
       setError(e?.message || "Failed to save schedule");
@@ -2042,7 +2369,7 @@ export const GardenDashboardPage: React.FC = () => {
     }
   };
 
-  const logWater = async (gardenPlantId: string) => {
+  const _logWater = async (_gardenPlantId: string) => {
     try {
       // Transition path: no legacy watering schedule updates; users should complete occurrences instead
       if (serverToday && garden?.id) {
@@ -2081,10 +2408,10 @@ export const GardenDashboardPage: React.FC = () => {
         } catch {}
       }
       await load({ silent: true, preserveHeavy: true });
-      if (tab === "routine") {
+      if (tab === "overview" || tab === "tasks") {
         await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
       }
-      if (id) navigate(`/garden/${id}/routine`);
+      if (id) navigate(`/garden/${id}/tasks`);
       emitGardenRealtime("tasks");
     } catch (e: any) {
       setError(e?.message || "Failed to log watering");
@@ -2144,7 +2471,7 @@ export const GardenDashboardPage: React.FC = () => {
       await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
       // Signal other UI (nav bars) to refresh notification badges
       emitGardenRealtime("tasks");
-    } catch (e) {
+    } catch (_e) {
       // swallow; global error display exists
     } finally {
       // Clear loading state
@@ -2157,7 +2484,7 @@ export const GardenDashboardPage: React.FC = () => {
   };
 
   // Toggle like for a plant and sync to profile
-  const toggleLiked = async (plantId: string) => {
+  const _toggleLiked = async (plantId: string) => {
     if (!user?.id) return;
     setLikedIds((prev) => {
       const has = prev.includes(plantId);
@@ -2297,18 +2624,60 @@ export const GardenDashboardPage: React.FC = () => {
           </main>
         </>
       )}
-      {!loading && garden && (
+      {/* Private garden view for non-members */}
+      {!loading && garden && !canViewOverview && (
+        <div className="col-span-full">
+          <Card className="rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-8 md:p-12 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] text-center">
+            <div className="max-w-md mx-auto space-y-6">
+              <div className="w-20 h-20 mx-auto rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center">
+                <Lock className="w-10 h-10 text-stone-400 dark:text-stone-500" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold mb-2">{garden.name}</h2>
+                <div className="text-lg font-medium text-stone-600 dark:text-stone-400">
+                  {t("gardenDashboard.privateGarden.title")}
+                </div>
+              </div>
+              <p className="text-sm text-stone-500 dark:text-stone-400">
+                {t("gardenDashboard.privateGarden.description")}
+              </p>
+              <div className="flex items-center justify-center gap-2 text-sm text-stone-400 dark:text-stone-500">
+                <Lock className="w-4 h-4" />
+                <span>{t("gardenDashboard.privateGarden.membersOnly")}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+      {!loading && garden && canViewOverview && (
         <>
           <aside className={`${sidebarPanelBase} space-y-4`}>
             <div className="text-xl font-semibold">{garden.name}</div>
+            {/* Show privacy badge for non-members */}
+            {!isMember && garden.privacy === 'public' && (
+              <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-full px-3 py-1.5">
+                <Globe className="w-3.5 h-3.5" />
+                {t("gardenDashboard.publicGarden")}
+              </div>
+            )}
+            {!isMember && garden.privacy === 'friends_only' && (
+              <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full px-3 py-1.5">
+                <Users className="w-3.5 h-3.5" />
+                {t("gardenDashboard.friendsOnlyGarden")}
+              </div>
+            )}
             <nav className="flex flex-wrap md:flex-col gap-2">
               {(
-                [
-                  ["overview", t("gardenDashboard.overview")],
-                  ["plants", t("gardenDashboard.plants")],
-                  ["routine", t("gardenDashboard.routine")],
-                  ["settings", t("gardenDashboard.settings")],
-                ] as Array<[TabKey, string]>
+                canViewFullGarden
+                  ? [
+                      ["overview", t("gardenDashboard.overview")],
+                      ["plants", t("gardenDashboard.plants")],
+                      ["tasks", t("gardenDashboard.tasks", "Tasks")],
+                      ["journal", t("gardenDashboard.journal", "Journal")],
+                      ["analytics", t("gardenDashboard.analytics", "Analytics")],
+                      ["settings", t("gardenDashboard.settings")],
+                    ]
+                  : [["overview", t("gardenDashboard.overview")]]
               ).map(([k, label]) => (
                 <Button
                   key={k}
@@ -2322,6 +2691,12 @@ export const GardenDashboardPage: React.FC = () => {
                 </Button>
               ))}
             </nav>
+            {/* Show hint for non-members */}
+            {!isMember && (
+              <div className="text-xs text-stone-500 dark:text-stone-400 pt-2 border-t border-stone-200/50 dark:border-stone-700/50">
+                {t("gardenDashboard.viewingAsGuest")}
+              </div>
+            )}
           </aside>
           <main className={mainPanelClass}>
             <Routes>
@@ -2332,29 +2707,58 @@ export const GardenDashboardPage: React.FC = () => {
                     gardenId={id!}
                     activityRev={activityRev}
                     plants={plants}
-                    membersCount={members.length}
+                    members={members}
+                    garden={garden}
                     serverToday={serverToday}
                     dailyStats={dailyStats}
                     totalOnHand={totalOnHand}
                     speciesOnHand={speciesOnHand}
                     baseStreak={garden.streak || 0}
+                    handleShare={handleShare}
+                    todayTaskOccurrences={todayTaskOccurrences}
+                    onProgressOccurrence={progressOccurrenceHandler}
+                    progressingOccIds={progressingOccIds}
+                    completingPlantIds={completingPlantIds}
+                    completeAllTodayForPlant={completeAllTodayForPlant}
+                    onNavigateToPlants={() => navigate(`/garden/${id}/tasks`)}
+                    shareStatus={shareStatus}
                   />
                 }
               />
               <Route
                 path="plants"
                 element={
+                  canViewFullGarden ? (
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <div className="text-lg font-medium">
                         {t("gardenDashboard.plantsSection.plantsInGarden")}
                       </div>
-                      <Button
-                        className="rounded-2xl"
-                        onClick={() => setAddOpen(true)}
-                      >
-                        {t("gardenDashboard.plantsSection.addPlant")}
-                      </Button>
+                      <div className="flex items-center">
+                        <Button
+                          className="rounded-l-2xl rounded-r-none border-r-0"
+                          onClick={() => setAddOpen(true)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          {t("gardenDashboard.plantsSection.addPlant")}
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button className="rounded-l-none rounded-r-2xl px-2">
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem
+                              onClick={openBookmarkDialog}
+                              className="cursor-pointer"
+                            >
+                              <Bookmark className="h-4 w-4 mr-2" />
+                              {t("gardenDashboard.plantsSection.addFromBookmarks")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {plants.map((gp: any, idx: number) => (
@@ -2436,35 +2840,76 @@ export const GardenDashboardPage: React.FC = () => {
                               })()}
                             </div>
                             <div className="col-span-2 p-3">
-                              <div className="font-medium">
-                                {gp.nickname || gp.plant?.name || 'Unknown Plant'}
+                              <div className="flex items-center justify-between">
+                                <div className="font-medium">
+                                  {gp.nickname || gp.plant?.name || 'Unknown Plant'}
+                                </div>
+                                {/* Health Status Badge */}
+                                {gp.healthStatus && (() => {
+                                  const status = getHealthStatus(gp.healthStatus);
+                                  return status ? (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${status.bg} ${status.color} flex items-center gap-1`}>
+                                      <span>{status.emoji}</span>
+                                      <span className="hidden sm:inline">{status.label}</span>
+                                    </span>
+                                  ) : null;
+                                })()}
                               </div>
                               {gp.nickname && gp.plant?.name && (
                                 <div className="text-xs opacity-60">
                                   {gp.plant.name}
                                 </div>
                               )}
-                              <div className="text-xs opacity-60">
-                                {t("gardenDashboard.plantsSection.onHand")}{" "}
-                                {Number(gp.plantsOnHand ?? 0)}
+                              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
+                                  {Number(gp.plantsOnHand ?? 0)} {t("gardenDashboard.plantsSection.onHand")}
+                                </span>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
+                                  {taskCountsByPlant[gp.id] || 0} {t("gardenDashboard.plantsSection.tasks")}
+                                </span>
+                                {(taskOccDueToday[gp.id] || 0) > 0 && (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium">
+                                    {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
+                                  </span>
+                                )}
                               </div>
-                              <div className="text-xs opacity-60">
-                                {t("gardenDashboard.plantsSection.tasks")}{" "}
-                                {taskCountsByPlant[gp.id] || 0}
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <div className="text-xs opacity-60">
-                                  {t("gardenDashboard.plantsSection.dueToday")}{" "}
-                                  {taskOccDueToday[gp.id] || 0}
+                              {/* Plant Notes Preview */}
+                              {gp.notes && (
+                                <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 line-clamp-1 italic">
+                                  📝 {gp.notes}
                                 </div>
-                              </div>
+                              )}
                               <div className="mt-2 flex gap-2 flex-wrap">
+                                {/* Complete All button if tasks are due today */}
+                                {(taskOccDueToday[gp.id] || 0) > 0 && (() => {
+                                  const plantOccs = todayTaskOccurrences.filter((o) => o.gardenPlantId === gp.id);
+                                  const allDone = plantOccs.every((o) => (o.completedCount || 0) >= Math.max(1, o.requiredCount || 1));
+                                  if (allDone) return null;
+                                  return (
+                                    <Button
+                                      variant="default"
+                                      className="rounded-2xl gap-1"
+                                      size="sm"
+                                      draggable={false}
+                                      onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                                      onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
+                                      disabled={completingPlantIds.has(gp.id)}
+                                      onClick={() => completeAllTodayForPlant(gp.id)}
+                                    >
+                                      {completingPlantIds.has(gp.id) ? (
+                                        <span className="animate-pulse">...</span>
+                                      ) : (
+                                        <>✓ {t("garden.completeAll", "Complete All")}</>
+                                      )}
+                                    </Button>
+                                  );
+                                })()}
                                 <Button
                                   variant="secondary"
                                   className="rounded-2xl"
                                   draggable={false}
-                                  onMouseDown={(e: any) => e.stopPropagation()}
-                                  onTouchStart={(e: any) => e.stopPropagation()}
+                                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                                  onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
                                   onClick={() => {
                                     setPendingGardenPlantId(gp.id);
                                     setTaskOpen(true);
@@ -2561,160 +3006,118 @@ export const GardenDashboardPage: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
                 }
               />
-              {/* Routine route kept for weekly chart; item rows show completers instead of button */}
+              {/* Redirect old routine route to tasks */}
               <Route
                 path="routine"
+                element={<Navigate to={`/garden/${id}/tasks`} replace />}
+              />
+              {/* Tasks Section */}
+              <Route
+                path="tasks"
                 element={
-                  <RoutineSection
-                    plants={plants}
-                    duePlantIds={dueToday}
-                    onLogWater={logWater}
-                    weekDays={weekDays}
-                    weekCounts={weekCounts}
-                    weekCountsByType={weekCountsByType}
-                    serverToday={serverToday}
-                    dueThisWeekByPlant={dueThisWeekByPlant}
-                    todayTaskOccurrences={todayTaskOccurrences}
-                    onProgressOccurrence={progressOccurrenceHandler}
-                    progressingOccIds={progressingOccIds}
-                    completingPlantIds={completingPlantIds}
-                    completeAllTodayForPlant={completeAllTodayForPlant}
-                  />
+                  canViewFullGarden ? (
+                    <GardenTasksSection
+                      plants={plants}
+                      todayTaskOccurrences={todayTaskOccurrences}
+                      onProgressOccurrence={progressOccurrenceHandler}
+                      progressingOccIds={progressingOccIds}
+                      completingPlantIds={completingPlantIds}
+                      completeAllTodayForPlant={completeAllTodayForPlant}
+                      weekDays={weekDays}
+                      weekCounts={weekCounts}
+                      weekCountsByType={weekCountsByType}
+                      serverToday={serverToday}
+                      dueThisWeekByPlant={dueThisWeekByPlant}
+                      duePlantIds={dueToday}
+                      weekTaskOccurrences={weekTaskOccurrences}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
+                }
+              />
+              <Route
+                path="journal"
+                element={
+                  canViewFullGarden ? (
+                    <GardenJournalSection
+                      gardenId={id!}
+                      garden={garden}
+                      plants={plants}
+                      members={members}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
+                }
+              />
+              <Route
+                path="analytics"
+                element={
+                  canViewFullGarden ? (
+                    <GardenAnalyticsSection
+                      gardenId={id!}
+                      garden={garden}
+                      plants={plants}
+                      members={members}
+                      dailyStats={dailyStats}
+                      onNavigateToSettings={() => navigate(`/garden/${id}/settings`)}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
                 }
               />
               <Route
                 path="settings"
                 element={
-                  <div className="space-y-6">
-                    {garden && (
-                      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-r from-emerald-50/80 via-white to-white dark:from-[#252526] dark:via-[#1f1f1f] dark:to-[#1b1b1f] p-4 shadow-sm">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          <span>
-                            {t("garden.created")}{" "}
-                            {new Date(garden.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </Card>
-                    )}
-                    <div className="space-y-3">
-                      <div className="text-lg font-medium">
-                        {t("gardenDashboard.settingsSection.gardenDetails")}
-                      </div>
-                      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm">
-                        <GardenDetailsEditor
-                          garden={garden}
-                          onSaved={load}
-                          canEdit={viewerIsOwner}
-                        />
-                      </Card>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="text-lg font-medium">
-                          {t("gardenDashboard.settingsSection.manageMembers")}
-                        </div>
-                        <Button
-                          className="rounded-2xl"
-                          onClick={() => setInviteOpen(true)}
-                        >
-                          {t("gardenDashboard.settingsSection.addMember")}
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {members.map((m) => (
-                          <MemberCard
-                            key={m.userId}
-                            member={m}
-                            gardenId={id!}
-                            onChanged={load}
-                            viewerIsOwner={viewerIsOwner}
-                            ownerCount={ownersCount}
-                            currentUserId={currentUserId}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    <div className="pt-2">
-                      {isOwner ? (
-                        <Button
-                          variant="destructive"
-                          className="rounded-2xl"
-                          onClick={async () => {
-                            if (!id) return;
-                            if (
-                              !confirm(
-                                t(
-                                  "gardenDashboard.settingsSection.deleteGardenConfirm",
-                                ),
-                              )
-                            )
-                              return;
-                            try {
-                              await supabase
-                                .from("gardens")
-                                .delete()
-                                .eq("id", id);
-                              navigate("/gardens");
-                            } catch (e) {
-                              alert(
-                                t(
-                                  "gardenDashboard.settingsSection.failedToDeleteGarden",
-                                ),
-                              );
-                            }
-                          }}
-                        >
-                          {t("gardenDashboard.settingsSection.deleteGarden")}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="destructive"
-                          className="rounded-2xl"
-                          onClick={async () => {
-                            if (!id || !currentUserId) return;
-                            if (
-                              !confirm(
-                                t(
-                                  "gardenDashboard.settingsSection.quitGardenConfirm",
-                                ),
-                              )
-                            )
-                              return;
-                            try {
-                              await removeGardenMember({
-                                gardenId: id,
-                                userId: currentUserId,
-                              });
-                              navigate("/gardens");
-                            } catch (e) {
-                              alert(
-                                t(
-                                  "gardenDashboard.settingsSection.failedToQuitGarden",
-                                ),
-                              );
-                            }
-                          }}
-                        >
-                          {t("gardenDashboard.settingsSection.quitGarden")}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
+                  canViewFullGarden && garden ? (
+                    <GardenSettingsSection
+                      garden={garden}
+                      members={members}
+                      profile={profile}
+                      viewerIsOwner={viewerIsOwner}
+                      isOwner={isOwner}
+                      currentUserId={currentUserId}
+                      ownersCount={ownersCount}
+                      onSaved={load}
+                      onRefreshGarden={refreshGarden}
+                      onDeleteGarden={async () => {
+                        if (!id) return;
+                        if (!confirm(t("gardenDashboard.settingsSection.deleteGardenConfirm"))) return;
+                        try {
+                          await deleteGarden(id);
+                          navigate("/gardens");
+                        } catch (_e) {
+                          alert(t("gardenDashboard.settingsSection.failedToDeleteGarden"));
+                        }
+                      }}
+                      onQuitGarden={async () => {
+                        if (!id || !currentUserId) return;
+                        if (!confirm(t("gardenDashboard.settingsSection.quitGardenConfirm"))) return;
+                        try {
+                          await removeGardenMember({ gardenId: id, userId: currentUserId });
+                          navigate("/gardens");
+                        } catch (_e) {
+                          alert(t("gardenDashboard.settingsSection.failedToQuitGarden"));
+                        }
+                      }}
+                      onInviteMember={() => setInviteOpen(true)}
+                      onMemberChanged={load}
+                      GardenDetailsEditor={GardenDetailsEditor}
+                      GardenLocationEditor={GardenLocationEditor}
+                      GardenAdviceLanguageEditor={GardenAdviceLanguageEditor}
+                      GardenPrivacyToggle={GardenPrivacyToggle}
+                      MemberCard={MemberCard}
+                    />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
                 }
               />
               <Route path="" element={<Navigate to={`overview`} replace />} />
@@ -2739,7 +3142,7 @@ export const GardenDashboardPage: React.FC = () => {
                   </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
-                <Input
+                <SearchInput
                   placeholder={t("gardenDashboard.plantsSection.searchPlants")}
                   value={plantQuery}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -2844,6 +3247,102 @@ export const GardenDashboardPage: React.FC = () => {
                     {t("gardenDashboard.plantsSection.add")}
                   </Button>
                 </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Bookmark Selection Dialog */}
+          <Dialog open={bookmarkDialogOpen} onOpenChange={setBookmarkDialogOpen}>
+            <DialogContent
+              className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
+              aria-describedby={undefined}
+            >
+              <DialogHeader>
+                <DialogTitle>
+                  {t("gardenDashboard.plantsSection.selectBookmark")}
+                </DialogTitle>
+                <DialogDescription>
+                  {t("gardenDashboard.plantsSection.selectBookmarkDescription")}
+                </DialogDescription>
+              </DialogHeader>
+              
+              {importingFromBookmark ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  >
+                    <Leaf className="h-12 w-12 text-emerald-500" />
+                  </motion.div>
+                  <span className="text-stone-500 dark:text-stone-400 text-sm">
+                    {t("gardenDashboard.plantsSection.importingPlants")}
+                  </span>
+                </div>
+              ) : bookmarksLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  >
+                    <Leaf className="h-12 w-12 text-emerald-500" />
+                  </motion.div>
+                  <span className="text-stone-400 text-sm">{t('common.loading', { defaultValue: 'Loading...' })}</span>
+                </div>
+              ) : userBookmarks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="flex items-center justify-center w-16 h-16 rounded-full bg-stone-100 dark:bg-stone-800">
+                    <Bookmark className="h-8 w-8 text-stone-400" />
+                  </div>
+                  <p className="text-stone-500 dark:text-stone-400 text-center">
+                    {t("gardenDashboard.plantsSection.noBookmarksFound")}
+                  </p>
+                  <p className="text-stone-400 dark:text-stone-500 text-sm text-center">
+                    {t("gardenDashboard.plantsSection.createBookmarkHint")}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {userBookmarks.map((bookmark) => (
+                    <button
+                      key={bookmark.id}
+                      onClick={() => importPlantsFromBookmark(bookmark.id)}
+                      className="w-full text-left p-4 rounded-2xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30] transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        {bookmark.preview_images && bookmark.preview_images.length > 0 ? (
+                          <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800">
+                            <img
+                              src={bookmark.preview_images[0]}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+                            <Leaf className="h-6 w-6 text-emerald-500" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{bookmark.name}</div>
+                          <div className="text-sm text-stone-500 dark:text-stone-400">
+                            {bookmark.plant_count || 0} {t('bookmarks.plants', { defaultValue: 'plants' })}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              <div className="flex justify-end pt-2">
+                <Button
+                  variant="secondary"
+                  className="rounded-2xl"
+                  onClick={() => setBookmarkDialogOpen(false)}
+                  disabled={importingFromBookmark}
+                >
+                  {t("common.cancel")}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -2987,9 +3486,11 @@ export const GardenDashboardPage: React.FC = () => {
   );
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RoutineSection({
   plants,
   duePlantIds,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onLogWater,
   weekDays,
   weekCounts,
@@ -3032,6 +3533,7 @@ function RoutineSection({
   completeAllTodayForPlant: (gardenPlantId: string) => Promise<void>;
 }) {
   const { t } = useTranslation("common");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const duePlants = React.useMemo(() => {
     if (!duePlantIds) return [];
     return plants.filter((gp: any) => duePlantIds.has(gp.id));
@@ -3117,7 +3619,7 @@ function RoutineSection({
             const count = weekCounts[idx] || 0;
             const heightPct =
               count === 0 ? 0 : Math.round((count / maxCount) * 100);
-            const d = new Date(ds);
+            const _d = new Date(ds);
             const labels = dayLabels;
             const isToday = serverToday === ds;
             const water = weekCountsByType.water[idx] || 0;
@@ -3346,17 +3848,34 @@ function OverviewSection({
   gardenId,
   activityRev,
   plants,
-  membersCount,
+  members,
+  garden,
   serverToday,
   dailyStats,
   totalOnHand,
   speciesOnHand,
   baseStreak,
+  handleShare,
+  shareStatus,
+  todayTaskOccurrences,
+  onProgressOccurrence,
+  progressingOccIds,
+  completingPlantIds,
+  completeAllTodayForPlant,
+  onNavigateToPlants,
 }: {
   gardenId: string;
   activityRev?: number;
   plants: any[];
-  membersCount: number;
+  members: Array<{
+    userId: string;
+    displayName?: string | null;
+    email?: string | null;
+    role: "owner" | "member";
+    joinedAt?: string;
+    accentKey?: string | null;
+  }>;
+  garden: Garden | null;
   serverToday: string | null;
   dailyStats: Array<{
     date: string;
@@ -3367,10 +3886,27 @@ function OverviewSection({
   totalOnHand: number;
   speciesOnHand: number;
   baseStreak: number;
+  handleShare: () => Promise<void>;
+  shareStatus: 'idle' | 'copied' | 'error';
+  todayTaskOccurrences: Array<{
+    id: string;
+    taskId: string;
+    gardenPlantId: string;
+    dueAt: string;
+    requiredCount: number;
+    completedCount: number;
+    completedAt: string | null;
+    taskType?: "water" | "fertilize" | "harvest" | "cut" | "custom";
+    taskEmoji?: string;
+  }>;
+  onProgressOccurrence: (id: string, inc: number) => Promise<void>;
+  progressingOccIds: Set<string>;
+  completingPlantIds: Set<string>;
+  completeAllTodayForPlant: (gardenPlantId: string) => Promise<void>;
+  onNavigateToPlants: () => void;
 }) {
   const { t } = useTranslation("common");
-  const cardSurface =
-    "rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm";
+  const navigate = useLanguageNavigate();
   const [activity, setActivity] = React.useState<
     Array<{
       id: string;
@@ -3385,6 +3921,38 @@ function OverviewSection({
   >([]);
   const [loadingAct, setLoadingAct] = React.useState(false);
   const [errAct, setErrAct] = React.useState<string | null>(null);
+  const [memberProfiles, setMemberProfiles] = React.useState<
+    Record<string, { avatarUrl?: string | null; accentKey?: string | null }>
+  >({});
+
+  // Fetch member avatar URLs
+  React.useEffect(() => {
+    let ignore = false;
+    (async () => {
+      if (members.length === 0) return;
+      try {
+        const userIds = members.map((m) => m.userId);
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, avatar_url, accent_key")
+          .in("id", userIds);
+        if (!ignore && data) {
+          const map: Record<
+            string,
+            { avatarUrl?: string | null; accentKey?: string | null }
+          > = {};
+          for (const p of data) {
+            map[p.id] = { avatarUrl: p.avatar_url, accentKey: p.accent_key };
+          }
+          setMemberProfiles(map);
+        }
+      } catch {}
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [members]);
+
   React.useEffect(() => {
     let ignore = false;
     (async () => {
@@ -3408,6 +3976,7 @@ function OverviewSection({
       ignore = true;
     };
   }, [gardenId, serverToday, activityRev]);
+
   const totalToDoToday =
     dailyStats.find((d) => d.date === (serverToday || ""))?.due ?? 0;
   const completedToday =
@@ -3425,18 +3994,14 @@ function OverviewSection({
   );
 
   const colorForDay = (completed: number, success: boolean) => {
-    // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
-    if (!success) return "bg-stone-200 dark:bg-stone-700";
-    // Green: Tasks were accomplished
-    // Light mode: lighter color = fewer tasks, darker color = more tasks
-    // Dark mode: darker color = fewer tasks, lighter color = more tasks
-    if (maxCompleted <= 0) return "bg-emerald-400 dark:bg-emerald-800";
+    if (!success) return "bg-stone-300/60 dark:bg-stone-700/60";
+    if (maxCompleted <= 0) return "bg-emerald-400 dark:bg-emerald-700";
     const ratio = completed / maxCompleted;
-    if (ratio <= 0) return "bg-emerald-300 dark:bg-emerald-900";
-    if (ratio <= 0.25) return "bg-emerald-400 dark:bg-emerald-800";
-    if (ratio <= 0.5) return "bg-emerald-500 dark:bg-emerald-700";
-    if (ratio <= 0.75) return "bg-emerald-600 dark:bg-emerald-600";
-    return "bg-emerald-700 dark:bg-emerald-500";
+    if (ratio <= 0) return "bg-emerald-300 dark:bg-emerald-800";
+    if (ratio <= 0.25) return "bg-emerald-400 dark:bg-emerald-700";
+    if (ratio <= 0.5) return "bg-emerald-500 dark:bg-emerald-600";
+    if (ratio <= 0.75) return "bg-emerald-600 dark:bg-emerald-500";
+    return "bg-emerald-700 dark:bg-emerald-400";
   };
 
   const days = Array.from({ length: 30 }, (_, i) => {
@@ -3444,13 +4009,12 @@ function OverviewSection({
     d.setDate(d.getDate() - (29 - i));
     const dateIso = d.toISOString().slice(0, 10);
     const dayNum = d.getDate();
-    // Treat missing task row as failed per requirement
     const found = dailyStats.find((x) => x.date === dateIso);
     const success = found ? found.success : false;
     const completed = found ? found.completed || 0 : 0;
     return { dayNum, isToday: i === 29, success, completed };
   });
-  // Use DB-backed streak as base, but if today is in progress we can show live preview
+
   const streak = (() => {
     let s = baseStreak;
     if (serverToday) {
@@ -3459,145 +4023,527 @@ function OverviewSection({
     }
     return s;
   })();
+
+  // Get plants with images for the gallery
+  const plantsWithImages = React.useMemo(() => {
+    return plants
+      .map((gp) => {
+        const primaryImageUrl = gp.plant?.photos
+          ? getPrimaryPhotoUrl(gp.plant.photos)
+          : gp.plant?.image || null;
+        return {
+          id: gp.id,
+          name: gp.nickname || gp.plant?.name || "Plant",
+          imageUrl: primaryImageUrl,
+          plantId: gp.plant?.id,
+        };
+      })
+      .filter((p) => p.imageUrl);
+  }, [plants]);
+
+  // Get initials for avatar fallback
+  const getInitials = (name?: string | null) => {
+    if (!name) return "?";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  // Get accent color for member
+  const getMemberColor = (member: (typeof members)[0]) => {
+    const profile = memberProfiles[member.userId];
+    const accentKey = profile?.accentKey || member.accentKey;
+    if (accentKey) {
+      const option = getAccentOption(accentKey);
+      if (option) return option.cssVar || option.value;
+    }
+    // Fallback colors based on name hash
+    const colors = [
+      "#10b981",
+      "#3b82f6",
+      "#8b5cf6",
+      "#ec4899",
+      "#f59e0b",
+      "#06b6d4",
+    ];
+    const name = member.displayName || member.email || member.userId;
+    let hash = 0;
+    for (let i = 0; i < name.length; i++)
+      hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return colors[hash % colors.length];
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className={cardSurface}>
-          <div className="text-xs opacity-60">
-            {t("gardenDashboard.overviewSection.plants")}
-          </div>
-          <div className="text-2xl font-semibold">{totalOnHand}</div>
-          <div className="text-[11px] opacity-60">
-            {t("gardenDashboard.overviewSection.species")} {speciesOnHand}
-          </div>
-        </Card>
-        <Card className={cardSurface}>
-          <div className="text-xs opacity-60">
-            {t("gardenDashboard.overviewSection.members")}
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <svg
-              className="w-4 h-4 text-muted-foreground"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+    <div className="space-y-6">
+      {/* Hero Section with Cover Image */}
+      <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+        {/* Share button - top right corner (for public/friends-only gardens) */}
+        {garden && (garden.privacy === 'public' || garden.privacy === 'friends_only') && (
+          <div className="absolute top-4 right-4 z-20">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-xl gap-1.5 shadow-md backdrop-blur-sm bg-white/90 dark:bg-black/70 hover:bg-white dark:hover:bg-black/80"
+              onClick={handleShare}
+              aria-label={t('common.share', { defaultValue: 'Share' })}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              <Share2 className="h-4 w-4" />
+              {shareStatus === 'copied' ? (
+                <span className="text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
+              ) : shareStatus === 'error' ? (
+                <span className="text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
+              ) : (
+                <span className="hidden sm:inline text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
+              )}
+            </Button>
+          </div>
+        )}
+        {garden?.coverImageUrl ? (
+          <>
+            <div className="absolute inset-0">
+              <img
+                src={garden.coverImageUrl}
+                alt={garden.name}
+                className="w-full h-full object-cover"
               />
-            </svg>
-            <div className="text-2xl font-semibold">{membersCount}</div>
-          </div>
-        </Card>
-        <Card className={cardSurface}>
-          <div className="text-xs opacity-60">
-            {t("gardenDashboard.overviewSection.streak")}
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <svg
-              className="w-4 h-4 text-orange-500"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
-            </svg>
-            <div className="text-2xl font-semibold">
-              {streak} {t("gardenDashboard.overviewSection.days")}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+            </div>
+            <div className="relative z-10 p-8 md:p-10 min-h-[280px] flex flex-col justify-end">
+              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+                <div className="space-y-3">
+                  <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">
+                    {garden.name}
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-4 text-white/90">
+                    <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                      <span className="text-lg">🌱</span>
+                      <span className="font-medium">{totalOnHand}</span>
+                      <span className="text-sm opacity-80">
+                        {t("gardenDashboard.overviewSection.plants")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                      <span className="text-lg">🔥</span>
+                      <span className="font-medium">{streak}</span>
+                      <span className="text-sm opacity-80">
+                        {t("gardenDashboard.overviewSection.dayStreak")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Ring */}
+                <div className="flex items-center gap-4">
+                  <div className="relative w-20 h-20">
+                    <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r="34"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.2)"
+                        strokeWidth="8"
+                      />
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r="34"
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="8"
+                        strokeLinecap="round"
+                        strokeDasharray={`${(progressPct / 100) * 213.6} 213.6`}
+                        className="drop-shadow-lg"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                      <span className="text-xl font-bold">{progressPct}%</span>
+                    </div>
+                  </div>
+                  <div className="text-white">
+                    <div className="text-sm opacity-80">
+                      {t("gardenDashboard.overviewSection.todaysProgress")}
+                    </div>
+                    <div className="font-semibold">
+                      {completedToday}/{totalToDoToday}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="relative z-10 p-8 md:p-10 min-h-[200px]">
+            <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
+            <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative">
+              <div className="space-y-3">
+                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+                  {garden?.name || t("gardenDashboard.overview")}
+                </h1>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
+                    <span className="text-lg">🌱</span>
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                      {totalOnHand}
+                    </span>
+                    <span className="text-sm text-stone-600 dark:text-stone-300">
+                      {t("gardenDashboard.overviewSection.plants")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
+                    <span className="text-lg">🔥</span>
+                    <span className="font-semibold text-orange-600 dark:text-orange-400">
+                      {streak}
+                    </span>
+                    <span className="text-sm text-stone-600 dark:text-stone-300">
+                      {t("gardenDashboard.overviewSection.dayStreak")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-stone-200/50 dark:border-stone-500/20">
+                    <span className="text-lg">🌿</span>
+                    <span className="font-semibold text-stone-700 dark:text-stone-300">
+                      {speciesOnHand}
+                    </span>
+                    <span className="text-sm text-stone-600 dark:text-stone-300">
+                      {t("gardenDashboard.overviewSection.species")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Ring for no-cover variant */}
+              <div className="flex items-center gap-4">
+                <div className="relative w-20 h-20">
+                  <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r="34"
+                      fill="none"
+                      stroke="currentColor"
+                      className="text-stone-200 dark:text-stone-700"
+                      strokeWidth="8"
+                    />
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r="34"
+                      fill="none"
+                      stroke="#10b981"
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray={`${(progressPct / 100) * 213.6} 213.6`}
+                      className="drop-shadow-sm"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {progressPct}%
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-stone-500 dark:text-stone-400">
+                    {t("gardenDashboard.overviewSection.todaysProgress")}
+                  </div>
+                  <div className="font-semibold text-stone-700 dark:text-stone-200">
+                    {completedToday}/{totalToDoToday}{" "}
+                    {t("gardenDashboard.overviewSection.tasksDone")}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </Card>
+        )}
       </div>
 
-      <Card className={cardSurface}>
-        <div className="font-medium mb-2">
-          {t("gardenDashboard.overviewSection.todaysProgress")}
-        </div>
-        <div className="text-sm opacity-60 mb-2">
-          {completedToday} / {totalToDoToday || 0}{" "}
-          {t("gardenDashboard.overviewSection.tasksDone")}
-        </div>
-        <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded-full overflow-hidden">
-          <div
-            className="h-3 bg-emerald-600 dark:bg-emerald-500"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
-      </Card>
+      {/* Members Section */}
+      {members.length > 0 && (
+        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <span>👥</span>
+              {t("gardenDashboard.overviewSection.gardenMembers")}
+              <span className="text-sm font-normal text-stone-500 dark:text-stone-400">
+                ({members.length})
+              </span>
+            </h3>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {members.map((member) => {
+              const profile = memberProfiles[member.userId];
+              const avatarUrl = profile?.avatarUrl;
+              const color = getMemberColor(member);
+              const isOwner = member.role === "owner";
+              return (
+                <button
+                  key={member.userId}
+                  type="button"
+                  onClick={() => {
+                    if (member.displayName) {
+                      navigate(`/u/${encodeURIComponent(member.displayName)}`);
+                    }
+                  }}
+                  className="group flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 rounded-2xl px-3 py-2 transition-all hover:bg-stone-100 dark:hover:bg-stone-800 hover:shadow-md cursor-pointer text-left"
+                  title={member.displayName || member.email || "Member"}
+                >
+                  <div className="relative">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={member.displayName || "Member"}
+                        className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-stone-700 shadow-sm"
+                      />
+                    ) : (
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ring-2 ring-white dark:ring-stone-700 shadow-sm"
+                        style={{ backgroundColor: color }}
+                      >
+                        {getInitials(member.displayName || member.email)}
+                      </div>
+                    )}
+                    {isOwner && (
+                      <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-gradient-to-br from-amber-300 to-orange-400 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-stone-800 shadow-md">
+                        <span className="text-[11px] drop-shadow-sm">👑</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate max-w-[120px] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      {member.displayName || member.email?.split("@")[0] || "Member"}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                      {isOwner
+                        ? t("gardenDashboard.settingsSection.owner")
+                        : t("gardenDashboard.settingsSection.member")}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
-      <Card className={cardSurface}>
-        <div className="font-medium mb-3">
-          {t("gardenDashboard.overviewSection.last30Days")}
-        </div>
-        <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
-          {days.map((d, idx) => (
-            <div key={idx} className="flex flex-col items-center">
+      {/* Plants Gallery */}
+      {plantsWithImages.length > 0 && (
+        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <span>🌿</span>
+              {t("gardenDashboard.overviewSection.gardenPlants")}
+              <span className="text-sm font-normal text-stone-500 dark:text-stone-400">
+                ({plants.length})
+              </span>
+            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+              onClick={() => navigate(`/garden/${gardenId}/plants`)}
+            >
+              {t("gardenDashboard.overviewSection.viewAll")}
+              <ArrowUpRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+            {plantsWithImages.slice(0, 12).map((plant, idx) => (
               <div
-                className={`w-7 h-7 rounded-md flex items-center justify-center ${colorForDay(d.completed, d.success)}`}
+                key={plant.id}
+                className="group relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
+                onClick={() => {
+                  if (plant.plantId) navigate(`/plants/${plant.plantId}`);
+                }}
+                style={{
+                  animationDelay: `${idx * 50}ms`,
+                }}
               >
-                <div className="text-[11px]">{d.dayNum}</div>
+                <img
+                  src={plant.imageUrl!}
+                  alt={plant.name}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                <div className="absolute bottom-0 left-0 right-0 p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
+                  <div className="text-white text-xs font-medium truncate drop-shadow-lg">
+                    {plant.name}
+                  </div>
+                </div>
               </div>
-              {d.isToday && (
-                <div className="mt-1 h-0.5 w-5 bg-black dark:bg-white rounded-full" />
+            ))}
+            {plants.length > 12 && (
+              <div
+                className="aspect-square rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all border-2 border-dashed border-emerald-300 dark:border-emerald-700"
+                onClick={() => navigate(`/garden/${gardenId}/plants`)}
+              >
+                <span className="text-2xl mb-1">+{plants.length - 12}</span>
+                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  {t("gardenDashboard.overviewSection.morePlants")}
+                </span>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* 30-Day Calendar */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
+            <span>📅</span>
+            {t("gardenDashboard.overviewSection.last30Days")}
+          </h3>
+          <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-emerald-500" />
+              <span>{t("gardenDashboard.overviewSection.completed")}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-stone-300 dark:bg-stone-600" />
+              <span>{t("gardenDashboard.overviewSection.missed")}</span>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 md:grid-cols-10 gap-2">
+          {days.map((d, idx) => (
+            <div
+              key={idx}
+              className={`relative aspect-square rounded-xl flex flex-col items-center justify-center transition-all ${
+                d.isToday
+                  ? "ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-[#1f1f1f]"
+                  : ""
+              } ${colorForDay(d.completed, d.success)}`}
+            >
+              <span
+                className={`text-sm font-medium ${
+                  d.success
+                    ? "text-white"
+                    : "text-stone-600 dark:text-stone-300"
+                }`}
+              >
+                {d.dayNum}
+              </span>
+              {d.completed > 0 && d.success && (
+                <span className="text-[10px] text-white/80">
+                  {d.completed}
+                </span>
               )}
             </div>
           ))}
         </div>
       </Card>
 
-      {/* Activity (today) */}
-      <Card className={cardSurface}>
-        <div className="font-medium mb-2">
-          {t("gardenDashboard.overviewSection.activityToday")}
+      {/* Today's Tasks Widget */}
+      <TodaysTasksWidget
+        plants={plants}
+        todayTaskOccurrences={todayTaskOccurrences}
+        onProgressOccurrence={onProgressOccurrence}
+        progressingOccIds={progressingOccIds}
+        completingPlantIds={completingPlantIds}
+        completeAllTodayForPlant={completeAllTodayForPlant}
+        onNavigateToPlants={onNavigateToPlants}
+        compact
+      />
+
+      {/* Activity Feed */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
+            <span>⚡</span>
+            {t("gardenDashboard.overviewSection.activityToday")}
+          </h3>
         </div>
         {loadingAct && (
-          <div className="text-sm opacity-60">
+          <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
             {t("gardenDashboard.overviewSection.loadingActivity")}
           </div>
         )}
-        {errAct && <div className="text-sm text-red-600">{errAct}</div>}
-        {!loadingAct && activity.length === 0 && (
-          <div className="text-sm opacity-60">
-            {t("gardenDashboard.overviewSection.noActivity")}
+        {errAct && (
+          <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
+            {errAct}
           </div>
         )}
-        <div className="space-y-2">
-          {activity.map((a) => {
-            const color = a.actorColor || null;
-            const ts = (() => {
-              try {
-                return new Date(a.occurredAt).toLocaleTimeString([], {
-                  hour12: false,
-                });
-              } catch {
-                return "";
-              }
-            })();
-            return (
-              <div key={a.id} className="text-sm flex items-start gap-2">
-                {ts && (
-                  <span className="text-xs opacity-60 tabular-nums">{ts}</span>
-                )}
-                {ts && <span className="text-xs opacity-40">//</span>}
-                <span
-                  className="font-semibold"
-                  style={color ? { color } : undefined}
+        {!loadingAct && activity.length === 0 && (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-3">🌱</div>
+            <div className="text-sm text-stone-500 dark:text-stone-400">
+              {t("gardenDashboard.overviewSection.noActivity")}
+            </div>
+            <div className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+              {t("gardenDashboard.overviewSection.startCaring")}
+            </div>
+          </div>
+        )}
+        {!loadingAct && activity.length > 0 && (
+          <div className="space-y-3">
+            {activity.slice(0, 10).map((a, idx) => {
+              const color = a.actorColor || null;
+              const ts = (() => {
+                try {
+                  return new Date(a.occurredAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  });
+                } catch {
+                  return "";
+                }
+              })();
+              const kindEmoji =
+                a.kind === "task_completed"
+                  ? "✅"
+                  : a.kind === "task_progressed"
+                    ? "🔄"
+                    : a.kind === "plant_added"
+                      ? "🌱"
+                      : a.kind === "member_joined"
+                        ? "👋"
+                        : "📝";
+              return (
+                <div
+                  key={a.id}
+                  className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                  style={{ animationDelay: `${idx * 30}ms` }}
                 >
-                  {a.actorName || t("gardenDashboard.settingsSection.unknown")}
-                </span>
-                <span className="opacity-80">{a.message}</span>
-              </div>
-            );
-          })}
-        </div>
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-stone-700 flex items-center justify-center shadow-sm">
+                    <span className="text-sm">{kindEmoji}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className="font-semibold text-sm"
+                        style={color ? { color } : undefined}
+                      >
+                        {a.actorName ||
+                          t("gardenDashboard.settingsSection.unknown")}
+                      </span>
+                      <span className="text-sm text-stone-600 dark:text-stone-300">
+                        {a.message}
+                      </span>
+                    </div>
+                    {ts && (
+                      <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5 tabular-nums">
+                        {ts}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
     </div>
   );
 }
 
-function colorForName(
+function _colorForName(
   name?: string | null,
   colorToken?: string | null,
 ): string {
@@ -3616,6 +4562,19 @@ function colorForName(
   for (let i = 0; i < name.length; i++)
     hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
   return colors[hash % colors.length];
+}
+
+// Health status options with colors and icons
+const HEALTH_STATUSES = [
+  { key: 'thriving', label: 'Thriving', emoji: '🌟', color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+  { key: 'healthy', label: 'Healthy', emoji: '💚', color: 'text-green-500', bg: 'bg-green-100 dark:bg-green-900/30' },
+  { key: 'okay', label: 'Okay', emoji: '🌱', color: 'text-lime-500', bg: 'bg-lime-100 dark:bg-lime-900/30' },
+  { key: 'struggling', label: 'Struggling', emoji: '🥀', color: 'text-amber-500', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+  { key: 'critical', label: 'Critical', emoji: '⚠️', color: 'text-red-500', bg: 'bg-red-100 dark:bg-red-900/30' },
+];
+
+function getHealthStatus(status: string | null) {
+  return HEALTH_STATUSES.find(h => h.key === status) || null;
 }
 
 function EditPlantButton({
@@ -3637,7 +4596,24 @@ function EditPlantButton({
   const [count, setCount] = React.useState<number>(
     Number(gp.plantsOnHand ?? 0),
   );
+  const [healthStatus, setHealthStatus] = React.useState<string | null>(gp.healthStatus || null);
+  const [notes, setNotes] = React.useState(gp.notes || "");
   const [submitting, setSubmitting] = React.useState(false);
+  const selectedHealthStatus = React.useMemo(() => getHealthStatus(healthStatus), [healthStatus]);
+  const lastHealthUpdatedLabel = React.useMemo(() => {
+    if (!gp.lastHealthUpdate) return null;
+    try {
+      return new Date(gp.lastHealthUpdate).toLocaleString([], {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return null;
+    }
+  }, [gp.lastHealthUpdate]);
+  const pendingStatusChange =
+    (healthStatus || null) !== (gp.healthStatus || null);
 
   React.useEffect(() => {
     setNickname(gp.nickname || "");
@@ -3647,17 +4623,32 @@ function EditPlantButton({
     setCount(Number(gp.plantsOnHand ?? 0));
   }, [gp.plantsOnHand]);
 
+  React.useEffect(() => {
+    setHealthStatus(gp.healthStatus || null);
+  }, [gp.healthStatus]);
+
+  React.useEffect(() => {
+    setNotes(gp.notes || "");
+  }, [gp.notes]);
+
   const save = async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
-      // Update nickname & per-instance count; delete plant if count becomes 0
+      // Update nickname, count, health status, and notes; delete plant if count becomes 0
+      const updateData: Record<string, any> = {
+        nickname: nickname.trim() || null,
+        plants_on_hand: Math.max(0, Number(count || 0)),
+        health_status: healthStatus || null,
+        notes: notes.trim() || null,
+      };
+      // Only update last_health_update if health status changed
+      if (healthStatus !== (gp.healthStatus || null)) {
+        updateData.last_health_update = new Date().toISOString();
+      }
       await supabase
         .from("garden_plants")
-        .update({
-          nickname: nickname.trim() || null,
-          plants_on_hand: Math.max(0, Number(count || 0)),
-        })
+        .update(updateData)
         .eq("id", gp.id);
       if (count <= 0) {
         await supabase.from("garden_plants").delete().eq("id", gp.id);
@@ -3677,11 +4668,19 @@ function EditPlantButton({
         const changedName = (gp.nickname || "") !== (nickname.trim() || "");
         const changedCount =
           Number(gp.plantsOnHand || 0) !== Math.max(0, Number(count || 0));
-        if (changedName || changedCount) {
+        const changedStatus =
+          (gp.healthStatus || null) !== (healthStatus || null);
+        if (changedName || changedCount || changedStatus) {
           const parts: string[] = [];
           if (changedName) parts.push(`name: "${nickname.trim() || "-"}"`);
           if (changedCount)
             parts.push(`count: ${Math.max(0, Number(count || 0))}`);
+          if (changedStatus) {
+            const nextStatus = getHealthStatus(healthStatus);
+            parts.push(
+              `health: ${nextStatus ? nextStatus.label : "none"}`,
+            );
+          }
           const plantName =
             nickname.trim() || gp.nickname || gp.plant?.name || "Plant";
           await logGardenActivity({
@@ -3695,7 +4694,7 @@ function EditPlantButton({
       } catch {}
       await onChanged();
       setOpen(false);
-    } catch (e) {
+    } catch (_e) {
       // swallow; page has global error area
     } finally {
       setSubmitting(false);
@@ -3718,7 +4717,7 @@ function EditPlantButton({
               {t("gardenDashboard.plantsSection.editPlant")}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">
                 {t("gardenDashboard.plantsSection.customName")}
@@ -3743,6 +4742,77 @@ function EditPlantButton({
                 onChange={(e: any) => setCount(Number(e.target.value))}
               />
             </div>
+            
+            {/* Health Status Selector */}
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <label className="text-sm font-medium">
+                  {t("gardenDashboard.plantsSection.healthStatus", "Plant Health")}
+                </label>
+                {selectedHealthStatus ? (
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${selectedHealthStatus.bg} ${selectedHealthStatus.color}`}
+                  >
+                    <span>{selectedHealthStatus.emoji}</span>
+                    <span>{t(`gardenDashboard.plantsSection.health.${selectedHealthStatus.key}`, selectedHealthStatus.label)}</span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-stone-500 dark:text-stone-400">
+                    {t("gardenDashboard.plantsSection.healthStatusUnset", "Not set yet")}
+                  </span>
+                )}
+              </div>
+              {lastHealthUpdatedLabel && (
+                <p className="text-xs text-stone-500 dark:text-stone-400 mb-2">
+                  {t("gardenDashboard.plantsSection.healthStatusUpdated", "Last updated")} {lastHealthUpdatedLabel}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {HEALTH_STATUSES.map((status) => {
+                  const isSelected = healthStatus === status.key;
+                  return (
+                    <button
+                      key={status.key}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setHealthStatus(isSelected ? null : status.key)}
+                      className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
+                        isSelected
+                          ? `${status.bg} ${status.color} ring-2 ring-offset-1 ring-current`
+                          : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                      }`}
+                    >
+                      <span>{status.emoji}</span>
+                      <span>{t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {pendingStatusChange && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                  {t(
+                    "gardenDashboard.plantsSection.healthStatusPending",
+                    "New status will be saved when you click Save."
+                  )}
+                </p>
+              )}
+            </div>
+            
+            {/* Notes */}
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                {t("gardenDashboard.plantsSection.notes", "Notes")}
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={t("gardenDashboard.plantsSection.notesPlaceholder", "Add observations about this plant...")}
+                className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-sm resize-none"
+                rows={3}
+                maxLength={500}
+              />
+            </div>
+            
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 variant="secondary"
@@ -3850,7 +4920,7 @@ function MemberCard({
         });
       } catch {}
       await onChanged();
-    } catch (e) {
+    } catch (_e) {
       // swallow; page has global error
     } finally {
       setBusy(false);
@@ -4297,6 +5367,152 @@ function GardenDetailsEditor({
             : t("gardenDashboard.settingsSection.saveChanges")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function GardenPrivacyToggle({
+  garden,
+  onSaved,
+  canEdit,
+  ownerIsPrivate = false,
+}: {
+  garden: Garden;
+  onSaved: () => Promise<void>;
+  canEdit?: boolean;
+  ownerIsPrivate?: boolean; // If true, hide the 'public' option
+}) {
+  const { t } = useTranslation("common");
+  // For private users, default to 'friends_only' if current privacy is 'public'
+  const effectivePrivacy = ownerIsPrivate && garden.privacy === 'public' 
+    ? 'friends_only' 
+    : (garden.privacy || 'public');
+  const [privacy, setPrivacy] = React.useState<GardenPrivacy>(effectivePrivacy);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    // For private users, don't allow 'public' privacy
+    const newPrivacy = ownerIsPrivate && garden.privacy === 'public' 
+      ? 'friends_only' 
+      : (garden.privacy || 'public');
+    setPrivacy(newPrivacy);
+  }, [garden.privacy, ownerIsPrivate]);
+
+  const handlePrivacyChange = async (newPrivacy: GardenPrivacy) => {
+    if (submitting || !canEdit || newPrivacy === privacy) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await updateGardenPrivacy(garden.id, newPrivacy);
+      setPrivacy(newPrivacy);
+      try {
+        const privacyLabels: Record<GardenPrivacy, string> = {
+          public: t("gardenDashboard.settingsSection.privacyChangedPublic"),
+          friends_only: t("gardenDashboard.settingsSection.privacyChangedFriendsOnly"),
+          private: t("gardenDashboard.settingsSection.privacyChangedPrivate"),
+        };
+        await logGardenActivity({
+          gardenId: garden.id,
+          kind: "note" as any,
+          message: privacyLabels[newPrivacy],
+          actorColor: null,
+        });
+      } catch {}
+      await onSaved();
+    } catch (e: any) {
+      setErr(e?.message || t("gardenDashboard.settingsSection.privacyUpdateFailed"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const allPrivacyOptions: Array<{
+    value: GardenPrivacy;
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+    bgClass: string;
+    textClass: string;
+  }> = [
+    {
+      value: 'public',
+      icon: <Globe className="w-5 h-5" />,
+      title: t("gardenDashboard.settingsSection.privacyPublicTitle"),
+      description: t("gardenDashboard.settingsSection.privacyPublicDescription"),
+      bgClass: "bg-emerald-100 dark:bg-emerald-900/30",
+      textClass: "text-emerald-600 dark:text-emerald-400",
+    },
+    {
+      value: 'friends_only',
+      icon: <Users className="w-5 h-5" />,
+      title: t("gardenDashboard.settingsSection.privacyFriendsOnlyTitle"),
+      description: t("gardenDashboard.settingsSection.privacyFriendsOnlyDescription"),
+      bgClass: "bg-blue-100 dark:bg-blue-900/30",
+      textClass: "text-blue-600 dark:text-blue-400",
+    },
+    {
+      value: 'private',
+      icon: <Lock className="w-5 h-5" />,
+      title: t("gardenDashboard.settingsSection.privacyPrivateTitle"),
+      description: t("gardenDashboard.settingsSection.privacyPrivateDescription"),
+      bgClass: "bg-stone-100 dark:bg-stone-800",
+      textClass: "text-stone-600 dark:text-stone-400",
+    },
+  ];
+  
+  // For private users, hide the 'public' option
+  const privacyOptions = ownerIsPrivate 
+    ? allPrivacyOptions.filter(opt => opt.value !== 'public')
+    : allPrivacyOptions;
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {privacyOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => handlePrivacyChange(option.value)}
+            disabled={submitting || !canEdit}
+            className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
+              privacy === option.value
+                ? "border-emerald-500 dark:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-900/10"
+                : "border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600"
+            } ${!canEdit ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <div
+              className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${option.bgClass} ${option.textClass}`}
+            >
+              {option.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{option.title}</span>
+                {privacy === option.value && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+                    {t("gardenDashboard.settingsSection.privacyCurrent")}
+                  </span>
+                )}
+                {submitting && privacy !== option.value && (
+                  <Loader2 className="w-4 h-4 animate-spin text-stone-400" />
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                {option.description}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {err && <div className="text-sm text-red-600">{err}</div>}
+
+      {!canEdit && (
+        <div className="text-xs text-muted-foreground">
+          {t("gardenDashboard.settingsSection.privacyOnlyOwnerCanChange")}
+        </div>
+      )}
     </div>
   );
 }

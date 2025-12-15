@@ -1,6 +1,7 @@
 import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
+import { validateUsername } from '@/lib/username'
 
 // Default timezone for users who haven't set one
 const DEFAULT_TIMEZONE = 'Europe/London'
@@ -52,36 +53,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, experience_years, accent_key, is_private, disable_friend_requests')
+      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
       setProfile(data as any)
       
-      // Auto-update timezone if missing (detect from browser, fallback to London)
-      // Only auto-update if user hasn't manually set a timezone
-      if (data && !data.timezone) {
-        const detectedTimezone = typeof Intl !== 'undefined'
-          ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
-          : DEFAULT_TIMEZONE
+      // Auto-update timezone and language if missing
+      // Detect from browser and update in background
+      const needsTimezone = data && !data.timezone
+      const needsLanguage = data && !data.language
+      
+      if (needsTimezone || needsLanguage) {
+        const detectedTimezone = needsTimezone
+          ? (typeof Intl !== 'undefined'
+              ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
+              : DEFAULT_TIMEZONE)
+          : null
+        
+        // Detect language from browser (French if browser is French)
+        const detectedLanguage = needsLanguage
+          ? (() => {
+              try {
+                const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
+                return browserLang.startsWith('fr') ? 'fr' : 'en'
+              } catch {
+                return 'en'
+              }
+            })()
+          : null
         
         // Update in background (non-blocking)
-        // This ensures users get a timezone even if they haven't visited Settings yet
         void (async () => {
           try {
+            const updates: Record<string, string> = {}
+            if (detectedTimezone) updates.timezone = detectedTimezone
+            if (detectedLanguage) updates.language = detectedLanguage
+            
             const { error: updateError } = await supabase
               .from('profiles')
-              .update({ timezone: detectedTimezone })
+              .update(updates)
               .eq('id', currentId)
             
             // Update local state if update succeeded
             if (!updateError) {
-              const updatedProfile = { ...data, timezone: detectedTimezone }
+              const updatedProfile = { ...data, ...updates }
               setProfile(updatedProfile as any)
               try { localStorage.setItem('plantswipe.profile', JSON.stringify(updatedProfile)) } catch {}
             }
           } catch {
-            // Silently fail - timezone update is non-critical
+            // Silently fail - auto-detection update is non-critical
           }
         })()
       }
@@ -136,9 +157,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
       if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
     } catch {}
+    // Validate and normalize the display name (username)
+    const validationResult = validateUsername(displayName)
+    if (!validationResult.valid) {
+      return { error: validationResult.error || 'Invalid display name' }
+    }
+    const normalizedDisplayName = validationResult.normalized!
+
     // Ensure unique email handled by Supabase; ensure unique display_name in profiles
-    // First check display_name uniqueness (case-insensitive)
-    const existing = await supabase.from('profiles').select('id').ilike('display_name', displayName).maybeSingle()
+    // First check display_name uniqueness (case-insensitive, using normalized lowercase)
+    const existing = await supabase.from('profiles').select('id').ilike('display_name', normalizedDisplayName).maybeSingle()
     if (existing.data?.id) return { error: 'Display name already taken' }
 
     const { data, error } = await supabase.auth.signUp({ email, password })
@@ -151,13 +179,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
       : DEFAULT_TIMEZONE
     
-    // Create profile row
+    // Detect language from browser (French if browser is French, else English)
+    const detectedLanguage = (() => {
+      try {
+        const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
+        return browserLang.startsWith('fr') ? 'fr' : 'en'
+      } catch {
+        return 'en'
+      }
+    })()
+    
+    // Create profile row with detected timezone and language
     // Note: notify_push and notify_email columns will default to true once the migration is applied
+    // Use normalized (lowercase) display name for consistent uniqueness
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
-      display_name: displayName,
+      display_name: normalizedDisplayName,
       liked_plant_ids: [],
       timezone: detectedTimezone,
+      language: detectedLanguage,
       accent_key: 'emerald',
     })
     if (perr) return { error: perr.message }
@@ -165,6 +205,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Update local session immediately; profile fetch runs in background
     await loadSession()
     refreshProfile().catch(() => {})
+
+    // Send welcome email (non-blocking, fire-and-forget)
+    // Uses the same detected language that was saved to the profile
+    if (email) {
+      fetch('/api/send-automatic-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          triggerType: 'WELCOME_EMAIL',
+          userId: uid,
+          userEmail: email,
+          userDisplayName: normalizedDisplayName,
+          userLanguage: detectedLanguage,
+        }),
+        credentials: 'same-origin',
+      }).catch((err) => {
+        console.warn('[signup] Failed to send welcome email:', err)
+      })
+    }
+
     return {}
   }
 

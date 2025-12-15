@@ -1,8 +1,8 @@
 import React from 'react'
-import { Link } from 'react-router-dom'
 import { Lock, Globe, Trash2, Edit2, Leaf } from 'lucide-react'
 import type { Bookmark } from '@/types/bookmark'
 import { useTranslation } from 'react-i18next'
+import { Link } from '@/components/i18n/Link'
 
 interface BookmarkCardProps {
   bookmark: Bookmark
