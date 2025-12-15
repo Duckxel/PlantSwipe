@@ -26,7 +26,6 @@ const BUSINESS_EMAILS = parseEmailList(
 const RECIPIENT_EMAILS = {
   support: SUPPORT_EMAILS,
   business: BUSINESS_EMAILS,
-  bug: SUPPORT_EMAILS,
 } as const
 type Audience = keyof typeof RECIPIENT_EMAILS
 
@@ -47,8 +46,7 @@ const contactSchema = z.object({
   subject: z.string().trim().min(3).max(150),
   message: z.string().trim().min(10).max(4000),
   submittedAt: z.string().optional(),
-  audience: z.enum(["support", "business", "bug"]).optional(),
-  screenshotUrl: z.string().optional(),
+  audience: z.enum(["support", "business"]).optional(),
 })
 
 const corsHeaders: Record<string, string> = {
@@ -125,7 +123,7 @@ serve(async (req) => {
     })
   }
 
-    const { name, email, subject, message, submittedAt, audience: parsedAudience, screenshotUrl } = parsed.data
+    const { name, email, subject, message, submittedAt, audience: parsedAudience } = parsed.data
     const audience: Audience = parsedAudience ?? "support"
     const recipientEmails = RECIPIENT_EMAILS[audience]
 
@@ -165,7 +163,6 @@ serve(async (req) => {
       `Audience: ${audience}`,
       `Delivered to: ${recipientEmails.join(", ")}`,
     submittedAt ? `Submitted at: ${submittedAt}` : undefined,
-    screenshotUrl ? `Screenshot: ${screenshotUrl}` : undefined,
     ``,
     `Message:`,
     message,
@@ -179,10 +176,8 @@ serve(async (req) => {
       <p><strong>Audience:</strong> ${escapeHtml(audience)}</p>
       <p><strong>Delivered to:</strong> ${escapeHtml(recipientEmails.join(", "))}</p>
     ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
-    ${screenshotUrl ? `<p><strong>Screenshot:</strong> <a href="${escapeHtml(screenshotUrl)}">${escapeHtml(screenshotUrl)}</a></p>` : ""}
     <hr style="margin:16px 0;" />
     <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
-    ${screenshotUrl ? `<div style="margin-top:20px;"><img src="${escapeHtml(screenshotUrl)}" alt="Screenshot" style="max-width:100%; border-radius: 8px; border: 1px solid #ccc;" /></div>` : ""}
   `
 
     try {
@@ -230,3 +225,4 @@ serve(async (req) => {
     })
   }
 })
+
