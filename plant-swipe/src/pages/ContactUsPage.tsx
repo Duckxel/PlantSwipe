@@ -29,7 +29,6 @@ type DialogFormState = {
   email: string
   subject: string
   message: string
-  attachment?: { filename: string; content: string }
 }
 
 type CopyState = "idle" | "copied"
@@ -191,37 +190,9 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         email: "",
         subject: "",
         message: "",
-        attachment: undefined,
       })
     }
     setFormOpen(open)
-  }
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    // Max 5MB
-    if (file.size > 5 * 1024 * 1024) {
-      setFormErrorMessage("File too large. Max 5MB.")
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const content = e.target?.result as string
-      // content is like "data:image/png;base64,....."
-      const base64Content = content.split(",")[1]
-
-      setFormValues((prev) => ({
-        ...prev,
-        attachment: {
-          filename: file.name,
-          content: base64Content,
-        },
-      }))
-    }
-    reader.readAsDataURL(file)
   }
 
   const handleScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -325,7 +296,6 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
             ...trimmedData,
             submittedAt: new Date().toISOString(),
             audience: selectedChannel,
-            attachments: formValues.attachment ? [formValues.attachment] : undefined,
             screenshotUrl: screenshotUrl || undefined
           },
         })
@@ -343,7 +313,6 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         email: "",
         subject: "",
         message: "",
-        attachment: undefined,
       })
       // Clear screenshot state without deleting from server (since it's now submitted)
       setScreenshotUrl(null)
@@ -655,20 +624,6 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
               </div>
             )}
 
-            {/* General attachment for other channels (or in addition) */}
-            {selectedChannel !== 'bug' && (
-              <div className="grid gap-2">
-                <Label htmlFor="contact-attachment">{t('contactUs.form.attachmentLabel')}</Label>
-                <Input
-                  id="contact-attachment"
-                  name="attachment"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  disabled={inputsDisabled}
-                />
-              </div>
-            )}
 
             <DialogFooter className="pt-2">
               <Button
