@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle, MessageSquare, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -16,6 +16,7 @@ interface TopBarProps {
 
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
+import { useNotifications } from "@/hooks/useNotifications"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 import { checkEditorAccess } from "@/constants/userRoles"
 
@@ -29,6 +30,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPosition, setMenuPosition] = React.useState<{ top: number; right: number } | null>(null)
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "topbar" })
+  const { unseenCount } = useNotifications()
 
   const recomputeMenuPosition = React.useCallback(() => {
     const anchor = anchorRef.current
@@ -128,13 +130,27 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             </Button>
           </>
         ) : (
-          <div className="relative" ref={anchorRef}>
-            <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Profile menu" aria-haspopup="menu" aria-expanded={menuOpen}>
-              <User className="h-4 w-4 mr-2 shrink-0" />
-              <span className="hidden sm:inline max-w-[40vw] truncate min-w-0">{label}</span>
-              <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
-            </Button>
-            {menuOpen && menuPosition && createPortal(
+          <>
+            <div className="relative">
+              <Button asChild className="rounded-full w-10 h-10 p-0 bg-transparent hover:bg-stone-100 dark:hover:bg-[#2d2d30] border-0" variant="ghost">
+                <Link to="/notifications" aria-label="Notifications">
+                  <Bell className="h-5 w-5 text-stone-600 dark:text-stone-300" />
+                </Link>
+              </Button>
+              {unseenCount > 0 && (
+                <span
+                  className="pointer-events-none absolute top-2 right-2.5 h-2.5 w-2.5 rounded-full bg-red-600 dark:bg-red-500 ring-2 ring-white dark:ring-[#252526]"
+                  aria-hidden="true"
+                />
+              )}
+            </div>
+            <div className="relative" ref={anchorRef}>
+              <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Profile menu" aria-haspopup="menu" aria-expanded={menuOpen}>
+                <User className="h-4 w-4 mr-2 shrink-0" />
+                <span className="hidden sm:inline max-w-[40vw] truncate min-w-0">{label}</span>
+                <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
+              </Button>
+              {menuOpen && menuPosition && createPortal(
               <div
                 ref={menuRef}
                 className="w-40 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow z-[60] p-1"
@@ -152,6 +168,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                   <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
                 </button>
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/messages') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                  <MessageSquare className="h-4 w-4" /> {t('common.messages', { defaultValue: 'Messages' })}
+                </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                   <Settings className="h-4 w-4" /> {t('common.settings')}
                 </button>
@@ -163,8 +182,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                 </button>
               </div>,
               document.body
-            )}
-          </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </header>

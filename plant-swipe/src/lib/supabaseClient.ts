@@ -72,6 +72,8 @@ export type ProfileRow = {
   disable_friend_requests?: boolean | null
   notify_push?: boolean | null
   notify_email?: boolean | null
+  is_suspended?: boolean | null
+  flag_level?: number | null
 }
 
 export type BlogPostRow = {

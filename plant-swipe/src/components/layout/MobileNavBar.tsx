@@ -2,10 +2,11 @@ import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, LayoutGrid, HelpCircle, LogIn, UserPlus } from "lucide-react"
+import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, MessageSquare, Settings, LogOut, Crown, LayoutGrid, HelpCircle, LogIn, UserPlus, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
+import { useNotifications } from "@/hooks/useNotifications"
 import { useTranslation } from "react-i18next"
 import { checkEditorAccess } from "@/constants/userRoles"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -73,6 +74,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "mobile" })
+  const { unseenCount } = useNotifications()
   const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
   const [guestMenuOpen, setGuestMenuOpen] = React.useState(false)
@@ -224,12 +226,37 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             <button
               onClick={() => {
                 setProfileMenuOpen(false)
+                navigate("/notifications")
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
+            >
+              <div className="relative">
+                <Bell className="h-5 w-5" />
+                {unseenCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-600 rounded-full ring-2 ring-white dark:ring-[#2d2d30]" />
+                )}
+              </div>
+              <span>{t("notifications.title", { defaultValue: "Notifications" })}</span>
+            </button>
+            <button
+              onClick={() => {
+                setProfileMenuOpen(false)
                 navigate("/friends")
               }}
               className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
             >
               <HeartHandshake className="h-5 w-5" />
               <span>{t("common.friends")}</span>
+            </button>
+            <button
+              onClick={() => {
+                setProfileMenuOpen(false)
+                navigate("/messages")
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
+            >
+              <MessageSquare className="h-5 w-5" />
+              <span>{t("common.messages", { defaultValue: "Messages" })}</span>
             </button>
             <button
               onClick={() => {

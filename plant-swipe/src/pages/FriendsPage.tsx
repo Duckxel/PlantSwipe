@@ -456,6 +456,24 @@ export const FriendsPage: React.FC = () => {
 
         if (err) throw err;
 
+        // Send notification to recipient
+        try {
+          const session = (await supabase.auth.getSession()).data.session;
+          if (session?.access_token) {
+            fetch("/api/notifications/friend-request-sent", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              credentials: "same-origin",
+              body: JSON.stringify({ recipientId }),
+            }).catch(() => {});
+          }
+        } catch {
+          // Ignore notification errors
+        }
+
         // Refresh search results and pending requests
         handleDialogSearch();
         await Promise.all([loadPendingRequests(), loadSentPendingRequests()]);
@@ -477,11 +495,35 @@ export const FriendsPage: React.FC = () => {
   const acceptRequest = React.useCallback(
     async (requestId: string) => {
       try {
+        // Get the request details first to know who sent it
+        const request = pendingRequests.find((r) => r.id === requestId);
+        const requesterId = request?.requester_id;
+
         const { error: err } = await supabase.rpc("accept_friend_request", {
           _request_id: requestId,
         });
 
         if (err) throw err;
+
+        // Send notification to the original requester
+        if (requesterId) {
+          try {
+            const session = (await supabase.auth.getSession()).data.session;
+            if (session?.access_token) {
+              fetch("/api/notifications/friend-request-accepted", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${session.access_token}`,
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({ requesterId }),
+              }).catch(() => {});
+            }
+          } catch {
+            // Ignore notification errors
+          }
+        }
 
         // Refresh both lists
         await Promise.all([
@@ -494,7 +536,7 @@ export const FriendsPage: React.FC = () => {
         setError(e?.message || t("friends.errors.failedToAccept"));
       }
     },
-    [loadFriends, loadPendingRequests, loadSentPendingRequests],
+    [loadFriends, loadPendingRequests, loadSentPendingRequests, pendingRequests],
   );
 
   const rejectRequest = React.useCallback(

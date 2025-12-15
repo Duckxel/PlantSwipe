@@ -44,6 +44,7 @@ const CreatePlantPageLazy = lazy(() => import("@/pages/CreatePlantPage").then(mo
 const PlantInfoPageLazy = lazy(() => import("@/pages/PlantInfoPage"))
 const PublicProfilePageLazy = lazy(() => import("@/pages/PublicProfilePage"))
 const FriendsPageLazy = lazy(() => import("@/pages/FriendsPage").then(module => ({ default: module.FriendsPage })))
+const MessagesPageLazy = lazy(() => import("@/pages/MessagesPage").then(module => ({ default: module.MessagesPage })))
 const SettingsPageLazy = lazy(() => import("@/pages/SettingsPage"))
 const ContactUsPageLazy = lazy(() => import("@/pages/ContactUsPage"))
 const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
@@ -56,6 +57,7 @@ const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
 const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
 const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
+const NotificationsPageLazy = lazy(() => import("@/pages/NotificationsPage"))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -1436,6 +1438,36 @@ export default function PlantSwipe() {
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
                   <FriendsPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/messages"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <MessagesPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/messages/:conversationId"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <MessagesPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/notifications"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <NotificationsPageLazy />
                 </Suspense>
               ) : (
                 <Navigate to="/" replace />

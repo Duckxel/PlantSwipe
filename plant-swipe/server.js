@@ -6246,8 +6246,13 @@ async function ensureDefaultAutomations() {
   }
 }
 
-app.get('/api/admin/notification-automations', async (req, res) => {
-  const adminId = await ensureEditor(req, res)
+// ============================================================================
+// Admin Report Management Endpoints
+// ============================================================================
+
+// Get flagged users count (for badge)
+app.get('/api/admin/reports/flagged-count', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
   if (!adminId) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -6327,6 +6332,981 @@ app.get('/api/admin/notification-automations', async (req, res) => {
     const automations = automationsWithCounts.map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
     console.log('[notification-automations] Returning:', automations.length, 'automations')
     res.json({ automations })
+    const result = await sql`
+      select 
+        count(distinct subject_user_id)::integer as flagged_users,
+        count(*)::integer as open_files
+      from public.report_files
+      where status = 'open'
+    `
+    res.json({
+      flaggedUsers: result[0]?.flagged_users || 0,
+      openFiles: result[0]?.open_files || 0
+    })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get flagged count:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get flagged count' })
+  }
+})
+
+// Get all flagged users with their report files
+app.get('/api/admin/reports/flagged-users', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    const { status = 'all', limit = 50, offset = 0 } = req.query
+    
+    let users
+    if (status === 'open') {
+      users = await sql`
+        select 
+          p.id,
+          p.display_name,
+          p.email,
+          p.avatar_url,
+          p.flag_level,
+          p.is_suspended,
+          p.suspended_at,
+          p.is_private,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as open_files_count,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id) as total_files_count,
+          (select max(rf.priority) from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as max_priority,
+          (select count(*)::integer from public.user_reports ur where ur.reported_id = p.id) as user_reports_count,
+          (select count(*)::integer from public.message_reports mr join public.messages m on m.id = mr.message_id where m.sender_id = p.id) as message_reports_count
+        from public.profiles p
+        where p.flag_level is not null
+          or exists (select 1 from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open')
+        order by 
+          p.is_suspended desc,
+          coalesce(p.flag_level, 0) desc,
+          open_files_count desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    } else {
+      users = await sql`
+        select 
+          p.id,
+          p.display_name,
+          u.email,
+          p.avatar_url,
+          p.flag_level,
+          p.is_suspended,
+          p.suspended_at,
+          p.is_private,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as open_files_count,
+          (select count(*)::integer from public.report_files rf where rf.subject_user_id = p.id) as total_files_count,
+          (select max(rf.priority) from public.report_files rf where rf.subject_user_id = p.id and rf.status = 'open') as max_priority,
+          (select count(*)::integer from public.user_reports ur where ur.reported_id = p.id) as user_reports_count,
+          (select count(*)::integer from public.message_reports mr join public.messages m on m.id = mr.message_id where m.sender_id = p.id) as message_reports_count
+        from public.profiles p
+        left join auth.users u on u.id = p.id
+        where p.flag_level is not null
+          or exists (select 1 from public.report_files rf where rf.subject_user_id = p.id)
+        order by 
+          p.is_suspended desc,
+          coalesce(p.flag_level, 0) desc,
+          open_files_count desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    }
+    
+    res.json({ users: users || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get flagged users:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get flagged users' })
+  }
+})
+
+// Get report files for a specific user
+app.get('/api/admin/reports/files/:userId', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const { userId } = req.params
+  const { status = 'all' } = req.query
+  
+  try {
+    let files
+    if (status === 'open') {
+      files = await sql`
+        select 
+          rf.*,
+          p.display_name as created_by_name,
+          cp.display_name as closed_by_name
+        from public.report_files rf
+        left join public.profiles p on p.id = rf.created_by
+        left join public.profiles cp on cp.id = rf.closed_by
+        where rf.subject_user_id = ${userId}
+          and rf.status = 'open'
+        order by rf.priority desc, rf.created_at desc
+      `
+    } else if (status === 'closed') {
+      files = await sql`
+        select 
+          rf.*,
+          p.display_name as created_by_name,
+          cp.display_name as closed_by_name
+        from public.report_files rf
+        left join public.profiles p on p.id = rf.created_by
+        left join public.profiles cp on cp.id = rf.closed_by
+        where rf.subject_user_id = ${userId}
+          and rf.status = 'closed'
+        order by rf.closed_at desc
+      `
+    } else {
+      files = await sql`
+        select 
+          rf.*,
+          p.display_name as created_by_name,
+          cp.display_name as closed_by_name
+        from public.report_files rf
+        left join public.profiles p on p.id = rf.created_by
+        left join public.profiles cp on cp.id = rf.closed_by
+        where rf.subject_user_id = ${userId}
+        order by rf.status asc, rf.priority desc, rf.created_at desc
+      `
+    }
+    
+    res.json({ files: files || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get report files:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get report files' })
+  }
+})
+
+// Get a single report file with its linked reports
+app.get('/api/admin/reports/file/:fileId', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  const { fileId } = req.params
+  
+  try {
+    // Convert undefined to null for SQL compatibility
+    const isEnabled = typeof parsed.isEnabled === 'boolean' ? parsed.isEnabled : null
+    const templateId = parsed.templateId !== undefined ? (parsed.templateId || null) : null
+    const sendHour = typeof parsed.sendHour === 'number' ? parsed.sendHour : null
+    const ctaUrl = parsed.ctaUrl !== undefined ? (parsed.ctaUrl || null) : null
+
+    // Track which fields to update
+    const hasIsEnabled = typeof parsed.isEnabled === 'boolean'
+    const hasTemplateId = parsed.templateId !== undefined
+    const hasSendHour = typeof parsed.sendHour === 'number'
+    const hasCtaUrl = parsed.ctaUrl !== undefined
+
+    const rows = await sql`
+      update public.notification_automations
+      set is_enabled = case when ${hasIsEnabled} then ${isEnabled} else is_enabled end,
+          template_id = case when ${hasTemplateId} then ${templateId} else template_id end,
+          send_hour = case when ${hasSendHour} then ${sendHour} else send_hour end,
+          cta_url = case when ${hasCtaUrl} then ${ctaUrl} else cta_url end,
+          updated_by = ${adminUuid},
+          updated_at = now()
+      where id = ${automationId}
+      returning *
+    const fileResult = await sql`
+      select 
+        rf.*,
+        p.display_name as created_by_name,
+        cp.display_name as closed_by_name,
+        sp.display_name as subject_display_name,
+        sp.avatar_url as subject_avatar_url,
+        sp.flag_level as subject_flag_level,
+        sp.is_suspended as subject_is_suspended
+      from public.report_files rf
+      left join public.profiles p on p.id = rf.created_by
+      left join public.profiles cp on cp.id = rf.closed_by
+      left join public.profiles sp on sp.id = rf.subject_user_id
+      where rf.id = ${fileId}
+    `
+    
+    if (!fileResult?.length) {
+      res.status(404).json({ error: 'Report file not found' })
+      return
+    }
+    
+    // Get linked user reports
+    const userReports = await sql`
+      select 
+        ur.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar
+      from public.user_reports ur
+      join public.profiles rp on rp.id = ur.reporter_id
+      where ur.report_file_id = ${fileId}
+      order by ur.created_at desc
+    `
+    
+    // Get linked message reports
+    const messageReports = await sql`
+      select 
+        mr.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar,
+        m.content as message_content,
+        m.created_at as message_created_at,
+        c.id as conversation_id
+      from public.message_reports mr
+      join public.profiles rp on rp.id = mr.reporter_id
+      join public.messages m on m.id = mr.message_id
+      join public.conversations c on c.id = m.conversation_id
+      where mr.report_file_id = ${fileId}
+      order by mr.created_at desc
+    `
+    
+    res.json({
+      file: fileResult[0],
+      userReports: userReports || [],
+      messageReports: messageReports || []
+    })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get report file' })
+  }
+})
+
+// Create a new report file
+app.post('/api/admin/reports/files', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { subjectUserId, category, title, notes, priority = 1 } = req.body
+  
+  if (!subjectUserId || !category || !title) {
+    res.status(400).json({ error: 'Missing required fields: subjectUserId, category, title' })
+    return
+  }
+  
+  try {
+    const result = await sql`
+      insert into public.report_files (subject_user_id, category, title, notes, priority, created_by)
+      values (${subjectUserId}, ${category}, ${title}, ${notes || null}, ${priority}, ${adminId})
+      returning *
+    `
+    
+    // Update user's flag level if this is their first report file
+    await sql`
+      update public.profiles
+      set flag_level = coalesce(flag_level, 1)
+      where id = ${subjectUserId} and flag_level is null
+    `
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to create report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to create report file' })
+  }
+})
+
+// Helper function to run an automation
+async function runAutomation(automation) {
+  if (!sql) return { error: 'Database not configured' }
+
+  const defaultVariants = toStringArray(automation.message_variants)
+  if (!defaultVariants.length) return { error: 'No message variants' }
+
+  // Get the notification title from template (fallback to automation display_name)
+  const notificationTitle = automation.template_title || automation.display_name || 'Reminder'
+
+  // Load translations for the template
+  let translations = {}
+  if (automation.template_id) {
+    try {
+      const transRows = await sql`
+        select language, message_variants
+        from public.notification_template_translations
+        where template_id = ${automation.template_id}
+      `
+      for (const row of transRows || []) {
+        translations[row.language] = toStringArray(row.message_variants)
+      }
+    } catch (err) {
+      console.error('[automation] failed to load translations', err)
+// Update a report file
+app.put('/api/admin/reports/file/:fileId', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  const { title, notes, priority } = req.body
+  
+  try {
+    const result = await sql`
+      update public.report_files
+      set 
+        title = coalesce(${title || null}, title),
+        notes = coalesce(${notes}, notes),
+        priority = coalesce(${priority || null}, priority),
+        updated_at = now()
+      where id = ${fileId}
+      returning *
+    `
+    
+    if (!result?.length) {
+      res.status(404).json({ error: 'Report file not found' })
+      return
+    }
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to update report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update report file' })
+  }
+})
+
+// Close a report file
+app.post('/api/admin/reports/file/:fileId/close', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+
+  const triggerType = automation.trigger_type
+  let recipientQuery
+
+  if (triggerType === 'weekly_inactive_reminder') {
+    recipientQuery = sql`
+      select p.id as user_id, p.display_name, p.language
+      from public.profiles p
+      left join auth.users u on u.id = p.id
+      where (p.notify_push is null or p.notify_push = true)
+        and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+      limit 5000
+  
+  const { fileId } = req.params
+  const { resolution, actionTaken } = req.body
+  
+  try {
+    const result = await sql`
+      update public.report_files
+      set 
+        status = 'closed',
+        closed_by = ${adminId},
+        closed_at = now(),
+        resolution = ${resolution || null},
+        action_taken = ${actionTaken || null},
+        updated_at = now()
+      where id = ${fileId} and status = 'open'
+      returning *
+    `
+    
+    if (!result?.length) {
+      res.status(404).json({ error: 'Report file not found or already closed' })
+      return
+    }
+    
+    // Update linked reports to 'reviewed' status
+    await sql`
+      update public.user_reports
+      set status = 'reviewed', reviewed_by = ${adminId}, reviewed_at = now()
+      where report_file_id = ${fileId} and status = 'pending'
+    `
+    
+    await sql`
+      update public.message_reports
+      set status = 'reviewed', reviewed_by = ${adminId}, reviewed_at = now()
+      where report_file_id = ${fileId} and status = 'pending'
+    `
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to close report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to close report file' })
+  }
+
+  const recipients = await recipientQuery
+  if (!recipients || !recipients.length) {
+    return { recipients: 0, sent: 0, message: 'No recipients found' }
+  }
+
+  // Create user_notifications entries
+  let insertedCount = 0
+  for (const recipient of recipients) {
+    // Get message variants for user's language (with fallback to default)
+    const userLang = (recipient.language || 'en').toLowerCase()
+    let messageVariants = defaultVariants
+    if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
+      messageVariants = translations[userLang]
+    }
+
+    const messageIndex = automation.randomize
+      ? Math.floor(Math.random() * messageVariants.length)
+      : 0
+    const message = messageVariants[messageIndex]
+      .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+
+    try {
+      // Check if notification already exists for this automation + user today
+      const existing = await sql`
+        select id from public.user_notifications 
+        where automation_id = ${automation.id} 
+          and user_id = ${recipient.user_id}
+          and scheduled_for::date = current_date
+        limit 1
+      `
+      if (existing && existing.length > 0) {
+        continue // Skip, already sent today
+      }
+
+      await sql`
+        insert into public.user_notifications (
+          automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
+        )
+        values (
+          ${automation.id},
+          ${recipient.user_id},
+          ${notificationTitle},
+          ${message},
+          ${automation.cta_url || null},
+          now(),
+          'pending'
+        )
+      `
+      insertedCount++
+    } catch (insertErr) {
+      console.error('[automation] insert error', insertErr)
+})
+
+// Reopen a report file
+app.post('/api/admin/reports/file/:fileId/reopen', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  
+  try {
+    const result = await sql`
+      update public.report_files
+      set 
+        status = 'open',
+        closed_by = null,
+        closed_at = null,
+        resolution = null,
+        action_taken = null,
+        updated_at = now()
+      where id = ${fileId} and status = 'closed'
+      returning *
+    `
+    
+    if (!result?.length) {
+      res.status(404).json({ error: 'Report file not found or already open' })
+      return
+    }
+    
+    res.json({ file: result[0] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to reopen report file:', err)
+    res.status(500).json({ error: err?.message || 'Failed to reopen report file' })
+  }
+
+  return { recipients: recipients.length, queued: insertedCount }
+}
+})
+
+// Link existing reports to a file
+app.post('/api/admin/reports/file/:fileId/link', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { fileId } = req.params
+  const { userReportIds = [], messageReportIds = [] } = req.body
+  
+  try {
+    if (userReportIds.length > 0) {
+      await sql`
+        update public.user_reports
+        set report_file_id = ${fileId}
+        where id = any(${userReportIds}::uuid[])
+      `
+    }
+    
+    if (messageReportIds.length > 0) {
+      await sql`
+        update public.message_reports
+        set report_file_id = ${fileId}
+        where id = any(${messageReportIds}::uuid[])
+      `
+    }
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[admin/reports] Failed to link reports:', err)
+    res.status(500).json({ error: err?.message || 'Failed to link reports' })
+  }
+})
+
+// Update user flag level (escalate/de-escalate)
+app.put('/api/admin/reports/user/:userId/flag-level', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { flagLevel } = req.body
+  
+  if (flagLevel !== null && (flagLevel < 1 || flagLevel > 3)) {
+    res.status(400).json({ error: 'Flag level must be between 1 and 3, or null to clear' })
+    return
+  }
+  
+  try {
+    // If escalating to level 3, suspend the account
+    if (flagLevel === 3) {
+      await sql`
+        update public.profiles
+        set 
+          flag_level = 3,
+          is_suspended = true,
+          suspended_at = now(),
+          suspended_by = ${adminId},
+          is_private = true
+        where id = ${userId}
+      `
+      
+      // Send suspension email
+      try {
+        const userInfo = await sql`
+          select u.email, p.display_name, p.language
+          from auth.users u
+          join public.profiles p on p.id = u.id
+          where u.id = ${userId}
+        `
+        if (userInfo?.length && userInfo[0].email) {
+          // Trigger account_suspended notification
+          await sendSuspensionEmail(userInfo[0].email, userInfo[0].display_name, userInfo[0].language)
+        }
+      } catch (emailErr) {
+        console.error('[admin/reports] Failed to send suspension email:', emailErr)
+      }
+    } else {
+      await sql`
+        update public.profiles
+        set flag_level = ${flagLevel}
+        where id = ${userId}
+      `
+    }
+    
+    res.json({ ok: true, flagLevel })
+  } catch (err) {
+    console.error('[admin/reports] Failed to update flag level:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update flag level' })
+  }
+})
+
+// Suspend a user account (Level 3)
+app.post('/api/admin/reports/user/:userId/suspend', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { reason } = req.body
+  
+  try {
+    await sql`
+      update public.profiles
+      set 
+        flag_level = 3,
+        is_suspended = true,
+        suspended_at = now(),
+        suspended_by = ${adminId},
+        is_private = true
+      where id = ${userId}
+    `
+    
+    // Create a report file for the suspension
+    await sql`
+      insert into public.report_files (subject_user_id, category, title, notes, priority, created_by, status, action_taken)
+      values (
+        ${userId}, 
+        'system_abuse', 
+        'Account Suspended', 
+        ${reason || 'Account suspended by administrator'},
+        3,
+        ${adminId},
+        'closed',
+        'suspended'
+      )
+    `
+    
+    // Send suspension email
+    try {
+      const userInfo = await sql`
+        select u.email, p.display_name, p.language
+        from auth.users u
+        join public.profiles p on p.id = u.id
+        where u.id = ${userId}
+      `
+      if (userInfo?.length && userInfo[0].email) {
+        await sendSuspensionEmail(userInfo[0].email, userInfo[0].display_name, userInfo[0].language)
+      }
+    } catch (emailErr) {
+      console.error('[admin/reports] Failed to send suspension email:', emailErr)
+    }
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[admin/reports] Failed to suspend user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to suspend user' })
+  }
+})
+
+// Unsuspend a user account
+app.post('/api/admin/reports/user/:userId/unsuspend', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { flagLevel = 2 } = req.body // Default to level 2 (under watch)
+  
+  try {
+    await sql`
+      update public.profiles
+      set 
+        flag_level = ${flagLevel},
+        is_suspended = false,
+        suspended_at = null,
+        suspended_by = null
+      where id = ${userId}
+    `
+    
+    res.json({ ok: true, flagLevel })
+  } catch (err) {
+    console.error('[admin/reports] Failed to unsuspend user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to unsuspend user' })
+  }
+})
+
+// Get unassigned reports (not linked to any file)
+app.get('/api/admin/reports/unassigned', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  try {
+    const userReports = await sql`
+      select 
+        ur.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar,
+        sp.display_name as reported_name,
+        sp.avatar_url as reported_avatar,
+        sp.flag_level as reported_flag_level
+      from public.user_reports ur
+      join public.profiles rp on rp.id = ur.reporter_id
+      join public.profiles sp on sp.id = ur.reported_id
+      where ur.report_file_id is null
+        and ur.status = 'pending'
+      order by ur.created_at desc
+      limit 50
+    `
+    
+    const messageReports = await sql`
+      select 
+        mr.*,
+        rp.display_name as reporter_name,
+        rp.avatar_url as reporter_avatar,
+        sp.display_name as sender_name,
+        sp.avatar_url as sender_avatar,
+        sp.flag_level as sender_flag_level,
+        m.content as message_content,
+        m.created_at as message_created_at,
+        m.sender_id
+      from public.message_reports mr
+      join public.profiles rp on rp.id = mr.reporter_id
+      join public.messages m on m.id = mr.message_id
+      join public.profiles sp on sp.id = m.sender_id
+      where mr.report_file_id is null
+        and mr.status = 'pending'
+      order by mr.created_at desc
+      limit 50
+    `
+    
+    res.json({
+      userReports: userReports || [],
+      messageReports: messageReports || []
+    })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get unassigned reports:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get unassigned reports' })
+  }
+})
+
+// Get user stats (friends, messages, conversations) for admin
+app.get('/api/admin/reports/user/:userId/stats', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  
+  try {
+    const statsResult = await sql`
+      select
+        (select count(*)::integer from public.friends where user_id = ${userId} or friend_id = ${userId}) as friends_count,
+        (select count(*)::integer from public.messages where sender_id = ${userId}) as messages_sent_count,
+        (select count(*)::integer from public.conversation_participants where user_id = ${userId} and left_at is null) as conversations_count,
+        (select count(*)::integer from public.user_reports where reported_id = ${userId}) as reports_received_count,
+        (select count(*)::integer from public.user_reports where reporter_id = ${userId}) as reports_made_count
+    `
+    
+    res.json({ stats: statsResult[0] || {} })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get user stats:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get user stats' })
+  }
+})
+
+// Get user's messages for admin review
+app.get('/api/admin/reports/user/:userId/messages', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  const { limit = 100, offset = 0, conversationId } = req.query
+  
+  try {
+    let messages
+    if (conversationId) {
+      messages = await sql`
+        select 
+          m.*,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar,
+          (select exists(select 1 from public.message_reports mr where mr.message_id = m.id)) as is_reported
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.conversation_id = ${conversationId}
+        order by m.created_at desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    } else {
+      messages = await sql`
+        select 
+          m.*,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar,
+          (select exists(select 1 from public.message_reports mr where mr.message_id = m.id)) as is_reported
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.sender_id = ${userId}
+        order by m.created_at desc
+        limit ${Number(limit)}
+        offset ${Number(offset)}
+      `
+    }
+    
+    res.json({ messages: messages || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get user messages:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get user messages' })
+  }
+})
+
+// Get user's conversations for admin review
+app.get('/api/admin/reports/user/:userId/conversations', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { userId } = req.params
+  
+  try {
+    const conversations = await sql`
+      select 
+        c.*,
+        (
+          select jsonb_agg(jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url
+          ))
+          from public.conversation_participants cp2
+          join public.profiles p on p.id = cp2.user_id
+          where cp2.conversation_id = c.id
+        ) as participants,
+        (select count(*)::integer from public.messages m where m.conversation_id = c.id) as message_count,
+        (select count(*)::integer from public.messages m where m.conversation_id = c.id and m.sender_id = ${userId}) as user_message_count
+      from public.conversations c
+      join public.conversation_participants cp on cp.conversation_id = c.id and cp.user_id = ${userId}
+      where cp.left_at is null
+      order by c.last_message_at desc nulls last
+      limit 50
+    `
+    
+    res.json({ conversations: conversations || [] })
+  } catch (err) {
+    console.error('[admin/reports] Failed to get user conversations:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get user conversations' })
+  }
+})
+
+// Helper function to send suspension email
+async function sendSuspensionEmail(email, displayName, language) {
+  if (!sql) return
+  
+  try {
+    // Get the account_suspended automation
+    const automation = await sql`
+      select na.*, nt.message_variants, nt.title as template_title
+      from public.notification_automations na
+      left join public.notification_templates nt on nt.id = na.template_id
+      where na.trigger_type = 'account_suspended'
+        and na.is_enabled = true
+      limit 1
+    `
+    
+    if (!automation?.length) {
+      console.log('[suspension-email] account_suspended automation not configured')
+      return
+    }
+    
+    // For now, just log - the actual email sending would be handled by the email system
+    console.log(`[suspension-email] Would send suspension email to ${email} (${displayName})`)
+    
+    // You could also create a user_notification entry here if you want it delivered via push
+    // Or trigger an email campaign send
+    
+  } catch (err) {
+    console.error('[suspension-email] Failed to send:', err)
+  }
+}
+
+app.get('/api/admin/notification-automations', async (req, res) => {
+  const adminId = await ensureEditor(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    // Ensure notification tables exist first
+    console.log('[notification-automations] Ensuring tables exist...')
+    await ensureNotificationTables()
+    // Ensure default automations exist
+    console.log('[notification-automations] Ensuring default automations exist...')
+    await ensureDefaultAutomations()
+    
+    // First, get basic automations
+    const rows = await sql`
+      select a.*,
+             t.title as template_title
+      from public.notification_automations a
+      left join public.notification_templates t on t.id = a.template_id
+      order by a.created_at asc
+    `
+    console.log('[notification-automations] Query returned:', rows?.length || 0, 'rows')
+    
+    // Calculate recipient counts separately to avoid query failures
+    const automationsWithCounts = await Promise.all((rows || []).map(async (row) => {
+      let recipientCount = 0
+      try {
+        if (row.trigger_type === 'weekly_inactive_reminder') {
+          const countResult = await sql`
+            select count(*)::bigint as cnt
+            from public.profiles p
+            left join auth.users u on u.id = p.id
+            where (p.notify_push is null or p.notify_push = true)
+              and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
+          `
+          recipientCount = Number(countResult?.[0]?.cnt || 0)
+        } else if (row.trigger_type === 'daily_task_reminder') {
+          try {
+            const countResult = await sql`
+              select count(distinct p.id)::bigint as cnt
+              from public.profiles p
+              join public.garden_members gm on gm.user_id = p.id
+              join public.garden_plant_tasks t on t.garden_id = gm.garden_id
+              join public.garden_plant_task_occurrences occ on occ.task_id = t.id
+              where (p.notify_push is null or p.notify_push = true)
+                and occ.due_at::date = current_date
+                and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+            `
+            recipientCount = Number(countResult?.[0]?.cnt || 0)
+          } catch (e) {
+            // Table might not exist
+            recipientCount = 0
+          }
+        } else if (row.trigger_type === 'journal_continue_reminder') {
+          try {
+            const countResult = await sql`
+              select count(distinct p.id)::bigint as cnt
+              from public.profiles p
+              join public.garden_members gm on gm.user_id = p.id
+              join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
+              where (p.notify_push is null or p.notify_push = true)
+                and gal.kind = 'note'
+                and gal.occurred_at::date = current_date - interval '1 day'
+            `
+            recipientCount = Number(countResult?.[0]?.cnt || 0)
+          } catch (e) {
+            // Table might not exist
+            recipientCount = 0
+          }
+        }
+      } catch (countErr) {
+        console.error('[notification-automations] Error counting recipients for', row.trigger_type, countErr)
+      }
+      return { ...row, recipient_count: recipientCount }
+    }))
+    
+    const automations = automationsWithCounts.map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
+    console.log('[notification-automations] Returning:', automations.length, 'automations')
+    res.json({ automations })
   } catch (err) {
     console.error('[notification-automations] failed to load automations', err)
     res.status(500).json({ error: err?.message || 'Failed to load automations' })
@@ -6347,6 +7327,22 @@ app.put('/api/admin/notification-automations/:id', async (req, res) => {
   }
   let parsed
   try {
+    // First, delete any campaign sends records (in case cascade doesn't work)
+    await sql`delete from public.admin_campaign_sends where campaign_id = ${campaignId}`
+
+    // Allow deletion of campaigns in any status (including sent, partial, failed, running)
+    const rows = await sql`
+      delete from public.admin_email_campaigns
+      where id = ${campaignId}
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Campaign not found' })
+      return
+    }
+    const campaign = normalizeEmailCampaignRow(rows[0])
+    console.log('[email-campaigns] deleted campaign:', campaign.id, campaign.title, 'status:', campaign.status)
+    res.json({ campaign })
     parsed = notificationAutomationUpdateSchema.parse(req.body || {})
   } catch (err) {
     res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
@@ -6359,13 +7355,13 @@ app.put('/api/admin/notification-automations/:id', async (req, res) => {
     const templateId = parsed.templateId !== undefined ? (parsed.templateId || null) : null
     const sendHour = typeof parsed.sendHour === 'number' ? parsed.sendHour : null
     const ctaUrl = parsed.ctaUrl !== undefined ? (parsed.ctaUrl || null) : null
-
+    
     // Track which fields to update
     const hasIsEnabled = typeof parsed.isEnabled === 'boolean'
     const hasTemplateId = parsed.templateId !== undefined
     const hasSendHour = typeof parsed.sendHour === 'number'
     const hasCtaUrl = parsed.ctaUrl !== undefined
-
+    
     const rows = await sql`
       update public.notification_automations
       set is_enabled = case when ${hasIsEnabled} then ${isEnabled} else is_enabled end,
@@ -6444,13 +7440,13 @@ app.post('/api/admin/notification-automations/:id/trigger', async (req, res) => 
 // Helper function to run an automation
 async function runAutomation(automation) {
   if (!sql) return { error: 'Database not configured' }
-
+  
   const defaultVariants = toStringArray(automation.message_variants)
   if (!defaultVariants.length) return { error: 'No message variants' }
-
+  
   // Get the notification title from template (fallback to automation display_name)
   const notificationTitle = automation.template_title || automation.display_name || 'Reminder'
-
+  
   // Load translations for the template
   let translations = {}
   if (automation.template_id) {
@@ -6467,17 +7463,17 @@ async function runAutomation(automation) {
       console.error('[automation] failed to load translations', err)
     }
   }
-
+  
   const triggerType = automation.trigger_type
   let recipientQuery
-
+  
   if (triggerType === 'weekly_inactive_reminder') {
     recipientQuery = sql`
       select p.id as user_id, p.display_name, p.language
       from public.profiles p
       left join auth.users u on u.id = p.id
       where (p.notify_push is null or p.notify_push = true)
-        and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+        and coalesce(u.last_sign_in_at, p.created_at, now() - interval '30 days') < now() - interval '7 days'
       limit 5000
     `
   } else if (triggerType === 'daily_task_reminder') {
@@ -6508,12 +7504,12 @@ async function runAutomation(automation) {
   } else {
     return { error: 'Unknown trigger type' }
   }
-
+  
   const recipients = await recipientQuery
   if (!recipients || !recipients.length) {
     return { recipients: 0, sent: 0, message: 'No recipients found' }
   }
-
+  
   // Create user_notifications entries
   let insertedCount = 0
   for (const recipient of recipients) {
@@ -6523,13 +7519,13 @@ async function runAutomation(automation) {
     if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
       messageVariants = translations[userLang]
     }
-
-    const messageIndex = automation.randomize
+    
+    const messageIndex = automation.randomize 
       ? Math.floor(Math.random() * messageVariants.length)
       : 0
     const message = messageVariants[messageIndex]
       .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
-
+    
     try {
       // Check if notification already exists for this automation + user today
       const existing = await sql`
@@ -6542,7 +7538,7 @@ async function runAutomation(automation) {
       if (existing && existing.length > 0) {
         continue // Skip, already sent today
       }
-
+      
       await sql`
         insert into public.user_notifications (
           automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
@@ -6562,7 +7558,7 @@ async function runAutomation(automation) {
       console.error('[automation] insert error', insertErr)
     }
   }
-
+  
   return { recipients: recipients.length, queued: insertedCount }
 }
 
@@ -6656,6 +7652,11 @@ app.post('/api/admin/email-templates', async (req, res) => {
   const isActive = parsed.isActive !== false
   const adminUuid = toAdminUuid(adminId)
   try {
+    const body = req.body || {}
+
+    // Get current state
+    const current = await sql`
+      select * from public.admin_email_triggers where id = ${triggerId} limit 1
     const rows = await sql`
       insert into public.admin_email_templates (
         title, subject, description, preview_text, body_html, body_json, variables,
@@ -6714,6 +7715,29 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
       res.status(404).json({ error: 'Template not found' })
       return
     }
+
+    // Calculate new values
+    let newEnabled = current[0].is_enabled
+    let newTemplateId = current[0].template_id
+
+    if (body.templateId !== undefined) {
+      newTemplateId = body.templateId || null
+      // If clearing template, also disable the trigger
+      if (!newTemplateId) {
+        newEnabled = false
+      }
+    }
+
+    if (typeof body.isEnabled === 'boolean') {
+      // Only allow enabling if there's a template
+      if (body.isEnabled && !newTemplateId) {
+        newEnabled = false
+      } else {
+        newEnabled = body.isEnabled
+      }
+    }
+
+    // Simple direct update
     const current = existing[0]
     const description = parsed.description && parsed.description.length ? parsed.description : null
     const previewText = resolvePreviewText(parsed.previewText, parsed.bodyHtml)
@@ -6739,6 +7763,24 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
       where id = ${templateId}
       returning *
     `
+
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Trigger not found after update' })
+      return
+    }
+
+    // Fetch with template title
+    const refreshed = await sql`
+      select t.*, tpl.title as template_title
+      from public.admin_email_triggers t
+      left join public.admin_email_templates tpl on tpl.id = t.template_id
+      where t.id = ${triggerId}
+      limit 1
+    `
+
+    const trigger = normalizeEmailTriggerRow(refreshed[0])
+    console.log('[email-triggers] updated trigger:', trigger.triggerType, 'enabled:', trigger.isEnabled, 'template:', trigger.templateId)
+    res.json({ trigger })
     const template = normalizeEmailTemplateRow(rows?.[0])
     res.json({ template })
   } catch (err) {
@@ -6747,6 +7789,16 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
   }
 })
 
+// Public endpoint to send automatic email (called from auth flow)
+// Uses the same method as campaign emails: direct Resend API call with wrapper
+app.post('/api/send-automatic-email', async (req, res) => {
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+  if (!apiKey) {
+    console.error('[send-automatic-email] No Resend API key configured')
+    res.status(500).json({ error: 'Email service not configured' })
+    return
+  }
+
 app.delete('/api/admin/email-templates/:id', async (req, res) => {
   const adminId = await ensureEditor(req, res)
   if (!adminId) return
@@ -6754,6 +7806,16 @@ app.delete('/api/admin/email-templates/:id', async (req, res) => {
     res.status(500).json({ error: 'Database not configured' })
     return
   }
+
+  const { triggerType, userId, userEmail, userDisplayName, userLanguage } = req.body || {}
+
+  if (!triggerType || !userId || !userEmail || !userDisplayName) {
+    res.status(400).json({ error: 'Missing required fields: triggerType, userId, userEmail, userDisplayName' })
+    return
+  }
+
+  const lang = userLanguage || 'en'
+
   const templateId = String(req.params?.id || '').trim()
   if (!templateId) {
     res.status(400).json({ error: 'Missing template id' })
@@ -6766,6 +7828,131 @@ app.delete('/api/admin/email-templates/:id', async (req, res) => {
       where template_id = ${templateId}
         and status in ('draft','scheduled','running')
     `
+
+    if (!triggerRows || !triggerRows.length) {
+      console.log(`[send-automatic-email] Trigger type "${triggerType}" not found`)
+      res.json({ sent: false, reason: 'Trigger not configured' })
+      return
+    }
+
+    const trigger = triggerRows[0]
+
+    // 2. Check if enabled and has a template
+    if (!trigger.is_enabled) {
+      console.log(`[send-automatic-email] Trigger "${triggerType}" is disabled`)
+      res.json({ sent: false, reason: 'Trigger is disabled' })
+      return
+    }
+
+    if (!trigger.template_id) {
+      console.log(`[send-automatic-email] Trigger "${triggerType}" has no template configured`)
+      res.json({ sent: false, reason: 'No template configured' })
+      return
+    }
+
+    // 3. Check if we've already sent this automatic email to this user
+    const existingSend = await sql`
+      select id from public.admin_automatic_email_sends
+      where trigger_type = ${triggerType} and user_id = ${userId}
+      limit 1
+    `
+
+    if (existingSend && existingSend.length > 0) {
+      console.log(`[send-automatic-email] Already sent "${triggerType}" to user ${userId}`)
+      res.json({ sent: false, reason: 'Already sent to this user' })
+      return
+    }
+
+    // 4. Load translations for the template (for multi-language support)
+    const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
+
+    // 5. Get user's language-specific content (fallback to template's default content)
+    const translation = emailTranslations.get(lang)
+    const rawSubject = translation?.subject || trigger.subject
+    const rawBodyHtml = translation?.bodyHtml || trigger.body_html
+
+    if (!rawSubject || !rawBodyHtml) {
+      console.error(`[send-automatic-email] Template "${trigger.template_id}" has no content`)
+      res.status(500).json({ error: 'Template has no content' })
+      return
+    }
+
+    // 6. Prepare variable replacement context (same as campaign emails)
+    const userRaw = userDisplayName || 'User'
+    const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+
+    // Generate random 10-character string (uppercase, lowercase, numbers)
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    let randomStr = ''
+    for (let i = 0; i < 10; i++) {
+      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+
+    const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+
+    // Variables available for replacement in email templates
+    const context = {
+      user: userCap,                                     // User's display name (capitalized)
+      email: userEmail,                                  // User's email address
+      random: randomStr,                                 // 10 random characters (unique per email)
+      url: websiteUrl.replace(/^https?:\/\//, ''),       // Website URL without protocol (e.g., "aphylia.app")
+      code: 'XXXXXX'                                     // Placeholder (real codes are for transactional emails)
+    }
+    const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
+
+    // 7. Render the email content
+    const subject = replaceVars(rawSubject)
+    const bodyHtmlRaw = replaceVars(rawBodyHtml)
+
+    // 8. Sanitize HTML for email client compatibility (same as campaigns)
+    const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
+
+    // 9. Wrap with the beautiful email wrapper (same as campaigns)
+    const html = wrapEmailHtml(bodyHtml, subject, lang)
+    const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+
+    // 10. Send via Resend API (same method as campaigns)
+    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
+
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: userEmail,
+        subject: subject,
+        html: html,
+        text: text,
+        headers: { 'X-Trigger-Type': triggerType },
+        tags: [{ name: 'trigger_type', value: triggerType }]
+      })
+    })
+
+    if (!resendResponse.ok) {
+      const errorText = await resendResponse.text().catch(() => '')
+      console.error(`[send-automatic-email] Resend API error (${resendResponse.status}):`, errorText)
+      res.status(500).json({ error: `Failed to send email: ${errorText || resendResponse.status}` })
+      return
+    }
+
+    const resendData = await resendResponse.json().catch(() => ({}))
+    console.log(`[send-automatic-email] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
+
+    // 11. Record the send to prevent duplicates
+    try {
+      await sql`
+        insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
+        values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
+      `
+    } catch (logErr) {
+      // Don't fail the request if logging fails, email was already sent
+      console.warn('[send-automatic-email] Failed to log send:', logErr?.message || logErr)
+    }
+
+    res.json({ sent: true, resendId: resendData.id })
     const activeCount = usage && usage[0] ? Number(usage[0].cnt) : 0
     if (activeCount > 0) {
       res.status(409).json({ error: 'Template is used by active campaigns' })
@@ -6788,6 +7975,70 @@ app.delete('/api/admin/email-templates/:id', async (req, res) => {
   }
 })
 
+// Admin: global stats (bypass RLS via server connection)
+app.get('/api/admin/stats', async (req, res) => {
+  const uid = "public"
+  if (!uid) return
+  try {
+    let profilesCount = 0
+    let authUsersCount = null
+    let plantsCount = null
+
+    if (sql) {
+      try {
+        const profilesRows = await sql`select count(*)::int as count from public.profiles`
+        profilesCount = Array.isArray(profilesRows) && profilesRows[0] ? Number(profilesRows[0].count) : 0
+      } catch { }
+      try {
+        const authRows = await sql`select count(*)::int as count from auth.users`
+        authUsersCount = Array.isArray(authRows) && authRows[0] ? Number(authRows[0].count) : null
+      } catch { }
+      try {
+        const plantsRows = await sql`select count(*)::int as count from public.plants`
+        plantsCount = Array.isArray(plantsRows) && plantsRows[0] ? Number(plantsRows[0].count) : 0
+      } catch { }
+    }
+
+    // Fallback via Supabase REST RPC if DB connection not available
+    if (!sql && supabaseUrlEnv && supabaseAnonKey) {
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      try {
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_profiles_total`, {
+          method: 'POST',
+          headers: baseHeaders,
+          body: '{}',
+        })
+        if (pr.ok) {
+          const val = await pr.json().catch(() => 0)
+          if (typeof val === 'number' && Number.isFinite(val)) profilesCount = val
+        }
+      } catch { }
+      try {
+        const ar = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_auth_users_total`, {
+          method: 'POST',
+          headers: baseHeaders,
+          body: '{}',
+        })
+        if (ar.ok) {
+          const val = await ar.json().catch(() => null)
+          if (typeof val === 'number' && Number.isFinite(val)) authUsersCount = val
+        }
+      } catch { }
+      try {
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+        })
+        if (pr.ok) {
+          const contentRange = pr.headers.get('content-range') || ''
+          const match = contentRange.match(/\/(\d+)$/)
+          if (match) plantsCount = Number(match[1])
+        }
+      } catch { }
+    }
+
+    res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
+  } catch (e) {
+    res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
 // ---- Admin email campaigns ----
 app.get('/api/admin/email-campaigns', async (req, res) => {
   const adminId = await ensureEditor(req, res)
@@ -7101,7 +8352,7 @@ app.delete('/api/admin/email-campaigns/:id', async (req, res) => {
   try {
     // First, delete any campaign sends records (in case cascade doesn't work)
     await sql`delete from public.admin_campaign_sends where campaign_id = ${campaignId}`
-
+    
     // Allow deletion of campaigns in any status (including sent, partial, failed, running)
     const rows = await sql`
       delete from public.admin_email_campaigns
@@ -7365,7 +8616,7 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
   }
   try {
     const body = req.body || {}
-
+    
     // Get current state
     const current = await sql`
       select * from public.admin_email_triggers where id = ${triggerId} limit 1
@@ -7374,11 +8625,11 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
       res.status(404).json({ error: 'Trigger not found' })
       return
     }
-
+    
     // Calculate new values
     let newEnabled = current[0].is_enabled
     let newTemplateId = current[0].template_id
-
+    
     if (body.templateId !== undefined) {
       newTemplateId = body.templateId || null
       // If clearing template, also disable the trigger
@@ -7386,7 +8637,7 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
         newEnabled = false
       }
     }
-
+    
     if (typeof body.isEnabled === 'boolean') {
       // Only allow enabling if there's a template
       if (body.isEnabled && !newTemplateId) {
@@ -7395,7 +8646,7 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
         newEnabled = body.isEnabled
       }
     }
-
+    
     // Simple direct update
     const rows = await sql`
       update public.admin_email_triggers
@@ -7405,12 +8656,12 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
       where id = ${triggerId}
       returning *
     `
-
+    
     if (!rows || !rows.length) {
       res.status(404).json({ error: 'Trigger not found after update' })
       return
     }
-
+    
     // Fetch with template title
     const refreshed = await sql`
       select t.*, tpl.title as template_title
@@ -7419,7 +8670,7 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
       where t.id = ${triggerId}
       limit 1
     `
-
+    
     const trigger = normalizeEmailTriggerRow(refreshed[0])
     console.log('[email-triggers] updated trigger:', trigger.triggerType, 'enabled:', trigger.isEnabled, 'template:', trigger.templateId)
     res.json({ trigger })
@@ -7438,22 +8689,22 @@ app.post('/api/send-automatic-email', async (req, res) => {
     res.status(500).json({ error: 'Email service not configured' })
     return
   }
-
+  
   if (!sql) {
     console.error('[send-automatic-email] Database connection not available')
     res.status(500).json({ error: 'Database not configured' })
     return
   }
-
+  
   const { triggerType, userId, userEmail, userDisplayName, userLanguage } = req.body || {}
-
+  
   if (!triggerType || !userId || !userEmail || !userDisplayName) {
     res.status(400).json({ error: 'Missing required fields: triggerType, userId, userEmail, userDisplayName' })
     return
   }
-
+  
   const lang = userLanguage || 'en'
-
+  
   try {
     // 1. Load trigger configuration
     const triggerRows = await sql`
@@ -7463,70 +8714,70 @@ app.post('/api/send-automatic-email', async (req, res) => {
       where t.trigger_type = ${triggerType}
       limit 1
     `
-
+    
     if (!triggerRows || !triggerRows.length) {
       console.log(`[send-automatic-email] Trigger type "${triggerType}" not found`)
       res.json({ sent: false, reason: 'Trigger not configured' })
       return
     }
-
+    
     const trigger = triggerRows[0]
-
+    
     // 2. Check if enabled and has a template
     if (!trigger.is_enabled) {
       console.log(`[send-automatic-email] Trigger "${triggerType}" is disabled`)
       res.json({ sent: false, reason: 'Trigger is disabled' })
       return
     }
-
+    
     if (!trigger.template_id) {
       console.log(`[send-automatic-email] Trigger "${triggerType}" has no template configured`)
       res.json({ sent: false, reason: 'No template configured' })
       return
     }
-
+    
     // 3. Check if we've already sent this automatic email to this user
     const existingSend = await sql`
       select id from public.admin_automatic_email_sends
       where trigger_type = ${triggerType} and user_id = ${userId}
       limit 1
     `
-
+    
     if (existingSend && existingSend.length > 0) {
       console.log(`[send-automatic-email] Already sent "${triggerType}" to user ${userId}`)
       res.json({ sent: false, reason: 'Already sent to this user' })
       return
     }
-
+    
     // 4. Load translations for the template (for multi-language support)
     const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
-
+    
     // 5. Get user's language-specific content (fallback to template's default content)
     const translation = emailTranslations.get(lang)
     const rawSubject = translation?.subject || trigger.subject
     const rawBodyHtml = translation?.bodyHtml || trigger.body_html
-
+    
     if (!rawSubject || !rawBodyHtml) {
       console.error(`[send-automatic-email] Template "${trigger.template_id}" has no content`)
       res.status(500).json({ error: 'Template has no content' })
       return
     }
-
+    
     // 6. Prepare variable replacement context (same as campaign emails)
     const userRaw = userDisplayName || 'User'
     const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
-
+    
     // Generate random 10-character string (uppercase, lowercase, numbers)
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     let randomStr = ''
     for (let i = 0; i < 10; i++) {
       randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
     }
-
+    
     const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
-
+    
     // Variables available for replacement in email templates
-    const context = {
+    const context = { 
       user: userCap,                                     // User's display name (capitalized)
       email: userEmail,                                  // User's email address
       random: randomStr,                                 // 10 random characters (unique per email)
@@ -7534,21 +8785,21 @@ app.post('/api/send-automatic-email', async (req, res) => {
       code: 'XXXXXX'                                     // Placeholder (real codes are for transactional emails)
     }
     const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
-
+    
     // 7. Render the email content
     const subject = replaceVars(rawSubject)
     const bodyHtmlRaw = replaceVars(rawBodyHtml)
-
+    
     // 8. Sanitize HTML for email client compatibility (same as campaigns)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
-
+    
     // 9. Wrap with the beautiful email wrapper (same as campaigns)
     const html = wrapEmailHtml(bodyHtml, subject, lang)
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-
+    
     // 10. Send via Resend API (same method as campaigns)
     const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
-
+    
     const resendResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -7565,17 +8816,17 @@ app.post('/api/send-automatic-email', async (req, res) => {
         tags: [{ name: 'trigger_type', value: triggerType }]
       })
     })
-
+    
     if (!resendResponse.ok) {
       const errorText = await resendResponse.text().catch(() => '')
       console.error(`[send-automatic-email] Resend API error (${resendResponse.status}):`, errorText)
       res.status(500).json({ error: `Failed to send email: ${errorText || resendResponse.status}` })
       return
     }
-
+    
     const resendData = await resendResponse.json().catch(() => ({}))
     console.log(`[send-automatic-email] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
-
+    
     // 11. Record the send to prevent duplicates
     try {
       await sql`
@@ -7586,7 +8837,7 @@ app.post('/api/send-automatic-email', async (req, res) => {
       // Don't fail the request if logging fails, email was already sent
       console.warn('[send-automatic-email] Failed to log send:', logErr?.message || logErr)
     }
-
+    
     res.json({ sent: true, resendId: resendData.id })
   } catch (err) {
     console.error('[send-automatic-email] Error:', err)
@@ -7594,28 +8845,28 @@ app.post('/api/send-automatic-email', async (req, res) => {
   }
 })
 
-// Admin: global stats (bypass RLS via server connection)
-app.get('/api/admin/stats', async (req, res) => {
+  // Admin: global stats (bypass RLS via server connection)
+  app.get('/api/admin/stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
   try {
     let profilesCount = 0
     let authUsersCount = null
-    let plantsCount = null
+      let plantsCount = null
 
     if (sql) {
       try {
         const profilesRows = await sql`select count(*)::int as count from public.profiles`
         profilesCount = Array.isArray(profilesRows) && profilesRows[0] ? Number(profilesRows[0].count) : 0
-      } catch { }
+      } catch {}
       try {
         const authRows = await sql`select count(*)::int as count from auth.users`
         authUsersCount = Array.isArray(authRows) && authRows[0] ? Number(authRows[0].count) : null
-      } catch { }
-      try {
-        const plantsRows = await sql`select count(*)::int as count from public.plants`
-        plantsCount = Array.isArray(plantsRows) && plantsRows[0] ? Number(plantsRows[0].count) : 0
-      } catch { }
+        } catch {}
+        try {
+          const plantsRows = await sql`select count(*)::int as count from public.plants`
+          plantsCount = Array.isArray(plantsRows) && plantsRows[0] ? Number(plantsRows[0].count) : 0
+        } catch {}
     }
 
     // Fallback via Supabase REST RPC if DB connection not available
@@ -7631,7 +8882,7 @@ app.get('/api/admin/stats', async (req, res) => {
           const val = await pr.json().catch(() => 0)
           if (typeof val === 'number' && Number.isFinite(val)) profilesCount = val
         }
-      } catch { }
+      } catch {}
       try {
         const ar = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_auth_users_total`, {
           method: 'POST',
@@ -7642,22 +8893,22 @@ app.get('/api/admin/stats', async (req, res) => {
           const val = await ar.json().catch(() => null)
           if (typeof val === 'number' && Number.isFinite(val)) authUsersCount = val
         }
-      } catch { }
-      try {
-        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, {
-          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
-        })
-        if (pr.ok) {
-          const contentRange = pr.headers.get('content-range') || ''
-          const match = contentRange.match(/\/(\d+)$/)
-          if (match) plantsCount = Number(match[1])
-        }
-      } catch { }
+        } catch {}
+        try {
+          const pr = await fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, {
+            headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+          })
+          if (pr.ok) {
+            const contentRange = pr.headers.get('content-range') || ''
+            const match = contentRange.match(/\/(\d+)$/)
+            if (match) plantsCount = Number(match[1])
+          }
+        } catch {}
     }
 
-    res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
+      res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
   } catch (e) {
-    res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
+      res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
   }
 })
 
@@ -7913,10 +9164,25 @@ app.get('/api/admin/member', async (req, res) => {
         const adminName = null
         if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
       } catch { }
+      } catch {}
+      // Get social stats via REST (best effort)
+      let socialStats = null
+      try {
+        const statsRpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/admin_get_user_social_stats`, {
+          method: 'POST',
+          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _user_id: targetId }),
+        })
+        if (statsRpc.ok) {
+          socialStats = await statsRpc.json().catch(() => null)
+        }
+      } catch {}
+      
       res.json({
         ok: true,
         user: { id: targetId, email: resolvedEmail || emailParam || null, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
         profile,
+        socialStats,
         ips,
         lastOnlineAt,
         lastIp,
@@ -7966,9 +9232,24 @@ app.get('/api/admin/member', async (req, res) => {
     }
     let profile = null
     try {
-      const rows = await sql`select id, display_name, is_admin, roles from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin, roles, flag_level, is_suspended, suspended_at, is_private from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
     } catch { }
+    } catch {}
+    // Get social stats for admin (friends, messages, conversations, reports)
+    let socialStats = null
+    try {
+      const statsRows = await sql`
+        select
+          (select count(*)::integer from public.friends where user_id = ${user.id} or friend_id = ${user.id}) as friends_count,
+          (select count(*)::integer from public.messages where sender_id = ${user.id}) as messages_sent_count,
+          (select count(*)::integer from public.conversation_participants where user_id = ${user.id} and left_at is null) as conversations_count,
+          (select count(*)::integer from public.user_reports where reported_id = ${user.id}) as reports_received_count,
+          (select count(*)::integer from public.report_files where subject_user_id = ${user.id}) as report_files_count,
+          (select count(*)::integer from public.report_files where subject_user_id = ${user.id} and status = 'open') as open_report_files_count
+      `
+      socialStats = statsRows?.[0] || null
+    } catch {}
     // Load latest admin notes for this profile (DB or REST)
     let adminNotes = []
     try {
@@ -8139,6 +9420,7 @@ app.get('/api/admin/member', async (req, res) => {
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at, email_confirmed_at: user.email_confirmed_at || null, last_sign_in_at: user.last_sign_in_at || null },
       profile,
+      socialStats,
       ips,
       lastOnlineAt,
       lastIp,
@@ -8999,6 +10281,9 @@ app.get('/api/admin/member-suggest', async (req, res) => {
     } catch { }
     const suggestions = out.slice(0, 7)
     res.json({ ok: true, suggestions })
+    } catch {}
+    const suggestions = out.slice(0, 7)
+    res.json({ ok: true, suggestions })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to suggest members' })
   }
@@ -9042,7 +10327,7 @@ app.post('/api/admin/promote-admin', async (req, res) => {
         res.status(500).json({ error: 'Profiles table not found' })
         return
       }
-    } catch { }
+    } catch {}
     try {
       await sql`
         insert into public.profiles (id, is_admin)
@@ -9058,7 +10343,7 @@ app.post('/api/admin/promote-admin', async (req, res) => {
       const adminId = caller?.id || null
       const adminName = null
       await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'promote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
-    } catch { }
+    } catch {}
     res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: true })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to promote user' })
@@ -9109,7 +10394,7 @@ app.post('/api/admin/demote-admin', async (req, res) => {
         res.status(500).json({ error: 'Profiles table not found' })
         return
       }
-    } catch { }
+    } catch {}
     try {
       await sql`insert into public.profiles (id, is_admin) values (${targetId}, false) on conflict (id) do update set is_admin = false`
     } catch (e) {
@@ -9121,7 +10406,7 @@ app.post('/api/admin/demote-admin', async (req, res) => {
       const adminId = caller?.id || null
       const adminName = null
       await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'demote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
-    } catch { }
+    } catch {}
     res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: false })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to demote user' })
@@ -9151,6 +10436,385 @@ app.post('/api/admin/roles/add', async (req, res) => {
       return
     }
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const roleParam = (rawRole || '').toString().trim().toLowerCase()
+    
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    if (!roleParam) {
+      res.status(400).json({ error: 'Missing role' })
+      return
+    }
+    if (!ADMIN_ASSIGNABLE_ROLES.includes(roleParam)) {
+      res.status(400).json({ error: `Invalid role. Must be one of: ${ADMIN_ASSIGNABLE_ROLES.join(', ')}` })
+      return
+    }
+    
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+    
+    // Get current roles
+    let currentRoles = []
+    try {
+      const profileRows = await sql`select roles from public.profiles where id = ${targetId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0] && Array.isArray(profileRows[0].roles)) {
+        currentRoles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+      }
+    } catch {}
+    
+    // Add role if not already present
+    if (!currentRoles.includes(roleParam)) {
+      currentRoles.push(roleParam)
+    }
+    
+    // Update profile with new roles (profile must already exist)
+    try {
+      // First check if profile exists
+      const profileCheck = await sql`select id from public.profiles where id = ${targetId} limit 1`
+      if (!profileCheck || profileCheck.length === 0) {
+        res.status(404).json({ error: 'User profile not found. The user must have a profile before roles can be assigned.' })
+        return
+      }
+      
+      // Update the roles array
+      await sql`update public.profiles set roles = ${sql.array(currentRoles)} where id = ${targetId}`
+      
+      // If adding admin role, also set is_admin = true for legacy support
+      if (roleParam === 'admin') {
+        await sql`update public.profiles set is_admin = true where id = ${targetId}`
+      }
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to add role' })
+      return
+    }
+    
+    // Log admin action
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'add_role', ${targetId}, ${sql.json({ email: targetEmail, role: roleParam })})`
+    } catch {}
+    
+    res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, addedRole: roleParam })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to add role' })
+  }
+})
+
+app.options('/api/admin/roles/add', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Admin: remove a role from a user
+app.post('/api/admin/roles/remove', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const roleParam = (rawRole || '').toString().trim().toLowerCase()
+    
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    if (!roleParam) {
+      res.status(400).json({ error: 'Missing role' })
+      return
+    }
+    if (!ALL_USER_ROLES.includes(roleParam)) {
+      res.status(400).json({ error: `Invalid role. Must be one of: ${ALL_USER_ROLES.join(', ')}` })
+      return
+    }
+    
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+    
+    // Get current roles
+    let currentRoles = []
+    try {
+      const profileRows = await sql`select roles from public.profiles where id = ${targetId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0] && Array.isArray(profileRows[0].roles)) {
+        currentRoles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+      }
+    } catch { }
+    } catch {}
+    
+    // Remove role if present
+    currentRoles = currentRoles.filter(r => r !== roleParam)
+    
+    // Update profile with new roles
+    try {
+      await sql`update public.profiles set roles = ${sql.array(currentRoles)} where id = ${targetId}`
+      
+      // If removing admin role, also set is_admin = false for legacy support
+      if (roleParam === 'admin') {
+        await sql`update public.profiles set is_admin = false where id = ${targetId}`
+      }
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to remove role' })
+      return
+    }
+    
+    // Log admin action
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'promote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
+    } catch { }
+    res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: true })
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'remove_role', ${targetId}, ${sql.json({ email: targetEmail, role: roleParam })})`
+    } catch {}
+    
+    res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, removedRole: roleParam })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to remove role' })
+  }
+})
+
+app.options('/api/admin/roles/remove', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Admin: get a user's roles
+app.get('/api/admin/roles/:userId', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const userId = (req.params.userId || '').toString().trim()
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId' })
+      return
+    }
+    
+    let roles = []
+    try {
+      const profileRows = await sql`select roles, is_admin from public.profiles where id = ${userId} limit 1`
+      if (Array.isArray(profileRows) && profileRows[0]) {
+        if (Array.isArray(profileRows[0].roles)) {
+          roles = profileRows[0].roles.filter(r => ALL_USER_ROLES.includes(r))
+        }
+        // Support legacy is_admin field
+        if (profileRows[0].is_admin === true && !roles.includes('admin')) {
+          roles.push('admin')
+        }
+      }
+    } catch {}
+    
+    res.json({ ok: true, userId, roles })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to get roles' })
+  }
+})
+
+app.options('/api/admin/roles/:userId', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Public: check if an email or current IP is banned
+app.get('/api/banned/check', async (req, res) => {
+  try {
+    if (!sql) {
+      res.json({ banned: false })
+      return
+    }
+    const emailParam = (req.query.email || '').toString().trim()
+    const ip = getClientIp(req)
+    // Check IP ban first
+    if (ip) {
+      try {
+        const rows = await sql`select 1 from public.banned_ips where ip_address = ${ip}::inet limit 1`
+        if (Array.isArray(rows) && rows.length > 0) {
+          res.json({ banned: true, source: 'ip' })
+          return
+        }
+      } catch {}
+    }
+    if (emailParam) {
+      try {
+        const rows = await sql`
+          select reason, banned_at from public.banned_accounts
+          where lower(email) = ${emailParam.toLowerCase()}
+          order by banned_at desc
+          limit 1
+        `
+        if (Array.isArray(rows) && rows.length > 0) {
+          const r = rows[0]
+          res.json({ banned: true, source: 'email', reason: r.reason || null, bannedAt: r.banned_at || null })
+          return
+        }
+      } catch {}
+    }
+    res.json({ banned: false })
+  } catch (e) {
+    res.status(500).json({ banned: false })
+  }
+})
+
+// reCAPTCHA Enterprise v3 verification endpoint
+// Uses GOOGLE_API_KEY for authentication with Google Cloud
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || ''
+const RECAPTCHA_SITE_KEY = '6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd'
+
+app.post('/api/recaptcha/verify', async (req, res) => {
+  try {
+    const { token, action } = req.body || {}
+    
+    if (!token) {
+      res.status(400).json({ success: false, error: 'Missing reCAPTCHA token' })
+      return
+    }
+    
+    if (!GOOGLE_API_KEY) {
+      // If no API key configured, log warning and allow request
+      // This enables development without reCAPTCHA verification
+      console.warn('[recaptcha] No GOOGLE_API_KEY configured, skipping verification')
+      res.json({ success: true, score: 1.0, warning: 'verification_skipped' })
+      return
+    }
+
+    // Call Google reCAPTCHA Enterprise verification API
+    // POST https://recaptchaenterprise.googleapis.com/v1/projects/PROJECT_ID/assessments?key=API_KEY
+    const verifyUrl = `https://recaptchaenterprise.googleapis.com/v1/projects/aphylia/assessments?key=${GOOGLE_API_KEY}`
+
+    const requestBody = {
+      event: {
+        token: token,
+        expectedAction: action || 'submit',
+        siteKey: RECAPTCHA_SITE_KEY
+      }
+    }
+
+    const verifyResponse = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    })
+
+    const verifyData = await verifyResponse.json()
+
+    if (!verifyResponse.ok) {
+      console.error('[recaptcha] Verification API error:', verifyData)
+      res.status(400).json({ success: false, error: 'Verification failed', details: verifyData.error?.message })
+      return
+    }
+
+    // Check the token properties
+    const tokenProperties = verifyData.tokenProperties
+    const riskAnalysis = verifyData.riskAnalysis
+    
+    if (!tokenProperties?.valid) {
+      console.warn('[recaptcha] Invalid token:', tokenProperties?.invalidReason)
+      res.status(400).json({ success: false, error: 'Invalid token', reason: tokenProperties?.invalidReason })
+      return
+    }
+    // Ensure profiles table exists, then set is_admin = false
+    try {
+      const exists = await sql`select 1 from information_schema.tables where table_schema = 'public' and table_name = 'profiles'`
+      if (!exists || exists.length === 0) {
+        res.status(500).json({ error: 'Profiles table not found' })
+        return
+      }
+    } catch { }
+    try {
+      await sql`insert into public.profiles (id, is_admin) values (${targetId}, false) on conflict (id) do update set is_admin = false`
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to demote user' })
+      return
+    }
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'demote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
+    } catch { }
+    res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: false })
+
+    // Check if action matches (important for security)
+    if (action && tokenProperties.action !== action) {
+      console.warn('[recaptcha] Action mismatch:', { expected: action, got: tokenProperties.action })
+      res.status(400).json({ success: false, error: 'Action mismatch' })
+      return
+    }
+
+    // Get the risk score (0.0 = likely bot, 1.0 = likely human)
+    const score = riskAnalysis?.score ?? 0.5
+    
+    // Threshold: scores below 0.3 are likely bots
+    if (score < 0.3) {
+      console.warn('[recaptcha] Low score, likely bot:', score)
+      res.status(400).json({ success: false, error: 'Suspicious activity detected', score })
+      return
+    }
+
+    console.log('[recaptcha] Verification success, score:', score)
+    res.json({ success: true, score })
+  } catch (e) {
+    console.error('[recaptcha] Verification error:', e)
+    // On error, we still allow the request but log the issue
+    res.json({ success: true, score: 0.5, warning: 'verification_error' })
+  }
+})
+
+// Admin: ban a user by email, record IPs, and attempt account deletion
+app.post('/api/admin/ban', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    // Require admin with robust detection
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, reason: rawReason } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
     const roleParam = (rawRole || '').toString().trim().toLowerCase()
@@ -9224,27 +10888,120 @@ app.post('/api/admin/roles/add', async (req, res) => {
     } catch { }
 
     res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, addedRole: roleParam })
+    const reason = (rawReason || '').toString().trim() || null
+    if (!emailParam) {
+      res.status(400).json({ error: 'Missing email' })
+      return
+    }
+    const email = emailParam.toLowerCase()
+    const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+    const userId = Array.isArray(userRows) && userRows[0] ? userRows[0].id : null
+    // Gather distinct IPs used by this user
+    let ips = []
+    if (userId) {
+      const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [userId])
+      ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
+    }
+    // Best-effort admin identification from token
+    const caller = await getUserFromRequest(req)
+    let bannedBy = caller?.id || null
+
+    // Insert ban records
+    try {
+      await sql`
+        insert into public.banned_accounts (user_id, email, ip_addresses, reason, banned_by)
+        values (${userId}, ${email}, ${ips}, ${reason}, ${bannedBy})
+      `
+    } catch {}
+    // Insert per-IP rows (upsert to avoid duplicates)
+    for (const ip of ips) {
+      try {
+        await sql`
+          insert into public.banned_ips (ip_address, reason, banned_by, user_id, email)
+          values (${ip}::inet, ${reason}, ${bannedBy}, ${userId}, ${email})
+          on conflict (ip_address) do update set
+            reason = coalesce(excluded.reason, public.banned_ips.reason),
+            banned_by = coalesce(excluded.banned_by, public.banned_ips.banned_by),
+            banned_at = excluded.banned_at,
+            user_id = coalesce(excluded.user_id, public.banned_ips.user_id),
+            email = coalesce(excluded.email, public.banned_ips.email)
+        `
+      } catch {}
+    }
+
+    // Delete profile row
+    if (userId) {
+      try { await sql`delete from public.profiles where id = ${userId}` } catch {}
+      // Attempt to delete auth user as well; ignore failures
+      try { await sql`delete from auth.users where id = ${userId}` } catch {}
+    }
+
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'ban_user', ${email}, ${sql.json({ userId, ips })})`
+    } catch {}
+    res.json({ ok: true, userId: userId || null, email, ipCount: ips.length, bannedAt: new Date().toISOString() })
   } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to add role' })
+    res.status(500).json({ error: e?.message || 'Failed to ban user' })
   }
 })
 
-app.options('/api/admin/roles/add', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
-  res.status(204).end()
-})
+// Helper: load plants via Supabase anon client when SQL is unavailable
+async function loadPlantsViaSupabase() {
+  if (!supabaseServer) return null
+    try {
+      const { data, error } = await supabaseServer
+        .from('plants')
+        .select('*')
+        .order('name', { ascending: true })
+    if (error) return null
+      return (Array.isArray(data) ? data : []).map((r) => {
+        const photos = Array.isArray(r.photos) ? r.photos : undefined
+        return {
+          id: r.id,
+          name: r.name,
+          scientificName: r.scientific_name,
+          colors: r.colors ?? [],
+          seasons: r.seasons ?? [],
+          rarity: r.rarity,
+          meaning: r.meaning ?? '',
+          description: r.description ?? '',
+          photos,
+          image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+          care: {
+            sunlight: r.level_sun || null,
+            water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
+            soil: Array.isArray(r.soil) ? r.soil.join(', ') : null,
+            difficulty: r.maintenance_level || null,
+          },
+          seedsAvailable: r.seeds_available === true,
+        }
+      })
+  } catch {
+    return null
+  }
+}
 
-// Admin: remove a role from a user
-app.post('/api/admin/roles/remove', async (req, res) => {
+app.post('/api/contact', async (req, res) => {
   try {
-    if (!sql) {
-      res.status(500).json({ error: 'Database not configured' })
+    const body = req.body || {}
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : ''
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 180) : ''
+    const message = typeof body.message === 'string' ? body.message.trim().slice(0, 5000) : ''
+    const audienceInput =
+      typeof body.audience === 'string' ? body.audience :
+      (typeof body.channel === 'string' ? body.channel : '')
+    const audience = normalizeContactAudience(audienceInput)
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: 'A valid email address is required.' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
+    if (!message) {
+      res.status(400).json({ error: 'Message is required.' })
       return
     }
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
@@ -9254,15 +11011,37 @@ app.post('/api/admin/roles/remove', async (req, res) => {
 
     if (!emailParam && !userIdParam) {
       res.status(400).json({ error: 'Missing email or userId' })
+
+    const ip = getClientIp(req) || 'unknown'
+    if (isContactRateLimited(ip)) {
+      res.status(429).json({ error: 'Too many messages in a short period. Please try again later.' })
       return
     }
-    if (!roleParam) {
-      res.status(400).json({ error: 'Missing role' })
-      return
+
+    await dispatchSupportEmail({ name, email, subject, message, audience })
+    res.json({ ok: true, audience })
+  } catch (error) {
+    console.error('[contact] failed to send support email:', error)
+    res.status(500).json({ error: 'Failed to send message. Please try again later.' })
+  }
+})
+
+// DeepL Translation API endpoint
+app.post('/api/translate', async (req, res) => {
+  try {
+    const { text, source_lang, target_lang } = req.body
+    
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid text field' })
     }
-    if (!ALL_USER_ROLES.includes(roleParam)) {
-      res.status(400).json({ error: `Invalid role. Must be one of: ${ALL_USER_ROLES.join(', ')}` })
-      return
+    
+    if (!source_lang || !target_lang) {
+      return res.status(400).json({ error: 'Missing source_lang or target_lang' })
+    }
+    
+    // Skip translation if source and target are the same
+    if (source_lang.toUpperCase() === target_lang.toUpperCase()) {
+      return res.json({ translatedText: text })
     }
 
     let targetId = userIdParam || null
@@ -9313,30 +11092,89 @@ app.post('/api/admin/roles/remove', async (req, res) => {
     res.json({ ok: true, userId: targetId, email: targetEmail, roles: currentRoles, removedRole: roleParam })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to remove role' })
+    
+    // Get DeepL API key from environment
+    const deeplApiKey = process.env.DEEPL_API_KEY
+    if (!deeplApiKey) {
+      console.error('[translate] DeepL API key not configured')
+      return res.status(500).json({ error: 'Translation service not configured' })
+    }
+    
+    // Use DeepL API (Pro: https://api.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+    
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        source_lang: source_lang.toUpperCase(),
+        target_lang: target_lang.toUpperCase(),
+      }),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[translate] DeepL API error:', response.status, errorText)
+      return res.status(response.status).json({ error: 'Translation failed: ' + (errorText || response.statusText) })
+    }
+    
+    const data = await response.json()
+    const translatedText = data.translations?.[0]?.text || text
+    
+    res.json({ translatedText })
+  } catch (error) {
+    console.error('[translate] Translation error:', error)
+    res.status(500).json({ error: 'Translation service error: ' + (error?.message || 'Unknown error') })
   }
 })
 
-app.options('/api/admin/roles/remove', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
-  res.status(204).end()
-})
-
-// Admin: get a user's roles
-app.get('/api/admin/roles/:userId', async (req, res) => {
+app.get('/api/plants', async (_req, res) => {
   try {
-    if (!sql) {
-      res.status(500).json({ error: 'Database not configured' })
-      return
+    const setPlantsCache = () => {
+      if (!res.getHeader('Cache-Control')) {
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+      }
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
+    if (sql) {
+      try {
+          const rows = await sql`select * from plants order by name asc`
+          const mapped = rows.map(r => {
+            const photos = Array.isArray(r.photos) ? r.photos : undefined
+            return {
+              id: r.id,
+              name: r.name,
+              scientificName: r.scientific_name,
+              colors: r.colors ?? [],
+              seasons: r.seasons ?? [],
+              rarity: r.rarity,
+              meaning: r.meaning ?? '',
+              description: r.description ?? '',
+              photos,
+              image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+              care: {
+                sunlight: r.level_sun || null,
+                water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
+                soil: Array.isArray(r.soil) ? r.soil.join(', ') : null,
+                difficulty: r.maintenance_level || null,
+              },
+              seedsAvailable: r.seeds_available === true,
+            }
+          })
+          setPlantsCache()
+          res.json(mapped)
+        return
+      } catch (e) {
+        // Fall through to Supabase fallback on SQL query failure
+      }
     }
-    const userId = (req.params.userId || '').toString().trim()
-    if (!userId) {
-      res.status(400).json({ error: 'Missing userId' })
+    const fallback = await loadPlantsViaSupabase()
+    if (fallback) {
+        setPlantsCache()
+      res.json(fallback)
       return
     }
 
@@ -9355,22 +11193,23 @@ app.get('/api/admin/roles/:userId', async (req, res) => {
     } catch { }
 
     res.json({ ok: true, userId, roles })
+    res.status(500).json({ error: 'Database not configured' })
   } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to get roles' })
+    res.status(500).json({ error: e?.message || 'Query failed' })
   }
 })
 
-app.options('/api/admin/roles/:userId', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
-  res.status(204).end()
-})
+// In-memory token store for one-time backup downloads
+const backupTokenStore = new Map()
 
-// Public: check if an email or current IP is banned
-app.get('/api/banned/check', async (req, res) => {
+// Admin: create a gzip'ed pg_dump and return a one-time download token
+app.post('/api/admin/backup-db', async (req, res) => {
   try {
-    if (!sql) {
-      res.json({ banned: false })
+    const uid = "public"
+    if (!uid) return
+
+    if (!connectionString) {
+      res.status(500).json({ error: 'Database not configured' })
       return
     }
     const emailParam = (req.query.email || '').toString().trim()
@@ -9399,17 +11238,79 @@ app.get('/api/banned/check', async (req, res) => {
           return
         }
       } catch { }
+
+    const backupDir = path.resolve(__dirname, 'tmp_backups')
+    await fs.mkdir(backupDir, { recursive: true })
+
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())}_${pad(now.getUTCHours())}-${pad(now.getUTCMinutes())}-${pad(now.getUTCSeconds())}Z`
+    const filename = `plantswipe_backup_${ts}.sql.gz`
+    const destPath = path.join(backupDir, filename)
+
+    // Spawn pg_dump and gzip the output to a file
+    let stderrBuf = ''
+    const dump = spawnChild('pg_dump', ['--dbname', connectionString, '--no-owner', '--no-acl'], {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    dump.on('error', async () => {
+      try { await fs.unlink(destPath) } catch {}
+    })
+    dump.stderr.on('data', (d) => { stderrBuf += d.toString() })
+
+    const gzip = zlib.createGzip({ level: 9 })
+    const out = fsSync.createWriteStream(destPath)
+
+    const pipelinePromise = new Promise((resolve, reject) => {
+      streamPipeline(dump.stdout, gzip, out, (err) => {
+        if (err) return reject(err)
+        resolve(null)
+      })
+    })
+    const exitPromise = new Promise((resolve) => {
+      dump.on('close', (code) => resolve(code))
+    })
+
+    const [, code] = await Promise.all([pipelinePromise, exitPromise]).catch(async (e) => {
+      try { await fs.unlink(destPath) } catch {}
+      throw e
+    })
+    if (code !== 0) {
+      try { await fs.unlink(destPath) } catch {}
+      throw new Error(`pg_dump exit code ${code}: ${stderrBuf || 'unknown error'}`)
     }
-    res.json({ banned: false })
+
+    // Stat the file
+    const stat = await fs.stat(destPath)
+    const token = crypto.randomBytes(24).toString('hex')
+    backupTokenStore.set(token, { path: destPath, filename, size: stat.size, createdAt: Date.now() })
+
+    // Expire tokens after 15 minutes
+    const expireMs = 15 * 60 * 1000
+    for (const [t, info] of backupTokenStore.entries()) {
+      if ((Date.now() - info.createdAt) > expireMs) {
+        backupTokenStore.delete(t)
+        try { await fs.unlink(info.path) } catch {}
+      }
+    }
+
+    res.json({ ok: true, token, filename, size: stat.size })
   } catch (e) {
-    res.status(500).json({ banned: false })
+    const msg = e?.message || 'Backup failed'
+    // Surface friendly message if pg_dump missing
+    if (/ENOENT/.test(msg) || /pg_dump\s+not\s+found/i.test(msg)) {
+      res.status(500).json({ error: 'pg_dump not available on server. Install PostgreSQL client tools.' })
+      return
+    }
+    res.status(500).json({ error: msg })
   }
 })
 
-// reCAPTCHA Enterprise v3 verification endpoint
-// Uses GOOGLE_API_KEY for authentication with Google Cloud
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || ''
-const RECAPTCHA_SITE_KEY = '6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd'
+// Admin: download a previously created backup (one-time token + admin auth)
+app.get('/api/admin/download-backup', async (req, res) => {
+  const uid = "public"
+  if (!uid) return
 
 app.post('/api/recaptcha/verify', async (req, res) => {
   try {
@@ -9427,32 +11328,43 @@ app.post('/api/recaptcha/verify', async (req, res) => {
       res.json({ success: true, score: 1.0, warning: 'verification_skipped' })
       return
     }
+  const token = (req.query.token || '').toString().trim()
+  if (!token) {
+    res.status(400).json({ error: 'Missing token' })
+    return
+  }
 
-    // Call Google reCAPTCHA Enterprise verification API
-    // POST https://recaptchaenterprise.googleapis.com/v1/projects/PROJECT_ID/assessments?key=API_KEY
-    const verifyUrl = `https://recaptchaenterprise.googleapis.com/v1/projects/aphylia/assessments?key=${GOOGLE_API_KEY}`
+  const info = backupTokenStore.get(token)
+  if (!info) {
+    res.status(404).json({ error: 'Invalid or expired token' })
+    return
+  }
 
-    const requestBody = {
-      event: {
-        token: token,
-        expectedAction: action || 'submit',
-        siteKey: RECAPTCHA_SITE_KEY
-      }
-    }
+  // Enforce 15-minute token expiry
+  const maxAge = 15 * 60 * 1000
+  if ((Date.now() - info.createdAt) > maxAge) {
+    backupTokenStore.delete(token)
+    try { await fs.unlink(info.path) } catch {}
+    res.status(410).json({ error: 'Token expired' })
+    return
+  }
 
-    const verifyResponse = await fetch(verifyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    })
+  res.setHeader('Content-Type', 'application/gzip')
+  res.setHeader('Content-Disposition', `attachment; filename="${info.filename}"`)
 
-    const verifyData = await verifyResponse.json()
+  const read = fsSync.createReadStream(info.path)
+  read.on('error', () => {
+    res.status(500).end()
+  })
+  read.pipe(res)
 
-    if (!verifyResponse.ok) {
-      console.error('[recaptcha] Verification API error:', verifyData)
-      res.status(400).json({ success: false, error: 'Verification failed', details: verifyData.error?.message })
-      return
-    }
+  const cleanup = async () => {
+    backupTokenStore.delete(token)
+    try { await fs.unlink(info.path) } catch {}
+  }
+  res.on('finish', cleanup)
+  res.on('close', cleanup)
+})
 
     // Check the token properties
     const tokenProperties = verifyData.tokenProperties
@@ -9461,14 +11373,48 @@ app.post('/api/recaptcha/verify', async (req, res) => {
     if (!tokenProperties?.valid) {
       console.warn('[recaptcha] Invalid token:', tokenProperties?.invalidReason)
       res.status(400).json({ success: false, error: 'Invalid token', reason: tokenProperties?.invalidReason })
+// Admin: refresh website by invoking scripts/refresh-plant-swipe.sh from repo root
+async function handlePullCode(req, res) {
+  try {
+    const uid = "public"
+    if (!uid) return
+
+    const branch = (req.query.branch || '').toString().trim() || undefined
+    const repoRoot = await getRepoRoot()
+    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
+
+    // Verify the refresh script exists
+    try {
+      await fs.access(scriptPath)
+    } catch {
+      res.status(500).json({ ok: false, error: `refresh script not found at ${scriptPath}` })
       return
     }
+    // Ensure it is executable (best-effort)
+    try { await fs.chmod(scriptPath, 0o755) } catch {}
 
-    // Check if action matches (important for security)
-    if (action && tokenProperties.action !== action) {
-      console.warn('[recaptcha] Action mismatch:', { expected: action, got: tokenProperties.action })
-      res.status(400).json({ success: false, error: 'Action mismatch' })
-      return
+    // Pre-validate requested branch to fail fast on typos or deleted branches
+    if (branch) {
+      try {
+        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
+        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+        ])
+        const normalize = (s) => s.trim().replace(/^origin\//, '')
+        const allowed = new Set(
+          [...(remoteOut || '').split('\n'), ...(localOut || '').split('\n')]
+            .map(x => x.trim())
+            .filter(Boolean)
+            .map(normalize)
+            .filter(name => name && name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
+        )
+        if (!allowed.has(branch)) {
+          res.status(400).json({ ok: false, error: `Unknown branch: ${branch}` })
+          return
+        }
+      } catch {}
     }
 
     // Get the risk score (0.0 = likely bot, 1.0 = likely human)
@@ -9479,49 +11425,83 @@ app.post('/api/recaptcha/verify', async (req, res) => {
       console.warn('[recaptcha] Low score, likely bot:', score)
       res.status(400).json({ success: false, error: 'Suspicious activity detected', score })
       return
+    // Execute the script from repository root so it updates current branch and builds
+    // Run detached so we can return a response before the service restarts
+    const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '', PLANTSWIPE_REPO_DIR: repoRoot }
+    // Do not restart services inside the script when invoked from the API.
+    // This allows us to finish the SSE cleanly and control restarts from the UI.
+    execEnv.SKIP_SERVICE_RESTARTS = 'true'
+    execEnv.SKIP_ENV_SYNC = 'true'
+    if (branch) {
+      // Pass target branch to refresh script
+      execEnv.PLANTSWIPE_TARGET_BRANCH = branch
     }
+    const child = spawnChild(scriptPath, {
+      cwd: repoRoot,
+      detached: true,
+      stdio: 'ignore',
+      env: execEnv,
+      shell: false,
+    })
+    try { child.unref() } catch {}
 
-    console.log('[recaptcha] Verification success, score:', score)
-    res.json({ success: true, score })
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'api' } }) } catch {}
+      }
+    } catch {}
+    res.json({ ok: true, branch, started: true })
   } catch (e) {
-    console.error('[recaptcha] Verification error:', e)
-    // On error, we still allow the request but log the issue
-    res.json({ success: true, score: 0.5, warning: 'verification_error' })
+    res.status(500).json({ ok: false, error: e?.message || 'refresh failed' })
   }
+}
+
+app.post('/api/admin/pull-code', handlePullCode)
+app.get('/api/admin/pull-code', handlePullCode)
+app.options('/api/admin/pull-code', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
 })
 
-// Admin: ban a user by email, record IPs, and attempt account deletion
-app.post('/api/admin/ban', async (req, res) => {
+// Admin: stream pull/build logs via Server-Sent Events (SSE)
+app.get('/api/admin/pull-code/stream', async (req, res) => {
   try {
-    if (!sql) {
-      res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-    // Require admin with robust detection
+    const uid = "public"
+    if (!uid) return
+
+    // Require admin (same policy as other admin endpoints)
     const isAdmin = await isAdminFromRequest(req)
     if (!isAdmin) {
       res.status(403).json({ error: 'Admin privileges required' })
       return
     }
-    const { email: rawEmail, reason: rawReason } = req.body || {}
-    const emailParam = (rawEmail || '').toString().trim()
-    const reason = (rawReason || '').toString().trim() || null
-    if (!emailParam) {
-      res.status(400).json({ error: 'Missing email' })
-      return
-    }
-    const email = emailParam.toLowerCase()
-    const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
-    const userId = Array.isArray(userRows) && userRows[0] ? userRows[0].id : null
-    // Gather distinct IPs used by this user
-    let ips = []
-    if (userId) {
-      const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [userId])
-      ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
-    }
-    // Best-effort admin identification from token
-    const caller = await getUserFromRequest(req)
-    let bannedBy = caller?.id || null
 
     // Insert ban records
     try {
@@ -9552,7 +11532,30 @@ app.post('/api/admin/ban', async (req, res) => {
       // Attempt to delete auth user as well; ignore failures
       try { await sql`delete from auth.users where id = ${userId}` } catch { }
     }
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no') // for nginx
+    res.flushHeaders?.()
 
+    const send = (event, data) => {
+      try {
+        if (event) res.write(`event: ${event}\n`)
+        const payload = typeof data === 'string' ? data : JSON.stringify(data)
+        // Split by lines to avoid giant frames
+        const lines = String(payload).split(/\r?\n/) || []
+        for (const line of lines) res.write(`data: ${line}\n`)
+        res.write('\n')
+      } catch {}
+    }
+
+    send('open', { ok: true, message: 'Starting refresh…' })
+
+    const repoRoot = await getRepoRoot()
+    const branch = (req.query.branch || '').toString().trim() || ''
+
+    // Log that a streamed pull/build has been initiated
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
@@ -9598,10 +11601,129 @@ async function loadPlantsViaSupabase() {
     })
   } catch {
     return null
-  }
-}
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'stream' })})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'stream' } }) } catch {}
+      }
+    } catch {}
+    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
+    try { await fs.access(scriptPath) } catch {
+      send('error', { error: `refresh script not found at ${scriptPath}` })
+      res.end()
+      return
+    }
+    try { await fs.chmod(scriptPath, 0o755) } catch {}
 
-app.post('/api/contact', async (req, res) => {
+    // Allow the script to perform restarts even if it drops the stream briefly
+    const childEnv = { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot }
+    // Avoid restarting services from the script while streaming logs (keeps SSE alive)
+    childEnv.SKIP_SERVICE_RESTARTS = 'true'
+    if (branch) {
+      // Pre-validate requested branch and surface a clear error on failure
+      try {
+        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
+        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+        ])
+        const normalize = (s) => s.trim().replace(/^origin\//, '')
+        const allowed = new Set(
+          [...(remoteOut || '').split('\n'), ...(localOut || '').split('\n')]
+            .map(x => x.trim())
+            .filter(Boolean)
+            .map(normalize)
+            .filter(name => name && name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
+        )
+        if (!allowed.has(branch)) {
+          send('error', { error: `Unknown branch: ${branch}` })
+          send('done', { ok: false, code: 1 })
+          res.end()
+          return
+        }
+      } catch {}
+      childEnv.PLANTSWIPE_TARGET_BRANCH = branch
+      send('log', `[pull] Target branch requested: ${branch}`)
+    }
+      const child = spawnChild(scriptPath, [], {
+        cwd: repoRoot,
+        env: childEnv,
+        shell: false,
+      })
+
+      // Heartbeat to keep the connection alive behind proxies
+      const heartbeatId = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+      let clientDisconnected = false
+      let streamClosedGracefully = false
+      let autoRestartScheduled = false
+
+      // Stream stdout/stderr
+      child.stdout?.on('data', (buf) => {
+        const text = buf.toString()
+        send('log', text)
+      })
+      child.stderr?.on('data', (buf) => {
+        const text = buf.toString()
+        send('log', text)
+      })
+      child.on('error', (err) => {
+        send('error', { error: err?.message || 'spawn failed' })
+      })
+      child.on('close', (code) => {
+        const ok = code === 0
+        if (!streamClosedGracefully) {
+          if (ok) {
+            send('done', { ok: true, code })
+          } else {
+            send('done', { ok: false, code })
+          }
+        }
+        streamClosedGracefully = true
+        try { clearInterval(heartbeatId) } catch {}
+        try { res.end() } catch {}
+        if (ok && clientDisconnected && !autoRestartScheduled) {
+          autoRestartScheduled = true
+          console.log('[pull-code] Build finished after client disconnect; scheduling service restart.')
+          scheduleRestartAllServices('pull_code_stream_auto')
+        }
+      })
+
+      req.on('close', () => {
+        if (streamClosedGracefully) return
+        clientDisconnected = true
+        try { clearInterval(heartbeatId) } catch {}
+        console.warn('[pull-code] SSE client disconnected early; continuing refresh in background.')
+      })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
+// Admin: list remote branches and current branch
+app.get('/api/admin/branches', async (req, res) => {
   try {
     const body = req.body || {}
     const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : ''
@@ -9612,32 +11734,69 @@ app.post('/api/contact', async (req, res) => {
       typeof body.audience === 'string' ? body.audience :
         (typeof body.channel === 'string' ? body.channel : '')
     const audience = normalizeContactAudience(audienceInput)
+    const uid = "public"
+    if (!uid) return
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      res.status(400).json({ error: 'A valid email address is required.' })
-      return
-    }
-    if (!message) {
-      res.status(400).json({ error: 'Message is required.' })
-      return
+    // Always operate from the repository root and mark it safe for this process
+    const repoRoot = await getRepoRoot()
+    const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
+    // Keep this fast: limit network timeout and avoid blocking when offline
+    try { await exec(`${gitBase} remote update --prune`, { timeout: 5000 }) } catch {}
+    // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
+    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
+    let branches = branchesStdout
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(name => name.replace(/^origin\//, ''))
+      // Exclude HEAD pointer, the remote namespace itself ("origin"), and any symbolic ref lines
+      .filter(name => name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
+      .sort((a, b) => a.localeCompare(b))
+
+    // Fallback to local branches if remote list is empty (e.g., detached or offline)
+    if (branches.length === 0) {
+      const { stdout: localStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 3000 })
+      branches = localStdout
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b))
     }
 
-    const ip = getClientIp(req) || 'unknown'
-    if (isContactRateLimited(ip)) {
-      res.status(429).json({ error: 'Too many messages in a short period. Please try again later.' })
-      return
+    const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 3000 })
+    const current = currentStdout.trim()
+
+    // Read the last update time from TIME file if it exists
+    let lastUpdateTime = null
+    try {
+      const timeFile = path.join(repoRoot, 'TIME')
+      const timeContent = await fs.readFile(timeFile, 'utf-8')
+      lastUpdateTime = timeContent.trim() || null
+    } catch {
+      // TIME file doesn't exist or can't be read, which is fine
     }
 
-    await dispatchSupportEmail({ name, email, subject, message, audience })
-    res.json({ ok: true, audience })
-  } catch (error) {
-    console.error('[contact] failed to send support email:', error)
-    res.status(500).json({ error: 'Failed to send message. Please try again later.' })
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'list_branches', ${current || null}, ${sql.json({ count: branches.length })})`
+    } catch {}
+    res.json({ branches, current, lastUpdateTime })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to list branches' })
   }
 })
 
-// DeepL Translation API endpoint
-app.post('/api/translate', async (req, res) => {
+app.options('/api/admin/branches', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Public: Track a page visit (client-initiated for SPA navigations)
+// This endpoint is designed to be tolerant and never block user flows
+app.post('/api/track-visit', async (req, res) => {
   try {
     const { text, source_lang, target_lang } = req.body
 
@@ -9690,10 +11849,47 @@ app.post('/api/translate', async (req, res) => {
   } catch (error) {
     console.error('[translate] Translation error:', error)
     res.status(500).json({ error: 'Translation service error: ' + (error?.message || 'Unknown error') })
+    const sessionId = getOrSetSessionId(req, res)
+    const { pagePath, referrer: bodyReferrer, userId, extra, pageTitle, language } = req.body || {}
+    const ipAddress = getClientIp(req)
+    let geo = { geo_country: null, geo_region: null, geo_city: null }
+    try {
+      geo = await withTimeout(resolveGeo(req, ipAddress), 800, 'GEO_TIMEOUT')
+    } catch {}
+    const userAgent = req.get('user-agent') || ''
+    const tokenUserId = await getUserIdFromRequest(req)
+    const effectiveUserId = tokenUserId || (typeof userId === 'string' ? userId : null)
+    
+    // Be tolerant: if pagePath is missing, log and still respond with 204
+    // Tracking should never block or break user flows
+    if (typeof pagePath !== 'string' || pagePath.length === 0) {
+      console.warn('[track-visit] Missing pagePath, skipping visit recording')
+      res.status(204).end()
+      return
+    }
+    
+    const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
+    const lang = language || acceptLanguage
+    const referrer = (typeof bodyReferrer === 'string' && bodyReferrer.length > 0) ? bodyReferrer : (req.get('referer') || req.get('referrer') || '')
+    // Do not block the response on DB write; best-effort in background
+    insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req).catch((err) => {
+      console.warn('[track-visit] Failed to insert visit:', err?.message || 'unknown error')
+    })
+    res.status(204).end()
+  } catch (e) {
+    // Even on errors, respond with 204 to avoid blocking user flows
+    console.error('[track-visit] Unexpected error:', e?.message || e)
+    res.status(204).end()
   }
 })
 
-app.get('/api/plants', async (_req, res) => {
+app.options('/api/account/delete', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+app.post('/api/account/delete', async (req, res) => {
   try {
     const setPlantsCache = () => {
       if (!res.getHeader('Cache-Control')) {
@@ -9736,518 +11932,6 @@ app.get('/api/plants', async (_req, res) => {
     if (fallback) {
       setPlantsCache()
       res.json(fallback)
-      return
-    }
-    res.status(500).json({ error: 'Database not configured' })
-  } catch (e) {
-    res.status(500).json({ error: e?.message || 'Query failed' })
-  }
-})
-
-// In-memory token store for one-time backup downloads
-const backupTokenStore = new Map()
-
-// Admin: create a gzip'ed pg_dump and return a one-time download token
-app.post('/api/admin/backup-db', async (req, res) => {
-  try {
-    const uid = "public"
-    if (!uid) return
-
-    if (!connectionString) {
-      res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-
-    const backupDir = path.resolve(__dirname, 'tmp_backups')
-    await fs.mkdir(backupDir, { recursive: true })
-
-    const now = new Date()
-    const pad = (n) => String(n).padStart(2, '0')
-    const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())}_${pad(now.getUTCHours())}-${pad(now.getUTCMinutes())}-${pad(now.getUTCSeconds())}Z`
-    const filename = `plantswipe_backup_${ts}.sql.gz`
-    const destPath = path.join(backupDir, filename)
-
-    // Spawn pg_dump and gzip the output to a file
-    let stderrBuf = ''
-    const dump = spawnChild('pg_dump', ['--dbname', connectionString, '--no-owner', '--no-acl'], {
-      env: { ...process.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    dump.on('error', async () => {
-      try { await fs.unlink(destPath) } catch { }
-    })
-    dump.stderr.on('data', (d) => { stderrBuf += d.toString() })
-
-    const gzip = zlib.createGzip({ level: 9 })
-    const out = fsSync.createWriteStream(destPath)
-
-    const pipelinePromise = new Promise((resolve, reject) => {
-      streamPipeline(dump.stdout, gzip, out, (err) => {
-        if (err) return reject(err)
-        resolve(null)
-      })
-    })
-    const exitPromise = new Promise((resolve) => {
-      dump.on('close', (code) => resolve(code))
-    })
-
-    const [, code] = await Promise.all([pipelinePromise, exitPromise]).catch(async (e) => {
-      try { await fs.unlink(destPath) } catch { }
-      throw e
-    })
-    if (code !== 0) {
-      try { await fs.unlink(destPath) } catch { }
-      throw new Error(`pg_dump exit code ${code}: ${stderrBuf || 'unknown error'}`)
-    }
-
-    // Stat the file
-    const stat = await fs.stat(destPath)
-    const token = crypto.randomBytes(24).toString('hex')
-    backupTokenStore.set(token, { path: destPath, filename, size: stat.size, createdAt: Date.now() })
-
-    // Expire tokens after 15 minutes
-    const expireMs = 15 * 60 * 1000
-    for (const [t, info] of backupTokenStore.entries()) {
-      if ((Date.now() - info.createdAt) > expireMs) {
-        backupTokenStore.delete(t)
-        try { await fs.unlink(info.path) } catch { }
-      }
-    }
-
-    res.json({ ok: true, token, filename, size: stat.size })
-  } catch (e) {
-    const msg = e?.message || 'Backup failed'
-    // Surface friendly message if pg_dump missing
-    if (/ENOENT/.test(msg) || /pg_dump\s+not\s+found/i.test(msg)) {
-      res.status(500).json({ error: 'pg_dump not available on server. Install PostgreSQL client tools.' })
-      return
-    }
-    res.status(500).json({ error: msg })
-  }
-})
-
-// Admin: download a previously created backup (one-time token + admin auth)
-app.get('/api/admin/download-backup', async (req, res) => {
-  const uid = "public"
-  if (!uid) return
-
-  const token = (req.query.token || '').toString().trim()
-  if (!token) {
-    res.status(400).json({ error: 'Missing token' })
-    return
-  }
-
-  const info = backupTokenStore.get(token)
-  if (!info) {
-    res.status(404).json({ error: 'Invalid or expired token' })
-    return
-  }
-
-  // Enforce 15-minute token expiry
-  const maxAge = 15 * 60 * 1000
-  if ((Date.now() - info.createdAt) > maxAge) {
-    backupTokenStore.delete(token)
-    try { await fs.unlink(info.path) } catch { }
-    res.status(410).json({ error: 'Token expired' })
-    return
-  }
-
-  res.setHeader('Content-Type', 'application/gzip')
-  res.setHeader('Content-Disposition', `attachment; filename="${info.filename}"`)
-
-  const read = fsSync.createReadStream(info.path)
-  read.on('error', () => {
-    res.status(500).end()
-  })
-  read.pipe(res)
-
-  const cleanup = async () => {
-    backupTokenStore.delete(token)
-    try { await fs.unlink(info.path) } catch { }
-  }
-  res.on('finish', cleanup)
-  res.on('close', cleanup)
-})
-
-// Admin: refresh website by invoking scripts/refresh-plant-swipe.sh from repo root
-async function handlePullCode(req, res) {
-  try {
-    const uid = "public"
-    if (!uid) return
-
-    const branch = (req.query.branch || '').toString().trim() || undefined
-    const repoRoot = await getRepoRoot()
-    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
-
-    // Verify the refresh script exists
-    try {
-      await fs.access(scriptPath)
-    } catch {
-      res.status(500).json({ ok: false, error: `refresh script not found at ${scriptPath}` })
-      return
-    }
-    // Ensure it is executable (best-effort)
-    try { await fs.chmod(scriptPath, 0o755) } catch { }
-
-    // Pre-validate requested branch to fail fast on typos or deleted branches
-    if (branch) {
-      try {
-        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
-        const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
-        ])
-        const normalize = (s) => s.trim().replace(/^origin\//, '')
-        const allowed = new Set(
-          [...(remoteOut || '').split('\n'), ...(localOut || '').split('\n')]
-            .map(x => x.trim())
-            .filter(Boolean)
-            .map(normalize)
-            .filter(name => name && name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
-        )
-        if (!allowed.has(branch)) {
-          res.status(400).json({ ok: false, error: `Unknown branch: ${branch}` })
-          return
-        }
-      } catch { }
-    }
-
-    // Execute the script from repository root so it updates current branch and builds
-    // Run detached so we can return a response before the service restarts
-    const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '', PLANTSWIPE_REPO_DIR: repoRoot }
-    // Do not restart services inside the script when invoked from the API.
-    // This allows us to finish the SSE cleanly and control restarts from the UI.
-    execEnv.SKIP_SERVICE_RESTARTS = 'true'
-    execEnv.SKIP_ENV_SYNC = 'true'
-    if (branch) {
-      // Pass target branch to refresh script
-      execEnv.PLANTSWIPE_TARGET_BRANCH = branch
-    }
-    const child = spawnChild(scriptPath, {
-      cwd: repoRoot,
-      detached: true,
-      stdio: 'ignore',
-      env: execEnv,
-      shell: false,
-    })
-    try { child.unref() } catch { }
-
-    try {
-      const caller = await getUserFromRequest(req)
-      const adminId = caller?.id || null
-      let adminName = null
-      if (sql && adminId) {
-        try {
-          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
-          adminName = (rows?.[0]?.name || '').trim() || null
-        } catch { }
-      }
-      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
-        try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-          const bearer = getBearerTokenFromRequest(req)
-          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
-          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
-          const r = await fetch(url, { headers })
-          if (r.ok) {
-            const arr = await r.json().catch(() => [])
-            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
-          }
-        } catch { }
-      }
-      let ok = false
-      if (sql) {
-        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`; ok = true } catch { }
-      }
-      if (!ok) {
-        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'api' } }) } catch { }
-      }
-    } catch { }
-    res.json({ ok: true, branch, started: true })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || 'refresh failed' })
-  }
-}
-
-app.post('/api/admin/pull-code', handlePullCode)
-app.get('/api/admin/pull-code', handlePullCode)
-app.options('/api/admin/pull-code', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
-  res.status(204).end()
-})
-
-// Admin: stream pull/build logs via Server-Sent Events (SSE)
-app.get('/api/admin/pull-code/stream', async (req, res) => {
-  try {
-    const uid = "public"
-    if (!uid) return
-
-    // Require admin (same policy as other admin endpoints)
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
-
-    // SSE headers
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('Connection', 'keep-alive')
-    res.setHeader('X-Accel-Buffering', 'no') // for nginx
-    res.flushHeaders?.()
-
-    const send = (event, data) => {
-      try {
-        if (event) res.write(`event: ${event}\n`)
-        const payload = typeof data === 'string' ? data : JSON.stringify(data)
-        // Split by lines to avoid giant frames
-        const lines = String(payload).split(/\r?\n/) || []
-        for (const line of lines) res.write(`data: ${line}\n`)
-        res.write('\n')
-      } catch { }
-    }
-
-    send('open', { ok: true, message: 'Starting refresh…' })
-
-    const repoRoot = await getRepoRoot()
-    const branch = (req.query.branch || '').toString().trim() || ''
-
-    // Log that a streamed pull/build has been initiated
-    try {
-      const caller = await getUserFromRequest(req)
-      const adminId = caller?.id || null
-      let adminName = null
-      if (sql && adminId) {
-        try {
-          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
-          adminName = (rows?.[0]?.name || '').trim() || null
-        } catch { }
-      }
-      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
-        try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-          const bearer = getBearerTokenFromRequest(req)
-          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
-          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
-          const r = await fetch(url, { headers })
-          if (r.ok) {
-            const arr = await r.json().catch(() => [])
-            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
-          }
-        } catch { }
-      }
-      let ok = false
-      if (sql) {
-        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'stream' })})`; ok = true } catch { }
-      }
-      if (!ok) {
-        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'stream' } }) } catch { }
-      }
-    } catch { }
-    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
-    try { await fs.access(scriptPath) } catch {
-      send('error', { error: `refresh script not found at ${scriptPath}` })
-      res.end()
-      return
-    }
-    try { await fs.chmod(scriptPath, 0o755) } catch { }
-
-    // Allow the script to perform restarts even if it drops the stream briefly
-    const childEnv = { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot }
-    // Avoid restarting services from the script while streaming logs (keeps SSE alive)
-    childEnv.SKIP_SERVICE_RESTARTS = 'true'
-    if (branch) {
-      // Pre-validate requested branch and surface a clear error on failure
-      try {
-        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
-        const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
-        ])
-        const normalize = (s) => s.trim().replace(/^origin\//, '')
-        const allowed = new Set(
-          [...(remoteOut || '').split('\n'), ...(localOut || '').split('\n')]
-            .map(x => x.trim())
-            .filter(Boolean)
-            .map(normalize)
-            .filter(name => name && name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
-        )
-        if (!allowed.has(branch)) {
-          send('error', { error: `Unknown branch: ${branch}` })
-          send('done', { ok: false, code: 1 })
-          res.end()
-          return
-        }
-      } catch { }
-      childEnv.PLANTSWIPE_TARGET_BRANCH = branch
-      send('log', `[pull] Target branch requested: ${branch}`)
-    }
-    const child = spawnChild(scriptPath, [], {
-      cwd: repoRoot,
-      env: childEnv,
-      shell: false,
-    })
-
-    // Heartbeat to keep the connection alive behind proxies
-    const heartbeatId = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
-    let clientDisconnected = false
-    let streamClosedGracefully = false
-    let autoRestartScheduled = false
-
-    // Stream stdout/stderr
-    child.stdout?.on('data', (buf) => {
-      const text = buf.toString()
-      send('log', text)
-    })
-    child.stderr?.on('data', (buf) => {
-      const text = buf.toString()
-      send('log', text)
-    })
-    child.on('error', (err) => {
-      send('error', { error: err?.message || 'spawn failed' })
-    })
-    child.on('close', (code) => {
-      const ok = code === 0
-      if (!streamClosedGracefully) {
-        if (ok) {
-          send('done', { ok: true, code })
-        } else {
-          send('done', { ok: false, code })
-        }
-      }
-      streamClosedGracefully = true
-      try { clearInterval(heartbeatId) } catch { }
-      try { res.end() } catch { }
-      if (ok && clientDisconnected && !autoRestartScheduled) {
-        autoRestartScheduled = true
-        console.log('[pull-code] Build finished after client disconnect; scheduling service restart.')
-        scheduleRestartAllServices('pull_code_stream_auto')
-      }
-    })
-
-    req.on('close', () => {
-      if (streamClosedGracefully) return
-      clientDisconnected = true
-      try { clearInterval(heartbeatId) } catch { }
-      console.warn('[pull-code] SSE client disconnected early; continuing refresh in background.')
-    })
-  } catch (e) {
-    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
-  }
-})
-
-// Admin: list remote branches and current branch
-app.get('/api/admin/branches', async (req, res) => {
-  try {
-    const uid = "public"
-    if (!uid) return
-
-    // Always operate from the repository root and mark it safe for this process
-    const repoRoot = await getRepoRoot()
-    const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-    // Keep this fast: limit network timeout and avoid blocking when offline
-    try { await exec(`${gitBase} remote update --prune`, { timeout: 5000 }) } catch { }
-    // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
-    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
-    let branches = branchesStdout
-      .split('\n')
-      .map(s => s.trim())
-      .filter(Boolean)
-      .map(name => name.replace(/^origin\//, ''))
-      // Exclude HEAD pointer, the remote namespace itself ("origin"), and any symbolic ref lines
-      .filter(name => name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
-      .sort((a, b) => a.localeCompare(b))
-
-    // Fallback to local branches if remote list is empty (e.g., detached or offline)
-    if (branches.length === 0) {
-      const { stdout: localStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 3000 })
-      branches = localStdout
-        .split('\n')
-        .map(s => s.trim())
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b))
-    }
-
-    const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 3000 })
-    const current = currentStdout.trim()
-
-    // Read the last update time from TIME file if it exists
-    let lastUpdateTime = null
-    try {
-      const timeFile = path.join(repoRoot, 'TIME')
-      const timeContent = await fs.readFile(timeFile, 'utf-8')
-      lastUpdateTime = timeContent.trim() || null
-    } catch {
-      // TIME file doesn't exist or can't be read, which is fine
-    }
-
-    try {
-      const caller = await getUserFromRequest(req)
-      const adminId = caller?.id || null
-      const adminName = null
-      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'list_branches', ${current || null}, ${sql.json({ count: branches.length })})`
-    } catch { }
-    res.json({ branches, current, lastUpdateTime })
-  } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to list branches' })
-  }
-})
-
-app.options('/api/admin/branches', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
-  res.status(204).end()
-})
-
-// Public: Track a page visit (client-initiated for SPA navigations)
-// This endpoint is designed to be tolerant and never block user flows
-app.post('/api/track-visit', async (req, res) => {
-  try {
-    const sessionId = getOrSetSessionId(req, res)
-    const { pagePath, referrer: bodyReferrer, userId, extra, pageTitle, language } = req.body || {}
-    const ipAddress = getClientIp(req)
-    let geo = { geo_country: null, geo_region: null, geo_city: null }
-    try {
-      geo = await withTimeout(resolveGeo(req, ipAddress), 800, 'GEO_TIMEOUT')
-    } catch { }
-    const userAgent = req.get('user-agent') || ''
-    const tokenUserId = await getUserIdFromRequest(req)
-    const effectiveUserId = tokenUserId || (typeof userId === 'string' ? userId : null)
-
-    // Be tolerant: if pagePath is missing, log and still respond with 204
-    // Tracking should never block or break user flows
-    if (typeof pagePath !== 'string' || pagePath.length === 0) {
-      console.warn('[track-visit] Missing pagePath, skipping visit recording')
-      res.status(204).end()
-      return
-    }
-
-    const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
-    const lang = language || acceptLanguage
-    const referrer = (typeof bodyReferrer === 'string' && bodyReferrer.length > 0) ? bodyReferrer : (req.get('referer') || req.get('referrer') || '')
-    // Do not block the response on DB write; best-effort in background
-    insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req).catch((err) => {
-      console.warn('[track-visit] Failed to insert visit:', err?.message || 'unknown error')
-    })
-    res.status(204).end()
-  } catch (e) {
-    // Even on errors, respond with 204 to avoid blocking user flows
-    console.error('[track-visit] Unexpected error:', e?.message || e)
-    res.status(204).end()
-  }
-})
-
-app.options('/api/account/delete', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
-  res.status(204).end()
-})
-
-app.post('/api/account/delete', async (req, res) => {
-  try {
     if (!supabaseServiceClient) {
       res.status(503).json({ error: 'Account deletion is not configured on this server' })
       return
@@ -10289,6 +11973,16 @@ app.post('/api/account/delete', async (req, res) => {
           .select('user_id, role')
           .eq('garden_id', gardenId)
 
+    // Spawn pg_dump and gzip the output to a file
+    let stderrBuf = ''
+    const dump = spawnChild('pg_dump', ['--dbname', connectionString, '--no-owner', '--no-acl'], {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    dump.on('error', async () => {
+      try { await fs.unlink(destPath) } catch { }
+    })
+    dump.stderr.on('data', (d) => { stderrBuf += d.toString() })
         const otherMembers = (allMembers || []).filter((m) => m.user_id !== userId)
         const otherOwners = otherMembers.filter((m) => m.role === 'owner')
 
@@ -10339,6 +12033,26 @@ app.post('/api/account/delete', async (req, res) => {
               deletedGardens++
               deletedGardenIds.push(gardenId)
 
+    const [, code] = await Promise.all([pipelinePromise, exitPromise]).catch(async (e) => {
+      try { await fs.unlink(destPath) } catch { }
+      throw e
+    })
+    if (code !== 0) {
+      try { await fs.unlink(destPath) } catch { }
+      throw new Error(`pg_dump exit code ${code}: ${stderrBuf || 'unknown error'}`)
+    }
+
+    // Stat the file
+    const stat = await fs.stat(destPath)
+    const token = crypto.randomBytes(24).toString('hex')
+    backupTokenStore.set(token, { path: destPath, filename, size: stat.size, createdAt: Date.now() })
+
+    // Expire tokens after 15 minutes
+    const expireMs = 15 * 60 * 1000
+    for (const [t, info] of backupTokenStore.entries()) {
+      if ((Date.now() - info.createdAt) > expireMs) {
+        backupTokenStore.delete(t)
+        try { await fs.unlink(info.path) } catch { }
               // Delete cover image from storage
               if (coverUrl) {
                 try {
@@ -10407,6 +12121,26 @@ app.post('/api/account/delete', async (req, res) => {
 app.get('/api/admin/visitors-stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
+
+  const token = (req.query.token || '').toString().trim()
+  if (!token) {
+    res.status(400).json({ error: 'Missing token' })
+    return
+  }
+
+  const info = backupTokenStore.get(token)
+  if (!info) {
+    res.status(404).json({ error: 'Invalid or expired token' })
+    return
+  }
+
+  // Enforce 15-minute token expiry
+  const maxAge = 15 * 60 * 1000
+  if ((Date.now() - info.createdAt) > maxAge) {
+    backupTokenStore.delete(token)
+    try { await fs.unlink(info.path) } catch { }
+    res.status(410).json({ error: 'Token expired' })
+    return
   // Helper that always succeeds using in-memory analytics
   const respondFromMemory = (extra = {}) => {
     try {
@@ -10437,6 +12171,13 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
           const daysParam = Number(req.query.days || 7)
           const days = (daysParam === 30 ? 30 : 7)
 
+  const cleanup = async () => {
+    backupTokenStore.delete(token)
+    try { await fs.unlink(info.path) } catch { }
+  }
+  res.on('finish', cleanup)
+  res.on('close', cleanup)
+})
           const [c10, c30, c60u, c60v, uN, sN] = await Promise.all([
             fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 10 }) }),
             fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 30 }) }),
@@ -10471,11 +12212,37 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
             days,
           })
           return
-        } catch { }
+        } catch {}
       }
       // Fallback to memory-only if Supabase REST isn't configured or failed
       respondFromMemory()
       return
+    }
+    // Ensure it is executable (best-effort)
+    try { await fs.chmod(scriptPath, 0o755) } catch { }
+
+    // Pre-validate requested branch to fail fast on typos or deleted branches
+    if (branch) {
+      try {
+        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
+        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+        ])
+        const normalize = (s) => s.trim().replace(/^origin\//, '')
+        const allowed = new Set(
+          [...(remoteOut || '').split('\n'), ...(localOut || '').split('\n')]
+            .map(x => x.trim())
+            .filter(Boolean)
+            .map(normalize)
+            .filter(name => name && name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
+        )
+        if (!allowed.has(branch)) {
+          res.status(400).json({ ok: false, error: `Unknown branch: ${branch}` })
+          return
+        }
+      } catch { }
     }
 
     const daysParam = Number(req.query.days || 7)
@@ -10518,6 +12285,14 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     if (!respondFromMemory({ error: e?.message || 'DB query failed' })) {
       res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
     }
+    const child = spawnChild(scriptPath, {
+      cwd: repoRoot,
+      detached: true,
+      stdio: 'ignore',
+      env: execEnv,
+      shell: false,
+    })
+    try { child.unref() } catch { }
   }
 })
 
@@ -10527,6 +12302,37 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
   if (!uid) return
   const respondFromMemory = (extra = {}) => {
     try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch { }
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch { }
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`; ok = true } catch { }
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'api' } }) } catch { }
+      }
+    } catch { }
+    res.json({ ok: true, branch, started: true })
       const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
       res.json({ ok: true, uniqueIps7d, via: 'memory', ...extra })
       return true
@@ -10606,6 +12412,22 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       return
     }
 
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no') // for nginx
+    res.flushHeaders?.()
+
+    const send = (event, data) => {
+      try {
+        if (event) res.write(`event: ${event}\n`)
+        const payload = typeof data === 'string' ? data : JSON.stringify(data)
+        // Split by lines to avoid giant frames
+        const lines = String(payload).split(/\r?\n/) || []
+        for (const line of lines) res.write(`data: ${line}\n`)
+        res.write('\n')
+      } catch { }
     if (supabaseUrlEnv && supabaseAnonKey) {
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
       const token = getBearerTokenFromRequest(req)
@@ -10653,6 +12475,43 @@ app.get('/api/admin/online-ips', async (req, res) => {
 
   const respondFromMemory = (extra = {}) => {
     try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch { }
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch { }
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'stream' })})`; ok = true } catch { }
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'stream' } }) } catch { }
+      }
+    } catch { }
+    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
+    try { await fs.access(scriptPath) } catch {
+      send('error', { error: `refresh script not found at ${scriptPath}` })
+      res.end()
+      return
+    }
+    try { await fs.chmod(scriptPath, 0o755) } catch { }
       // Build set of IPs from the in-memory minute buckets within the window
       const nowMin = Math.floor(Date.now() / 60000)
       const start = nowMin - windowMinutes + 1
@@ -10702,6 +12561,61 @@ app.get('/api/admin/online-ips', async (req, res) => {
           ips = Array.from(uniq).sort()
         }
       } catch { }
+      childEnv.PLANTSWIPE_TARGET_BRANCH = branch
+      send('log', `[pull] Target branch requested: ${branch}`)
+    }
+    const child = spawnChild(scriptPath, [], {
+      cwd: repoRoot,
+      env: childEnv,
+      shell: false,
+    })
+
+    // Heartbeat to keep the connection alive behind proxies
+    const heartbeatId = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    let clientDisconnected = false
+    let streamClosedGracefully = false
+    let autoRestartScheduled = false
+
+    // Stream stdout/stderr
+    child.stdout?.on('data', (buf) => {
+      const text = buf.toString()
+      send('log', text)
+    })
+    child.stderr?.on('data', (buf) => {
+      const text = buf.toString()
+      send('log', text)
+    })
+    child.on('error', (err) => {
+      send('error', { error: err?.message || 'spawn failed' })
+    })
+    child.on('close', (code) => {
+      const ok = code === 0
+      if (!streamClosedGracefully) {
+        if (ok) {
+          send('done', { ok: true, code })
+        } else {
+          send('done', { ok: false, code })
+        }
+      }
+      streamClosedGracefully = true
+      try { clearInterval(heartbeatId) } catch { }
+      try { res.end() } catch { }
+      if (ok && clientDisconnected && !autoRestartScheduled) {
+        autoRestartScheduled = true
+        console.log('[pull-code] Build finished after client disconnect; scheduling service restart.')
+        scheduleRestartAllServices('pull_code_stream_auto')
+      }
+    })
+
+    req.on('close', () => {
+      if (streamClosedGracefully) return
+      clientDisconnected = true
+      try { clearInterval(heartbeatId) } catch { }
+      console.warn('[pull-code] SSE client disconnected early; continuing refresh in background.')
+    })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
+      } catch {}
       if (ips.length > 0) {
         res.json({ ok: true, ips, via: 'supabase', windowMinutes, count: ips.length, updatedAt: Date.now() })
         return
@@ -10764,6 +12678,731 @@ app.get('/api/admin/online-users', async (req, res) => {
       res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
     }
   }
+})
+
+// --- Global broadcast message system ---
+// SSE client registry
+const broadcastClients = new Set()
+
+function sseWrite(res, event, data) {
+  try {
+    if (!res) return
+    if (event) res.write(`event: ${event}\n`)
+    const payload = typeof data === 'string' ? data : JSON.stringify(data)
+    const lines = String(payload).split(/\r?\n/)
+    for (const line of lines) res.write(`data: ${line}\n`)
+    res.write('\n')
+  } catch {}
+}
+
+    // Always operate from the repository root and mark it safe for this process
+    const repoRoot = await getRepoRoot()
+    const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
+    // Keep this fast: limit network timeout and avoid blocking when offline
+    try { await exec(`${gitBase} remote update --prune`, { timeout: 5000 }) } catch { }
+    // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
+    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
+    let branches = branchesStdout
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(name => name.replace(/^origin\//, ''))
+      // Exclude HEAD pointer, the remote namespace itself ("origin"), and any symbolic ref lines
+      .filter(name => name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
+      .sort((a, b) => a.localeCompare(b))
+async function getActiveBroadcastRow() {
+  // Prefer direct SQL when available
+  if (sql) {
+    try {
+      const rows = await sql`
+        select 
+          bm.id::text as id,
+          bm.message,
+          bm.severity,
+          bm.created_at,
+          bm.expires_at,
+          bm.created_by::text as created_by,
+          coalesce(p.display_name, p.email, '') as admin_name
+        from public.broadcast_messages bm
+        left join public.profiles p on p.id = bm.created_by
+        where bm.removed_at is null and (bm.expires_at is null or bm.expires_at > now())
+        order by bm.created_at desc
+        limit 1
+      `
+      return Array.isArray(rows) && rows[0] ? rows[0] : null
+    } catch {}
+  }
+  // Supabase REST fallback for reads
+  if (supabaseUrlEnv && supabaseAnonKey) {
+    try {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const url = `${supabaseUrlEnv}/rest/v1/broadcast_messages?removed_at=is.null&select=id,message,severity,created_at,expires_at,created_by&order=created_at.desc&limit=10`
+      const r = await fetch(url, { headers })
+      if (r.ok) {
+        const arr = await r.json().catch(() => [])
+        const now = Date.now()
+        const valid = (Array.isArray(arr) ? arr : []).find((row) => {
+          const ex = row?.expires_at ? Date.parse(row.expires_at) : null
+          return !ex || ex > now
+        })
+        return valid || null
+      }
+    } catch {}
+  }
+  return null
+}
+
+function broadcastToAll(payload) {
+  try {
+    for (const res of Array.from(broadcastClients)) {
+      sseWrite(res, 'broadcast', payload)
+    }
+  } catch {}
+}
+
+function clearBroadcastForAll() {
+  try {
+    for (const res of Array.from(broadcastClients)) {
+      sseWrite(res, 'clear', { ok: true })
+    }
+  } catch {}
+}
+
+// Public: fetch current active broadcast
+app.get('/api/broadcast/active', async (_req, res) => {
+  try {
+    // Prevent caches from serving stale broadcast state
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'list_branches', ${current || null}, ${sql.json({ count: branches.length })})`
+    } catch { }
+    res.json({ branches, current, lastUpdateTime })
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+    } catch {}
+    const row = await getActiveBroadcastRow()
+    if (row) {
+      res.json({ ok: true, broadcast: {
+        id: String(row.id || ''),
+        message: String(row.message || ''),
+        severity: String(row.severity || 'info'),
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+        expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+        createdBy: row.created_by ? String(row.created_by) : null,
+        adminName: row.admin_name ? String(row.admin_name) : null,
+      } })
+    } else {
+      res.json({ ok: true, broadcast: null })
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load broadcast' })
+  }
+})
+
+// Public: Server-Sent Events stream for broadcast updates
+app.get('/api/broadcast/stream', async (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    // Send initial state (only broadcast if active exists; do not force-clear here)
+    try {
+      geo = await withTimeout(resolveGeo(req, ipAddress), 800, 'GEO_TIMEOUT')
+    } catch { }
+    const userAgent = req.get('user-agent') || ''
+    const tokenUserId = await getUserIdFromRequest(req)
+    const effectiveUserId = tokenUserId || (typeof userId === 'string' ? userId : null)
+
+    // Be tolerant: if pagePath is missing, log and still respond with 204
+    // Tracking should never block or break user flows
+    if (typeof pagePath !== 'string' || pagePath.length === 0) {
+      console.warn('[track-visit] Missing pagePath, skipping visit recording')
+      res.status(204).end()
+      return
+    }
+
+    const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
+    const lang = language || acceptLanguage
+    const referrer = (typeof bodyReferrer === 'string' && bodyReferrer.length > 0) ? bodyReferrer : (req.get('referer') || req.get('referrer') || '')
+    // Do not block the response on DB write; best-effort in background
+    insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req).catch((err) => {
+      console.warn('[track-visit] Failed to insert visit:', err?.message || 'unknown error')
+    })
+    res.status(204).end()
+      const row = await getActiveBroadcastRow()
+      if (row) {
+        sseWrite(res, 'broadcast', {
+          id: String(row.id || ''),
+          message: String(row.message || ''),
+          severity: String(row.severity || 'info'),
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+          expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+          createdBy: row.created_by ? String(row.created_by) : null,
+          adminName: row.admin_name ? String(row.admin_name) : null,
+        })
+      }
+    } catch {}
+
+    broadcastClients.add(res)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(hb) } catch {}; broadcastClients.delete(res) })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
+// User membership SSE: notify when the current user's garden memberships change
+app.get('/api/self/memberships/stream', async (req, res) => {
+  try {
+    // Allow token via query param for EventSource
+    let user = null
+    try {
+      const qToken = (req.query?.token || req.query?.access_token)
+      if (qToken && supabaseServer) {
+        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
+        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
+      }
+    } catch {}
+    if (!user) user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    sseWrite(res, 'ready', { ok: true })
+
+    const getSig = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select gm.garden_id::text as garden_id
+            from public.garden_members gm
+            where gm.user_id = ${user.id}
+            order by gm.garden_id asc
+          `
+          const list = (rows || []).map((r) => String(r.garden_id))
+          return list.join(',')
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&order=garden_id.asc`
+          const r = await fetch(url, { headers })
+          const arr = r.ok ? (await r.json().catch(() => [])) : []
+          const list = (arr || []).map((row) => String(row.garden_id))
+          return list.join(',')
+        }
+      } catch {}
+      return ''
+    }
+
+    let lastSig = await getSig()
+
+    const poll = async () => {
+      try {
+        const next = await getSig()
+        if (next !== lastSig) {
+          lastSig = next
+          sseWrite(res, 'memberships', { changed: true })
+        }
+      } catch {}
+    }
+
+    const iv = setInterval(poll, 1000)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
+// Private info lookup (self or admin)
+app.get('/api/users/:id/private', async (req, res) => {
+  try {
+    const targetId = String(req.params.id || '').trim()
+    if (!targetId) { res.status(400).json({ ok: false, error: 'user id required' }); return }
+    const viewer = await getUserFromRequest(req)
+    if (!viewer?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    let allowed = viewer.id === targetId
+    if (!allowed) {
+      try {
+        allowed = await isAdminFromRequest(req)
+      } catch {}
+    }
+    if (!allowed) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    if (sql) {
+      const rows = await sql`
+        select u.id::text as id, u.email
+        from auth.users u
+        where u.id = ${targetId}
+        limit 1
+      `
+      const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+      res.json({
+        ok: true,
+        user: row ? { id: String(row.id || targetId), email: row.email || null } : null,
+      })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+        const bearer = getBearerTokenFromRequest(req)
+        if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_private_info`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ _user_id: targetId }),
+        })
+        if (resp.ok) {
+          const body = await resp.json().catch(() => null)
+          const row = Array.isArray(body) ? body[0] : body
+          res.json({
+            ok: true,
+            user: row ? { id: String(row.id || targetId), email: row.email || null } : null,
+          })
+          return
+        } catch { }
+        }
+      } catch {}
+    }
+
+    res.status(503).json({ ok: false, error: 'Private info lookup unavailable' })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load private info' })
+  }
+})
+
+// User-wide Garden Activity SSE: pushes activity from all gardens the user belongs to
+app.get('/api/self/gardens/activity/stream', async (req, res) => {
+  try {
+    // Resolve user from token param or cookie session
+    let user = null
+    try {
+      const qToken = (req.query?.token || req.query?.access_token)
+      if (qToken && supabaseServer) {
+        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
+        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
+      }
+    } catch {}
+    if (!user) user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    sseWrite(res, 'ready', { ok: true })
+
+    const getGardenIdsCsv = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select garden_id::text as garden_id from public.garden_members where user_id = ${user.id}
+          `
+          const list = (rows || []).map((r) => String(r.garden_id))
+          return list
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id`
+          const r = await fetch(url, { headers })
+          const arr = r.ok ? (await r.json().catch(() => [])) : []
+          const list = (arr || []).map((row) => String(row.garden_id))
+          return list
+        }
+      } catch {}
+      return []
+    }
+
+    let gardenIds = await getGardenIdsCsv()
+    let lastSig = gardenIds.slice().sort().join(',')
+    let lastSeen = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+
+    const poll = async () => {
+      try {
+        // Refresh membership set
+        const nextIds = await getGardenIdsCsv()
+        const nextSig = nextIds.slice().sort().join(',')
+        if (nextSig !== lastSig) {
+          gardenIds = nextIds
+          lastSig = nextSig
+          sseWrite(res, 'membership', { changed: true })
+        }
+        if (!gardenIds || gardenIds.length === 0) return
+        if (sql) {
+          const rows = await sql`
+            select id::text as id, garden_id::text as garden_id, actor_id::text as actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at
+            from public.garden_activity_logs
+            where garden_id = any(${sql.array(gardenIds)}) and occurred_at > ${lastSeen}
+            order by occurred_at asc
+            limit 500
+          `
+          for (const r of rows || []) {
+            lastSeen = new Date(r.occurred_at).toISOString()
+            sseWrite(res, 'activity', {
+              id: String(r.id), gardenId: String(r.garden_id), actorId: r.actor_id || null, actorName: r.actor_name || null, actorColor: r.actor_color || null,
+              kind: r.kind, message: r.message, plantName: r.plant_name || null, taskName: r.task_name || null, occurredAt: new Date(r.occurred_at).toISOString(),
+            })
+          }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          // Build OR filter for multiple garden_ids: or=(garden_id.eq.id1,garden_id.eq.id2,...)
+          const orExpr = gardenIds.length > 0 ? `or=(${gardenIds.map(id => `garden_id.eq.${id}`).join(',')})` : ''
+          const qp = [orExpr, `occurred_at=gt.${lastSeen}`, 'select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at', 'order=occurred_at.asc', 'limit=500']
+            .filter(Boolean)
+            .map(s => encodeURI(s))
+            .join('&')
+          const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?${qp}`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            for (const row of arr || []) {
+              lastSeen = new Date(row.occurred_at).toISOString()
+              sseWrite(res, 'activity', {
+                id: String(row.id), gardenId: String(row.garden_id), actorId: row.actor_id || null, actorName: row.actor_name || null, actorColor: row.actor_color || null,
+                kind: row.kind, message: row.message, plantName: row.plant_name || null, taskName: row.task_name || null, occurredAt: new Date(row.occurred_at).toISOString(),
+              })
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const iv = setInterval(poll, 1000)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
+// ---- Garden overview + realtime (SSE) ----
+
+async function isGardenMember(req, gardenId, userIdOverride = null) {
+  try {
+    const user = userIdOverride ? { id: userIdOverride } : await getUserFromRequest(req)
+    if (!user?.id) return false
+    // Admins can access any garden
+    try { if (await isAdminFromRequest(req)) return true } catch {}
+    if (sql) {
+      const rows = await sql`
+        select 1 as ok from public.garden_members
+        where garden_id = ${gardenId} and user_id = ${user.id}
+        limit 1
+      `
+      return Array.isArray(rows) && rows.length > 0
+    }
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getBearerTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&limit=1`
+      const r = await fetch(url, { headers })
+      if (r.ok) {
+        const arr = await r.json().catch(() => [])
+        return Array.isArray(arr) && arr.length > 0
+      }
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+async function isGardenOwner(req, gardenId, userIdOverride = null) {
+  try {
+    const user = userIdOverride ? { id: userIdOverride } : await getUserFromRequest(req)
+    if (!user?.id) return false
+    try { if (await isAdminFromRequest(req)) return true } catch {}
+    if (sql) {
+      const rows = await sql`
+        select role from public.garden_members
+        where garden_id = ${gardenId} and user_id = ${user.id}
+        limit 1
+      `
+      if (Array.isArray(rows) && rows.length > 0) {
+        return String(rows[0].role || '').toLowerCase() === 'owner'
+      }
+    }
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getBearerTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`
+      const r = await fetch(url, { headers })
+      if (r.ok) {
+        const arr = await r.json().catch(() => [])
+        if (Array.isArray(arr) && arr.length > 0) {
+          return String(arr[0].role || '').toLowerCase() === 'owner'
+        }
+      }
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+async function getGardenCoverRow(gardenId) {
+  if (sql) {
+    const rows = await sql`
+      select id::text as id, cover_image_url, name, created_by::text as owner_id
+      from public.gardens
+      where id = ${gardenId}
+      limit 1
+    `
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null
+  }
+  if (supabaseServiceClient) {
+    const { data, error } = await supabaseServiceClient
+      .from('gardens')
+      .select('id, cover_image_url, name, created_by')
+      .eq('id', gardenId)
+      .maybeSingle()
+    if (error) throw error
+    return data ? { ...data, owner_id: data.created_by } : null
+  }
+  return null
+}
+
+async function updateGardenCoverImage(gardenId, publicUrl) {
+  if (sql) {
+    await sql`
+      update public.gardens
+      set cover_image_url = ${publicUrl}
+      where id = ${gardenId}
+    `
+    return
+  }
+  if (supabaseServiceClient) {
+    const { error } = await supabaseServiceClient
+      .from('gardens')
+      .update({ cover_image_url: publicUrl })
+      .eq('id', gardenId)
+    if (error) throw error
+    return
+  }
+  throw new Error('Database connection not configured')
+}
+
+app.post('/api/garden/:id/upload-cover', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const gardenId = String(req.params.id || '').trim()
+  if (!gardenId) {
+    res.status(400).json({ error: 'Garden id is required' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const canEdit = await isGardenOwner(req, gardenId, user.id)
+  if (!canEdit) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
+  }
+
+  singleGardenCoverUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(gardenCoverMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const gardenRow = await getGardenCoverRow(gardenId)
+      if (!gardenRow) {
+        res.status(404).json({ error: 'Garden not found' })
+        return
+      }
+        let uploaderDisplayName = null
+        try {
+          uploaderDisplayName = await getAdminProfileName(user.id)
+        } catch {}
+      const previousUrl = gardenRow.cover_image_url || null
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      try {
+        optimizedBuffer = await sharp(file.buffer)
+          .rotate()
+          .resize({
+            width: gardenCoverMaxDimension,
+            height: gardenCoverMaxDimension,
+            fit: 'inside',
+            withoutEnlargement: true,
+            fastShrinkOnLoad: true,
+          })
+          .webp({
+            quality: gardenCoverWebpQuality,
+            effort: 5,
+            smartSubsample: true,
+          })
+          .toBuffer()
+      } catch (sharpErr) {
+        console.error('[garden-cover] failed to convert image to webp', sharpErr)
+        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+        return
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const gardenSegment = sanitizePathSegment(`garden-${gardenId}`, 'garden')
+      const typeSegment = gardenSegment ? `cover-${gardenSegment}` : 'cover'
+      const objectPath = buildUploadObjectPath(baseName, typeSegment, gardenCoverUploadPrefix)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(gardenCoverUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: 'image/webp',
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[garden-cover] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(gardenCoverUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      // Transform URL to use media proxy (hides Supabase project URL)
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+      if (!proxyUrl) {
+        res.status(500).json({ error: 'Failed to generate public URL for cover image' })
+        return
+      }
+
+      try {
+        const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
+        const url = `${supabaseUrlEnv}/rest/v1/${tablePath}?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`
+        const resp = await withTimeout(fetch(url, { headers }), 1200, 'REST_TIMEOUT')
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          const uniq = new Set((Array.isArray(arr) ? arr : []).map(r => String(r.ip_address || '')).filter(Boolean))
+          ips = Array.from(uniq).sort()
+        }
+      } catch { }
+      if (ips.length > 0) {
+        res.json({ ok: true, ips, via: 'supabase', windowMinutes, count: ips.length, updatedAt: Date.now() })
+        // Store the proxy URL in the database for display
+        await updateGardenCoverImage(gardenId, proxyUrl)
+      } catch (dbErr) {
+        console.error('[garden-cover] failed to update garden cover', dbErr)
+        res.status(500).json({ error: dbErr?.message || 'Failed to update garden cover' })
+        return
+      }
+
+      let deletedPrevious = false
+      if (previousUrl && previousUrl !== proxyUrl) {
+        try {
+          const result = await deleteGardenCoverObject(previousUrl)
+          deletedPrevious = Boolean(result.deleted)
+        } catch {}
+      }
+
+      const compressionPercent =
+        file.size > 0
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+        try {
+          await recordAdminMediaUpload({
+            adminId: user.id,
+            adminEmail: user.email || null,
+            adminName: uploaderDisplayName,
+            bucket: gardenCoverUploadBucket,
+            path: objectPath,
+            publicUrl: proxyUrl,
+            mimeType: 'image/webp',
+            originalMimeType: mime,
+            sizeBytes: optimizedBuffer.length,
+            originalSizeBytes: file.size,
+            quality: gardenCoverWebpQuality,
+            compressionPercent,
+            metadata: {
+              source: 'garden_cover',
+              gardenId,
+              gardenName: gardenRow.name || null,
+              originalName: file.originalname,
+              previousUrl,
+            },
+            createdAt: new Date().toISOString(),
+          })
+        } catch (recordErr) {
+          console.error('[garden-cover] failed to record media upload', recordErr)
+        }
+
+      res.json({
+        ok: true,
+        gardenId,
+        bucket: gardenCoverUploadBucket,
+        path: objectPath,
+        url: proxyUrl,
+        mimeType: 'image/webp',
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        quality: gardenCoverWebpQuality,
+        maxDimension: gardenCoverMaxDimension,
+        compressionPercent,
+        deletedPrevious,
+      })
+    })().catch((uploadErr) => {
+      console.error('[garden-cover] unexpected failure', uploadErr)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
+      }
+    })
+  })
 })
 
 // --- Global broadcast message system ---
@@ -10908,11 +13547,61 @@ app.get('/api/broadcast/stream', async (req, res) => {
     req.on('close', () => { try { clearInterval(hb) } catch { }; broadcastClients.delete(res) })
   } catch (e) {
     try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
+app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for storage cleanup' })
+    return
+  }
+  const gardenId = String(req.params.id || '').trim()
+  if (!gardenId) {
+    res.status(400).json({ error: 'Garden id is required' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const canEdit = await isGardenOwner(req, gardenId, user.id)
+  if (!canEdit) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
+  }
+  const targetUrl = String(req.body?.url || '').trim()
+  if (!targetUrl) {
+    res.status(400).json({ error: 'url is required' })
+    return
+  }
+  try {
+    const result = await deleteGardenCoverObject(targetUrl)
+    res.json({ ok: true, deleted: Boolean(result.deleted), reason: result.reason })
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to delete cover image' })
   }
 })
 
-// User membership SSE: notify when the current user's garden memberships change
-app.get('/api/self/memberships/stream', async (req, res) => {
+// DELETE a garden (and its cover image from storage)
+app.delete('/api/garden/:id', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(503).json({ error: 'Garden deletion is not configured on this server' })
+    return
+  }
+  const gardenId = String(req.params.id || '').trim()
+  if (!gardenId) {
+    res.status(400).json({ error: 'Garden id is required' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const canDelete = await isGardenOwner(req, gardenId, user.id)
+  if (!canDelete) {
+    res.status(403).json({ error: 'Forbidden - only garden owners can delete a garden' })
+    return
+  }
+
   try {
     // Allow token via query param for EventSource
     let user = null
@@ -10931,8 +13620,15 @@ app.get('/api/self/memberships/stream', async (req, res) => {
     res.setHeader('Connection', 'keep-alive')
     res.setHeader('X-Accel-Buffering', 'no')
     res.flushHeaders?.()
+    // 1. Get the garden's cover image URL before deleting
+    const gardenRow = await getGardenCoverRow(gardenId)
+    const coverImageUrl = gardenRow?.cover_image_url || null
 
-    sseWrite(res, 'ready', { ok: true })
+    // 2. Delete the garden row (cascade will delete related rows)
+    const { error: deleteErr } = await supabaseServiceClient
+      .from('gardens')
+      .delete()
+      .eq('id', gardenId)
 
     const getSig = async () => {
       try {
@@ -10977,11 +13673,39 @@ app.get('/api/self/memberships/stream', async (req, res) => {
     req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch { } })
   } catch (e) {
     try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
+    if (deleteErr) {
+      console.error('[garden-delete] Failed to delete garden row', deleteErr)
+      res.status(500).json({ error: 'Failed to delete garden' })
+      return
+    }
+
+    // 3. Delete the cover image from storage if it exists
+    let coverDeleted = false
+    let coverDeleteReason = 'no_cover'
+    if (coverImageUrl) {
+      try {
+        const result = await deleteGardenCoverObject(coverImageUrl)
+        coverDeleted = Boolean(result.deleted)
+        coverDeleteReason = result.reason || (coverDeleted ? 'deleted' : 'unknown')
+      } catch (coverErr) {
+        console.error('[garden-delete] Failed to delete cover image from storage', coverErr)
+        coverDeleteReason = coverErr?.message || 'delete_failed'
+      }
+    }
+
+    res.json({
+      ok: true,
+      gardenId,
+      coverDeleted,
+      coverDeleteReason,
+    })
+  } catch (err) {
+    console.error('[garden-delete] Unexpected error', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete garden' })
   }
 })
 
-// Private info lookup (self or admin)
-app.get('/api/users/:id/private', async (req, res) => {
+app.get('/api/garden/:id/activity', async (req, res) => {
   try {
     const targetId = String(req.params.id || '').trim()
     if (!targetId) { res.status(400).json({ ok: false, error: 'user id required' }); return }
@@ -10994,31 +13718,75 @@ app.get('/api/users/:id/private', async (req, res) => {
       } catch { }
     }
     if (!allowed) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
+    const dayParam = typeof req.query.day === 'string' ? req.query.day : ''
+    const dayIso = /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : new Date().toISOString().slice(0,10)
+    const start = new Date(`${dayIso}T00:00:00.000Z`).toISOString()
+    const endExclusive = new Date(new Date(`${dayIso}T00:00:00.000Z`).getTime() + 24 * 3600 * 1000).toISOString()
+
+    let rows = []
     if (sql) {
-      const rows = await sql`
-        select u.id::text as id, u.email
-        from auth.users u
-        where u.id = ${targetId}
-        limit 1
+      rows = await sql`
+        select
+          id::text as id,
+          garden_id::text as garden_id,
+          actor_id::text as actor_id,
+          actor_name,
+          actor_color,
+          kind,
+          message,
+          plant_name,
+          task_name,
+          occurred_at
+        from public.garden_activity_logs
+        where garden_id = ${gardenId}
+          and occurred_at >= ${start}
+          and occurred_at < ${endExclusive}
+        order by occurred_at desc
       `
-      const row = Array.isArray(rows) && rows[0] ? rows[0] : null
-      res.json({
-        ok: true,
-        user: row ? { id: String(row.id || targetId), email: row.email || null } : null,
-      })
-      return
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getAuthTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gte.${encodeURIComponent(start)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.desc&limit=200`
+      const resp = await fetch(url, { headers })
+      if (resp.ok) {
+        const arr = await resp.json().catch(() => [])
+        rows = Array.isArray(arr) ? arr.filter((r) => {
+          try {
+            const ts = new Date(r.occurred_at).toISOString()
+            return ts >= start && ts < endExclusive
+          } catch {
+            return false
+          }
+        }) : []
+      }
     }
 
-    if (supabaseUrlEnv && supabaseAnonKey) {
-      try {
-        const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
-        const bearer = getBearerTokenFromRequest(req)
-        if (bearer) headers['Authorization'] = `Bearer ${bearer}`
-        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_private_info`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ _user_id: targetId }),
+    const activity = []
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        const occurredAtRaw = row?.occurred_at instanceof Date
+          ? row.occurred_at.toISOString()
+          : (row?.occurred_at ? String(row.occurred_at) : null)
+        if (occurredAtRaw == null || occurredAtRaw === '') continue
+        activity.push({
+          id: String(row.id),
+          gardenId: String(row.garden_id ?? row.gardenId ?? gardenId),
+          actorId: row.actor_id ? String(row.actor_id) : row.actorId ? String(row.actorId) : null,
+          actorName: row.actor_name ?? row.actorName ?? null,
+          actorColor: row.actor_color ?? row.actorColor ?? null,
+          kind: row.kind,
+          message: row.message,
+          plantName: row.plant_name ?? row.plantName ?? null,
+          taskName: row.task_name ?? row.taskName ?? null,
+          occurredAt: occurredAtRaw,
         })
         if (resp.ok) {
           const body = await resp.json().catch(() => null)
@@ -11030,16 +13798,16 @@ app.get('/api/users/:id/private', async (req, res) => {
           return
         }
       } catch { }
+      }
     }
 
-    res.status(503).json({ ok: false, error: 'Private info lookup unavailable' })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to load private info' })
-  }
-})
+      res.json({ ok: true, activity })
+    } catch (e) {
+      try { res.status(500).json({ ok: false, error: e?.message || 'failed to load activity' }) } catch {}
+    }
+  })
 
-// User-wide Garden Activity SSE: pushes activity from all gardens the user belongs to
-app.get('/api/self/gardens/activity/stream', async (req, res) => {
+app.get('/api/garden/:id/tasks', async (req, res) => {
   try {
     // Resolve user from token param or cookie session
     let user = null
@@ -11081,7 +13849,19 @@ app.get('/api/self/gardens/activity/stream', async (req, res) => {
         }
       } catch { }
       return []
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const startDay = typeof req.query.start === 'string' ? req.query.start : ''
+    const endDay = typeof req.query.end === 'string' ? req.query.end : ''
+    const dayPattern = /^\d{4}-\d{2}-\d{2}$/
+    if (!dayPattern.test(startDay) || !dayPattern.test(endDay)) {
+      res.status(400).json({ ok: false, error: 'start and end must be YYYY-MM-DD' })
+      return
     }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
     let gardenIds = await getGardenIdsCsv()
     let lastSig = gardenIds.slice().sort().join(',')
@@ -11145,41 +13925,291 @@ app.get('/api/self/gardens/activity/stream', async (req, res) => {
     req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch { } })
   } catch (e) {
     try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
+    let rows = []
+    if (sql) {
+      rows = await sql`
+        select
+          id::text as id,
+          garden_id::text as garden_id,
+          day,
+          task_type,
+          garden_plant_ids,
+          success
+        from public.garden_tasks
+        where garden_id = ${gardenId}
+          and day >= ${startDay}
+          and day <= ${endDay}
+        order by day asc
+      `
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getAuthTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const query = [
+        'select=id,garden_id,day,task_type,garden_plant_ids,success',
+        `garden_id=eq.${encodeURIComponent(gardenId)}`,
+        `day=gte.${encodeURIComponent(startDay)}`,
+        `day=lte.${encodeURIComponent(endDay)}`,
+        'order=day.asc',
+      ].join('&')
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_tasks?${query}`, { headers })
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '')
+        res.status(resp.status).json({ ok: false, error: text || 'failed to load tasks' })
+        return
+      }
+      rows = await resp.json().catch(() => [])
+    } else {
+      res.status(503).json({ ok: false, error: 'Database not configured' })
+      return
+    }
+
+    const tasks = (rows || []).map((r) => ({
+      id: String(r.id),
+      gardenId: String(r.garden_id),
+      day: (() => {
+        if (r.day instanceof Date) return r.day.toISOString().slice(0, 10)
+        return String(r.day || '').slice(0, 10)
+      })(),
+      taskType: String(r.task_type || 'watering'),
+      gardenPlantIds: Array.isArray(r.garden_plant_ids) ? r.garden_plant_ids : [],
+      success: Boolean(r.success),
+    }))
+    res.json({ ok: true, tasks })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'failed to load tasks' })
   }
 })
 
-// ---- Garden overview + realtime (SSE) ----
-
-async function isGardenMember(req, gardenId, userIdOverride = null) {
+app.post('/api/garden/:id/activity', async (req, res) => {
   try {
     const user = userIdOverride ? { id: userIdOverride } : await getUserFromRequest(req)
     if (!user?.id) return false
     // Admins can access any garden
     try { if (await isAdminFromRequest(req)) return true } catch { }
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    const body = req.body || {}
+    const kindRaw = typeof body.kind === 'string' ? body.kind.trim() : ''
+    const messageRaw = typeof body.message === 'string' ? body.message.trim() : ''
+    if (!kindRaw || !messageRaw) { res.status(400).json({ ok: false, error: 'kind and message required' }); return }
+    const plantName = typeof body.plantName === 'string' ? body.plantName : null
+    const taskName = typeof body.taskName === 'string' ? body.taskName : null
+    const actorColor = typeof body.actorColor === 'string' ? body.actorColor : null
+
     if (sql) {
-      const rows = await sql`
-        select 1 as ok from public.garden_members
-        where garden_id = ${gardenId} and user_id = ${user.id}
-        limit 1
+      let actorName = null
+      try {
+        // First try profiles table for display_name
+        const nameRows = await sql`select display_name from public.profiles where id = ${user.id} limit 1`
+        if (Array.isArray(nameRows) && nameRows[0]?.display_name) {
+          actorName = nameRows[0].display_name
+        } else {
+          // Fallback to email username from auth.users
+          const emailRows = await sql`select email from auth.users where id = ${user.id} limit 1`
+          if (Array.isArray(emailRows) && emailRows[0]?.email) {
+            actorName = emailRows[0].email.split('@')[0] || null
+          }
+        }
+      } catch {}
+      const nowIso = new Date().toISOString()
+      await sql`
+        insert into public.garden_activity_logs (garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at)
+        values (${gardenId}, ${user.id}, ${actorName}, ${actorColor || null}, ${kindRaw}, ${messageRaw}, ${plantName || null}, ${taskName || null}, ${nowIso})
       `
-      return Array.isArray(rows) && rows.length > 0
+      res.json({ ok: true })
+      return
     }
+
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
-      const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&limit=1`
-      const r = await fetch(url, { headers })
-      if (r.ok) {
-        const arr = await r.json().catch(() => [])
-        return Array.isArray(arr) && arr.length > 0
+      const payload = {
+        _garden_id: gardenId,
+        _kind: kindRaw,
+        _message: messageRaw,
+        _plant_name: plantName,
+        _task_name: taskName,
+        _actor_color: actorColor,
       }
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/log_garden_activity`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '')
+        res.status(resp.status).json({ ok: false, error: text || 'failed to log activity' })
+        return
+      }
+      res.json({ ok: true })
+      return
     }
-    return false
-  } catch {
-    return false
+
+    res.status(503).json({ ok: false, error: 'activity logging unavailable' })
+  } catch (e) {
+    try { res.status(500).json({ ok: false, error: e?.message || 'failed to log activity' }) } catch {}
   }
-}
+})
+
+// Batched initial load for a garden
+app.get('/api/garden/:id/overview', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    
+    // Try to get user (may be null for unauthenticated requests)
+    const user = await getUserFromRequest(req).catch(() => null)
+    const isMember = user?.id ? await isGardenMember(req, gardenId, user.id).catch(() => false) : false
+
+    let garden = null
+    let plants = []
+    let members = []
+    const serverNow = new Date().toISOString()
+
+    // First, fetch garden to check privacy
+    if (sql) {
+      // Try with privacy column first, then progressively simpler fallbacks
+      let gRows = []
+      let gardenQuerySuccess = false
+      
+      // Attempt 1: Full query with privacy, streak, location, and preferred_language
+      try {
+        console.log('[overview] Fetching garden', gardenId, '(attempt 1: full query)')
+        gRows = await sql`
+          select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy,
+                 location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language
+          from public.gardens where id = ${gardenId} limit 1
+        `
+        console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
+        gardenQuerySuccess = true
+      } catch (e1) {
+        console.error('[overview] Garden query failed (attempt 1):', e1?.message || e1)
+        
+        // Attempt 2: Without privacy column
+        try {
+          console.log('[overview] Fetching garden', gardenId, '(attempt 2: without privacy)')
+          gRows = await sql`
+            select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy,
+                   location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language
+            from public.gardens where id = ${gardenId} limit 1
+          `
+          console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
+          gardenQuerySuccess = true
+        } catch (e2) {
+          console.error('[overview] Garden query failed (attempt 2):', e2?.message || e2)
+          
+          // Attempt 3: Minimal query (basic columns only)
+          try {
+            console.log('[overview] Fetching garden', gardenId, '(attempt 3: minimal)')
+            gRows = await sql`
+              select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy,
+                     location_city, location_country, location_timezone, location_lat, location_lon, 'en' as preferred_language
+              from public.gardens where id = ${gardenId} limit 1
+            `
+            console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
+            gardenQuerySuccess = true
+          } catch (e3) {
+            console.error('[overview] Garden query failed (attempt 3):', e3?.message || e3)
+            throw new Error('Failed to fetch garden after all attempts: ' + (e3?.message || 'Unknown error'))
+          }
+        }
+      }
+      
+      garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
+      console.log('[overview] Garden found:', !!garden, 'querySuccess:', gardenQuerySuccess)
+
+      // Fetch plants with try-catch
+      console.log('[overview] Fetching plants for garden', gardenId)
+      let gpRows = []
+      try {
+        gpRows = await sql`
+          select
+            gp.id::text as id,
+            gp.garden_id::text as garden_id,
+            gp.plant_id::text as plant_id,
+            gp.nickname,
+            gp.seeds_planted::int as seeds_planted,
+            gp.planted_at,
+            gp.expected_bloom_date,
+            gp.override_water_freq_unit,
+            gp.override_water_freq_value::int as override_water_freq_value,
+            gp.plants_on_hand::int as plants_on_hand,
+            gp.sort_index::int as sort_index,
+            gp.health_status,
+            gp.notes,
+            gp.last_health_update,
+            p.id as p_id,
+            p.name as p_name,
+            p.scientific_name as p_scientific_name,
+            p.colors as p_colors,
+            p.seasons as p_seasons,
+            p.rarity as p_rarity,
+            p.meaning as p_meaning,
+            p.description as p_description,
+            p.image_url as p_image_url,
+            p.photos as p_photos,
+            p.level_sun as p_level_sun,
+            p.watering_type as p_watering_type,
+            p.soil as p_soil,
+            p.maintenance_level as p_maintenance_level,
+            p.seeds_available as p_seeds_available
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.garden_id = ${gardenId}
+          order by gp.sort_index asc nulls last
+        `
+        console.log('[overview] Plants query succeeded, rows:', gpRows?.length || 0)
+      } catch (plantsErr) {
+        console.error('[overview] Plants query failed:', plantsErr?.message || plantsErr)
+        // Plants query failed, continue with empty plants (non-fatal)
+        gpRows = []
+      }
+      plants = (gpRows || []).map((r) => {
+          const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
+          const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
+          return {
+            id: String(r.id),
+            gardenId: String(r.garden_id),
+            plantId: String(r.plant_id),
+            nickname: r.nickname,
+            seedsPlanted: Number(r.seeds_planted || 0),
+            plantedAt: r.planted_at || null,
+            expectedBloomDate: r.expected_bloom_date || null,
+            overrideWaterFreqUnit: r.override_water_freq_unit || null,
+            overrideWaterFreqValue: (r.override_water_freq_value ?? null),
+            plantsOnHand: Number(r.plants_on_hand || 0),
+            sortIndex: (r.sort_index ?? null),
+            healthStatus: r.health_status || null,
+            notes: r.notes || null,
+            lastHealthUpdate: r.last_health_update || null,
+            plant: r.p_id ? {
+              id: String(r.p_id),
+              name: String(r.p_name || ''),
+              scientificName: String(r.p_scientific_name || ''),
+              colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
+              seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
+              rarity: r.p_rarity,
+              meaning: r.p_meaning || '',
+              description: r.p_description || '',
+              photos: plantPhotos,
+              image: plantImage,
+                care: {
+                  sunlight: r.p_level_sun || null,
+                  water: Array.isArray(r.p_watering_type) ? r.p_watering_type.join(', ') : null,
+                  soil: Array.isArray(r.p_soil) ? r.p_soil.join(', ') : null,
+                  difficulty: r.p_maintenance_level || null,
+                },
+              seedsAvailable: Boolean(r.p_seeds_available ?? false),
+            } : null,
+          }
+        })
 
 async function isGardenOwner(req, gardenId, userIdOverride = null) {
   try {
@@ -11194,89 +14224,51 @@ async function isGardenOwner(req, gardenId, userIdOverride = null) {
       `
       if (Array.isArray(rows) && rows.length > 0) {
         return String(rows[0].role || '').toLowerCase() === 'owner'
+      // Fetch members - try with auth.users first, fallback if access denied
+      console.log('[overview] Fetching members for garden', gardenId)
+      let mRows = []
+      try {
+        mRows = await sql`
+          select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
+                 p.display_name, p.accent_key,
+                 u.email
+          from public.garden_members gm
+          left join public.profiles p on p.id = gm.user_id
+          left join auth.users u on u.id = gm.user_id
+          where gm.garden_id = ${gardenId}
+        `
+        console.log('[overview] Members query with auth.users succeeded, rows:', mRows?.length || 0)
+      } catch (memberErr) {
+        console.error('[overview] members query with auth.users failed:', memberErr?.message || memberErr)
+        // Fallback: query without auth.users (email will be null)
+        try {
+          mRows = await sql`
+            select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
+                   p.display_name, p.accent_key
+            from public.garden_members gm
+            left join public.profiles p on p.id = gm.user_id
+            where gm.garden_id = ${gardenId}
+          `
+          console.log('[overview] Members fallback query succeeded, rows:', mRows?.length || 0)
+        } catch (fallbackErr) {
+          console.error('[overview] members fallback query also failed:', fallbackErr?.message || fallbackErr)
+        }
       }
-    }
-    if (supabaseUrlEnv && supabaseAnonKey) {
+      members = (mRows || []).map((r) => ({
+        gardenId: String(r.garden_id),
+        userId: String(r.user_id),
+        role: r.role,
+        joinedAt: r.joined_at ? new Date(r.joined_at).toISOString() : null,
+        displayName: r.display_name || null,
+        email: r.email || null,
+        accentKey: r.accent_key || null,
+      }))
+      console.log('[overview] Finished SQL queries for garden', gardenId)
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      console.log('[overview] Using Supabase REST API for garden', gardenId)
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
-      const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`
-      const r = await fetch(url, { headers })
-      if (r.ok) {
-        const arr = await r.json().catch(() => [])
-        if (Array.isArray(arr) && arr.length > 0) {
-          return String(arr[0].role || '').toLowerCase() === 'owner'
-        }
-      }
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
-async function getGardenCoverRow(gardenId) {
-  if (sql) {
-    const rows = await sql`
-      select id::text as id, cover_image_url, name, created_by::text as owner_id
-      from public.gardens
-      where id = ${gardenId}
-      limit 1
-    `
-    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null
-  }
-  if (supabaseServiceClient) {
-    const { data, error } = await supabaseServiceClient
-      .from('gardens')
-      .select('id, cover_image_url, name, created_by')
-      .eq('id', gardenId)
-      .maybeSingle()
-    if (error) throw error
-    return data ? { ...data, owner_id: data.created_by } : null
-  }
-  return null
-}
-
-async function updateGardenCoverImage(gardenId, publicUrl) {
-  if (sql) {
-    await sql`
-      update public.gardens
-      set cover_image_url = ${publicUrl}
-      where id = ${gardenId}
-    `
-    return
-  }
-  if (supabaseServiceClient) {
-    const { error } = await supabaseServiceClient
-      .from('gardens')
-      .update({ cover_image_url: publicUrl })
-      .eq('id', gardenId)
-    if (error) throw error
-    return
-  }
-  throw new Error('Database connection not configured')
-}
-
-app.post('/api/garden/:id/upload-cover', async (req, res) => {
-  if (!supabaseServiceClient) {
-    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
-    return
-  }
-  const gardenId = String(req.params.id || '').trim()
-  if (!gardenId) {
-    res.status(400).json({ error: 'Garden id is required' })
-    return
-  }
-  const user = await getUserFromRequest(req)
-  if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
-  }
-  const canEdit = await isGardenOwner(req, gardenId, user.id)
-  if (!canEdit) {
-    res.status(403).json({ error: 'Forbidden' })
-    return
-  }
 
   singleGardenCoverUpload(req, res, (err) => {
     if (err) {
@@ -11315,66 +14307,143 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
       if (!file.buffer || file.buffer.length === 0) {
         res.status(400).json({ error: 'Uploaded file is empty' })
         return
+      // Garden (include privacy field and location if available)
+      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy,location_city,location_country,location_timezone,location_lat,location_lon&limit=1`
+      console.log('[overview] Fetching garden via REST API')
+      const gResp = await fetch(gUrl, { headers })
+      if (gResp.ok) {
+        const arr = await gResp.json().catch(() => [])
+        const row = Array.isArray(arr) && arr[0] ? arr[0] : null
+        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public', location_city: row.location_city || null, location_country: row.location_country || null, location_timezone: row.location_timezone || null, location_lat: row.location_lat || null, location_lon: row.location_lon || null }
+        console.log('[overview] Garden found via REST:', !!garden)
+      } else {
+        console.error('[overview] Garden REST query failed:', gResp.status, await gResp.text().catch(() => ''))
       }
 
-      let optimizedBuffer
-      try {
-        optimizedBuffer = await sharp(file.buffer)
-          .rotate()
-          .resize({
-            width: gardenCoverMaxDimension,
-            height: gardenCoverMaxDimension,
-            fit: 'inside',
-            withoutEnlargement: true,
-            fastShrinkOnLoad: true,
-          })
-          .webp({
-            quality: gardenCoverWebpQuality,
-            effort: 5,
-            smartSubsample: true,
-          })
-          .toBuffer()
-      } catch (sharpErr) {
-        console.error('[garden-cover] failed to convert image to webp', sharpErr)
-        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
-        return
-      }
-
-      const baseName = sanitizeUploadBaseName(file.originalname)
-      const gardenSegment = sanitizePathSegment(`garden-${gardenId}`, 'garden')
-      const typeSegment = gardenSegment ? `cover-${gardenSegment}` : 'cover'
-      const objectPath = buildUploadObjectPath(baseName, typeSegment, gardenCoverUploadPrefix)
-
-      try {
-        const { error: uploadError } = await supabaseServiceClient
-          .storage
-          .from(gardenCoverUploadBucket)
-          .upload(objectPath, optimizedBuffer, {
-            cacheControl: '31536000',
-            contentType: 'image/webp',
-            upsert: false,
-          })
-        if (uploadError) {
-          throw new Error(uploadError.message || 'Supabase storage upload failed')
+      // Garden plants
+      const gpUrl = `${supabaseUrlEnv}/rest/v1/garden_plants?garden_id=eq.${encodeURIComponent(gardenId)}&select=id,garden_id,plant_id,nickname,seeds_planted,planted_at,expected_bloom_date,override_water_freq_unit,override_water_freq_value,plants_on_hand,sort_index,health_status,notes,last_health_update`
+      const gpResp = await fetch(gpUrl, { headers })
+      let gpRows = []
+      if (gpResp.ok) gpRows = await gpResp.json().catch(() => [])
+      const plantIds = Array.from(new Set(gpRows.map((r) => r.plant_id)))
+      let plantsMap = {}
+      if (plantIds.length > 0) {
+        const inParam = plantIds.map((id) => encodeURIComponent(String(id))).join(',')
+        const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=*`
+        const pResp = await fetch(pUrl, { headers })
+        const pRows = pResp.ok ? (await pResp.json().catch(() => [])) : []
+        for (const p of pRows) {
+            const plantPhotos = Array.isArray(p.photos) ? p.photos : undefined
+          plantsMap[String(p.id)] = {
+            id: String(p.id),
+            name: String(p.name || ''),
+            scientificName: String(p.scientific_name || ''),
+            colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
+            seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
+            rarity: p.rarity,
+            meaning: p.meaning || '',
+            description: p.description || '',
+            photos: plantPhotos,
+            image: pickPrimaryPhotoUrlFromArray(plantPhotos, p.image_url || ''),
+            care: {
+              sunlight: p.level_sun || null,
+              water: Array.isArray(p.watering_type) ? p.watering_type.join(', ') : null,
+              soil: Array.isArray(p.soil) ? p.soil.join(', ') : null,
+              difficulty: p.maintenance_level || null,
+            },
+            seedsAvailable: Boolean(p.seeds_available ?? false),
+          }
         }
-      } catch (storageErr) {
-        console.error('[garden-cover] supabase storage upload failed', storageErr)
-        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
-        return
       }
+      plants = gpRows.map((r) => ({
+        id: String(r.id),
+        gardenId: String(r.garden_id),
+        plantId: String(r.plant_id),
+        nickname: r.nickname,
+        seedsPlanted: Number(r.seeds_planted || 0),
+        plantedAt: r.planted_at || null,
+        expectedBloomDate: r.expected_bloom_date || null,
+        overrideWaterFreqUnit: r.override_water_freq_unit || null,
+        overrideWaterFreqValue: (r.override_water_freq_value ?? null),
+        plantsOnHand: Number(r.plants_on_hand || 0),
+        sortIndex: (r.sort_index ?? null),
+        healthStatus: r.health_status || null,
+        notes: r.notes || null,
+        lastHealthUpdate: r.last_health_update || null,
+        plant: plantsMap[String(r.plant_id)] || null,
+      }))
 
-      const { data: publicData } = supabaseServiceClient
-        .storage
-        .from(gardenCoverUploadBucket)
-        .getPublicUrl(objectPath)
-      const publicUrl = publicData?.publicUrl || null
-      // Transform URL to use media proxy (hides Supabase project URL)
-      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
-      if (!proxyUrl) {
-        res.status(500).json({ error: 'Failed to generate public URL for cover image' })
-        return
-      }
+      // Members via RPC to include email
+      try {
+        const rpcResp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_profiles_for_garden`, {
+          method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ _garden_id: gardenId })
+        })
+        if (rpcResp.ok) {
+          const rows = await rpcResp.json().catch(() => [])
+          const gmResp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&select=garden_id,user_id,role,joined_at`, { headers })
+          const gms = gmResp.ok ? (await gmResp.json().catch(() => [])) : []
+          const meta = {}
+          for (const r of rows) meta[String(r.user_id)] = { display_name: r.display_name || null, email: r.email || null }
+          members = gms.map((m) => ({
+            gardenId: String(m.garden_id),
+            userId: String(m.user_id),
+            role: m.role,
+            joinedAt: m.joined_at,
+            displayName: (meta[String(m.user_id)] || {}).display_name || null,
+            email: (meta[String(m.user_id)] || {}).email || null,
+            accentKey: null,
+          }))
+        }
+      } catch {}
+    } else {
+      res.status(500).json({ ok: false, error: 'Database not configured' }); return
+    }
 
+    // Normalize garden object to frontend shape
+    const gardenOut = garden ? {
+      id: String(garden.id),
+      name: String(garden.name),
+      coverImageUrl: (garden.cover_image_url || garden.coverImageUrl || null),
+      createdBy: String(garden.created_by || garden.createdBy || ''),
+      createdAt: garden.created_at ? new Date(garden.created_at).toISOString() : (garden.createdAt || null),
+      streak: Number(garden.streak ?? 0),
+      privacy: garden.privacy || 'public',
+      locationCity: garden.location_city || null,
+      locationCountry: garden.location_country || null,
+      locationTimezone: garden.location_timezone || null,
+      locationLat: garden.location_lat || null,
+      locationLon: garden.location_lon || null,
+      preferredLanguage: garden.preferred_language || 'en',
+    } : null
+    
+    // Check access: members always allowed, otherwise check privacy
+    const gardenPrivacy = garden?.privacy || 'public'
+    if (!isMember && gardenPrivacy === 'private') {
+      res.status(403).json({ ok: false, error: 'This garden is private' })
+      return
+    }
+    // TODO: For friends_only, would need to check friend status with members
+    
+    // Calculate today's progress and stats server-side to avoid round-trips
+    const today = new Date().toISOString().slice(0, 10)
+    const startIso = `${today}T00:00:00.000Z`
+    const endIso = `${today}T23:59:59.999Z`
+    
+    let todayProgress = { due: 0, completed: 0 }
+    let totalOnHand = 0
+    let speciesCount = 0
+    
+    // Calculate species count and totalOnHand from plants
+    const seenSpecies = new Set()
+    for (const p of plants) {
+      const c = Number(p.plantsOnHand || 0)
+      totalOnHand += c
+      if (p.plantId) seenSpecies.add(String(p.plantId))
+    }
+    speciesCount = seenSpecies.size
+    
+    // Calculate today's task progress
+    if (sql && gardenId) {
       try {
         // Store the proxy URL in the database for display
         await updateGardenCoverImage(gardenId, proxyUrl)
@@ -11443,278 +14512,438 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
       console.error('[garden-cover] unexpected failure', uploadErr)
       if (!res.headersSent) {
         res.status(500).json({ error: 'Unexpected upload failure' })
-      }
-    })
-  })
-})
-
-app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
-  if (!supabaseServiceClient) {
-    res.status(500).json({ error: 'Supabase service role key not configured for storage cleanup' })
-    return
-  }
-  const gardenId = String(req.params.id || '').trim()
-  if (!gardenId) {
-    res.status(400).json({ error: 'Garden id is required' })
-    return
-  }
-  const user = await getUserFromRequest(req)
-  if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
-  }
-  const canEdit = await isGardenOwner(req, gardenId, user.id)
-  if (!canEdit) {
-    res.status(403).json({ error: 'Forbidden' })
-    return
-  }
-  const targetUrl = String(req.body?.url || '').trim()
-  if (!targetUrl) {
-    res.status(400).json({ error: 'url is required' })
-    return
-  }
-  try {
-    const result = await deleteGardenCoverObject(targetUrl)
-    res.json({ ok: true, deleted: Boolean(result.deleted), reason: result.reason })
-  } catch (err) {
-    res.status(500).json({ error: err?.message || 'Failed to delete cover image' })
-  }
-})
-
-// DELETE a garden (and its cover image from storage)
-app.delete('/api/garden/:id', async (req, res) => {
-  if (!supabaseServiceClient) {
-    res.status(503).json({ error: 'Garden deletion is not configured on this server' })
-    return
-  }
-  const gardenId = String(req.params.id || '').trim()
-  if (!gardenId) {
-    res.status(400).json({ error: 'Garden id is required' })
-    return
-  }
-  const user = await getUserFromRequest(req)
-  if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
-  }
-  const canDelete = await isGardenOwner(req, gardenId, user.id)
-  if (!canDelete) {
-    res.status(403).json({ error: 'Forbidden - only garden owners can delete a garden' })
-    return
-  }
-
-  try {
-    // 1. Get the garden's cover image URL before deleting
-    const gardenRow = await getGardenCoverRow(gardenId)
-    const coverImageUrl = gardenRow?.cover_image_url || null
-
-    // 2. Delete the garden row (cascade will delete related rows)
-    const { error: deleteErr } = await supabaseServiceClient
-      .from('gardens')
-      .delete()
-      .eq('id', gardenId)
-
-    if (deleteErr) {
-      console.error('[garden-delete] Failed to delete garden row', deleteErr)
-      res.status(500).json({ error: 'Failed to delete garden' })
-      return
-    }
-
-    // 3. Delete the cover image from storage if it exists
-    let coverDeleted = false
-    let coverDeleteReason = 'no_cover'
-    if (coverImageUrl) {
-      try {
-        const result = await deleteGardenCoverObject(coverImageUrl)
-        coverDeleted = Boolean(result.deleted)
-        coverDeleteReason = result.reason || (coverDeleted ? 'deleted' : 'unknown')
-      } catch (coverErr) {
-        console.error('[garden-delete] Failed to delete cover image from storage', coverErr)
-        coverDeleteReason = coverErr?.message || 'delete_failed'
+        const progressRows = await sql`
+          SELECT 
+            COALESCE(SUM(GREATEST(1, o.required_count)), 0)::int as due,
+            COALESCE(SUM(LEAST(GREATEST(1, o.required_count), o.completed_count)), 0)::int as completed
+          FROM garden_plant_task_occurrences o
+          JOIN garden_plant_tasks t ON t.id = o.task_id
+          WHERE t.garden_id = ${gardenId}
+            AND o.due_at >= ${startIso}::timestamptz
+            AND o.due_at <= ${endIso}::timestamptz
+        `
+        if (progressRows && progressRows[0]) {
+          todayProgress = {
+            due: Number(progressRows[0].due || 0),
+            completed: Number(progressRows[0].completed || 0),
+          }
+        }
+      } catch (progressErr) {
+        console.warn('[overview] Progress query failed:', progressErr?.message || progressErr)
       }
     }
-
-    res.json({
-      ok: true,
-      gardenId,
-      coverDeleted,
-      coverDeleteReason,
+    
+    res.json({ 
+      ok: true, 
+      garden: gardenOut, 
+      plants, 
+      members, 
+      serverNow,
+      todayProgress,
+      totalOnHand,
+      speciesCount,
     })
-  } catch (err) {
-    console.error('[garden-delete] Unexpected error', err)
-    res.status(500).json({ error: err?.message || 'Failed to delete garden' })
+  } catch (e) {
+    console.error('[overview] Error for garden', req.params.id, ':', e?.message || e)
+    console.error('[overview] Stack:', e?.stack || 'No stack')
+    res.status(500).json({ ok: false, error: e?.message || 'overview failed' })
   }
 })
 
-app.get('/api/garden/:id/activity', async (req, res) => {
+// Garden activity SSE — pushes new rows in garden_activity_logs
+app.get('/api/garden/:id/stream', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
-    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    if (!gardenId) { res.status(400).json({ error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
-    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
     const member = await isGardenMember(req, gardenId, user.id)
-    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+    if (!member) { res.status(403).json({ error: 'Forbidden' }); return }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    // Initial acknowledge
+    sseWrite(res, 'ready', { ok: true, gardenId })
+
+    // Start from last 2 minutes to avoid missing events across reconnects
+    let lastSeen = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+
+    const poll = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select id::text as id, garden_id::text as garden_id, actor_id::text as actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at
+            from public.garden_activity_logs
+            where garden_id = ${gardenId} and occurred_at > ${lastSeen}
+            order by occurred_at asc
+            limit 500
+          `
+          for (const r of rows || []) {
+            lastSeen = new Date(r.occurred_at).toISOString()
+            sseWrite(res, 'activity', {
+              id: String(r.id), gardenId: String(r.garden_id), actorId: r.actor_id || null, actorName: r.actor_name || null, actorColor: r.actor_color || null,
+              kind: r.kind, message: r.message, plantName: r.plant_name || null, taskName: r.task_name || null, occurredAt: new Date(r.occurred_at).toISOString(),
+            })
+          }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+      const bearer = getAuthTokenFromRequest(req)
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gt.${encodeURIComponent(lastSeen)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.asc&limit=500`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            for (const row of arr) {
+              lastSeen = new Date(row.occurred_at).toISOString()
+              sseWrite(res, 'activity', {
+                id: String(row.id), gardenId: String(row.garden_id), actorId: row.actor_id || null, actorName: row.actor_name || null, actorColor: row.actor_color || null,
+                kind: row.kind, message: row.message, plantName: row.plant_name || null, taskName: row.task_name || null, occurredAt: new Date(row.occurred_at).toISOString(),
+              })
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const iv = setInterval(poll, 1000)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
+// ---- Admin logs SSE ----
+app.get('/api/admin/admin-logs/stream', async (req, res) => {
+  try {
+    // Allow admin static token via query param for EventSource
+    try {
+      const adminToken = (req.query?.admin_token ? String(req.query.admin_token) : '')
+      if (adminToken) {
+        try { req.headers['x-admin-token'] = adminToken } catch {}
+      }
+    } catch {}
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     const dayParam = typeof req.query.day === 'string' ? req.query.day : ''
     const dayIso = /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : new Date().toISOString().slice(0, 10)
     const start = new Date(`${dayIso}T00:00:00.000Z`).toISOString()
     const endExclusive = new Date(new Date(`${dayIso}T00:00:00.000Z`).getTime() + 24 * 3600 * 1000).toISOString()
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
 
-    let rows = []
-    if (sql) {
-      rows = await sql`
-        select
-          id::text as id,
-          garden_id::text as garden_id,
-          actor_id::text as actor_id,
-          actor_name,
-          actor_color,
-          kind,
-          message,
-          plant_name,
-          task_name,
-          occurred_at
-        from public.garden_activity_logs
-        where garden_id = ${gardenId}
-          and occurred_at >= ${start}
-          and occurred_at < ${endExclusive}
-        order by occurred_at desc
-      `
-    } else if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-      const bearer = getAuthTokenFromRequest(req)
-      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
-      const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gte.${encodeURIComponent(start)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.desc&limit=200`
-      const resp = await fetch(url, { headers })
-      if (resp.ok) {
-        const arr = await resp.json().catch(() => [])
-        rows = Array.isArray(arr) ? arr.filter((r) => {
-          try {
-            const ts = new Date(r.occurred_at).toISOString()
-            return ts >= start && ts < endExclusive
-          } catch {
-            return false
+    let lastSeen = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+
+    // Send initial snapshot (latest 200)
+    try {
+      if (sql) {
+        const rows = await sql`
+          select occurred_at, admin_id::text as admin_id, admin_name, action, target, detail
+          from public.admin_activity_logs
+          where occurred_at >= now() - interval '30 days'
+          order by occurred_at desc
+          limit 200
+        `
+        const list = (rows || []).map((r) => ({
+          occurred_at: new Date(r.occurred_at).toISOString(),
+          admin_id: r.admin_id || null,
+          admin_name: r.admin_name || null,
+          action: r.action,
+          target: r.target || null,
+          detail: r.detail || null,
+        }))
+        sseWrite(res, 'snapshot', { logs: list })
+        if (list[0]?.occurred_at) lastSeen = list[0].occurred_at
+      } else if (supabaseUrlEnv && supabaseAnonKey) {
+        const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+        const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(new Date(Date.now() - 30*24*3600*1000).toISOString())}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.desc&limit=200`
+        const r = await fetch(url, { headers })
+        if (r.ok) {
+          const arr = await r.json().catch(() => [])
+          const list = (arr || []).map((row) => ({
+            occurred_at: new Date(row.occurred_at).toISOString(),
+            admin_id: row.admin_id || null,
+            admin_name: row.admin_name || null,
+            action: row.action,
+            target: row.target || null,
+            detail: row.detail || null,
+          }))
+          sseWrite(res, 'snapshot', { logs: list })
+          if (list[0]?.occurred_at) lastSeen = list[0].occurred_at
+        }
+      }
+    } catch {}
+
+    const poll = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select occurred_at, admin_id::text as admin_id, admin_name, action, target, detail
+            from public.admin_activity_logs
+            where occurred_at > ${lastSeen}
+            order by occurred_at asc
+            limit 500
+          `
+          for (const r of rows || []) {
+            const payload = {
+              occurred_at: new Date(r.occurred_at).toISOString(),
+              admin_id: r.admin_id || null,
+              admin_name: r.admin_name || null,
+              action: r.action,
+              target: r.target || null,
+              detail: r.detail || null,
+            }
+            lastSeen = payload.occurred_at
+            sseWrite(res, 'append', payload)
           }
-        }) : []
-      }
-    }
-
-    const activity = []
-    if (Array.isArray(rows)) {
-      for (const row of rows) {
-        const occurredAtRaw = row?.occurred_at instanceof Date
-          ? row.occurred_at.toISOString()
-          : (row?.occurred_at ? String(row.occurred_at) : null)
-        if (occurredAtRaw == null || occurredAtRaw === '') continue
-        activity.push({
-          id: String(row.id),
-          gardenId: String(row.garden_id ?? row.gardenId ?? gardenId),
-          actorId: row.actor_id ? String(row.actor_id) : row.actorId ? String(row.actorId) : null,
-          actorName: row.actor_name ?? row.actorName ?? null,
-          actorColor: row.actor_color ?? row.actorColor ?? null,
-          kind: row.kind,
-          message: row.message,
-          plantName: row.plant_name ?? row.plantName ?? null,
-          taskName: row.task_name ?? row.taskName ?? null,
-          occurredAt: occurredAtRaw,
-        })
-      }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gt.${encodeURIComponent(lastSeen)}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.asc&limit=500`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            for (const row of arr || []) {
+              const payload = {
+                occurred_at: new Date(row.occurred_at).toISOString(),
+                admin_id: row.admin_id || null,
+                admin_name: row.admin_name || null,
+                action: row.action,
+                target: row.target || null,
+                detail: row.detail || null,
+              }
+              lastSeen = payload.occurred_at
+              sseWrite(res, 'append', payload)
+            }
+          }
+        }
+      } catch {}
     }
 
     res.json({ ok: true, activity })
   } catch (e) {
     try { res.status(500).json({ ok: false, error: e?.message || 'failed to load activity' }) } catch { }
+    const iv = setInterval(poll, 2500)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
   }
 })
 
-app.get('/api/garden/:id/tasks', async (req, res) => {
+// Garden Analytics endpoint - returns aggregated statistics
+app.get('/api/garden/:id/analytics', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
-    const startDay = typeof req.query.start === 'string' ? req.query.start : ''
-    const endDay = typeof req.query.end === 'string' ? req.query.end : ''
-    const dayPattern = /^\d{4}-\d{2}-\d{2}$/
-    if (!dayPattern.test(startDay) || !dayPattern.test(endDay)) {
-      res.status(400).json({ ok: false, error: 'start and end must be YYYY-MM-DD' })
-      return
-    }
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
-    const member = await isGardenMember(req, gardenId, user.id)
-    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
-    let rows = []
-    if (sql) {
-      rows = await sql`
-        select
-          id::text as id,
-          garden_id::text as garden_id,
-          day,
-          task_type,
-          garden_plant_ids,
-          success
-        from public.garden_tasks
-        where garden_id = ${gardenId}
-          and day >= ${startDay}
-          and day <= ${endDay}
-        order by day asc
-      `
-    } else if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-      const bearer = getAuthTokenFromRequest(req)
-      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
-      const query = [
-        'select=id,garden_id,day,task_type,garden_plant_ids,success',
-        `garden_id=eq.${encodeURIComponent(gardenId)}`,
-        `day=gte.${encodeURIComponent(startDay)}`,
-        `day=lte.${encodeURIComponent(endDay)}`,
-        'order=day.asc',
-      ].join('&')
-      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_tasks?${query}`, { headers })
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => '')
-        res.status(resp.status).json({ ok: false, error: text || 'failed to load tasks' })
-        return
-      }
-      rows = await resp.json().catch(() => [])
-    } else {
-      res.status(503).json({ ok: false, error: 'Database not configured' })
+    // Verify membership
+    const membership = await sql`
+      select 1 from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership || membership.length === 0) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
       return
     }
 
-    const tasks = (rows || []).map((r) => ({
-      id: String(r.id),
-      gardenId: String(r.garden_id),
-      day: (() => {
-        if (r.day instanceof Date) return r.day.toISOString().slice(0, 10)
-        return String(r.day || '').slice(0, 10)
-      })(),
-      taskType: String(r.task_type || 'watering'),
-      gardenPlantIds: Array.isArray(r.garden_plant_ids) ? r.garden_plant_ids : [],
-      success: Boolean(r.success),
-    }))
-    res.json({ ok: true, tasks })
+    const today = new Date().toISOString().slice(0, 10)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    // Get task occurrences for last 30 days with task type breakdown
+    const taskStats = await sql`
+      select
+        date_trunc('day', o.due_at)::date as due_date,
+        t.type,
+        sum(o.required_count) as due_count,
+        sum(least(o.completed_count, o.required_count)) as completed_count
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      where t.garden_id = ${gardenId}
+        and o.due_at >= ${thirtyDaysAgo}::date
+        and o.due_at <= (${today}::date + interval '1 day')
+      group by due_date, t.type
+      order by due_date asc
+    `
+
+    // Aggregate by date
+    const dailyStatsMap = {}
+    for (const row of taskStats) {
+      const dateKey = row.due_date ? new Date(row.due_date).toISOString().slice(0, 10) : null
+      if (!dateKey) continue
+      if (!dailyStatsMap[dateKey]) {
+        dailyStatsMap[dateKey] = { date: dateKey, due: 0, completed: 0, water: 0, fertilize: 0, harvest: 0, cut: 0, custom: 0 }
+      }
+      const due = Number(row.due_count || 0)
+      const done = Number(row.completed_count || 0)
+      dailyStatsMap[dateKey].due += due
+      dailyStatsMap[dateKey].completed += done
+      if (row.type && dailyStatsMap[dateKey][row.type] !== undefined) {
+        dailyStatsMap[dateKey][row.type] += due
+      }
+    }
+
+    // Fill in missing days
+    const dailyStats = []
+    const cursor = new Date(thirtyDaysAgo)
+    const endDate = new Date(today)
+    while (cursor <= endDate) {
+      const dateKey = cursor.toISOString().slice(0, 10)
+      if (dailyStatsMap[dateKey]) {
+        dailyStatsMap[dateKey].success = dailyStatsMap[dateKey].due === 0 || dailyStatsMap[dateKey].completed >= dailyStatsMap[dateKey].due
+        dailyStats.push(dailyStatsMap[dateKey])
+      } else {
+        dailyStats.push({ date: dateKey, due: 0, completed: 0, success: true, water: 0, fertilize: 0, harvest: 0, cut: 0, custom: 0 })
+      }
+      cursor.setDate(cursor.getDate() + 1)
+    }
+
+    // Get member contributions for this week
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    let memberContributions = []
+    try {
+      // First get all garden members
+      const allMembers = await sql`
+        select
+          gm.user_id,
+          gm.role,
+          gm.joined_at,
+          p.display_name,
+          p.accent_key,
+          p.avatar_url
+        from public.garden_members gm
+        left join public.profiles p on p.id = gm.user_id
+        where gm.garden_id = ${gardenId}
+        order by gm.joined_at asc
+      `
+      
+      // Then get task completion counts for this week
+      const memberStats = await sql`
+        select
+          uc.user_id,
+          sum(uc.increment) as tasks_completed
+        from public.garden_task_user_completions uc
+        join public.garden_plant_task_occurrences o on o.id = uc.occurrence_id
+        join public.garden_plant_tasks t on t.id = o.task_id
+        where t.garden_id = ${gardenId}
+          and uc.occurred_at >= ${weekAgo}::date
+        group by uc.user_id
+      `
+      
+      // Build a map of user_id -> tasks_completed
+      const completionMap = {}
+      for (const row of memberStats) {
+        completionMap[String(row.user_id)] = Number(row.tasks_completed || 0)
+      }
+      
+      // Merge all members with their completion counts
+      const totalCompleted = memberStats.reduce((s, r) => s + Number(r.tasks_completed || 0), 0)
+      const memberColors = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4', '#84cc16', '#f97316']
+      
+      memberContributions = allMembers.map((m, i) => {
+        const userId = String(m.user_id)
+        const tasksCompleted = completionMap[userId] || 0
+        return {
+          userId,
+          displayName: m.display_name || 'Member',
+          role: m.role || 'member',
+          avatarUrl: m.avatar_url || null,
+          accentKey: m.accent_key || null,
+          joinedAt: m.joined_at,
+          tasksCompleted,
+          percentage: totalCompleted > 0 ? Math.round((tasksCompleted / totalCompleted) * 100) : 0,
+          color: memberColors[i % memberColors.length],
+        }
+      })
+      
+      // Sort by tasks completed (descending), but keep showing all members
+      memberContributions.sort((a, b) => b.tasksCompleted - a.tasksCompleted)
+    } catch (err) {
+      console.warn('[analytics] Failed to get member contributions:', err)
+    }
+
+    // Get plant stats
+    const plantStats = await sql`
+      select
+        count(distinct id)::int as total,
+        count(distinct plant_id)::int as species,
+        count(case when plants_on_hand < 1 then 1 end)::int as needs_attention,
+        count(case when plants_on_hand >= 1 then 1 end)::int as healthy
+      from public.garden_plants
+      where garden_id = ${gardenId}
+    `
+    const ps = plantStats[0] || { total: 0, species: 0, needs_attention: 0, healthy: 0 }
+
+    // Compute weekly stats
+    const last7Stats = dailyStats.slice(-7)
+    const prev7Stats = dailyStats.slice(-14, -7)
+    const currentWeekCompleted = last7Stats.reduce((s, d) => s + d.completed, 0)
+    const currentWeekDue = last7Stats.reduce((s, d) => s + d.due, 0)
+    const prevWeekCompleted = prev7Stats.reduce((s, d) => s + d.completed, 0)
+    const completionRate = currentWeekDue > 0 ? Math.round((currentWeekCompleted / currentWeekDue) * 100) : 100
+    const trendValue = prevWeekCompleted > 0 ? Math.round(((currentWeekCompleted - prevWeekCompleted) / prevWeekCompleted) * 100) : 0
+    let trend = 'stable'
+    if (trendValue > 5) trend = 'up'
+    else if (trendValue < -5) trend = 'down'
+
+    const tasksByType = last7Stats.reduce((acc, d) => {
+      acc.water += d.water || 0
+      acc.fertilize += d.fertilize || 0
+      acc.harvest += d.harvest || 0
+      acc.cut += d.cut || 0
+      acc.custom += d.custom || 0
+      return acc
+    }, { water: 0, fertilize: 0, harvest: 0, cut: 0, custom: 0 })
+
+    res.json({
+      ok: true,
+      analytics: {
+        dailyStats,
+        weeklyStats: {
+          tasksCompleted: currentWeekCompleted,
+          tasksDue: currentWeekDue,
+          completionRate,
+          trend,
+          trendValue: Math.abs(trendValue),
+          tasksByType,
+        },
+        memberContributions,
+        plantStats: {
+          total: Number(ps.total || 0),
+          species: Number(ps.species || 0),
+          needingAttention: Number(ps.needs_attention || 0),
+          healthy: Number(ps.healthy || 0),
+        },
+      },
+    })
   } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || 'failed to load tasks' })
+    console.error('[garden-analytics] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load analytics' })
   }
 })
 
-app.post('/api/garden/:id/activity', async (req, res) => {
+// Garden AI Advice endpoint - generates or retrieves cached weekly advice
+app.get('/api/garden/:id/advice', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
-    const user = await getUserFromRequest(req)
+    const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
-    const member = await isGardenMember(req, gardenId, user.id)
-    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
-    const body = req.body || {}
-    const kindRaw = typeof body.kind === 'string' ? body.kind.trim() : ''
-    const messageRaw = typeof body.message === 'string' ? body.message.trim() : ''
-    if (!kindRaw || !messageRaw) { res.status(400).json({ ok: false, error: 'kind and message required' }); return }
-    const plantName = typeof body.plantName === 'string' ? body.plantName : null
-    const taskName = typeof body.taskName === 'string' ? body.taskName : null
-    const actorColor = typeof body.actorColor === 'string' ? body.actorColor : null
+    const forceRefresh = req.query.refresh === 'true'
 
     if (sql) {
       let actorName = null
@@ -11737,32 +14966,24 @@ app.post('/api/garden/:id/activity', async (req, res) => {
         values (${gardenId}, ${user.id}, ${actorName}, ${actorColor || null}, ${kindRaw}, ${messageRaw}, ${plantName || null}, ${taskName || null}, ${nowIso})
       `
       res.json({ ok: true })
+    // Verify membership
+    const membership = await sql`
+      select 1 from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership || membership.length === 0) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
       return
     }
 
-    if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
-      const bearer = getBearerTokenFromRequest(req)
-      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
-      const payload = {
-        _garden_id: gardenId,
-        _kind: kindRaw,
-        _message: messageRaw,
-        _plant_name: plantName,
-        _task_name: taskName,
-        _actor_color: actorColor,
-      }
-      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/log_garden_activity`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      })
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => '')
-        res.status(resp.status).json({ ok: false, error: text || 'failed to log activity' })
-        return
-      }
-      res.json({ ok: true })
+    // Get garden info
+    const gardenRows = await sql`
+      select id, name, created_at, preferred_language from public.gardens where id = ${gardenId} limit 1
+    `
+    const garden = gardenRows[0]
+    if (!garden) {
+      res.status(404).json({ ok: false, error: 'Garden not found' })
       return
     }
 
@@ -11924,65 +15145,224 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           } : null,
         }
       })
+    // Determine target language: garden's preferred language or Accept-Language header
+    const acceptLang = req.headers['accept-language'] || ''
+    const headerLang = acceptLang.split(',')[0]?.split('-')[0]?.toUpperCase() || 'EN'
+    const targetLang = (garden.preferred_language || headerLang || 'EN').toUpperCase()
 
-      // Fetch members - try with auth.users first, fallback if access denied
-      console.log('[overview] Fetching members for garden', gardenId)
-      let mRows = []
+    // Check eligibility: garden must be older than 7 days and have at least 1 plant
+    const gardenAge = Math.floor((Date.now() - new Date(garden.created_at).getTime()) / (1000 * 60 * 60 * 24))
+    if (gardenAge < 7) {
+      res.json({ ok: true, message: `Garden needs to be at least 1 week old. Come back in ${7 - gardenAge} days!`, advice: null })
+      return
+    }
+
+    const plantCountRows = await sql`
+      select count(*)::int as count from public.garden_plants where garden_id = ${gardenId}
+    `
+    const plantCount = Number(plantCountRows[0]?.count || 0)
+    if (plantCount < 1) {
+      res.json({ ok: true, message: 'Add at least 1 plant to receive personalized advice.', advice: null })
+      return
+    }
+
+    // Calculate current week start (Monday)
+    const now = new Date()
+    const dayOfWeek = now.getUTCDay() // 0 = Sunday
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+    const weekStart = new Date(now)
+    weekStart.setUTCDate(now.getUTCDate() + mondayOffset)
+    weekStart.setUTCHours(0, 0, 0, 0)
+    const weekStartIso = weekStart.toISOString().slice(0, 10)
+
+    // Check for existing advice this week
+    if (!forceRefresh) {
       try {
-        mRows = await sql`
-          select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
-                 p.display_name, p.accent_key,
-                 u.email
-          from public.garden_members gm
-          left join public.profiles p on p.id = gm.user_id
-          left join auth.users u on u.id = gm.user_id
-          where gm.garden_id = ${gardenId}
-        `
-        console.log('[overview] Members query with auth.users succeeded, rows:', mRows?.length || 0)
-      } catch (memberErr) {
-        console.error('[overview] members query with auth.users failed:', memberErr?.message || memberErr)
-        // Fallback: query without auth.users (email will be null)
-        try {
-          mRows = await sql`
-            select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
-                   p.display_name, p.accent_key
-            from public.garden_members gm
-            left join public.profiles p on p.id = gm.user_id
-            where gm.garden_id = ${gardenId}
+        let existingAdvice
+        if (gardenAdviceContextColumnsSupported) {
+          try {
+            existingAdvice = await sql`
+              select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                     improvement_score, generated_at, weather_context, location_context, model_used, translations
+              from public.garden_ai_advice
+              where garden_id = ${gardenId} and week_start = ${weekStartIso}
+              limit 1
+            `
+          } catch (err) {
+            if (isMissingColumnError(err)) {
+              disableGardenAdviceContextColumns('select', err)
+              existingAdvice = await sql`
+                select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                       improvement_score, generated_at, model_used, translations
+                from public.garden_ai_advice
+                where garden_id = ${gardenId} and week_start = ${weekStartIso}
+                limit 1
+              `
+            } else {
+              throw err
+            }
+          }
+        } else {
+          existingAdvice = await sql`
+            select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
+                   improvement_score, generated_at, model_used, translations
+            from public.garden_ai_advice
+            where garden_id = ${gardenId} and week_start = ${weekStartIso}
+            limit 1
           `
-          console.log('[overview] Members fallback query succeeded, rows:', mRows?.length || 0)
-        } catch (fallbackErr) {
-          console.error('[overview] members fallback query also failed:', fallbackErr?.message || fallbackErr)
         }
-      }
-      members = (mRows || []).map((r) => ({
-        gardenId: String(r.garden_id),
-        userId: String(r.user_id),
-        role: r.role,
-        joinedAt: r.joined_at ? new Date(r.joined_at).toISOString() : null,
-        displayName: r.display_name || null,
-        email: r.email || null,
-        accentKey: r.accent_key || null,
-      }))
-      console.log('[overview] Finished SQL queries for garden', gardenId)
-    } else if (supabaseUrlEnv && supabaseAnonKey) {
-      console.log('[overview] Using Supabase REST API for garden', gardenId)
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-      const bearer = getBearerTokenFromRequest(req)
-      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
 
-      // Garden (include privacy field and location if available)
-      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy,location_city,location_country,location_timezone,location_lat,location_lon&limit=1`
-      console.log('[overview] Fetching garden via REST API')
-      const gResp = await fetch(gUrl, { headers })
-      if (gResp.ok) {
-        const arr = await gResp.json().catch(() => [])
-        const row = Array.isArray(arr) && arr[0] ? arr[0] : null
-        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public', location_city: row.location_city || null, location_country: row.location_country || null, location_timezone: row.location_timezone || null, location_lat: row.location_lat || null, location_lon: row.location_lon || null }
-        console.log('[overview] Garden found via REST:', !!garden)
-      } else {
-        console.error('[overview] Garden REST query failed:', gResp.status, await gResp.text().catch(() => ''))
+        if (existingAdvice && existingAdvice.length > 0) {
+          const adv = existingAdvice[0]
+          const modelUsed = adv.model_used || 'unknown'
+          if (modelUsed !== 'rule-based') {
+            // Build base advice object
+            let adviceResponse = {
+              id: String(adv.id),
+              weekStart: adv.week_start,
+              adviceText: adv.advice_text,
+              adviceSummary: adv.advice_summary,
+              focusAreas: adv.focus_areas || [],
+              plantSpecificTips: normalizeJsonArray(adv.plant_specific_tips),
+              improvementScore: adv.improvement_score,
+              generatedAt: adv.generated_at,
+              weatherContext: adv.weather_context || null,
+              locationContext: adv.location_context || null,
+            }
+
+            // Check if translation is needed and exists
+            if (targetLang !== 'EN') {
+              const translations = adv.translations || {}
+              if (translations[targetLang]) {
+                // Use cached translation
+                console.log(`[garden-advice] Using cached ${targetLang} translation`)
+                adviceResponse = { ...adviceResponse, ...translations[targetLang] }
+              } else {
+                // Translate and cache the translation
+                console.log(`[garden-advice] Translating existing advice to ${targetLang}`)
+                try {
+                  const translatedAdvice = await translateAdvice(adviceResponse, targetLang)
+                  // Store the translation in the database
+                  const updatedTranslations = { ...translations, [targetLang]: {
+                    adviceText: translatedAdvice.adviceText,
+                    adviceSummary: translatedAdvice.adviceSummary,
+                    focusAreas: translatedAdvice.focusAreas,
+                    plantSpecificTips: translatedAdvice.plantSpecificTips,
+                    weeklyFocus: translatedAdvice.weeklyFocus,
+                    weatherAdvice: translatedAdvice.weatherAdvice,
+                    encouragement: translatedAdvice.encouragement,
+                  }}
+                  await sql`
+                    update public.garden_ai_advice
+                    set translations = ${JSON.stringify(updatedTranslations)}::jsonb
+                    where id = ${adv.id}
+                  `.catch(err => console.warn('[garden-advice] Failed to cache translation:', err))
+                  
+                  adviceResponse = { ...adviceResponse, ...translatedAdvice }
+                } catch (translateErr) {
+                  console.warn('[garden-advice] Translation failed, returning English:', translateErr)
+                }
+              }
+            }
+
+            res.json({ ok: true, advice: adviceResponse })
+            return
+          }
+        }
+      } catch (err) {
+        console.warn('[garden-advice] Existing advice lookup failed:', err)
       }
+    }
+
+    // Gather comprehensive garden data for advice generation
+    const plants = await sql`
+      select gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes,
+             p.name as plant_name, p.scientific_name,
+             p.watering_type, p.level_sun, p.maintenance_level
+      from public.garden_plants gp
+      left join public.plants p on p.id = gp.plant_id
+      where gp.garden_id = ${gardenId}
+      limit 50
+    `
+
+    // Get garden location for context
+    const gardenFull = await sql`
+      select location_city, location_country, location_timezone, location_lat, location_lon
+      from public.gardens where id = ${gardenId} limit 1
+    `
+    const gardenLocation = gardenFull[0] || {}
+
+    // Get weather data for the location
+    let weatherData = null
+    if (gardenLocation.location_city || gardenLocation.location_lat) {
+      weatherData = await fetchWeatherForLocation(
+        gardenLocation.location_lat, 
+        gardenLocation.location_lon, 
+        gardenLocation.location_city
+      )
+    }
+
+    // Get task completion data for last 14 days (for better trend analysis)
+    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const taskData = await sql`
+      select
+        t.type,
+        p.name as plant_name,
+        gp.nickname,
+        o.due_at,
+        o.required_count,
+        o.completed_count,
+        o.completed_at
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      join public.garden_plants gp on gp.id = t.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where t.garden_id = ${gardenId}
+        and o.due_at >= ${twoWeeksAgo}::date
+      order by o.due_at desc
+      limit 300
+    `
+
+    // Calculate average completion time (hour of day when tasks are typically completed)
+    const completionHours = taskData
+      .filter(t => t.completed_at)
+      .map(t => new Date(t.completed_at).getHours())
+    const avgCompletionHour = completionHours.length > 0 
+      ? Math.round(completionHours.reduce((a, b) => a + b, 0) / completionHours.length)
+      : null
+    const avgCompletionTime = avgCompletionHour !== null
+      ? `${avgCompletionHour}:00`
+      : 'Not enough data'
+
+    // Get recent journal entries (last 7 days) for additional context
+    let recentJournalEntries = []
+    try {
+      const journalRows = await sql`
+        select entry_date, title, content, mood, weather_snapshot
+        from public.garden_journal_entries
+        where garden_id = ${gardenId}
+          and entry_date >= ${weekAgo}::date
+        order by entry_date desc
+        limit 5
+      `
+      recentJournalEntries = journalRows || []
+    } catch {}
+
+    // Get custom plant images if available
+    let plantImages = []
+    try {
+      const imgRows = await sql`
+        select gpi.image_url, gp.nickname, p.name as plant_name
+        from public.garden_plant_images gpi
+        join public.garden_plants gp on gp.id = gpi.garden_plant_id
+        left join public.plants p on p.id = gp.plant_id
+        where gp.garden_id = ${gardenId}
+        order by gpi.uploaded_at desc
+        limit 5
+      `
+      plantImages = imgRows || []
+    } catch {}
 
       // Garden plants
       const gpUrl = `${supabaseUrlEnv}/rest/v1/garden_plants?garden_id=eq.${encodeURIComponent(gardenId)}&select=id,garden_id,plant_id,nickname,seeds_planted,planted_at,expected_bloom_date,override_water_freq_unit,override_water_freq_value,plants_on_hand,sort_index,health_status,notes,last_health_update`
@@ -12156,18 +15536,109 @@ app.get('/api/garden/:id/stream', async (req, res) => {
     if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
     const member = await isGardenMember(req, gardenId, user.id)
     if (!member) { res.status(403).json({ error: 'Forbidden' }); return }
+    // Get journal photos from recent entries (with URLs for vision analysis)
+    let journalPhotos = []
+    let journalPhotoUrls = []
+    try {
+      const photoRows = await sql`
+        select gjp.image_url, gjp.caption, gjp.plant_health, gjp.observations, 
+               gp.nickname, p.name as plant_name, gje.entry_date
+        from public.garden_journal_photos gjp
+        join public.garden_journal_entries gje on gje.id = gjp.entry_id
+        left join public.garden_plants gp on gp.id = gjp.garden_plant_id
+        left join public.plants p on p.id = gp.plant_id
+        where gje.garden_id = ${gardenId}
+          and gje.entry_date >= ${weekAgo}::date
+        order by gjp.uploaded_at desc
+        limit 6
+      `
+      journalPhotos = photoRows || []
+      // Transform URLs to media proxy format
+      journalPhotoUrls = journalPhotos
+        .map(p => supabaseStorageToMediaProxy(p.image_url) || p.image_url)
+        .filter(Boolean)
+    } catch {}
 
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('Connection', 'keep-alive')
-    res.setHeader('X-Accel-Buffering', 'no')
-    res.flushHeaders?.()
+    // Get previous week's advice to avoid repetition
+    let previousAdvice = null
+    try {
+      const prevWeekStart = new Date(weekStart)
+      prevWeekStart.setDate(prevWeekStart.getDate() - 7)
+      const prevWeekStartIso = prevWeekStart.toISOString().slice(0, 10)
+      
+      const prevAdviceRows = await sql`
+        select advice_text, advice_summary, focus_areas, plant_specific_tips
+        from public.garden_ai_advice
+        where garden_id = ${gardenId} and week_start = ${prevWeekStartIso}
+        limit 1
+      `
+      if (prevAdviceRows && prevAdviceRows.length > 0) {
+        previousAdvice = prevAdviceRows[0]
+      }
+    } catch {}
 
-    // Initial acknowledge
-    sseWrite(res, 'ready', { ok: true, gardenId })
+    // Build comprehensive plant list
+    const plantList = plants.map(p => {
+      const details = []
+      if (p.plants_on_hand) details.push(`${p.plants_on_hand} on hand`)
+      if (p.level_sun) details.push(`sun: ${p.level_sun}`)
+      if (p.maintenance_level) details.push(`maintenance: ${p.maintenance_level}`)
+      if (p.watering_type) details.push(`watering: ${p.watering_type}`)
+      if (p.health_status) details.push(`health: ${p.health_status}`)
+      if (p.notes) details.push(`notes: ${p.notes}`)
+      return `- ${p.nickname || p.plant_name || 'Unknown'} (${p.plant_name || 'N/A'}): ${details.join(', ') || 'no details'}`
+    }).join('\n')
+    
+    // Calculate task statistics for this week and last week
+    const thisWeekTasks = taskData.filter(t => t.due_at >= weekAgo)
+    const lastWeekTasks = taskData.filter(t => t.due_at >= twoWeeksAgo && t.due_at < weekAgo)
+    
+    const calcStats = (tasks) => {
+      const summary = tasks.reduce((acc, t) => {
+        const key = t.type
+        if (!acc[key]) acc[key] = { due: 0, completed: 0 }
+        acc[key].due += Number(t.required_count || 0)
+        acc[key].completed += Math.min(Number(t.completed_count || 0), Number(t.required_count || 0))
+        return acc
+      }, {})
+      const totalDue = Object.values(summary).reduce((s, d) => s + d.due, 0)
+      const totalCompleted = Object.values(summary).reduce((s, d) => s + d.completed, 0)
+      return { summary, totalDue, totalCompleted, rate: totalDue > 0 ? Math.round((totalCompleted / totalDue) * 100) : 100 }
+    }
+    
+    const thisWeekStats = calcStats(thisWeekTasks)
+    const lastWeekStats = calcStats(lastWeekTasks)
+    
+    const taskSummaryText = Object.entries(thisWeekStats.summary)
+      .map(([type, data]) => `${type}: ${data.completed}/${data.due}`)
+      .join(', ')
 
-    // Start from last 2 minutes to avoid missing events across reconnects
-    let lastSeen = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+    // Build weather context
+    let weatherContext = ''
+    if (weatherData) {
+      const current = weatherData.current
+      const forecast = weatherData.forecast?.slice(0, 7) || []
+      weatherContext = `
+CURRENT WEATHER (${gardenLocation.location_city || 'Location'}):
+- Temperature: ${current?.temp}°C
+- Condition: ${current?.condition}
+- Humidity: ${current?.humidity}%
+- Wind: ${current?.windSpeed} km/h
+
+7-DAY FORECAST:
+${forecast.map(f => `- ${f.date}: ${f.condition}, ${f.tempMin}°-${f.tempMax}°C, ${f.precipProbability}% rain chance`).join('\n')}`
+    }
+
+    // Build journal context
+    let journalContext = ''
+    if (recentJournalEntries.length > 0) {
+      journalContext = `
+RECENT JOURNAL ENTRIES (gardener's own observations):
+${recentJournalEntries.map(e => {
+  const moodEmoji = { great: '🌟', good: '😊', neutral: '😐', concerned: '😟', struggling: '😰' }[e.mood] || ''
+  return `- ${e.entry_date}${moodEmoji ? ' ' + moodEmoji : ''}: "${e.content.slice(0, 200)}${e.content.length > 200 ? '...' : ''}"`
+}).join('\n')}`
+    }
 
     const poll = async () => {
       try {
@@ -12227,14 +15698,34 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
     } catch { }
     const adminId = await ensureAdmin(req, res)
     if (!adminId) return
+    // Build photo observations context
+    let photoContext = ''
+    const photoObservations = journalPhotos.filter(p => p.observations || p.plant_health)
+    if (photoObservations.length > 0) {
+      photoContext = `
+PLANT OBSERVATIONS FROM PHOTOS:
+${photoObservations.map(p => `- ${p.nickname || p.plant_name || 'Plant'}: ${p.plant_health ? `Health: ${p.plant_health}` : ''} ${p.observations || ''}`).join('\n')}`
+    }
 
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('Connection', 'keep-alive')
-    res.setHeader('X-Accel-Buffering', 'no')
-    res.flushHeaders?.()
+    // Get current date and day of week for temporal context (reuse 'now' from earlier)
+    const dayOfWeekName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()]
+    const currentDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
-    let lastSeen = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    const prompt = `You are an expert gardener and plant care specialist providing personalized weekly advice. Analyze all the data below and provide comprehensive, actionable advice.
+
+═══════════════════════════════════════════════════════════════
+📅 DATE & TIME CONTEXT
+═══════════════════════════════════════════════════════════════
+Today: ${dayOfWeekName}, ${currentDate}
+Location: ${gardenLocation.location_city || 'Unknown'}${gardenLocation.location_country ? `, ${gardenLocation.location_country}` : ''}
+Timezone: ${gardenLocation.location_timezone || 'Unknown'}
+Average task completion time: ${avgCompletionTime}
+
+═══════════════════════════════════════════════════════════════
+🌱 GARDEN: "${garden.name}"
+═══════════════════════════════════════════════════════════════
+Plants (${plants.length} total):
+${plantList || 'No plants yet'}
 
     // Send initial snapshot (latest 200)
     try {
@@ -12275,48 +15766,101 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
         }
       }
     } catch { }
+═══════════════════════════════════════════════════════════════
+📊 TASK PERFORMANCE
+═══════════════════════════════════════════════════════════════
+This week: ${thisWeekStats.rate}% completion rate (${thisWeekStats.totalCompleted}/${thisWeekStats.totalDue} tasks)
+Last week: ${lastWeekStats.rate}% completion rate (${lastWeekStats.totalCompleted}/${lastWeekStats.totalDue} tasks)
+Trend: ${thisWeekStats.rate > lastWeekStats.rate ? '📈 Improving' : thisWeekStats.rate < lastWeekStats.rate ? '📉 Declining' : '➡️ Stable'}
 
-    const poll = async () => {
+Task breakdown this week: ${taskSummaryText || 'No tasks scheduled'}
+${weatherContext}
+${journalContext}
+${photoContext}
+${plantImages.length > 0 ? `\n📷 The gardener has uploaded ${plantImages.length} plant photos.` : ''}
+${previousAdvice ? `
+═══════════════════════════════════════════════════════════════
+📋 LAST WEEK'S ADVICE (DO NOT REPEAT THIS)
+═══════════════════════════════════════════════════════════════
+Summary: ${previousAdvice.advice_summary || 'N/A'}
+Focus areas given: ${(previousAdvice.focus_areas || []).join(', ') || 'N/A'}
+${previousAdvice.advice_text ? `Full text: "${previousAdvice.advice_text.slice(0, 500)}${previousAdvice.advice_text.length > 500 ? '...' : ''}"` : ''}
+` : ''}
+═══════════════════════════════════════════════════════════════
+YOUR ADVICE
+═══════════════════════════════════════════════════════════════
+Based on ALL the above data, provide personalized advice. Consider:
+- The weather forecast and how it affects care needs
+- The gardener's observations and concerns from their journal
+- Task completion patterns and timing
+- Specific plant needs based on their characteristics
+- Seasonal considerations for the current date and location
+${previousAdvice ? `
+IMPORTANT: The gardener received advice last week (shown above). DO NOT repeat the same tips or focus areas. Provide FRESH, NEW advice that builds on or differs from last week. If a previous tip is still relevant, phrase it differently and add new context.
+` : ''}
+Format your response as JSON with this structure:
+{
+  "summary": "A warm, encouraging 2-3 sentence overview of the garden's status",
+  "weeklyFocus": "What the gardener should prioritize this specific week based on weather and plant needs",
+  "focusAreas": ["3-4 specific action items for this week"],
+  "plantTips": [
+    {"plantName": "name", "tip": "specific, actionable advice", "priority": "high|medium|low", "reason": "why this matters now"}
+  ],
+  "weatherAdvice": "How the upcoming weather affects plant care (be specific about the forecast)",
+  "improvementScore": 85,
+  "encouragement": "A personalized, motivating message based on their progress",
+  "fullAdvice": "A detailed, friendly paragraph covering all your recommendations"
+}`
+
+    const buildRuleBased = () =>
+      generateRuleBasedAdvice({
+        gardenName: garden.name,
+        plants,
+        thisWeekStats,
+        lastWeekStats,
+        weatherData,
+        avgCompletionTime,
+        taskSummaryText,
+      })
+
+    let parsed = null
+    let tokensUsed = 0
+    let modelUsed = 'gpt-4o-mini'
+
+    if (openai) {
       try {
-        if (sql) {
-          const rows = await sql`
-            select occurred_at, admin_id::text as admin_id, admin_name, action, target, detail
-            from public.admin_activity_logs
-            where occurred_at > ${lastSeen}
-            order by occurred_at asc
-            limit 500
-          `
-          for (const r of rows || []) {
-            const payload = {
-              occurred_at: new Date(r.occurred_at).toISOString(),
-              admin_id: r.admin_id || null,
-              admin_name: r.admin_name || null,
-              action: r.action,
-              target: r.target || null,
-              detail: r.detail || null,
-            }
-            lastSeen = payload.occurred_at
-            sseWrite(res, 'append', payload)
-          }
-        } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-          const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gt.${encodeURIComponent(lastSeen)}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.asc&limit=500`
-          const r = await fetch(url, { headers })
-          if (r.ok) {
-            const arr = await r.json().catch(() => [])
-            for (const row of arr || []) {
-              const payload = {
-                occurred_at: new Date(row.occurred_at).toISOString(),
-                admin_id: row.admin_id || null,
-                admin_name: row.admin_name || null,
-                action: row.action,
-                target: row.target || null,
-                detail: row.detail || null,
+        // Build messages with optional images for vision analysis
+        const useVision = journalPhotoUrls.length > 0
+        let messages = [
+          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
+        ]
+
+        if (useVision) {
+          // Include up to 4 most recent journal photos for analysis
+          const imageUrls = journalPhotoUrls.slice(0, 4)
+          const content = [
+            { type: 'text', text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
+- Overall plant health and vigor
+- Signs of disease, pests, or stress
+- Watering issues (overwatering/underwatering)
+- Nutrient deficiencies
+- Growth progress
+Include specific observations from the photos in your advice.` }
+          ]
+          
+          for (const url of imageUrls) {
+            content.push({
+              type: 'image_url',
+              image_url: {
+                url: url,
+                detail: 'high'
               }
-              lastSeen = payload.occurred_at
-              sseWrite(res, 'append', payload)
-            }
+            })
           }
+          
+          messages.push({ role: 'user', content })
+        } else {
+          messages.push({ role: 'user', content: prompt })
         }
       } catch { }
     }
@@ -12329,75 +15873,57 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
   }
 })
 
-// Garden Analytics endpoint - returns aggregated statistics
-app.get('/api/garden/:id/analytics', async (req, res) => {
-  try {
-    const gardenId = String(req.params.id || '').trim()
-    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
-    const user = await getUserFromRequestOrToken(req)
-    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
-    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+        const completionOptions = {
+          model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
+          messages,
+          temperature: 0.7,
+          max_tokens: useVision ? 2000 : 1500,
+        }
+        // Only use json_object response format when not using vision (compatibility)
+        if (!useVision) {
+          completionOptions.response_format = { type: 'json_object' }
+        }
+        const completion = await openai.chat.completions.create(completionOptions)
 
-    // Verify membership
-    const membership = await sql`
-      select 1 from public.garden_members
-      where garden_id = ${gardenId} and user_id = ${user.id}
-      limit 1
-    `
-    if (!membership || membership.length === 0) {
-      res.status(403).json({ ok: false, error: 'Access denied' })
-      return
+        const aiResponse = completion.choices[0]?.message?.content
+        tokensUsed = completion.usage?.total_tokens || 0
+
+        try {
+          parsed = JSON.parse(aiResponse || '{}')
+        } catch {
+          parsed = { summary: 'Unable to parse advice', focusAreas: [], plantTips: [], improvementScore: null, fullAdvice: aiResponse }
+        }
+      } catch (aiErr) {
+        console.error('[garden-advice] AI generation failed:', aiErr)
+        parsed = buildRuleBased()
+        modelUsed = 'rule-based'
+        tokensUsed = 0
+      }
+    } else {
+      parsed = buildRuleBased()
+      modelUsed = 'rule-based'
+      tokensUsed = 0
     }
 
-    const today = new Date().toISOString().slice(0, 10)
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    if (!parsed) parsed = buildRuleBased()
 
-    // Get task occurrences for last 30 days with task type breakdown
-    const taskStats = await sql`
-      select
-        date_trunc('day', o.due_at)::date as due_date,
-        t.type,
-        sum(o.required_count) as due_count,
-        sum(least(o.completed_count, o.required_count)) as completed_count
-      from public.garden_plant_task_occurrences o
-      join public.garden_plant_tasks t on t.id = o.task_id
-      where t.garden_id = ${gardenId}
-        and o.due_at >= ${thirtyDaysAgo}::date
-        and o.due_at <= (${today}::date + interval '1 day')
-      group by due_date, t.type
-      order by due_date asc
-    `
+    // Build context objects for storage
+    const weatherContextObj = weatherData ? {
+      current: weatherData.current,
+      forecast: weatherData.forecast?.slice(0, 7),
+      location: gardenLocation.location_city,
+    } : {}
 
-    // Aggregate by date
-    const dailyStatsMap = {}
-    for (const row of taskStats) {
-      const dateKey = row.due_date ? new Date(row.due_date).toISOString().slice(0, 10) : null
-      if (!dateKey) continue
-      if (!dailyStatsMap[dateKey]) {
-        dailyStatsMap[dateKey] = { date: dateKey, due: 0, completed: 0, water: 0, fertilize: 0, harvest: 0, cut: 0, custom: 0 }
-      }
-      const due = Number(row.due_count || 0)
-      const done = Number(row.completed_count || 0)
-      dailyStatsMap[dateKey].due += due
-      dailyStatsMap[dateKey].completed += done
-      if (row.type && dailyStatsMap[dateKey][row.type] !== undefined) {
-        dailyStatsMap[dateKey][row.type] += due
-      }
+    const journalContextObj = {
+      entriesCount: recentJournalEntries.length,
+      recentMoods: recentJournalEntries.map(e => e.mood).filter(Boolean),
+      photoObservations: photoObservations.map(p => ({ plant: p.nickname || p.plant_name, health: p.plant_health })),
     }
 
-    // Fill in missing days
-    const dailyStats = []
-    const cursor = new Date(thirtyDaysAgo)
-    const endDate = new Date(today)
-    while (cursor <= endDate) {
-      const dateKey = cursor.toISOString().slice(0, 10)
-      if (dailyStatsMap[dateKey]) {
-        dailyStatsMap[dateKey].success = dailyStatsMap[dateKey].due === 0 || dailyStatsMap[dateKey].completed >= dailyStatsMap[dateKey].due
-        dailyStats.push(dailyStatsMap[dateKey])
-      } else {
-        dailyStats.push({ date: dateKey, due: 0, completed: 0, success: true, water: 0, fertilize: 0, harvest: 0, cut: 0, custom: 0 })
-      }
-      cursor.setDate(cursor.getDate() + 1)
+    const locationContextObj = {
+      city: gardenLocation.location_city,
+      country: gardenLocation.location_country,
+      timezone: gardenLocation.location_timezone,
     }
 
     // Get member contributions for this week
@@ -12462,184 +15988,341 @@ app.get('/api/garden/:id/analytics', async (req, res) => {
       memberContributions.sort((a, b) => b.tasksCompleted - a.tasksCompleted)
     } catch (err) {
       console.warn('[analytics] Failed to get member contributions:', err)
+    // Store in database with enhanced context. Fall back gracefully if the target columns don't exist yet.
+    let insertResult
+    const focusAreasArray = Array.isArray(parsed.focusAreas)
+      ? parsed.focusAreas.map((area) => String(area || '').trim()).filter(Boolean)
+      : []
+    const plantTipsJson = JSON.stringify(parsed.plantTips || [])
+    const weatherContextJson = JSON.stringify(weatherContextObj)
+    const journalContextJson = JSON.stringify(journalContextObj)
+    const locationContextJson = JSON.stringify(locationContextObj)
+    const insertArgs = {
+      gardenId,
+      weekStartIso,
+      fullAdvice: parsed.fullAdvice || '',
+      summary: parsed.summary || '',
+      focusAreas: focusAreasArray,
+      plantTips: plantTipsJson,
+      improvementScore: parsed.improvementScore || null,
+      tokensUsed,
+      weatherContextJson,
+      journalContextJson,
+      avgCompletionTime,
+      locationContextJson,
+      modelUsed,
     }
 
-    // Get plant stats
-    const plantStats = await sql`
-      select
-        count(distinct id)::int as total,
-        count(distinct plant_id)::int as species,
-        count(case when plants_on_hand < 1 then 1 end)::int as needs_attention,
-        count(case when plants_on_hand >= 1 then 1 end)::int as healthy
-      from public.garden_plants
-      where garden_id = ${gardenId}
+    const runBaseInsert = () => sql`
+      insert into public.garden_ai_advice (
+        garden_id, week_start, advice_text, advice_summary, focus_areas,
+        plant_specific_tips, improvement_score, model_used, tokens_used, generated_at
+      ) values (
+        ${insertArgs.gardenId}, ${insertArgs.weekStartIso}, ${insertArgs.fullAdvice}, ${insertArgs.summary},
+        ${sql.array(insertArgs.focusAreas, 'text')}, ${insertArgs.plantTips}::jsonb,
+        ${insertArgs.improvementScore}, ${insertArgs.modelUsed}, ${insertArgs.tokensUsed}, now()
+      )
+      on conflict (garden_id, week_start)
+      do update set
+        advice_text = excluded.advice_text,
+        advice_summary = excluded.advice_summary,
+        focus_areas = excluded.focus_areas,
+        plant_specific_tips = excluded.plant_specific_tips,
+        improvement_score = excluded.improvement_score,
+        model_used = excluded.model_used,
+        tokens_used = excluded.tokens_used,
+        generated_at = excluded.generated_at
+      returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
+                improvement_score, generated_at
     `
-    const ps = plantStats[0] || { total: 0, species: 0, needs_attention: 0, healthy: 0 }
 
-    // Compute weekly stats
-    const last7Stats = dailyStats.slice(-7)
-    const prev7Stats = dailyStats.slice(-14, -7)
-    const currentWeekCompleted = last7Stats.reduce((s, d) => s + d.completed, 0)
-    const currentWeekDue = last7Stats.reduce((s, d) => s + d.due, 0)
-    const prevWeekCompleted = prev7Stats.reduce((s, d) => s + d.completed, 0)
-    const completionRate = currentWeekDue > 0 ? Math.round((currentWeekCompleted / currentWeekDue) * 100) : 100
-    const trendValue = prevWeekCompleted > 0 ? Math.round(((currentWeekCompleted - prevWeekCompleted) / prevWeekCompleted) * 100) : 0
-    let trend = 'stable'
-    if (trendValue > 5) trend = 'up'
-    else if (trendValue < -5) trend = 'down'
+    if (gardenAdviceContextColumnsSupported) {
+      try {
+        insertResult = await sql`
+          insert into public.garden_ai_advice (
+            garden_id, week_start, advice_text, advice_summary, focus_areas,
+            plant_specific_tips, improvement_score, model_used, tokens_used, generated_at,
+            weather_context, journal_context, avg_completion_time, location_context
+          ) values (
+            ${insertArgs.gardenId}, ${insertArgs.weekStartIso}, ${insertArgs.fullAdvice}, ${insertArgs.summary},
+            ${insertArgs.focusAreas}::text[], ${insertArgs.plantTips}::jsonb,
+            ${insertArgs.improvementScore}, ${insertArgs.modelUsed}, ${insertArgs.tokensUsed}, now(),
+            ${insertArgs.weatherContextJson}::jsonb, ${insertArgs.journalContextJson}::jsonb,
+            ${insertArgs.avgCompletionTime}, ${insertArgs.locationContextJson}::jsonb
+          )
+          on conflict (garden_id, week_start)
+          do update set
+            advice_text = excluded.advice_text,
+            advice_summary = excluded.advice_summary,
+            focus_areas = excluded.focus_areas,
+            plant_specific_tips = excluded.plant_specific_tips,
+            improvement_score = excluded.improvement_score,
+            model_used = excluded.model_used,
+            tokens_used = excluded.tokens_used,
+            generated_at = excluded.generated_at,
+            weather_context = excluded.weather_context,
+            journal_context = excluded.journal_context,
+            avg_completion_time = excluded.avg_completion_time,
+            location_context = excluded.location_context
+          returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
+                    improvement_score, generated_at, weather_context, location_context
+        `
+      } catch (err) {
+        if (isMissingColumnError(err)) {
+          disableGardenAdviceContextColumns('insert', err)
+          insertResult = await runBaseInsert()
+        } else {
+          throw err
+        }
+      }
+    } else {
+      insertResult = await runBaseInsert()
+    }
 
-    const tasksByType = last7Stats.reduce((acc, d) => {
-      acc.water += d.water || 0
-      acc.fertilize += d.fertilize || 0
-      acc.harvest += d.harvest || 0
-      acc.cut += d.cut || 0
-      acc.custom += d.custom || 0
-      return acc
-    }, { water: 0, fertilize: 0, harvest: 0, cut: 0, custom: 0 })
+    const saved = insertResult[0]
+    
+    // Build the advice response
+    let adviceResponse = {
+      id: String(saved.id),
+      weekStart: saved.week_start,
+      adviceText: saved.advice_text,
+      adviceSummary: saved.advice_summary,
+      focusAreas: saved.focus_areas || [],
+      plantSpecificTips: normalizeJsonArray(saved.plant_specific_tips),
+      improvementScore: saved.improvement_score,
+      generatedAt: saved.generated_at,
+      weeklyFocus: parsed.weeklyFocus || null,
+      weatherAdvice: parsed.weatherAdvice || null,
+      encouragement: parsed.encouragement || null,
+      weatherContext: saved.weather_context || null,
+      locationContext: saved.location_context || null,
+    }
 
-    res.json({
-      ok: true,
-      analytics: {
-        dailyStats,
-        weeklyStats: {
-          tasksCompleted: currentWeekCompleted,
-          tasksDue: currentWeekDue,
-          completionRate,
-          trend,
-          trendValue: Math.abs(trendValue),
-          tasksByType,
-        },
-        memberContributions,
-        plantStats: {
-          total: Number(ps.total || 0),
-          species: Number(ps.species || 0),
-          needingAttention: Number(ps.needs_attention || 0),
-          healthy: Number(ps.healthy || 0),
-        },
-      },
-    })
+    // Translate if target language is not English
+    if (targetLang !== 'EN') {
+      console.log(`[garden-advice] Translating new advice to ${targetLang}`)
+      try {
+        const translatedAdvice = await translateAdvice(adviceResponse, targetLang)
+        
+        // Store the translation in the database
+        const translations = { [targetLang]: {
+          adviceText: translatedAdvice.adviceText,
+          adviceSummary: translatedAdvice.adviceSummary,
+          focusAreas: translatedAdvice.focusAreas,
+          plantSpecificTips: translatedAdvice.plantSpecificTips,
+          weeklyFocus: translatedAdvice.weeklyFocus,
+          weatherAdvice: translatedAdvice.weatherAdvice,
+          encouragement: translatedAdvice.encouragement,
+        }}
+        await sql`
+          update public.garden_ai_advice
+          set translations = ${JSON.stringify(translations)}::jsonb
+          where id = ${saved.id}
+        `.catch(err => console.warn('[garden-advice] Failed to cache translation:', err))
+        
+        adviceResponse = { ...adviceResponse, ...translatedAdvice }
+      } catch (translateErr) {
+        console.warn('[garden-advice] Translation failed, returning English:', translateErr)
+      }
+    }
+
+    res.json({ ok: true, advice: adviceResponse })
   } catch (e) {
-    console.error('[garden-analytics] Error:', e)
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to load analytics' })
+    console.error('[garden-advice] Error:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to get advice' })
   }
 })
 
-// Garden AI Advice endpoint - generates or retrieves cached weekly advice
-app.get('/api/garden/:id/advice', async (req, res) => {
+// Translate text using DeepL API
+async function translateWithDeepL(text, targetLang, sourceLang = 'EN') {
+  if (!text || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return text
+  }
+  
+  const deeplApiKey = process.env.DEEPL_API_KEY
+  if (!deeplApiKey) {
+    console.log('[translate] DeepL API key not configured, skipping translation')
+    return text
+  }
+  
   try {
-    const gardenId = String(req.params.id || '').trim()
-    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
-    const user = await getUserFromRequestOrToken(req)
-    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
-    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
-
-    const forceRefresh = req.query.refresh === 'true'
-
-    // Verify membership
-    const membership = await sql`
-      select 1 from public.garden_members
-      where garden_id = ${gardenId} and user_id = ${user.id}
-      limit 1
-    `
-    if (!membership || membership.length === 0) {
-      res.status(403).json({ ok: false, error: 'Access denied' })
-      return
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        source_lang: sourceLang.toUpperCase(),
+        target_lang: targetLang.toUpperCase(),
+      }),
+    })
+    
+    if (!response.ok) {
+      console.warn('[translate] DeepL API error:', response.status)
+      return text
     }
+    
+    const data = await response.json()
+    return data.translations?.[0]?.text || text
+  } catch (err) {
+    console.warn('[translate] DeepL translation failed:', err)
+    return text
+  }
+}
 
-    // Get garden info
-    const gardenRows = await sql`
-      select id, name, created_at, preferred_language from public.gardens where id = ${gardenId} limit 1
-    `
-    const garden = gardenRows[0]
-    if (!garden) {
-      res.status(404).json({ ok: false, error: 'Garden not found' })
-      return
-    }
+// Translate array of strings using DeepL
+async function translateArrayWithDeepL(items, targetLang, sourceLang = 'EN') {
+  if (!items || items.length === 0 || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return items
+  }
+  
+  // Translate each item in parallel
+  const translated = await Promise.all(
+    items.map(item => translateWithDeepL(item, targetLang, sourceLang))
+  )
+  return translated
+}
 
-    // Determine target language: garden's preferred language or Accept-Language header
-    const acceptLang = req.headers['accept-language'] || ''
-    const headerLang = acceptLang.split(',')[0]?.split('-')[0]?.toUpperCase() || 'EN'
-    const targetLang = (garden.preferred_language || headerLang || 'EN').toUpperCase()
+// Translate gardening advice object to target language
+async function translateAdvice(advice, targetLang, sourceLang = 'EN') {
+  if (!advice || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return advice
+  }
+  
+  console.log(`[translate] Translating advice to ${targetLang}...`)
+  
+  const translated = { ...advice }
+  
+  // Translate text fields in parallel where possible
+  const [adviceText, adviceSummary, weeklyFocus, weatherAdvice, encouragement] = await Promise.all([
+    advice.adviceText ? translateWithDeepL(advice.adviceText, targetLang, sourceLang) : advice.adviceText,
+    advice.adviceSummary ? translateWithDeepL(advice.adviceSummary, targetLang, sourceLang) : advice.adviceSummary,
+    advice.weeklyFocus ? translateWithDeepL(advice.weeklyFocus, targetLang, sourceLang) : advice.weeklyFocus,
+    advice.weatherAdvice ? translateWithDeepL(advice.weatherAdvice, targetLang, sourceLang) : advice.weatherAdvice,
+    advice.encouragement ? translateWithDeepL(advice.encouragement, targetLang, sourceLang) : advice.encouragement,
+  ])
+  
+  translated.adviceText = adviceText
+  translated.adviceSummary = adviceSummary
+  translated.weeklyFocus = weeklyFocus
+  translated.weatherAdvice = weatherAdvice
+  translated.encouragement = encouragement
+  
+  // Translate focus areas
+  if (advice.focusAreas && Array.isArray(advice.focusAreas)) {
+    translated.focusAreas = await translateArrayWithDeepL(advice.focusAreas, targetLang, sourceLang)
+  }
+  
+  // Translate plant-specific tips
+  if (advice.plantSpecificTips && Array.isArray(advice.plantSpecificTips)) {
+    translated.plantSpecificTips = await Promise.all(
+      advice.plantSpecificTips.map(async (tip) => ({
+        ...tip,
+        tip: tip.tip ? await translateWithDeepL(tip.tip, targetLang, sourceLang) : tip.tip,
+        reason: tip.reason ? await translateWithDeepL(tip.reason, targetLang, sourceLang) : tip.reason,
+        // Don't translate plant name - keep it in original language
+      }))
+    )
+  }
+  
+  console.log(`[translate] Advice translation to ${targetLang} complete`)
+  return translated
+}
 
-    // Check eligibility: garden must be older than 7 days and have at least 1 plant
-    const gardenAge = Math.floor((Date.now() - new Date(garden.created_at).getTime()) / (1000 * 60 * 60 * 24))
-    if (gardenAge < 7) {
-      res.json({ ok: true, message: `Garden needs to be at least 1 week old. Come back in ${7 - gardenAge} days!`, advice: null })
-      return
-    }
-
-    const plantCountRows = await sql`
-      select count(*)::int as count from public.garden_plants where garden_id = ${gardenId}
-    `
-    const plantCount = Number(plantCountRows[0]?.count || 0)
-    if (plantCount < 1) {
-      res.json({ ok: true, message: 'Add at least 1 plant to receive personalized advice.', advice: null })
-      return
-    }
-
-    // Calculate current week start (Monday)
-    const now = new Date()
-    const dayOfWeek = now.getUTCDay() // 0 = Sunday
-    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-    const weekStart = new Date(now)
-    weekStart.setUTCDate(now.getUTCDate() + mondayOffset)
-    weekStart.setUTCHours(0, 0, 0, 0)
-    const weekStartIso = weekStart.toISOString().slice(0, 10)
-
-    // Check for existing advice this week
-    if (!forceRefresh) {
-      try {
-        let existingAdvice
-        if (gardenAdviceContextColumnsSupported) {
-          try {
-            existingAdvice = await sql`
-              select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-                     improvement_score, generated_at, weather_context, location_context, model_used, translations
-              from public.garden_ai_advice
-              where garden_id = ${gardenId} and week_start = ${weekStartIso}
-              limit 1
-            `
-          } catch (err) {
-            if (isMissingColumnError(err)) {
-              disableGardenAdviceContextColumns('select', err)
-              existingAdvice = await sql`
-                select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-                       improvement_score, generated_at, model_used, translations
-                from public.garden_ai_advice
-                where garden_id = ${gardenId} and week_start = ${weekStartIso}
-                limit 1
-              `
-            } else {
-              throw err
-            }
+// Weather API helper
+async function fetchWeatherForLocation(lat, lon, city) {
+  // Use Open-Meteo API (free, no API key needed)
+  try {
+    if (!lat || !lon) {
+      // Try geocoding if we only have city name
+      if (city) {
+        const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)
+        if (geoResp.ok) {
+          const geoData = await geoResp.json()
+          if (geoData.results?.[0]) {
+            lat = geoData.results[0].latitude
+            lon = geoData.results[0].longitude
           }
-        } else {
-          existingAdvice = await sql`
-            select id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips,
-                   improvement_score, generated_at, model_used, translations
-            from public.garden_ai_advice
-            where garden_id = ${gardenId} and week_start = ${weekStartIso}
-            limit 1
-          `
         }
+      }
+      if (!lat || !lon) return null
+    }
+    
+    const weatherResp = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7`
+    )
+    
+    if (!weatherResp.ok) return null
+    const data = await weatherResp.json()
+    
+    // Weather code to description mapping
+    const weatherCodes = {
+      0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+      45: 'Foggy', 48: 'Rime fog', 51: 'Light drizzle', 53: 'Moderate drizzle',
+      55: 'Dense drizzle', 61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+      71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow', 80: 'Rain showers',
+      95: 'Thunderstorm'
+    }
+    
+    return {
+      current: {
+        temp: data.current?.temperature_2m,
+        humidity: data.current?.relative_humidity_2m,
+        condition: weatherCodes[data.current?.weather_code] || 'Unknown',
+        windSpeed: data.current?.wind_speed_10m,
+        weatherCode: data.current?.weather_code,
+      },
+      forecast: (data.daily?.time || []).slice(0, 7).map((date, i) => ({
+        date,
+        tempMax: data.daily?.temperature_2m_max?.[i],
+        tempMin: data.daily?.temperature_2m_min?.[i],
+        condition: weatherCodes[data.daily?.weather_code?.[i]] || 'Unknown',
+        precipProbability: data.daily?.precipitation_probability_max?.[i],
+      })),
+      timezone: data.timezone,
+    }
+  } catch (err) {
+    console.warn('[weather] Failed to fetch weather:', err)
+    return null
+  }
+}
 
-        if (existingAdvice && existingAdvice.length > 0) {
-          const adv = existingAdvice[0]
-          const modelUsed = adv.model_used || 'unknown'
-          if (modelUsed !== 'rule-based') {
-            // Build base advice object
-            let adviceResponse = {
-              id: String(adv.id),
-              weekStart: adv.week_start,
-              adviceText: adv.advice_text,
-              adviceSummary: adv.advice_summary,
-              focusAreas: adv.focus_areas || [],
-              plantSpecificTips: normalizeJsonArray(adv.plant_specific_tips),
-              improvementScore: adv.improvement_score,
-              generatedAt: adv.generated_at,
-              weatherContext: adv.weather_context || null,
-              locationContext: adv.location_context || null,
-            }
+/**
+ * Generate heuristic gardener advice when AI is unavailable.
+ */
+function generateRuleBasedAdvice({
+  gardenName,
+  plants,
+  thisWeekStats,
+  lastWeekStats,
+  weatherData,
+  avgCompletionTime,
+  taskSummaryText,
+}) {
+  const plantCount = plants.length
+  const normalizedThisWeek = thisWeekStats || { rate: 100, summary: {} }
+  const normalizedLastWeek = lastWeekStats || { rate: normalizedThisWeek.rate }
+  const completionRate = Number.isFinite(normalizedThisWeek.rate) ? normalizedThisWeek.rate : 100
+  const previousRate = Number.isFinite(normalizedLastWeek.rate) ? normalizedLastWeek.rate : completionRate
+  const rateDelta = completionRate - previousRate
+  const summaryParts = []
+
+  if (plantCount > 0) {
+    summaryParts.push(`You’re currently caring for ${plantCount} plant${plantCount === 1 ? '' : 's'}.`)
+  } else {
+    summaryParts.push('No plants are linked to this garden yet, so insights focus on task habits.')
+  }
+
+  const trendText =
+    rateDelta > 3
+      ? ` (up ${Math.abs(rateDelta)}% from last week)`
+      : rateDelta < -3
+        ? ` (${Math.abs(rateDelta)}% below last week)`
+        : ''
+  summaryParts.push(`You logged ${completionRate}% of scheduled tasks this week${trendText}.`)
 
             // Check if translation is needed and exists
             if (targetLang !== 'EN') {
@@ -12677,33 +16360,58 @@ app.get('/api/garden/:id/advice', async (req, res) => {
                 }
               }
             }
+  if (avgCompletionTime && avgCompletionTime !== 'Not enough data') {
+    summaryParts.push(`Most tasks get completed around ${avgCompletionTime}.`)
+  }
 
-            res.json({ ok: true, advice: adviceResponse })
-            return
-          }
-        }
-      } catch (err) {
-        console.warn('[garden-advice] Existing advice lookup failed:', err)
-      }
-    }
+  const typeLabels = {
+    water: 'watering',
+    fertilize: 'feeding',
+    harvest: 'harvesting',
+    cut: 'pruning',
+    custom: 'custom care',
+  }
+  const summaryByType = normalizedThisWeek.summary || {}
+  const deficits = Object.entries(typeLabels).map(([type, label]) => {
+    const stats = summaryByType[type] || { due: 0, completed: 0 }
+    const due = Number(stats.due || 0)
+    const completed = Number(stats.completed || 0)
+    return { type, label, due, completed, deficit: Math.max(0, due - completed) }
+  })
+    .filter(entry => entry.due > 0)
+    .sort((a, b) => {
+      if (b.deficit === a.deficit) return b.due - a.due
+      return b.deficit - a.deficit
+    })
 
-    // Gather comprehensive garden data for advice generation
-    const plants = await sql`
-      select gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes,
-             p.name as plant_name, p.scientific_name,
-             p.watering_type, p.level_sun, p.maintenance_level
-      from public.garden_plants gp
-      left join public.plants p on p.id = gp.plant_id
-      where gp.garden_id = ${gardenId}
-      limit 50
-    `
+  const focusAreas = []
+  for (const entry of deficits) {
+    if (entry.deficit <= 0) continue
+    focusAreas.push(`Prioritize ${entry.label} tasks (${entry.completed}/${entry.due} logged).`)
+    if (focusAreas.length >= 3) break
+  }
+  if (focusAreas.length === 0) {
+    focusAreas.push(plantCount === 0
+      ? 'Add at least one plant so reminders can target something alive.'
+      : 'Stay consistent with your existing routine to keep plants thriving.')
+  }
 
-    // Get garden location for context
-    const gardenFull = await sql`
-      select location_city, location_country, location_timezone, location_lat, location_lon
-      from public.gardens where id = ${gardenId} limit 1
-    `
-    const gardenLocation = gardenFull[0] || {}
+  const stressedPlants = plants.filter(p => {
+    const health = (p.health_status || '').toLowerCase()
+    return Boolean(
+      (health && !['great', 'good', 'thriving', 'healthy'].includes(health)) ||
+      (p.notes && p.notes.length > 0)
+    )
+  })
+
+  const plantTips = []
+  const plantEntries = stressedPlants.length ? stressedPlants : plants.slice(0, 3)
+  plantEntries.slice(0, 3).forEach((p, idx) => {
+    const plantName = p.nickname || p.plant_name || `Plant ${idx + 1}`
+    const health = (p.health_status || '').toLowerCase()
+    let tip = 'Give this plant a quick inspection for pests, yellowing leaves, or soil compaction.'
+    let reason = 'General upkeep keeps foliage breathing well.'
+    let priority = 'medium'
 
     // Get weather data for the location
     let weatherData = null
@@ -12747,9 +16455,30 @@ app.get('/api/garden/:id/advice', async (req, res) => {
     const avgCompletionTime = avgCompletionHour !== null
       ? `${avgCompletionHour}:00`
       : 'Not enough data'
+    if (health.includes('dry')) {
+      tip = 'Soak the soil thoroughly, add mulch to retain moisture, and monitor afternoon sun.'
+      reason = 'Reported dryness suggests the roots need a deeper drink.'
+      priority = 'high'
+    } else if (health.includes('pest') || health.includes('spot')) {
+      tip = 'Wipe leaves, remove damaged growth, and consider a neem or soap spray this week.'
+      reason = 'Spots or pests spread quickly when ignored.'
+      priority = 'high'
+    } else if (health.includes('slow') || health.includes('stall')) {
+      tip = 'Check fertilizer schedule and gently loosen the top layer of soil to improve airflow.'
+      reason = 'Stalled growth often tracks back to nutrients or compacted soil.'
+    } else if (p.notes) {
+      reason = p.notes.slice(0, 160)
+    }
 
-    // Get recent journal entries (last 7 days) for additional context
-    let recentJournalEntries = []
+    plantTips.push({
+      plantName,
+      tip,
+      priority,
+      reason,
+    })
+  })
+
+  const formatDay = iso => {
     try {
       const journalRows = await sql`
         select entry_date, title, content, mood, weather_snapshot
@@ -12853,630 +16582,6 @@ app.get('/api/garden/:id/advice', async (req, res) => {
     const taskSummaryText = Object.entries(thisWeekStats.summary)
       .map(([type, data]) => `${type}: ${data.completed}/${data.due}`)
       .join(', ')
-
-    // Build weather context
-    let weatherContext = ''
-    if (weatherData) {
-      const current = weatherData.current
-      const forecast = weatherData.forecast?.slice(0, 7) || []
-      weatherContext = `
-CURRENT WEATHER (${gardenLocation.location_city || 'Location'}):
-- Temperature: ${current?.temp}°C
-- Condition: ${current?.condition}
-- Humidity: ${current?.humidity}%
-- Wind: ${current?.windSpeed} km/h
-
-7-DAY FORECAST:
-${forecast.map(f => `- ${f.date}: ${f.condition}, ${f.tempMin}°-${f.tempMax}°C, ${f.precipProbability}% rain chance`).join('\n')}`
-    }
-
-    // Build journal context
-    let journalContext = ''
-    if (recentJournalEntries.length > 0) {
-      journalContext = `
-RECENT JOURNAL ENTRIES (gardener's own observations):
-${recentJournalEntries.map(e => {
-        const moodEmoji = { great: '🌟', good: '😊', neutral: '😐', concerned: '😟', struggling: '😰' }[e.mood] || ''
-        return `- ${e.entry_date}${moodEmoji ? ' ' + moodEmoji : ''}: "${e.content.slice(0, 200)}${e.content.length > 200 ? '...' : ''}"`
-      }).join('\n')}`
-    }
-
-    // Build photo observations context
-    let photoContext = ''
-    const photoObservations = journalPhotos.filter(p => p.observations || p.plant_health)
-    if (photoObservations.length > 0) {
-      photoContext = `
-PLANT OBSERVATIONS FROM PHOTOS:
-${photoObservations.map(p => `- ${p.nickname || p.plant_name || 'Plant'}: ${p.plant_health ? `Health: ${p.plant_health}` : ''} ${p.observations || ''}`).join('\n')}`
-    }
-
-    // Get current date and day of week for temporal context (reuse 'now' from earlier)
-    const dayOfWeekName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()]
-    const currentDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-
-    const prompt = `You are an expert gardener and plant care specialist providing personalized weekly advice. Analyze all the data below and provide comprehensive, actionable advice.
-
-═══════════════════════════════════════════════════════════════
-📅 DATE & TIME CONTEXT
-═══════════════════════════════════════════════════════════════
-Today: ${dayOfWeekName}, ${currentDate}
-Location: ${gardenLocation.location_city || 'Unknown'}${gardenLocation.location_country ? `, ${gardenLocation.location_country}` : ''}
-Timezone: ${gardenLocation.location_timezone || 'Unknown'}
-Average task completion time: ${avgCompletionTime}
-
-═══════════════════════════════════════════════════════════════
-🌱 GARDEN: "${garden.name}"
-═══════════════════════════════════════════════════════════════
-Plants (${plants.length} total):
-${plantList || 'No plants yet'}
-
-═══════════════════════════════════════════════════════════════
-📊 TASK PERFORMANCE
-═══════════════════════════════════════════════════════════════
-This week: ${thisWeekStats.rate}% completion rate (${thisWeekStats.totalCompleted}/${thisWeekStats.totalDue} tasks)
-Last week: ${lastWeekStats.rate}% completion rate (${lastWeekStats.totalCompleted}/${lastWeekStats.totalDue} tasks)
-Trend: ${thisWeekStats.rate > lastWeekStats.rate ? '📈 Improving' : thisWeekStats.rate < lastWeekStats.rate ? '📉 Declining' : '➡️ Stable'}
-
-Task breakdown this week: ${taskSummaryText || 'No tasks scheduled'}
-${weatherContext}
-${journalContext}
-${photoContext}
-${plantImages.length > 0 ? `\n📷 The gardener has uploaded ${plantImages.length} plant photos.` : ''}
-${previousAdvice ? `
-═══════════════════════════════════════════════════════════════
-📋 LAST WEEK'S ADVICE (DO NOT REPEAT THIS)
-═══════════════════════════════════════════════════════════════
-Summary: ${previousAdvice.advice_summary || 'N/A'}
-Focus areas given: ${(previousAdvice.focus_areas || []).join(', ') || 'N/A'}
-${previousAdvice.advice_text ? `Full text: "${previousAdvice.advice_text.slice(0, 500)}${previousAdvice.advice_text.length > 500 ? '...' : ''}"` : ''}
-` : ''}
-═══════════════════════════════════════════════════════════════
-YOUR ADVICE
-═══════════════════════════════════════════════════════════════
-Based on ALL the above data, provide personalized advice. Consider:
-- The weather forecast and how it affects care needs
-- The gardener's observations and concerns from their journal
-- Task completion patterns and timing
-- Specific plant needs based on their characteristics
-- Seasonal considerations for the current date and location
-${previousAdvice ? `
-IMPORTANT: The gardener received advice last week (shown above). DO NOT repeat the same tips or focus areas. Provide FRESH, NEW advice that builds on or differs from last week. If a previous tip is still relevant, phrase it differently and add new context.
-` : ''}
-Format your response as JSON with this structure:
-{
-  "summary": "A warm, encouraging 2-3 sentence overview of the garden's status",
-  "weeklyFocus": "What the gardener should prioritize this specific week based on weather and plant needs",
-  "focusAreas": ["3-4 specific action items for this week"],
-  "plantTips": [
-    {"plantName": "name", "tip": "specific, actionable advice", "priority": "high|medium|low", "reason": "why this matters now"}
-  ],
-  "weatherAdvice": "How the upcoming weather affects plant care (be specific about the forecast)",
-  "improvementScore": 85,
-  "encouragement": "A personalized, motivating message based on their progress",
-  "fullAdvice": "A detailed, friendly paragraph covering all your recommendations"
-}`
-
-    const buildRuleBased = () =>
-      generateRuleBasedAdvice({
-        gardenName: garden.name,
-        plants,
-        thisWeekStats,
-        lastWeekStats,
-        weatherData,
-        avgCompletionTime,
-        taskSummaryText,
-      })
-
-    let parsed = null
-    let tokensUsed = 0
-    let modelUsed = 'gpt-4o-mini'
-
-    if (openai) {
-      try {
-        // Build messages with optional images for vision analysis
-        const useVision = journalPhotoUrls.length > 0
-        let messages = [
-          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
-        ]
-
-        if (useVision) {
-          // Include up to 4 most recent journal photos for analysis
-          const imageUrls = journalPhotoUrls.slice(0, 4)
-          const content = [
-            {
-              type: 'text', text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
-- Overall plant health and vigor
-- Signs of disease, pests, or stress
-- Watering issues (overwatering/underwatering)
-- Nutrient deficiencies
-- Growth progress
-Include specific observations from the photos in your advice.` }
-          ]
-
-          for (const url of imageUrls) {
-            content.push({
-              type: 'image_url',
-              image_url: {
-                url: url,
-                detail: 'high'
-              }
-            })
-          }
-
-          messages.push({ role: 'user', content })
-        } else {
-          messages.push({ role: 'user', content: prompt })
-        }
-
-        const completionOptions = {
-          model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
-          messages,
-          temperature: 0.7,
-          max_tokens: useVision ? 2000 : 1500,
-        }
-        // Only use json_object response format when not using vision (compatibility)
-        if (!useVision) {
-          completionOptions.response_format = { type: 'json_object' }
-        }
-        const completion = await openai.chat.completions.create(completionOptions)
-
-        const aiResponse = completion.choices[0]?.message?.content
-        tokensUsed = completion.usage?.total_tokens || 0
-
-        try {
-          parsed = JSON.parse(aiResponse || '{}')
-        } catch {
-          parsed = { summary: 'Unable to parse advice', focusAreas: [], plantTips: [], improvementScore: null, fullAdvice: aiResponse }
-        }
-      } catch (aiErr) {
-        console.error('[garden-advice] AI generation failed:', aiErr)
-        parsed = buildRuleBased()
-        modelUsed = 'rule-based'
-        tokensUsed = 0
-      }
-    } else {
-      parsed = buildRuleBased()
-      modelUsed = 'rule-based'
-      tokensUsed = 0
-    }
-
-    if (!parsed) parsed = buildRuleBased()
-
-    // Build context objects for storage
-    const weatherContextObj = weatherData ? {
-      current: weatherData.current,
-      forecast: weatherData.forecast?.slice(0, 7),
-      location: gardenLocation.location_city,
-    } : {}
-
-    const journalContextObj = {
-      entriesCount: recentJournalEntries.length,
-      recentMoods: recentJournalEntries.map(e => e.mood).filter(Boolean),
-      photoObservations: photoObservations.map(p => ({ plant: p.nickname || p.plant_name, health: p.plant_health })),
-    }
-
-    const locationContextObj = {
-      city: gardenLocation.location_city,
-      country: gardenLocation.location_country,
-      timezone: gardenLocation.location_timezone,
-    }
-
-    // Store in database with enhanced context. Fall back gracefully if the target columns don't exist yet.
-    let insertResult
-    const focusAreasArray = Array.isArray(parsed.focusAreas)
-      ? parsed.focusAreas.map((area) => String(area || '').trim()).filter(Boolean)
-      : []
-    const plantTipsJson = JSON.stringify(parsed.plantTips || [])
-    const weatherContextJson = JSON.stringify(weatherContextObj)
-    const journalContextJson = JSON.stringify(journalContextObj)
-    const locationContextJson = JSON.stringify(locationContextObj)
-    const insertArgs = {
-      gardenId,
-      weekStartIso,
-      fullAdvice: parsed.fullAdvice || '',
-      summary: parsed.summary || '',
-      focusAreas: focusAreasArray,
-      plantTips: plantTipsJson,
-      improvementScore: parsed.improvementScore || null,
-      tokensUsed,
-      weatherContextJson,
-      journalContextJson,
-      avgCompletionTime,
-      locationContextJson,
-      modelUsed,
-    }
-
-    const runBaseInsert = () => sql`
-      insert into public.garden_ai_advice (
-        garden_id, week_start, advice_text, advice_summary, focus_areas,
-        plant_specific_tips, improvement_score, model_used, tokens_used, generated_at
-      ) values (
-        ${insertArgs.gardenId}, ${insertArgs.weekStartIso}, ${insertArgs.fullAdvice}, ${insertArgs.summary},
-        ${sql.array(insertArgs.focusAreas, 'text')}, ${insertArgs.plantTips}::jsonb,
-        ${insertArgs.improvementScore}, ${insertArgs.modelUsed}, ${insertArgs.tokensUsed}, now()
-      )
-      on conflict (garden_id, week_start)
-      do update set
-        advice_text = excluded.advice_text,
-        advice_summary = excluded.advice_summary,
-        focus_areas = excluded.focus_areas,
-        plant_specific_tips = excluded.plant_specific_tips,
-        improvement_score = excluded.improvement_score,
-        model_used = excluded.model_used,
-        tokens_used = excluded.tokens_used,
-        generated_at = excluded.generated_at
-      returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
-                improvement_score, generated_at
-    `
-
-    if (gardenAdviceContextColumnsSupported) {
-      try {
-        insertResult = await sql`
-          insert into public.garden_ai_advice (
-            garden_id, week_start, advice_text, advice_summary, focus_areas,
-            plant_specific_tips, improvement_score, model_used, tokens_used, generated_at,
-            weather_context, journal_context, avg_completion_time, location_context
-          ) values (
-            ${insertArgs.gardenId}, ${insertArgs.weekStartIso}, ${insertArgs.fullAdvice}, ${insertArgs.summary},
-            ${insertArgs.focusAreas}::text[], ${insertArgs.plantTips}::jsonb,
-            ${insertArgs.improvementScore}, ${insertArgs.modelUsed}, ${insertArgs.tokensUsed}, now(),
-            ${insertArgs.weatherContextJson}::jsonb, ${insertArgs.journalContextJson}::jsonb,
-            ${insertArgs.avgCompletionTime}, ${insertArgs.locationContextJson}::jsonb
-          )
-          on conflict (garden_id, week_start)
-          do update set
-            advice_text = excluded.advice_text,
-            advice_summary = excluded.advice_summary,
-            focus_areas = excluded.focus_areas,
-            plant_specific_tips = excluded.plant_specific_tips,
-            improvement_score = excluded.improvement_score,
-            model_used = excluded.model_used,
-            tokens_used = excluded.tokens_used,
-            generated_at = excluded.generated_at,
-            weather_context = excluded.weather_context,
-            journal_context = excluded.journal_context,
-            avg_completion_time = excluded.avg_completion_time,
-            location_context = excluded.location_context
-          returning id, week_start, advice_text, advice_summary, focus_areas, plant_specific_tips, 
-                    improvement_score, generated_at, weather_context, location_context
-        `
-      } catch (err) {
-        if (isMissingColumnError(err)) {
-          disableGardenAdviceContextColumns('insert', err)
-          insertResult = await runBaseInsert()
-        } else {
-          throw err
-        }
-      }
-    } else {
-      insertResult = await runBaseInsert()
-    }
-
-    const saved = insertResult[0]
-
-    // Build the advice response
-    let adviceResponse = {
-      id: String(saved.id),
-      weekStart: saved.week_start,
-      adviceText: saved.advice_text,
-      adviceSummary: saved.advice_summary,
-      focusAreas: saved.focus_areas || [],
-      plantSpecificTips: normalizeJsonArray(saved.plant_specific_tips),
-      improvementScore: saved.improvement_score,
-      generatedAt: saved.generated_at,
-      weeklyFocus: parsed.weeklyFocus || null,
-      weatherAdvice: parsed.weatherAdvice || null,
-      encouragement: parsed.encouragement || null,
-      weatherContext: saved.weather_context || null,
-      locationContext: saved.location_context || null,
-    }
-
-    // Translate if target language is not English
-    if (targetLang !== 'EN') {
-      console.log(`[garden-advice] Translating new advice to ${targetLang}`)
-      try {
-        const translatedAdvice = await translateAdvice(adviceResponse, targetLang)
-
-        // Store the translation in the database
-        const translations = {
-          [targetLang]: {
-            adviceText: translatedAdvice.adviceText,
-            adviceSummary: translatedAdvice.adviceSummary,
-            focusAreas: translatedAdvice.focusAreas,
-            plantSpecificTips: translatedAdvice.plantSpecificTips,
-            weeklyFocus: translatedAdvice.weeklyFocus,
-            weatherAdvice: translatedAdvice.weatherAdvice,
-            encouragement: translatedAdvice.encouragement,
-          }
-        }
-        await sql`
-          update public.garden_ai_advice
-          set translations = ${JSON.stringify(translations)}::jsonb
-          where id = ${saved.id}
-        `.catch(err => console.warn('[garden-advice] Failed to cache translation:', err))
-
-        adviceResponse = { ...adviceResponse, ...translatedAdvice }
-      } catch (translateErr) {
-        console.warn('[garden-advice] Translation failed, returning English:', translateErr)
-      }
-    }
-
-    res.json({ ok: true, advice: adviceResponse })
-  } catch (e) {
-    console.error('[garden-advice] Error:', e)
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to get advice' })
-  }
-})
-
-// Translate text using DeepL API
-async function translateWithDeepL(text, targetLang, sourceLang = 'EN') {
-  if (!text || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
-    return text
-  }
-
-  const deeplApiKey = process.env.DEEPL_API_KEY
-  if (!deeplApiKey) {
-    console.log('[translate] DeepL API key not configured, skipping translation')
-    return text
-  }
-
-  try {
-    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
-    const response = await fetch(deeplUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        text: text,
-        source_lang: sourceLang.toUpperCase(),
-        target_lang: targetLang.toUpperCase(),
-      }),
-    })
-
-    if (!response.ok) {
-      console.warn('[translate] DeepL API error:', response.status)
-      return text
-    }
-
-    const data = await response.json()
-    return data.translations?.[0]?.text || text
-  } catch (err) {
-    console.warn('[translate] DeepL translation failed:', err)
-    return text
-  }
-}
-
-// Translate array of strings using DeepL
-async function translateArrayWithDeepL(items, targetLang, sourceLang = 'EN') {
-  if (!items || items.length === 0 || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
-    return items
-  }
-
-  // Translate each item in parallel
-  const translated = await Promise.all(
-    items.map(item => translateWithDeepL(item, targetLang, sourceLang))
-  )
-  return translated
-}
-
-// Translate gardening advice object to target language
-async function translateAdvice(advice, targetLang, sourceLang = 'EN') {
-  if (!advice || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
-    return advice
-  }
-
-  console.log(`[translate] Translating advice to ${targetLang}...`)
-
-  const translated = { ...advice }
-
-  // Translate text fields in parallel where possible
-  const [adviceText, adviceSummary, weeklyFocus, weatherAdvice, encouragement] = await Promise.all([
-    advice.adviceText ? translateWithDeepL(advice.adviceText, targetLang, sourceLang) : advice.adviceText,
-    advice.adviceSummary ? translateWithDeepL(advice.adviceSummary, targetLang, sourceLang) : advice.adviceSummary,
-    advice.weeklyFocus ? translateWithDeepL(advice.weeklyFocus, targetLang, sourceLang) : advice.weeklyFocus,
-    advice.weatherAdvice ? translateWithDeepL(advice.weatherAdvice, targetLang, sourceLang) : advice.weatherAdvice,
-    advice.encouragement ? translateWithDeepL(advice.encouragement, targetLang, sourceLang) : advice.encouragement,
-  ])
-
-  translated.adviceText = adviceText
-  translated.adviceSummary = adviceSummary
-  translated.weeklyFocus = weeklyFocus
-  translated.weatherAdvice = weatherAdvice
-  translated.encouragement = encouragement
-
-  // Translate focus areas
-  if (advice.focusAreas && Array.isArray(advice.focusAreas)) {
-    translated.focusAreas = await translateArrayWithDeepL(advice.focusAreas, targetLang, sourceLang)
-  }
-
-  // Translate plant-specific tips
-  if (advice.plantSpecificTips && Array.isArray(advice.plantSpecificTips)) {
-    translated.plantSpecificTips = await Promise.all(
-      advice.plantSpecificTips.map(async (tip) => ({
-        ...tip,
-        tip: tip.tip ? await translateWithDeepL(tip.tip, targetLang, sourceLang) : tip.tip,
-        reason: tip.reason ? await translateWithDeepL(tip.reason, targetLang, sourceLang) : tip.reason,
-        // Don't translate plant name - keep it in original language
-      }))
-    )
-  }
-
-  console.log(`[translate] Advice translation to ${targetLang} complete`)
-  return translated
-}
-
-// Weather API helper
-async function fetchWeatherForLocation(lat, lon, city) {
-  // Use Open-Meteo API (free, no API key needed)
-  try {
-    if (!lat || !lon) {
-      // Try geocoding if we only have city name
-      if (city) {
-        const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)
-        if (geoResp.ok) {
-          const geoData = await geoResp.json()
-          if (geoData.results?.[0]) {
-            lat = geoData.results[0].latitude
-            lon = geoData.results[0].longitude
-          }
-        }
-      }
-      if (!lat || !lon) return null
-    }
-
-    const weatherResp = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7`
-    )
-
-    if (!weatherResp.ok) return null
-    const data = await weatherResp.json()
-
-    // Weather code to description mapping
-    const weatherCodes = {
-      0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
-      45: 'Foggy', 48: 'Rime fog', 51: 'Light drizzle', 53: 'Moderate drizzle',
-      55: 'Dense drizzle', 61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
-      71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow', 80: 'Rain showers',
-      95: 'Thunderstorm'
-    }
-
-    return {
-      current: {
-        temp: data.current?.temperature_2m,
-        humidity: data.current?.relative_humidity_2m,
-        condition: weatherCodes[data.current?.weather_code] || 'Unknown',
-        windSpeed: data.current?.wind_speed_10m,
-        weatherCode: data.current?.weather_code,
-      },
-      forecast: (data.daily?.time || []).slice(0, 7).map((date, i) => ({
-        date,
-        tempMax: data.daily?.temperature_2m_max?.[i],
-        tempMin: data.daily?.temperature_2m_min?.[i],
-        condition: weatherCodes[data.daily?.weather_code?.[i]] || 'Unknown',
-        precipProbability: data.daily?.precipitation_probability_max?.[i],
-      })),
-      timezone: data.timezone,
-    }
-  } catch (err) {
-    console.warn('[weather] Failed to fetch weather:', err)
-    return null
-  }
-}
-
-/**
- * Generate heuristic gardener advice when AI is unavailable.
- */
-function generateRuleBasedAdvice({
-  gardenName,
-  plants,
-  thisWeekStats,
-  lastWeekStats,
-  weatherData,
-  avgCompletionTime,
-  taskSummaryText,
-}) {
-  const plantCount = plants.length
-  const normalizedThisWeek = thisWeekStats || { rate: 100, summary: {} }
-  const normalizedLastWeek = lastWeekStats || { rate: normalizedThisWeek.rate }
-  const completionRate = Number.isFinite(normalizedThisWeek.rate) ? normalizedThisWeek.rate : 100
-  const previousRate = Number.isFinite(normalizedLastWeek.rate) ? normalizedLastWeek.rate : completionRate
-  const rateDelta = completionRate - previousRate
-  const summaryParts = []
-
-  if (plantCount > 0) {
-    summaryParts.push(`You’re currently caring for ${plantCount} plant${plantCount === 1 ? '' : 's'}.`)
-  } else {
-    summaryParts.push('No plants are linked to this garden yet, so insights focus on task habits.')
-  }
-
-  const trendText =
-    rateDelta > 3
-      ? ` (up ${Math.abs(rateDelta)}% from last week)`
-      : rateDelta < -3
-        ? ` (${Math.abs(rateDelta)}% below last week)`
-        : ''
-  summaryParts.push(`You logged ${completionRate}% of scheduled tasks this week${trendText}.`)
-
-  if (avgCompletionTime && avgCompletionTime !== 'Not enough data') {
-    summaryParts.push(`Most tasks get completed around ${avgCompletionTime}.`)
-  }
-
-  const typeLabels = {
-    water: 'watering',
-    fertilize: 'feeding',
-    harvest: 'harvesting',
-    cut: 'pruning',
-    custom: 'custom care',
-  }
-  const summaryByType = normalizedThisWeek.summary || {}
-  const deficits = Object.entries(typeLabels).map(([type, label]) => {
-    const stats = summaryByType[type] || { due: 0, completed: 0 }
-    const due = Number(stats.due || 0)
-    const completed = Number(stats.completed || 0)
-    return { type, label, due, completed, deficit: Math.max(0, due - completed) }
-  })
-    .filter(entry => entry.due > 0)
-    .sort((a, b) => {
-      if (b.deficit === a.deficit) return b.due - a.due
-      return b.deficit - a.deficit
-    })
-
-  const focusAreas = []
-  for (const entry of deficits) {
-    if (entry.deficit <= 0) continue
-    focusAreas.push(`Prioritize ${entry.label} tasks (${entry.completed}/${entry.due} logged).`)
-    if (focusAreas.length >= 3) break
-  }
-  if (focusAreas.length === 0) {
-    focusAreas.push(plantCount === 0
-      ? 'Add at least one plant so reminders can target something alive.'
-      : 'Stay consistent with your existing routine to keep plants thriving.')
-  }
-
-  const stressedPlants = plants.filter(p => {
-    const health = (p.health_status || '').toLowerCase()
-    return Boolean(
-      (health && !['great', 'good', 'thriving', 'healthy'].includes(health)) ||
-      (p.notes && p.notes.length > 0)
-    )
-  })
-
-  const plantTips = []
-  const plantEntries = stressedPlants.length ? stressedPlants : plants.slice(0, 3)
-  plantEntries.slice(0, 3).forEach((p, idx) => {
-    const plantName = p.nickname || p.plant_name || `Plant ${idx + 1}`
-    const health = (p.health_status || '').toLowerCase()
-    let tip = 'Give this plant a quick inspection for pests, yellowing leaves, or soil compaction.'
-    let reason = 'General upkeep keeps foliage breathing well.'
-    let priority = 'medium'
-
-    if (health.includes('dry')) {
-      tip = 'Soak the soil thoroughly, add mulch to retain moisture, and monitor afternoon sun.'
-      reason = 'Reported dryness suggests the roots need a deeper drink.'
-      priority = 'high'
-    } else if (health.includes('pest') || health.includes('spot')) {
-      tip = 'Wipe leaves, remove damaged growth, and consider a neem or soap spray this week.'
-      reason = 'Spots or pests spread quickly when ignored.'
-      priority = 'high'
-    } else if (health.includes('slow') || health.includes('stall')) {
-      tip = 'Check fertilizer schedule and gently loosen the top layer of soil to improve airflow.'
-      reason = 'Stalled growth often tracks back to nutrients or compacted soil.'
-    } else if (p.notes) {
-      reason = p.notes.slice(0, 160)
-    }
-
-    plantTips.push({
-      plantName,
-      tip,
-      priority,
-      reason,
-    })
-  })
-
-  const formatDay = iso => {
-    try {
       return new Date(iso).toLocaleDateString(undefined, { weekday: 'long' })
     } catch {
       return 'upcoming days'
@@ -13534,6 +16639,15 @@ function generateRuleBasedAdvice({
   }
 }
 
+    // Build journal context
+    let journalContext = ''
+    if (recentJournalEntries.length > 0) {
+      journalContext = `
+RECENT JOURNAL ENTRIES (gardener's own observations):
+${recentJournalEntries.map(e => {
+        const moodEmoji = { great: '🌟', good: '😊', neutral: '😐', concerned: '😟', struggling: '😰' }[e.mood] || ''
+        return `- ${e.entry_date}${moodEmoji ? ' ' + moodEmoji : ''}: "${e.content.slice(0, 200)}${e.content.length > 200 ? '...' : ''}"`
+      }).join('\n')}`
 // Garden Weather endpoint
 app.get('/api/garden/:id/weather', async (req, res) => {
   try {
@@ -13553,7 +16667,7 @@ app.get('/api/garden/:id/weather', async (req, res) => {
       res.status(404).json({ ok: false, error: 'Garden not found' })
       return
     }
-
+    
     if (!garden.location_city && !garden.location_lat) {
       res.json({ ok: true, weather: null, message: 'No location set for this garden' })
       return
@@ -13600,6 +16714,39 @@ app.put('/api/garden/:id/location', async (req, res) => {
     let finalLon = lon
     if (city && (!lat || !lon)) {
       try {
+        // Build messages with optional images for vision analysis
+        const useVision = journalPhotoUrls.length > 0
+        let messages = [
+          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
+        ]
+
+        if (useVision) {
+          // Include up to 4 most recent journal photos for analysis
+          const imageUrls = journalPhotoUrls.slice(0, 4)
+          const content = [
+            {
+              type: 'text', text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
+- Overall plant health and vigor
+- Signs of disease, pests, or stress
+- Watering issues (overwatering/underwatering)
+- Nutrient deficiencies
+- Growth progress
+Include specific observations from the photos in your advice.` }
+          ]
+
+          for (const url of imageUrls) {
+            content.push({
+              type: 'image_url',
+              image_url: {
+                url: url,
+                detail: 'high'
+              }
+            })
+          }
+
+          messages.push({ role: 'user', content })
+        } else {
+          messages.push({ role: 'user', content: prompt })
         const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)
         if (geoResp.ok) {
           const geoData = await geoResp.json()
@@ -13608,11 +16755,11 @@ app.put('/api/garden/:id/location', async (req, res) => {
             finalLon = geoData.results[0].longitude
           }
         }
-      } catch { }
+      } catch {}
     }
 
     console.log('[garden-location] Updating garden with:', { city, country, timezone, finalLat, finalLon, preferredLanguage })
-
+    
     // Build update query - only include preferred_language if explicitly provided
     let updateResult
     if (preferredLanguage !== undefined) {
@@ -13722,7 +16869,7 @@ app.get('/api/garden/:id/weather', async (req, res) => {
 
     let lat = garden.location_lat
     let lon = garden.location_lon
-
+    
     // If lat/lon missing but city is set, try to geocode
     if ((!lat || !lon) && garden.location_city) {
       try {
@@ -13739,14 +16886,14 @@ app.get('/api/garden/:id/weather', async (req, res) => {
               update public.gardens 
               set location_lat = ${lat}, location_lon = ${lon}
               where id = ${gardenId}
-            `.catch(() => { }) // Non-blocking update
+            `.catch(() => {}) // Non-blocking update
           }
         }
       } catch (geoErr) {
         console.warn('[garden-weather] Geocoding failed:', geoErr)
       }
     }
-
+    
     if (!lat || !lon) {
       res.status(400).json({ ok: false, error: 'Garden location not set', noLocation: true })
       return
@@ -13754,15 +16901,15 @@ app.get('/api/garden/:id/weather', async (req, res) => {
 
     // Fetch weather from Open-Meteo API
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=${garden.location_timezone || 'auto'}&forecast_days=7`
-
+    
     const weatherResp = await fetch(weatherUrl)
     if (!weatherResp.ok) {
       res.status(502).json({ ok: false, error: 'Failed to fetch weather data' })
       return
     }
-
+    
     const weatherJson = await weatherResp.json()
-
+    
     // Convert weather code to condition string
     const getConditionFromCode = (code) => {
       if (code === 0) return 'clear'
@@ -13816,14 +16963,61 @@ app.put('/api/garden/:gardenId/plant/:plantId/health', async (req, res) => {
   try {
     const gardenId = String(req.params.gardenId || '').trim()
     const plantId = String(req.params.plantId || '').trim()
-    if (!gardenId || !plantId) {
+    if (!gardenId || !plantId) { 
       res.status(400).json({ ok: false, error: 'garden id and plant id required' })
-      return
+      return 
     }
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
+    const saved = insertResult[0]
+
+    // Build the advice response
+    let adviceResponse = {
+      id: String(saved.id),
+      weekStart: saved.week_start,
+      adviceText: saved.advice_text,
+      adviceSummary: saved.advice_summary,
+      focusAreas: saved.focus_areas || [],
+      plantSpecificTips: normalizeJsonArray(saved.plant_specific_tips),
+      improvementScore: saved.improvement_score,
+      generatedAt: saved.generated_at,
+      weeklyFocus: parsed.weeklyFocus || null,
+      weatherAdvice: parsed.weatherAdvice || null,
+      encouragement: parsed.encouragement || null,
+      weatherContext: saved.weather_context || null,
+      locationContext: saved.location_context || null,
+    }
+
+    // Translate if target language is not English
+    if (targetLang !== 'EN') {
+      console.log(`[garden-advice] Translating new advice to ${targetLang}`)
+      try {
+        const translatedAdvice = await translateAdvice(adviceResponse, targetLang)
+
+        // Store the translation in the database
+        const translations = {
+          [targetLang]: {
+            adviceText: translatedAdvice.adviceText,
+            adviceSummary: translatedAdvice.adviceSummary,
+            focusAreas: translatedAdvice.focusAreas,
+            plantSpecificTips: translatedAdvice.plantSpecificTips,
+            weeklyFocus: translatedAdvice.weeklyFocus,
+            weatherAdvice: translatedAdvice.weatherAdvice,
+            encouragement: translatedAdvice.encouragement,
+          }
+        }
+        await sql`
+          update public.garden_ai_advice
+          set translations = ${JSON.stringify(translations)}::jsonb
+          where id = ${saved.id}
+        `.catch(err => console.warn('[garden-advice] Failed to cache translation:', err))
+
+        adviceResponse = { ...adviceResponse, ...translatedAdvice }
+      } catch (translateErr) {
+        console.warn('[garden-advice] Translation failed, returning English:', translateErr)
+      }
     const { healthStatus, notes } = req.body || {}
 
     // Verify membership
@@ -13861,14 +17055,112 @@ app.put('/api/garden/:gardenId/plant/:plantId/health', async (req, res) => {
   }
 })
 
+// Translate text using DeepL API
+async function translateWithDeepL(text, targetLang, sourceLang = 'EN') {
+  if (!text || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return text
+  }
+
+  const deeplApiKey = process.env.DEEPL_API_KEY
+  if (!deeplApiKey) {
+    console.log('[translate] DeepL API key not configured, skipping translation')
+    return text
+  }
+
+  try {
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        source_lang: sourceLang.toUpperCase(),
+        target_lang: targetLang.toUpperCase(),
+      }),
+    })
+
+    if (!response.ok) {
+      console.warn('[translate] DeepL API error:', response.status)
+      return text
+    }
+
+    const data = await response.json()
+    return data.translations?.[0]?.text || text
+  } catch (err) {
+    console.warn('[translate] DeepL translation failed:', err)
+    return text
+  }
+}
+
+// Translate array of strings using DeepL
+async function translateArrayWithDeepL(items, targetLang, sourceLang = 'EN') {
+  if (!items || items.length === 0 || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return items
+  }
+
+  // Translate each item in parallel
+  const translated = await Promise.all(
+    items.map(item => translateWithDeepL(item, targetLang, sourceLang))
+  )
+  return translated
+}
+
+// Translate gardening advice object to target language
+async function translateAdvice(advice, targetLang, sourceLang = 'EN') {
+  if (!advice || !targetLang || targetLang.toUpperCase() === sourceLang.toUpperCase()) {
+    return advice
+  }
+
+  console.log(`[translate] Translating advice to ${targetLang}...`)
+
+  const translated = { ...advice }
+
+  // Translate text fields in parallel where possible
+  const [adviceText, adviceSummary, weeklyFocus, weatherAdvice, encouragement] = await Promise.all([
+    advice.adviceText ? translateWithDeepL(advice.adviceText, targetLang, sourceLang) : advice.adviceText,
+    advice.adviceSummary ? translateWithDeepL(advice.adviceSummary, targetLang, sourceLang) : advice.adviceSummary,
+    advice.weeklyFocus ? translateWithDeepL(advice.weeklyFocus, targetLang, sourceLang) : advice.weeklyFocus,
+    advice.weatherAdvice ? translateWithDeepL(advice.weatherAdvice, targetLang, sourceLang) : advice.weatherAdvice,
+    advice.encouragement ? translateWithDeepL(advice.encouragement, targetLang, sourceLang) : advice.encouragement,
+  ])
+
+  translated.adviceText = adviceText
+  translated.adviceSummary = adviceSummary
+  translated.weeklyFocus = weeklyFocus
+  translated.weatherAdvice = weatherAdvice
+  translated.encouragement = encouragement
+
+  // Translate focus areas
+  if (advice.focusAreas && Array.isArray(advice.focusAreas)) {
+    translated.focusAreas = await translateArrayWithDeepL(advice.focusAreas, targetLang, sourceLang)
+  }
+
+  // Translate plant-specific tips
+  if (advice.plantSpecificTips && Array.isArray(advice.plantSpecificTips)) {
+    translated.plantSpecificTips = await Promise.all(
+      advice.plantSpecificTips.map(async (tip) => ({
+        ...tip,
+        tip: tip.tip ? await translateWithDeepL(tip.tip, targetLang, sourceLang) : tip.tip,
+        reason: tip.reason ? await translateWithDeepL(tip.reason, targetLang, sourceLang) : tip.reason,
+        // Don't translate plant name - keep it in original language
+      }))
+    )
+  }
+
+  console.log(`[translate] Advice translation to ${targetLang} complete`)
+  return translated
+}
 // Get plant details including health
 app.get('/api/garden/:gardenId/plant/:plantId', async (req, res) => {
   try {
     const gardenId = String(req.params.gardenId || '').trim()
     const plantId = String(req.params.plantId || '').trim()
-    if (!gardenId || !plantId) {
+    if (!gardenId || !plantId) { 
       res.status(400).json({ ok: false, error: 'garden id and plant id required' })
-      return
+      return 
     }
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
@@ -13903,8 +17195,8 @@ app.get('/api/garden/:gardenId/plant/:plantId', async (req, res) => {
     }
 
     const plant = plants[0]
-    res.json({
-      ok: true,
+    res.json({ 
+      ok: true, 
       plant: {
         id: plant.id,
         nickname: plant.nickname,
@@ -13933,6 +17225,53 @@ app.get('/api/garden/:gardenId/plant/:plantId', async (req, res) => {
 // Get journal entries for a garden
 app.get('/api/garden/:id/journal', async (req, res) => {
   try {
+    if (!lat || !lon) {
+      // Try geocoding if we only have city name
+      if (city) {
+        const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)
+        if (geoResp.ok) {
+          const geoData = await geoResp.json()
+          if (geoData.results?.[0]) {
+            lat = geoData.results[0].latitude
+            lon = geoData.results[0].longitude
+          }
+        }
+      }
+      if (!lat || !lon) return null
+    }
+
+    const weatherResp = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7`
+    )
+
+    if (!weatherResp.ok) return null
+    const data = await weatherResp.json()
+
+    // Weather code to description mapping
+    const weatherCodes = {
+      0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+      45: 'Foggy', 48: 'Rime fog', 51: 'Light drizzle', 53: 'Moderate drizzle',
+      55: 'Dense drizzle', 61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+      71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow', 80: 'Rain showers',
+      95: 'Thunderstorm'
+    }
+
+    return {
+      current: {
+        temp: data.current?.temperature_2m,
+        humidity: data.current?.relative_humidity_2m,
+        condition: weatherCodes[data.current?.weather_code] || 'Unknown',
+        windSpeed: data.current?.wind_speed_10m,
+        weatherCode: data.current?.weather_code,
+      },
+      forecast: (data.daily?.time || []).slice(0, 7).map((date, i) => ({
+        date,
+        tempMax: data.daily?.temperature_2m_max?.[i],
+        tempMin: data.daily?.temperature_2m_min?.[i],
+        condition: weatherCodes[data.daily?.weather_code?.[i]] || 'Unknown',
+        precipProbability: data.daily?.precipitation_probability_max?.[i],
+      })),
+      timezone: data.timezone,
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
@@ -14060,7 +17399,7 @@ app.post('/api/garden/:id/journal', async (req, res) => {
           weatherSnapshot = weather.current
         }
       }
-    } catch { }
+    } catch {}
 
     const today = new Date().toISOString().slice(0, 10)
 
@@ -14285,7 +17624,7 @@ Be specific and reference what you actually see in the images. If you notice any
       const content = [
         { type: 'text', text: textPrompt }
       ]
-
+      
       // Add images - transform URLs to media proxy format for optimization
       for (const photo of photos) {
         const imageUrl = supabaseStorageToMediaProxy(photo.image_url) || photo.image_url
@@ -14297,7 +17636,7 @@ Be specific and reference what you actually see in the images. If you notice any
           }
         })
       }
-
+      
       messages.push({ role: 'user', content })
     } else {
       messages.push({ role: 'user', content: textPrompt })
@@ -14318,6 +17657,16 @@ Be specific and reference what you actually see in the images. If you notice any
       set ai_feedback = ${feedback}, ai_feedback_generated_at = now()
       where id = ${entryId}
     `
+    const garden = gardenRows[0]
+    if (!garden) {
+      res.status(404).json({ ok: false, error: 'Garden not found' })
+      return
+    }
+
+    if (!garden.location_city && !garden.location_lat) {
+      res.json({ ok: true, weather: null, message: 'No location set for this garden' })
+      return
+    }
 
     res.json({ ok: true, feedback, imagesAnalyzed: photos.length, tokensUsed })
   } catch (e) {
@@ -14387,6 +17736,36 @@ app.get('/api/garden/:id/advice/export', async (req, res) => {
         } else {
           throw err
         }
+      } catch { }
+    }
+
+    console.log('[garden-location] Updating garden with:', { city, country, timezone, finalLat, finalLon, preferredLanguage })
+
+    // Build update query - only include preferred_language if explicitly provided
+    let updateResult
+    if (preferredLanguage !== undefined) {
+      updateResult = await sql`
+        update public.gardens set
+          location_city = ${city || null},
+          location_country = ${country || null},
+          location_timezone = ${timezone || null},
+          location_lat = ${finalLat || null},
+          location_lon = ${finalLon || null},
+          preferred_language = ${preferredLanguage || 'en'}
+        where id = ${gardenId}
+        returning id, location_city, location_country, preferred_language
+      `
+    } else {
+      updateResult = await sql`
+        update public.gardens set
+          location_city = ${city || null},
+          location_country = ${country || null},
+          location_timezone = ${timezone || null},
+          location_lat = ${finalLat || null},
+          location_lon = ${finalLon || null}
+        where id = ${gardenId}
+        returning id, location_city, location_country, preferred_language
+      `
       }
     } else {
       adviceHistory = await runAdviceHistoryBaseQuery()
@@ -14551,10 +17930,66 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       }
     }
 
+    let lat = garden.location_lat
+    let lon = garden.location_lon
+
+    // If lat/lon missing but city is set, try to geocode
+    if ((!lat || !lon) && garden.location_city) {
+      try {
+        console.log('[garden-weather] Geocoding city:', garden.location_city)
+        const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(garden.location_city)}&count=1`)
+        if (geoResp.ok) {
+          const geoData = await geoResp.json()
+          if (geoData.results?.[0]) {
+            lat = geoData.results[0].latitude
+            lon = geoData.results[0].longitude
+            console.log('[garden-weather] Geocoded to:', lat, lon)
+            // Optionally update the garden record with the coordinates
+            await sql`
+              update public.gardens 
+              set location_lat = ${lat}, location_lon = ${lon}
+              where id = ${gardenId}
+            `.catch(() => { }) // Non-blocking update
+          }
+        }
+      } catch (geoErr) {
+        console.warn('[garden-weather] Geocoding failed:', geoErr)
+      }
+    }
+
+    if (!lat || !lon) {
+      res.status(400).json({ ok: false, error: 'Garden location not set', noLocation: true })
+      return
+    }
+
+    // Fetch weather from Open-Meteo API
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=${garden.location_timezone || 'auto'}&forecast_days=7`
+
+    const weatherResp = await fetch(weatherUrl)
+    if (!weatherResp.ok) {
+      res.status(502).json({ ok: false, error: 'Failed to fetch weather data' })
+      return
+    }
+
+    const weatherJson = await weatherResp.json()
+
+    // Convert weather code to condition string
+    const getConditionFromCode = (code) => {
+      if (code === 0) return 'clear'
+      if (code === 1 || code === 2) return 'partly cloudy'
+      if (code === 3) return 'cloudy'
+      if (code >= 45 && code <= 48) return 'foggy'
+      if (code >= 51 && code <= 67) return 'rain'
+      if (code >= 71 && code <= 77) return 'snow'
+      if (code >= 80 && code <= 82) return 'rain'
+      if (code >= 85 && code <= 86) return 'snow'
+      if (code >= 95) return 'thunderstorm'
+      return 'cloudy'
+    }
     // Parse multipart form data
     const busboy = (await import('busboy')).default
     const bb = busboy({ headers: req.headers })
-
+    
     let fileBuffer = null
     let fileName = ''
     let mimeType = ''
@@ -14600,7 +18035,7 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       // Get public URL and transform to media proxy
       const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
       const proxyUrl = supabaseStorageToMediaProxy(urlData?.publicUrl) || urlData?.publicUrl || ''
-
+      
       res.json({ ok: true, url: proxyUrl, path: storagePath })
     })
 
@@ -14608,6 +18043,1137 @@ app.post('/api/garden/:id/upload', async (req, res) => {
   } catch (e) {
     console.error('[upload] Error:', e)
     res.status(500).json({ ok: false, error: e?.message || 'Failed to upload' })
+  }
+})
+
+// Admin: create a new broadcast message
+app.post('/api/admin/broadcast', async (req, res) => {
+  try {
+    const gardenId = String(req.params.gardenId || '').trim()
+    const plantId = String(req.params.plantId || '').trim()
+    if (!gardenId || !plantId) {
+      res.status(400).json({ ok: false, error: 'garden id and plant id required' })
+    // Require admin and ensure table
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    await ensureBroadcastTable()
+
+    const messageRaw = (req.body?.message || '').toString().trim()
+    const severityRaw = (req.body?.severity || '').toString().trim().toLowerCase()
+    const severity = (severityRaw === 'warning' || severityRaw === 'danger') ? severityRaw : 'info'
+    const durationMsRaw = Number(req.body?.durationMs || req.body?.duration_ms || req.body?.duration || 0)
+    if (!messageRaw) {
+      res.status(400).json({ error: 'Message is required' })
+      return
+    }
+    // Enforce single active message
+    const active = await sql`
+      select id from public.broadcast_messages
+      where removed_at is null and (expires_at is null or expires_at > now())
+      limit 1
+    `
+    if (Array.isArray(active) && active.length > 0) {
+      res.status(409).json({ error: 'An active broadcast already exists' })
+      return
+    }
+    let expiresAt = null
+    if (Number.isFinite(durationMsRaw) && durationMsRaw > 0) {
+      expiresAt = new Date(Date.now() + Math.floor(durationMsRaw)).toISOString()
+    }
+    const rows = await sql`
+      insert into public.broadcast_messages (message, severity, created_by, expires_at)
+      values (${messageRaw}, ${severity}, ${typeof adminId === 'string' ? adminId : null}, ${expiresAt ? expiresAt : null})
+      returning id::text as id, message, severity, created_at, expires_at, created_by::text as created_by
+    `
+    const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+    // Resolve admin name for SSE payload convenience
+    let adminName = null
+    if (row?.created_by && sql) {
+      try {
+        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        adminName = nameRows?.[0]?.name || null
+      } catch {}
+    }
+    const payload = row ? {
+      id: String(row.id || ''),
+      message: String(row.message || ''),
+      severity: String(row.severity || 'info'),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      createdBy: row.created_by ? String(row.created_by) : null,
+      adminName: adminName ? String(adminName) : null,
+    } : null
+    if (payload) broadcastToAll(payload)
+    res.json({ ok: true, broadcast: payload })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to create broadcast' })
+  }
+})
+
+// Admin: update current broadcast message (edit message or severity, optionally extend/shorten duration)
+app.put('/api/admin/broadcast', async (req, res) => {
+  try {
+    const gardenId = String(req.params.gardenId || '').trim()
+    const plantId = String(req.params.plantId || '').trim()
+    if (!gardenId || !plantId) {
+      res.status(400).json({ ok: false, error: 'garden id and plant id required' })
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    await ensureBroadcastTable()
+    // Find current active
+    const rows = await sql`
+      select id, message, severity, created_at, expires_at, created_by::text as created_by
+      from public.broadcast_messages
+      where removed_at is null and (expires_at is null or expires_at > now())
+      order by created_at desc
+      limit 1
+    `
+    const cur = Array.isArray(rows) && rows[0] ? rows[0] : null
+    if (!cur) {
+      res.status(404).json({ error: 'No active broadcast' })
+      return
+    }
+    const nextMessage = (req.body?.message ?? cur.message)?.toString()?.trim()
+    const sevRaw = (req.body?.severity ?? cur.severity)?.toString()?.trim()?.toLowerCase()
+    const nextSeverity = (sevRaw === 'warning' || sevRaw === 'danger') ? sevRaw : 'info'
+    const durationMsRaw = req.body?.durationMs ?? req.body?.duration_ms ?? null
+    let nextExpires = cur.expires_at ? new Date(cur.expires_at) : null
+    if (durationMsRaw === null) {
+      // keep as is
+    } else {
+      const n = Number(durationMsRaw)
+      if (Number.isFinite(n) && n > 0) nextExpires = new Date(Date.now() + Math.floor(n))
+      else nextExpires = null
+    }
+    const upd = await sql`
+      update public.broadcast_messages
+      set message = ${nextMessage}, severity = ${nextSeverity}, expires_at = ${nextExpires ? nextExpires.toISOString() : null}
+      where id = ${cur.id}
+      returning id::text as id, message, severity, created_at, expires_at, created_by::text as created_by
+    `
+    const row = upd?.[0]
+    let adminName = null
+    if (row?.created_by && sql) {
+      try {
+        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        adminName = nameRows?.[0]?.name || null
+      } catch {}
+    }
+
+    const plant = plants[0]
+    res.json({
+      ok: true,
+      plant: {
+        id: plant.id,
+        nickname: plant.nickname,
+        plantsOnHand: plant.plants_on_hand,
+        healthStatus: plant.health_status,
+        notes: plant.notes,
+        lastHealthUpdate: plant.last_health_update,
+        plantedAt: plant.planted_at,
+        expectedBloomDate: plant.expected_bloom_date,
+        plantId: plant.plant_id,
+        plantName: plant.plant_name,
+        scientificName: plant.scientific_name,
+        wateringType: plant.watering_type,
+        levelSun: plant.level_sun,
+        maintenanceLevel: plant.maintenance_level,
+      }
+    })
+    const payload = row ? {
+      id: String(row.id || ''),
+      message: String(row.message || ''),
+      severity: String(row.severity || 'info'),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      createdBy: row.created_by ? String(row.created_by) : null,
+      adminName: adminName ? String(adminName) : null,
+    } : null
+    if (payload) broadcastToAll(payload)
+    res.json({ ok: true, broadcast: payload })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to update broadcast' })
+  }
+})
+
+// Admin: remove current (or specified) broadcast message
+app.delete('/api/admin/broadcast', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    await ensureBroadcastTable()
+    const idParam = (req.query?.id || req.body?.id || '').toString().trim()
+    let rows
+    if (idParam) {
+      rows = await sql`
+        update public.broadcast_messages
+        set removed_at = now()
+        where id = ${idParam} and removed_at is null
+        returning id
+      `
+    } else {
+      rows = await sql`
+        update public.broadcast_messages
+        set removed_at = now()
+        where removed_at is null and (expires_at is null or expires_at > now())
+        returning id
+      `
+    }
+    const changed = Array.isArray(rows) && rows.length > 0
+    if (changed) clearBroadcastForAll()
+    res.json({ ok: true, removed: changed })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to remove broadcast' })
+  }
+})
+
+app.get('/api/notifications', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  try {
+    const rows = await sql`
+      select id::text as id, title, message, delivery_status, delivered_at, scheduled_for, seen_at, cta_url, payload
+      from public.user_notifications
+      where user_id = ${user.id}
+      order by coalesce(delivered_at, scheduled_for) desc
+      limit 50
+    `
+    const notifications = (rows || []).map((row) => ({
+      id: row.id,
+      title: row.title || null,
+      message: row.message || null,
+      status: row.delivery_status || 'pending',
+      deliveredAt: isoOrNull(row.delivered_at),
+      scheduledFor: isoOrNull(row.scheduled_for),
+      seenAt: isoOrNull(row.seen_at),
+      ctaUrl: row.cta_url || null,
+      payload: row.payload && typeof row.payload === 'object' ? row.payload : {},
+    }))
+    res.json({ notifications })
+  } catch (err) {
+    console.error('[notifications] failed to load user notifications', err)
+    res.status(500).json({ error: err?.message || 'Failed to load notifications' })
+  }
+})
+
+app.post('/api/notifications/:id/read', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  try {
+    await sql`
+      update public.user_notifications
+      set seen_at = now()
+      where id = ${notificationId} and user_id = ${user.id}
+    `
+    if (!membership?.length) {
+      res.status(403).json({ ok: false, error: 'Access denied' })
+      return
+    }
+
+    // Fetch weather for the entry
+    let weatherSnapshot = {}
+    try {
+      const gardenRows = await sql`
+        select location_city, location_lat, location_lon
+        from public.gardens where id = ${gardenId} limit 1
+      `
+      const garden = gardenRows[0]
+      if (garden?.location_city || garden?.location_lat) {
+        const weather = await fetchWeatherForLocation(garden.location_lat, garden.location_lon, garden.location_city)
+        if (weather?.current) {
+          weatherSnapshot = weather.current
+        }
+      }
+    } catch { }
+
+    const today = new Date().toISOString().slice(0, 10)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] failed to update notification', err)
+    res.status(500).json({ error: err?.message || 'Failed to update notification' })
+  }
+})
+
+app.post('/api/push/subscribe', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const subscription = req.body?.subscription
+  if (!subscription || typeof subscription !== 'object' || !subscription.endpoint) {
+    res.status(400).json({ error: 'Invalid subscription payload' })
+    return
+  }
+  const authKey = subscription.keys?.auth || subscription.auth_key || null
+  const p256dhKey = subscription.keys?.p256dh || subscription.p256dh_key || null
+  const userAgent = req.get('user-agent') || null
+  try {
+    await sql`
+      insert into public.user_push_subscriptions (user_id, endpoint, auth_key, p256dh_key, user_agent, subscription, updated_at, last_used_at)
+      values (${user.id}, ${subscription.endpoint}, ${authKey}, ${p256dhKey}, ${userAgent}, ${subscription}, now(), now())
+      on conflict (endpoint) do update
+      set user_id = excluded.user_id,
+          auth_key = excluded.auth_key,
+          p256dh_key = excluded.p256dh_key,
+          user_agent = excluded.user_agent,
+          subscription = excluded.subscription,
+          updated_at = now(),
+          last_used_at = now()
+    `
+    res.json({ ok: true, pushConfigured: pushNotificationsEnabled })
+  } catch (err) {
+    console.error('[notifications] failed to store push subscription', err)
+    res.status(500).json({ error: err?.message || 'Failed to store subscription' })
+  }
+})
+
+app.delete('/api/push/subscribe', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const endpoint =
+    (req.body?.endpoint || req.query?.endpoint || req.body?.subscription?.endpoint || '')
+      .toString()
+      .trim()
+  if (!endpoint) {
+    res.status(400).json({ error: 'Missing endpoint' })
+    return
+  }
+  try {
+    await sql`
+      delete from public.user_push_subscriptions
+      where endpoint = ${endpoint} or (user_id = ${user.id} and endpoint = ${endpoint})
+    `
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] failed to remove subscription', err)
+    res.status(500).json({ error: err?.message || 'Failed to remove subscription' })
+  }
+})
+
+// ============================================================================
+// Messaging API Endpoints
+// ============================================================================
+
+// Helper function to send instant notification for specific trigger types
+// payload can include senderId to check for mutes
+async function sendInstantNotification(triggerType, userId, payload) {
+  if (!sql) return
+  try {
+    // Check if recipient has muted the sender (if senderId provided)
+    if (payload?.senderId && payload.senderId !== userId) {
+      const muteCheck = await sql`
+        select exists (
+          select 1 from public.user_mutes
+          where muter_id = ${userId} and muted_id = ${payload.senderId}
+        ) as is_muted
+      `
+      if (muteCheck?.[0]?.is_muted) {
+        console.log(`[notifications] Notification suppressed - user ${userId} has muted ${payload.senderId}`)
+        return
+      }
+    }
+    
+    // Get automation settings for this trigger type
+    const automations = await sql`
+      select na.*, 
+             coalesce(nt.message_variants, '{}') as message_variants,
+             nt.title as template_title
+      from public.notification_automations na
+      left join public.notification_templates nt on nt.id = na.template_id
+      where na.trigger_type = ${triggerType}
+        and na.is_enabled = true
+      limit 1
+    `
+    
+    if (!automations || !automations.length) {
+      console.log(`[notifications] Automation ${triggerType} not enabled or not found`)
+      return
+    }
+    
+    const automation = automations[0]
+    const messageVariants = toStringArray(automation.message_variants)
+    if (!messageVariants.length) {
+      console.log(`[notifications] No message variants for ${triggerType}`)
+      return
+    }
+    
+    // Get recipient profile
+    const profiles = await sql`
+      select id, display_name, language, timezone, notify_push
+      from public.profiles
+      where id = ${userId}
+      limit 1
+    `
+    
+    if (!profiles || !profiles.length) return
+    const recipient = profiles[0]
+    
+    // Check if user has push notifications enabled
+    if (recipient.notify_push === false) return
+    
+    // Get translations for user's language
+    const userLang = (recipient.language || 'en').toLowerCase()
+    let variants = messageVariants
+    
+    if (userLang !== 'en' && automation.template_id) {
+      const translations = await sql`
+        select message_variants
+        from public.notification_template_translations
+        where template_id = ${automation.template_id}
+          and language = ${userLang}
+        limit 1
+      `
+      if (translations?.length && translations[0].message_variants?.length) {
+        variants = translations[0].message_variants
+      }
+    }
+    
+    // Select random variant
+    const messageIndex = Math.floor(Math.random() * variants.length)
+    let message = variants[messageIndex]
+    
+    // Replace template variables
+    message = message
+      .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+      .replace(/\{\{sender\}\}/gi, payload?.senderName || 'Someone')
+      .replace(/\{\{sender_name\}\}/gi, payload?.senderName || 'Someone')
+      .replace(/\{\{garden\}\}/gi, payload?.gardenName || 'your garden')
+      .replace(/\{\{garden_name\}\}/gi, payload?.gardenName || 'your garden')
+      .replace(/\{\{task\}\}/gi, payload?.taskName || 'a task')
+      .replace(/\{\{task_name\}\}/gi, payload?.taskName || 'a task')
+    
+    // Create notification
+    await sql`
+      insert into public.user_notifications (
+        automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status, payload
+      )
+      values (
+        ${automation.id},
+        ${userId},
+        ${automation.template_title || automation.display_name || 'Notification'},
+        ${message},
+        ${payload?.ctaUrl || automation.cta_url || null},
+        now(),
+        'pending',
+        ${sql.json(payload || {})}
+      )
+    `
+    
+    console.log(`[notifications] Created instant notification ${triggerType} for user ${userId}`)
+  } catch (err) {
+    console.error(`[notifications] Failed to send instant notification ${triggerType}:`, err)
+  }
+}
+
+// Get user's conversations list
+app.get('/api/messages/conversations', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  try {
+    const conversations = await sql`
+      select 
+        c.id,
+        c.type,
+        c.status,
+        c.initiated_by,
+        c.title,
+        c.last_message_at,
+        c.last_message_preview,
+        c.created_at,
+        cp.unread_count,
+        cp.is_muted,
+        cp.last_read_at,
+        -- Get the other participant's info for direct chats
+        (
+          select jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url
+          )
+          from public.conversation_participants cp2
+          join public.profiles p on p.id = cp2.user_id
+          where cp2.conversation_id = c.id
+            and cp2.user_id <> ${user.id}
+            and cp2.left_at is null
+          limit 1
+        ) as other_participant
+      from public.conversations c
+      join public.conversation_participants cp on cp.conversation_id = c.id
+      where cp.user_id = ${user.id}
+        and cp.left_at is null
+      order by 
+        case when c.status = 'pending' and c.initiated_by <> ${user.id} then 0 else 1 end,
+        c.last_message_at desc nulls last,
+        c.created_at desc
+    `
+    
+    res.json({ 
+      conversations: conversations.map(c => ({
+        id: c.id,
+        type: c.type,
+        status: c.status,
+        initiatedBy: c.initiated_by,
+        title: c.title,
+        lastMessageAt: c.last_message_at,
+        lastMessagePreview: c.last_message_preview,
+        createdAt: c.created_at,
+        unreadCount: c.unread_count || 0,
+        isMuted: c.is_muted || false,
+        lastReadAt: c.last_read_at,
+        otherParticipant: c.other_participant,
+        isPendingForMe: c.status === 'pending' && c.initiated_by !== user.id
+      }))
+    })
+  } catch (err) {
+    console.error('[messages] Failed to get conversations:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get conversations' })
+  }
+})
+
+// Get messages in a conversation
+app.get('/api/messages/conversations/:conversationId/messages', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100)
+  const before = req.query.before // message ID to paginate before
+  
+  try {
+    // Verify user is participant
+    const participant = await sql`
+      select cp.id, c.status
+      from public.conversation_participants cp
+      join public.conversations c on c.id = cp.conversation_id
+      where cp.conversation_id = ${conversationId}
+        and cp.user_id = ${user.id}
+        and cp.left_at is null
+      limit 1
+    `
+    
+    if (!participant?.length) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+
+    // Build prompt
+    const textPrompt = `You are a friendly, knowledgeable gardening expert providing personalized feedback on a gardener's journal entry.
+
+Garden: "${entry.garden_name}"
+${entry.location_city ? `Location: ${entry.location_city}` : ''}
+Plants in garden: ${plantList || 'Not specified'}
+${weatherContext}
+
+Journal Entry Date: ${entry.entry_date}
+${entry.mood ? `Garden Status: ${moodLabels[entry.mood] || entry.mood}` : ''}
+${entry.title ? `Title: ${entry.title}` : ''}
+
+Entry Content:
+"${entry.content}"
+
+${photos.length > 0 ? `The gardener has attached ${photos.length} photo(s) with this entry. Please analyze the images carefully and include observations about:
+- Plant health and appearance
+- Any signs of disease, pests, or nutrient deficiency
+- Growth progress
+- Care recommendations based on what you see` : ''}
+
+Please provide detailed, warm, helpful feedback that:
+1. ${photos.length > 0 ? 'Describes what you observe in the photos' : 'Acknowledges their observations'}
+2. Identifies any issues or areas needing attention
+3. Offers specific, actionable tips based on what you see
+4. Celebrates any positive progress
+5. Encourages their gardening journey
+
+Be specific and reference what you actually see in the images. If you notice any concerning signs, explain what they might be and how to address them.`
+
+    // Build messages array with images for OpenAI Vision
+    const messages = [
+      { role: 'system', content: 'You are a friendly, expert gardener who can analyze plant photos and provide detailed, helpful feedback. When analyzing images, be specific about what you observe.' },
+    ]
+
+    // If we have photos, use vision model with images
+    if (photos.length > 0) {
+      const content = [
+        { type: 'text', text: textPrompt }
+      ]
+
+      // Add images - transform URLs to media proxy format for optimization
+      for (const photo of photos) {
+        const imageUrl = supabaseStorageToMediaProxy(photo.image_url) || photo.image_url
+        content.push({
+          type: 'image_url',
+          image_url: {
+            url: imageUrl,
+            detail: 'high' // Use high detail for plant analysis
+          }
+        })
+      }
+
+      messages.push({ role: 'user', content })
+    
+    let messagesQuery
+    if (before) {
+      messagesQuery = sql`
+        select 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.type,
+          m.reply_to_id,
+          m.metadata,
+          m.deleted_at,
+          m.edited_at,
+          m.created_at,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.conversation_id = ${conversationId}
+          and m.id < ${before}
+        order by m.created_at desc
+        limit ${limit}
+      `
+    } else {
+      messagesQuery = sql`
+        select 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.type,
+          m.reply_to_id,
+          m.metadata,
+          m.deleted_at,
+          m.edited_at,
+          m.created_at,
+          p.display_name as sender_name,
+          p.avatar_url as sender_avatar
+        from public.messages m
+        join public.profiles p on p.id = m.sender_id
+        where m.conversation_id = ${conversationId}
+        order by m.created_at desc
+        limit ${limit}
+      `
+    }
+    
+    const messages = await messagesQuery
+    
+    res.json({
+      messages: messages.reverse().map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name,
+        senderAvatar: m.sender_avatar,
+        content: m.deleted_at ? null : m.content,
+        type: m.type,
+        replyToId: m.reply_to_id,
+        metadata: m.metadata || {},
+        isDeleted: !!m.deleted_at,
+        editedAt: m.edited_at,
+        createdAt: m.created_at,
+        isOwn: m.sender_id === user.id
+      })),
+      hasMore: messages.length === limit
+    })
+  } catch (err) {
+    console.error('[messages] Failed to get messages:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get messages' })
+  }
+})
+
+// Send a message
+// Rate limiting configuration for messages
+const MESSAGE_RATE_LIMIT = {
+  windowMinutes: 1,           // Time window in minutes
+  maxMessages: 30,            // Max messages per window for normal users
+  maxMessagesNewAccount: 10,  // Max messages for accounts < 24h old
+  newAccountHours: 24,        // Account age threshold
+  cooldownSeconds: 5,         // Minimum seconds between messages
+  maxContentLength: 5000,     // Max message length
+  minContentLength: 1,        // Min message length
+}
+
+// In-memory cooldown tracker (per user, last message timestamp)
+const messageCooldowns = new Map()
+
+app.post('/api/messages/conversations/:conversationId/messages', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  const { content, replyToId } = req.body
+  
+  if (!content || typeof content !== 'string' || !content.trim()) {
+    return res.status(400).json({ error: 'Message content is required' })
+  }
+  
+  const trimmedContent = content.trim()
+  
+  // Content length validation
+  if (trimmedContent.length < MESSAGE_RATE_LIMIT.minContentLength) {
+    return res.status(400).json({ error: 'Message is too short' })
+  }
+  
+  if (trimmedContent.length > MESSAGE_RATE_LIMIT.maxContentLength) {
+    return res.status(400).json({ error: 'Message is too long' })
+  }
+  
+  // Cooldown check (in-memory, fast)
+  const lastMessageTime = messageCooldowns.get(user.id)
+  const now = Date.now()
+  if (lastMessageTime && (now - lastMessageTime) < MESSAGE_RATE_LIMIT.cooldownSeconds * 1000) {
+    const waitSeconds = Math.ceil((MESSAGE_RATE_LIMIT.cooldownSeconds * 1000 - (now - lastMessageTime)) / 1000)
+    return res.status(429).json({ error: `Please wait ${waitSeconds} seconds before sending another message` })
+  }
+  
+  try {
+    // Get user account age for anti-spam
+    const userInfo = await sql`
+      select u.created_at
+      from auth.users u
+      where u.id = ${user.id}
+    `
+    const accountCreatedAt = userInfo?.[0]?.created_at ? new Date(userInfo[0].created_at) : new Date(0)
+    const accountAgeHours = (Date.now() - accountCreatedAt.getTime()) / (1000 * 60 * 60)
+    const isNewAccount = accountAgeHours < MESSAGE_RATE_LIMIT.newAccountHours
+    
+    // Rate limiting check (database-backed)
+    const windowStart = new Date(Date.now() - MESSAGE_RATE_LIMIT.windowMinutes * 60 * 1000)
+    const recentMessages = await sql`
+      select count(*)::integer as count
+      from public.messages
+      where sender_id = ${user.id}
+        and created_at >= ${windowStart.toISOString()}
+    `
+    const messageCount = recentMessages?.[0]?.count || 0
+    const maxAllowed = isNewAccount ? MESSAGE_RATE_LIMIT.maxMessagesNewAccount : MESSAGE_RATE_LIMIT.maxMessages
+    
+    if (messageCount >= maxAllowed) {
+      const errorMsg = isNewAccount 
+        ? 'New accounts have limited messaging. Please wait before sending more messages.'
+        : 'You are sending messages too quickly. Please slow down.'
+      return res.status(429).json({ error: errorMsg })
+    }
+    
+    // Verify user is participant and conversation is accepted
+    const participant = await sql`
+      select cp.id, c.status, c.initiated_by
+      from public.conversation_participants cp
+      join public.conversations c on c.id = cp.conversation_id
+      where cp.conversation_id = ${conversationId}
+        and cp.user_id = ${user.id}
+        and cp.left_at is null
+      limit 1
+    `
+    
+    if (!participant?.length) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+    
+    if (participant[0].status !== 'accepted') {
+      return res.status(403).json({ error: 'Conversation must be accepted before sending messages' })
+    }
+    
+    // Check if blocked by any other participant
+    const blockedCheck = await sql`
+      select exists (
+        select 1 from public.conversation_participants cp
+        join public.user_blocks ub on ub.blocker_id = cp.user_id and ub.blocked_id = ${user.id}
+        where cp.conversation_id = ${conversationId}
+          and cp.user_id <> ${user.id}
+          and cp.left_at is null
+      ) as is_blocked
+    `
+    
+    if (blockedCheck?.[0]?.is_blocked) {
+      return res.status(403).json({ error: 'Cannot send messages in this conversation' })
+    }
+    
+    // Duplicate message detection (anti-spam)
+    const duplicateCheck = await sql`
+      select exists (
+        select 1 from public.messages
+        where sender_id = ${user.id}
+          and conversation_id = ${conversationId}
+          and content = ${trimmedContent}
+          and created_at > now() - interval '30 seconds'
+      ) as is_duplicate
+    `
+    
+    if (duplicateCheck?.[0]?.is_duplicate) {
+      return res.status(429).json({ error: 'Duplicate message detected' })
+    }
+    
+    // Insert message
+    const messages = await sql`
+      insert into public.messages (conversation_id, sender_id, content, reply_to_id)
+      values (${conversationId}, ${user.id}, ${trimmedContent}, ${replyToId || null})
+      returning *
+    `
+    
+    const message = messages[0]
+    
+    // Update cooldown tracker
+    messageCooldowns.set(user.id, Date.now())
+    
+    // Clean up old cooldown entries periodically (every ~100 requests)
+    if (Math.random() < 0.01) {
+      const expiryTime = Date.now() - MESSAGE_RATE_LIMIT.cooldownSeconds * 1000 * 2
+      for (const [uid, time] of messageCooldowns.entries()) {
+        if (time < expiryTime) messageCooldowns.delete(uid)
+      }
+    }
+    
+    // Get sender profile
+    const profiles = await sql`
+      select display_name, avatar_url from public.profiles where id = ${user.id}
+    `
+    const senderProfile = profiles?.[0] || {}
+    
+    // Send notification to other participants (respecting mutes at user level too)
+    const otherParticipants = await sql`
+      select cp.user_id 
+      from public.conversation_participants cp
+      where cp.conversation_id = ${conversationId}
+        and cp.user_id <> ${user.id}
+        and cp.left_at is null
+        and cp.is_muted = false
+        and not exists (
+          select 1 from public.user_mutes um
+          where um.muter_id = cp.user_id and um.muted_id = ${user.id}
+        )
+    `
+    
+    for (const p of otherParticipants || []) {
+      sendInstantNotification('message_received', p.user_id, {
+        senderName: senderProfile.display_name || 'Someone',
+        senderId: user.id,
+        ctaUrl: `/messages/${conversationId}`
+      }).catch(() => {})
+    }
+    
+    res.json({
+      message: {
+        id: message.id,
+        conversationId: message.conversation_id,
+        senderId: message.sender_id,
+        senderName: senderProfile.display_name,
+        senderAvatar: senderProfile.avatar_url,
+        content: message.content,
+        type: message.type,
+        replyToId: message.reply_to_id,
+        metadata: message.metadata || {},
+        isDeleted: false,
+        editedAt: null,
+        createdAt: message.created_at,
+        isOwn: true
+      }
+    })
+  } catch (err) {
+    console.error('[messages] Failed to send message:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send message' })
+  }
+})
+
+// Start or get direct conversation
+app.post('/api/messages/start', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { userId: otherUserId } = req.body
+  
+  if (!otherUserId) {
+    return res.status(400).json({ error: 'User ID is required' })
+  }
+  
+  if (otherUserId === user.id) {
+    return res.status(400).json({ error: 'Cannot start conversation with yourself' })
+  }
+  
+  try {
+    // Use the RPC function to get or create conversation
+    const result = await sql`
+      select public.get_or_create_direct_conversation(${otherUserId}::uuid) as conversation_id
+    `
+    
+    const conversationId = result?.[0]?.conversation_id
+    
+    if (!conversationId) {
+      return res.status(500).json({ error: 'Failed to create conversation' })
+    }
+    
+    // Get conversation details
+    const conversations = await sql`
+      select 
+        c.*,
+        cp.unread_count,
+        cp.is_muted,
+        (
+          select jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url
+          )
+          from public.conversation_participants cp2
+          join public.profiles p on p.id = cp2.user_id
+          where cp2.conversation_id = c.id
+            and cp2.user_id <> ${user.id}
+            and cp2.left_at is null
+          limit 1
+        ) as other_participant
+      from public.conversations c
+      join public.conversation_participants cp on cp.conversation_id = c.id
+      where c.id = ${conversationId}
+        and cp.user_id = ${user.id}
+    `
+    
+    const conv = conversations?.[0]
+    
+    // If this is a new pending conversation, send notification to recipient
+    if (conv?.status === 'pending' && conv?.initiated_by === user.id) {
+      // Get sender's name for notification
+      const senderProfiles = await sql`
+        select display_name from public.profiles where id = ${user.id}
+      `
+      const senderName = senderProfiles?.[0]?.display_name || 'Someone'
+      
+      // Notify the other user about the chat request
+      sendInstantNotification('message_received', otherUserId, {
+        senderName,
+        senderId: user.id,
+        ctaUrl: '/messages'
+      }).catch(() => {})
+    }
+
+    // Parse multipart form data
+    const busboy = (await import('busboy')).default
+    const bb = busboy({ headers: req.headers })
+
+    let fileBuffer = null
+    let fileName = ''
+    let mimeType = ''
+    let folder = 'journal'
+
+    bb.on('file', (name, file, info) => {
+      fileName = info.filename
+      mimeType = info.mimeType
+      const chunks = []
+      file.on('data', (data) => chunks.push(data))
+      file.on('end', () => { fileBuffer = Buffer.concat(chunks) })
+    
+    res.json({
+      conversationId,
+      conversation: conv ? {
+        id: conv.id,
+        type: conv.type,
+        status: conv.status,
+        initiatedBy: conv.initiated_by,
+        otherParticipant: conv.other_participant,
+        unreadCount: conv.unread_count || 0,
+        isMuted: conv.is_muted || false,
+        isPendingForMe: conv.status === 'pending' && conv.initiated_by !== user.id
+      } : null
+    })
+  } catch (err) {
+    console.error('[messages] Failed to start conversation:', err)
+    res.status(500).json({ error: err?.message || 'Failed to start conversation' })
+  }
+})
+
+// Accept chat request
+app.post('/api/messages/conversations/:conversationId/accept', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  
+  try {
+    await sql`select public.accept_chat_request(${conversationId}::uuid)`
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[messages] Failed to accept chat request:', err)
+    res.status(500).json({ error: err?.message || 'Failed to accept chat request' })
+  }
+})
+
+// Reject chat request
+app.post('/api/messages/conversations/:conversationId/reject', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  
+  try {
+    await sql`select public.reject_chat_request(${conversationId}::uuid)`
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[messages] Failed to reject chat request:', err)
+    res.status(500).json({ error: err?.message || 'Failed to reject chat request' })
+  }
+})
+
+// Mark conversation as read
+app.post('/api/messages/conversations/:conversationId/read', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { conversationId } = req.params
+  
+  try {
+    await sql`select public.mark_conversation_read(${conversationId}::uuid)`
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[messages] Failed to mark as read:', err)
+    res.status(500).json({ error: err?.message || 'Failed to mark as read' })
+  }
+})
+
+// Get total unread count
+app.get('/api/messages/unread-count', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  try {
+    const result = await sql`select public.get_total_unread_messages() as count`
+    res.json({ count: result?.[0]?.count || 0 })
+  } catch (err) {
+    console.error('[messages] Failed to get unread count:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get unread count' })
+  }
+})
+
+// ============================================================================
+// Friend Request & Task Notification Triggers
+// ============================================================================
+
+      // Get public URL and transform to media proxy
+      const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
+      const proxyUrl = supabaseStorageToMediaProxy(urlData?.publicUrl) || urlData?.publicUrl || ''
+
+      res.json({ ok: true, url: proxyUrl, path: storagePath })
+// Send notification when friend request is sent
+app.post('/api/notifications/friend-request-sent', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { recipientId } = req.body
+  
+  if (!recipientId) {
+    return res.status(400).json({ error: 'Recipient ID is required' })
+  }
+  
+  try {
+    // Get sender's name
+    const senderProfiles = await sql`
+      select display_name from public.profiles where id = ${user.id}
+    `
+    const senderName = senderProfiles?.[0]?.display_name || 'Someone'
+    
+    // Send notification to recipient
+    await sendInstantNotification('friend_request_sent', recipientId, {
+      senderName,
+      senderId: user.id,
+      ctaUrl: '/friends'
+    })
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] Failed to send friend request notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
   }
 })
 
@@ -14727,42 +19293,69 @@ app.post('/api/admin/email-templates', async (req, res) => {
 
 // Admin: create a new broadcast message
 app.post('/api/admin/broadcast', async (req, res) => {
+// Send notification when friend request is accepted
+app.post('/api/notifications/friend-request-accepted', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { requesterId } = req.body
+  
+  if (!requesterId) {
+    return res.status(400).json({ error: 'Requester ID is required' })
+  }
+  
   try {
-    // Require admin and ensure table
-    const adminId = await ensureAdmin(req, res)
-    if (!adminId) return
-    if (!sql) {
-      res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-    await ensureBroadcastTable()
-
-    const messageRaw = (req.body?.message || '').toString().trim()
-    const severityRaw = (req.body?.severity || '').toString().trim().toLowerCase()
-    const severity = (severityRaw === 'warning' || severityRaw === 'danger') ? severityRaw : 'info'
-    const durationMsRaw = Number(req.body?.durationMs || req.body?.duration_ms || req.body?.duration || 0)
-    if (!messageRaw) {
-      res.status(400).json({ error: 'Message is required' })
-      return
-    }
-    // Enforce single active message
-    const active = await sql`
-      select id from public.broadcast_messages
-      where removed_at is null and (expires_at is null or expires_at > now())
-      limit 1
+    // Get accepter's name (current user)
+    const accepterProfiles = await sql`
+      select display_name from public.profiles where id = ${user.id}
     `
-    if (Array.isArray(active) && active.length > 0) {
-      res.status(409).json({ error: 'An active broadcast already exists' })
-      return
-    }
-    let expiresAt = null
-    if (Number.isFinite(durationMsRaw) && durationMsRaw > 0) {
-      expiresAt = new Date(Date.now() + Math.floor(durationMsRaw)).toISOString()
-    }
-    const rows = await sql`
-      insert into public.broadcast_messages (message, severity, created_by, expires_at)
-      values (${messageRaw}, ${severity}, ${typeof adminId === 'string' ? adminId : null}, ${expiresAt ? expiresAt : null})
-      returning id::text as id, message, severity, created_at, expires_at, created_by::text as created_by
+    const accepterName = accepterProfiles?.[0]?.display_name || 'Someone'
+    
+    // Send notification to the original requester
+    await sendInstantNotification('friend_request_accepted', requesterId, {
+      senderName: accepterName,
+      senderId: user.id,
+      ctaUrl: '/friends'
+    })
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] Failed to send friend accepted notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// Send notification when task is completed by another user
+app.post('/api/notifications/task-completed', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+  
+  const { gardenId, taskName } = req.body
+  
+  if (!gardenId) {
+    return res.status(400).json({ error: 'Garden ID is required' })
+  }
+  
+  try {
+    // Get completer's name
+    const completerProfiles = await sql`
+      select display_name from public.profiles where id = ${user.id}
+    `
+    const completerName = completerProfiles?.[0]?.display_name || 'Someone'
+    
+    // Get garden name
+    const gardens = await sql`
+      select name from public.gardens where id = ${gardenId}
     `
     const row = Array.isArray(rows) && rows[0] ? rows[0] : null
     // Resolve admin name for SSE payload convenience
@@ -14787,39 +19380,154 @@ app.post('/api/admin/broadcast', async (req, res) => {
     res.json({ ok: true, broadcast: payload })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to create broadcast' })
+    const gardenName = gardens?.[0]?.name || 'your garden'
+    
+    // Get all other garden members
+    const members = await sql`
+      select gm.user_id 
+      from public.garden_members gm
+      where gm.garden_id = ${gardenId}
+        and gm.user_id <> ${user.id}
+    `
+    
+    // Send notification to each member
+    for (const member of members || []) {
+      await sendInstantNotification('task_completed_by_other', member.user_id, {
+        senderName: completerName,
+        senderId: user.id,
+        gardenName,
+        taskName: taskName || 'a task',
+        ctaUrl: `/garden/${gardenId}`
+      })
+    }
+    
+    res.json({ ok: true, notified: members?.length || 0 })
+  } catch (err) {
+    console.error('[notifications] Failed to send task completed notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
   }
 })
 
-// Admin: update current broadcast message (edit message or severity, optionally extend/shorten duration)
-app.put('/api/admin/broadcast', async (req, res) => {
+// ============================================================================
+// User Safety API (Block, Mute, Report)
+// ============================================================================
+
+// Block a user
+app.post('/api/users/:userId/block', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: blockedId } = req.params
+  const { reason } = req.body || {}
+  
+  if (!blockedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  if (user.id === blockedId) {
+    return res.status(400).json({ error: 'Cannot block yourself' })
+  }
+  
   try {
-    const adminId = await ensureAdmin(req, res)
-    if (!adminId) return
-    if (!sql) {
-      res.status(500).json({ error: 'Database not configured' })
-      return
+    if (sql) {
+      await sql`select public.block_user(${blockedId}::uuid, ${reason || null}::text)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('block_user', {
+        _blocked_id: blockedId,
+        _reason: reason || null
+      })
+      if (error) throw error
     }
-    await ensureBroadcastTable()
-    // Find current active
-    const rows = await sql`
-      select id, message, severity, created_at, expires_at, created_by::text as created_by
-      from public.broadcast_messages
-      where removed_at is null and (expires_at is null or expires_at > now())
-      order by created_at desc
-      limit 1
-    `
-    const cur = Array.isArray(rows) && rows[0] ? rows[0] : null
-    if (!cur) {
-      res.status(404).json({ error: 'No active broadcast' })
-      return
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[block] Failed to block user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to block user' })
+  }
+})
+
+// Unblock a user
+app.delete('/api/users/:userId/block', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: blockedId } = req.params
+  
+  if (!blockedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.unblock_user(${blockedId}::uuid)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('unblock_user', { _blocked_id: blockedId })
+      if (error) throw error
     }
-    const nextMessage = (req.body?.message ?? cur.message)?.toString()?.trim()
-    const sevRaw = (req.body?.severity ?? cur.severity)?.toString()?.trim()?.toLowerCase()
-    const nextSeverity = (sevRaw === 'warning' || sevRaw === 'danger') ? sevRaw : 'info'
-    const durationMsRaw = req.body?.durationMs ?? req.body?.duration_ms ?? null
-    let nextExpires = cur.expires_at ? new Date(cur.expires_at) : null
-    if (durationMsRaw === null) {
-      // keep as is
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[unblock] Failed to unblock user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to unblock user' })
+  }
+})
+
+// Get blocked users list
+app.get('/api/users/blocked', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  try {
+    let blockedUsers = []
+    if (sql) {
+      blockedUsers = await sql`
+        select 
+          b.id,
+          b.blocked_id,
+          p.display_name,
+          p.avatar_url,
+          b.created_at as blocked_at
+        from public.user_blocks b
+        join public.profiles p on p.id = b.blocked_id
+        where b.blocker_id = ${user.id}
+        order by b.created_at desc
+      `
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('get_blocked_users')
+      if (error) throw error
+      blockedUsers = data || []
+    }
+    res.json({ blockedUsers })
+  } catch (err) {
+    console.error('[blocked] Failed to get blocked users:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get blocked users' })
+  }
+})
+
+// Mute a user (suppress notifications)
+app.post('/api/users/:userId/mute', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: mutedId } = req.params
+  
+  if (!mutedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  if (user.id === mutedId) {
+    return res.status(400).json({ error: 'Cannot mute yourself' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`select public.mute_user(${mutedId}::uuid)`
     } else {
       const n = Number(durationMsRaw)
       if (Number.isFinite(n) && n > 0) nextExpires = new Date(Date.now() + Math.floor(n))
@@ -14853,179 +19561,297 @@ app.put('/api/admin/broadcast', async (req, res) => {
     res.json({ ok: true, broadcast: payload })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to update broadcast' })
+      const { error } = await supabaseAdmin.rpc('mute_user', { _muted_id: mutedId })
+      if (error) throw error
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[mute] Failed to mute user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to mute user' })
   }
 })
 
-// Admin: remove current (or specified) broadcast message
-app.delete('/api/admin/broadcast', async (req, res) => {
+// Unmute a user
+app.delete('/api/users/:userId/mute', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: mutedId } = req.params
+  
+  if (!mutedId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
   try {
-    const adminId = await ensureAdmin(req, res)
-    if (!adminId) return
-    if (!sql) {
-      res.status(500).json({ error: 'Database not configured' })
-      return
+    if (sql) {
+      await sql`select public.unmute_user(${mutedId}::uuid)`
+    } else {
+      const { error } = await supabaseAdmin.rpc('unmute_user', { _muted_id: mutedId })
+      if (error) throw error
     }
-    await ensureBroadcastTable()
-    const idParam = (req.query?.id || req.body?.id || '').toString().trim()
-    let rows
-    if (idParam) {
-      rows = await sql`
-        update public.broadcast_messages
-        set removed_at = now()
-        where id = ${idParam} and removed_at is null
-        returning id
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[unmute] Failed to unmute user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to unmute user' })
+  }
+})
+
+// Get muted users list
+app.get('/api/users/muted', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  try {
+    let mutedUsers = []
+    if (sql) {
+      mutedUsers = await sql`
+        select 
+          m.id,
+          m.muted_id,
+          p.display_name,
+          p.avatar_url,
+          m.created_at as muted_at
+        from public.user_mutes m
+        join public.profiles p on p.id = m.muted_id
+        where m.muter_id = ${user.id}
+        order by m.created_at desc
       `
     } else {
-      rows = await sql`
-        update public.broadcast_messages
-        set removed_at = now()
-        where removed_at is null and (expires_at is null or expires_at > now())
-        returning id
-      `
+      const { data, error } = await supabaseAdmin.rpc('get_muted_users')
+      if (error) throw error
+      mutedUsers = data || []
     }
-    const changed = Array.isArray(rows) && rows.length > 0
-    if (changed) clearBroadcastForAll()
-    res.json({ ok: true, removed: changed })
-  } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to remove broadcast' })
-  }
-})
-
-app.get('/api/notifications', async (req, res) => {
-  const user = await getUserFromRequestOrToken(req)
-  if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
-  }
-  if (!sql) {
-    res.status(500).json({ error: 'Database not configured' })
-    return
-  }
-  await ensureNotificationTables()
-  try {
-    const rows = await sql`
-      select id::text as id, title, message, delivery_status, delivered_at, scheduled_for, seen_at, cta_url, payload
-      from public.user_notifications
-      where user_id = ${user.id}
-      order by coalesce(delivered_at, scheduled_for) desc
-      limit 50
-    `
-    const notifications = (rows || []).map((row) => ({
-      id: row.id,
-      title: row.title || null,
-      message: row.message || null,
-      status: row.delivery_status || 'pending',
-      deliveredAt: isoOrNull(row.delivered_at),
-      scheduledFor: isoOrNull(row.scheduled_for),
-      seenAt: isoOrNull(row.seen_at),
-      ctaUrl: row.cta_url || null,
-      payload: row.payload && typeof row.payload === 'object' ? row.payload : {},
-    }))
-    res.json({ notifications })
+    res.json({ mutedUsers })
   } catch (err) {
-    console.error('[notifications] failed to load user notifications', err)
-    res.status(500).json({ error: err?.message || 'Failed to load notifications' })
+    console.error('[muted] Failed to get muted users:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get muted users' })
   }
 })
 
-app.post('/api/notifications/:id/read', async (req, res) => {
+// Report a user
+app.post('/api/users/:userId/report', async (req, res) => {
   const user = await getUserFromRequestOrToken(req)
   if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
+    return res.status(401).json({ error: 'Unauthorized' })
   }
-  if (!sql) {
-    res.status(500).json({ error: 'Database not configured' })
-    return
+  
+  const { userId: reportedId } = req.params
+  const { reason, description } = req.body || {}
+  
+  if (!reportedId) {
+    return res.status(400).json({ error: 'User ID required' })
   }
-  await ensureNotificationTables()
-  const notificationId = String(req.params?.id || '').trim()
-  if (!notificationId) {
-    res.status(400).json({ error: 'Missing notification id' })
-    return
+  
+  if (!reason) {
+    return res.status(400).json({ error: 'Reason required' })
   }
+  
+  const validReasons = ['spam', 'harassment', 'inappropriate_content', 'fake_profile', 'other']
+  if (!validReasons.includes(reason)) {
+    return res.status(400).json({ error: 'Invalid reason' })
+  }
+  
+  if (user.id === reportedId) {
+    return res.status(400).json({ error: 'Cannot report yourself' })
+  }
+  
   try {
-    await sql`
-      update public.user_notifications
-      set seen_at = now()
-      where id = ${notificationId} and user_id = ${user.id}
-    `
+    let reportId
+    if (sql) {
+      const result = await sql`select public.report_user(${reportedId}::uuid, ${reason}::text, ${description || null}::text) as id`
+      reportId = result[0]?.id
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('report_user', {
+        _reported_id: reportedId,
+        _reason: reason,
+        _description: description || null
+      })
+      if (error) throw error
+      reportId = data
+    }
+    res.json({ ok: true, reportId })
+  } catch (err) {
+    console.error('[report] Failed to report user:', err)
+    res.status(500).json({ error: err?.message || 'Failed to report user' })
+  }
+})
+
+// Report a message
+app.post('/api/messages/:messageId/report', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { messageId } = req.params
+  const { reason, description } = req.body || {}
+  
+  if (!messageId) {
+    return res.status(400).json({ error: 'Message ID required' })
+  }
+  
+  if (!reason) {
+    return res.status(400).json({ error: 'Reason required' })
+  }
+  
+  const validReasons = ['spam', 'harassment', 'inappropriate_content', 'scam', 'other']
+  if (!validReasons.includes(reason)) {
+    return res.status(400).json({ error: 'Invalid reason' })
+  }
+  
+  try {
+    let reportId
+    if (sql) {
+      const result = await sql`select public.report_message(${messageId}::uuid, ${reason}::text, ${description || null}::text) as id`
+      reportId = result[0]?.id
+    } else {
+      const { data, error } = await supabaseAdmin.rpc('report_message', {
+        _message_id: messageId,
+        _reason: reason,
+        _description: description || null
+      })
+      if (error) throw error
+      reportId = data
+    }
+    res.json({ ok: true, reportId })
+  } catch (err) {
+    console.error('[report] Failed to report message:', err)
+    res.status(500).json({ error: err?.message || 'Failed to report message' })
+  }
+})
+
+// Check block/mute status for a user
+app.get('/api/users/:userId/safety-status', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { userId: targetId } = req.params
+  
+  if (!targetId) {
+    return res.status(400).json({ error: 'User ID required' })
+  }
+  
+  try {
+    let status = { isBlocked: false, isMuted: false, isBlockedBy: false }
+    if (sql) {
+      const result = await sql`
+        select 
+          exists(select 1 from public.user_blocks where blocker_id = ${user.id} and blocked_id = ${targetId}) as is_blocked,
+          exists(select 1 from public.user_mutes where muter_id = ${user.id} and muted_id = ${targetId}) as is_muted,
+          exists(select 1 from public.user_blocks where blocker_id = ${targetId} and blocked_id = ${user.id}) as is_blocked_by
+      `
+      status = {
+        isBlocked: result[0]?.is_blocked || false,
+        isMuted: result[0]?.is_muted || false,
+        isBlockedBy: result[0]?.is_blocked_by || false
+      }
+    } else {
+      const { data: blocked } = await supabaseAdmin
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', user.id)
+        .eq('blocked_id', targetId)
+        .maybeSingle()
+      const { data: muted } = await supabaseAdmin
+        .from('user_mutes')
+        .select('id')
+        .eq('muter_id', user.id)
+        .eq('muted_id', targetId)
+        .maybeSingle()
+      const { data: blockedBy } = await supabaseAdmin
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', targetId)
+        .eq('blocked_id', user.id)
+        .maybeSingle()
+      status = {
+        isBlocked: !!blocked,
+        isMuted: !!muted,
+        isBlockedBy: !!blockedBy
+      }
+    }
+    res.json(status)
+  } catch (err) {
+    console.error('[safety-status] Failed to get safety status:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get safety status' })
+  }
+})
+
+// Update messaging privacy preference
+app.put('/api/users/privacy/messaging', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { allowMessagesFromNonFriends } = req.body || {}
+  
+  if (typeof allowMessagesFromNonFriends !== 'boolean') {
+    return res.status(400).json({ error: 'allowMessagesFromNonFriends must be a boolean' })
+  }
+  
+  try {
+    if (sql) {
+      await sql`
+        update public.profiles
+        set allow_messages_from_non_friends = ${allowMessagesFromNonFriends}
+        where id = ${user.id}
+      `
+    } else {
+      const { error } = await supabaseAdmin
+        .from('profiles')
+        .update({ allow_messages_from_non_friends: allowMessagesFromNonFriends })
+        .eq('id', user.id)
+      if (error) throw error
+    }
     res.json({ ok: true })
   } catch (err) {
-    console.error('[notifications] failed to update notification', err)
-    res.status(500).json({ error: err?.message || 'Failed to update notification' })
+    console.error('[privacy] Failed to update messaging privacy:', err)
+    res.status(500).json({ error: err?.message || 'Failed to update privacy settings' })
   }
 })
 
-app.post('/api/push/subscribe', async (req, res) => {
+// Get messaging privacy preference
+app.get('/api/users/privacy/messaging', async (req, res) => {
   const user = await getUserFromRequestOrToken(req)
   if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
+    return res.status(401).json({ error: 'Unauthorized' })
   }
-  if (!sql) {
-    res.status(500).json({ error: 'Database not configured' })
-    return
-  }
-  await ensureNotificationTables()
-  const subscription = req.body?.subscription
-  if (!subscription || typeof subscription !== 'object' || !subscription.endpoint) {
-    res.status(400).json({ error: 'Invalid subscription payload' })
-    return
-  }
-  const authKey = subscription.keys?.auth || subscription.auth_key || null
-  const p256dhKey = subscription.keys?.p256dh || subscription.p256dh_key || null
-  const userAgent = req.get('user-agent') || null
+  
   try {
-    await sql`
-      insert into public.user_push_subscriptions (user_id, endpoint, auth_key, p256dh_key, user_agent, subscription, updated_at, last_used_at)
-      values (${user.id}, ${subscription.endpoint}, ${authKey}, ${p256dhKey}, ${userAgent}, ${subscription}, now(), now())
-      on conflict (endpoint) do update
-      set user_id = excluded.user_id,
-          auth_key = excluded.auth_key,
-          p256dh_key = excluded.p256dh_key,
-          user_agent = excluded.user_agent,
-          subscription = excluded.subscription,
-          updated_at = now(),
-          last_used_at = now()
-    `
-    res.json({ ok: true, pushConfigured: pushNotificationsEnabled })
+    let allowMessagesFromNonFriends = true
+    if (sql) {
+      const result = await sql`
+        select coalesce(allow_messages_from_non_friends, true) as allow_messages_from_non_friends
+        from public.profiles
+        where id = ${user.id}
+      `
+      allowMessagesFromNonFriends = result[0]?.allow_messages_from_non_friends ?? true
+    } else {
+      const { data, error } = await supabaseAdmin
+        .from('profiles')
+        .select('allow_messages_from_non_friends')
+        .eq('id', user.id)
+        .single()
+      if (error) throw error
+      allowMessagesFromNonFriends = data?.allow_messages_from_non_friends ?? true
+    }
+    res.json({ allowMessagesFromNonFriends })
   } catch (err) {
-    console.error('[notifications] failed to store push subscription', err)
-    res.status(500).json({ error: err?.message || 'Failed to store subscription' })
+    console.error('[privacy] Failed to get messaging privacy:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get privacy settings' })
   }
 })
 
-app.delete('/api/push/subscribe', async (req, res) => {
-  const user = await getUserFromRequestOrToken(req)
-  if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
-  }
-  if (!sql) {
-    res.status(500).json({ error: 'Database not configured' })
-    return
-  }
-  await ensureNotificationTables()
-  const endpoint =
-    (req.body?.endpoint || req.query?.endpoint || req.body?.subscription?.endpoint || '')
-      .toString()
-      .trim()
-  if (!endpoint) {
-    res.status(400).json({ error: 'Missing endpoint' })
-    return
-  }
-  try {
-    await sql`
-      delete from public.user_push_subscriptions
-      where endpoint = ${endpoint} or (user_id = ${user.id} and endpoint = ${endpoint})
-    `
-    res.json({ ok: true })
-  } catch (err) {
-    console.error('[notifications] failed to remove subscription', err)
-    res.status(500).json({ error: err?.message || 'Failed to remove subscription' })
-  }
-})
+// ============================================================================
+// Notification Worker
+// ============================================================================
 
 const notificationWorkerIntervalMs = Math.max(15000, Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS || 60000))
 const notificationDeliveryBatchSize = Math.min(

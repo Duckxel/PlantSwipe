@@ -64,6 +64,14 @@ import {
   Pencil,
   Shield,
   Store,
+  Flag,
+  AlertOctagon,
+  FileText,
+  Eye,
+  Ban,
+  MessageSquare,
+  X,
+  Loader2,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -3488,10 +3496,40 @@ export const AdminPage: React.FC = () => {
     plantDashboardLoading,
     loadPlantDashboard,
   ]);
-  const membersView: "search" | "list" = React.useMemo(() => {
+  const membersView: "search" | "list" | "reports" = React.useMemo(() => {
     if (currentPath.includes("/admin/members/list")) return "list";
+    if (currentPath.includes("/admin/members/reports")) return "reports";
     return "search";
   }, [currentPath]);
+
+  // ---- Report Center State ----
+  const [flaggedUsersCount, setFlaggedUsersCount] = React.useState(0);
+  const [flaggedUsers, setFlaggedUsers] = React.useState<any[]>([]);
+  const [flaggedUsersLoading, setFlaggedUsersLoading] = React.useState(false);
+  const [selectedReportUser, setSelectedReportUser] = React.useState<any>(null);
+  const [reportFiles, setReportFiles] = React.useState<any[]>([]);
+  const [reportFilesLoading, setReportFilesLoading] = React.useState(false);
+  const [selectedReportFile, setSelectedReportFile] = React.useState<any>(null);
+  const [reportFileDetails, setReportFileDetails] = React.useState<any>(null);
+  const [reportFileDetailsLoading, setReportFileDetailsLoading] = React.useState(false);
+  const [unassignedReports, setUnassignedReports] = React.useState<{ userReports: any[], messageReports: any[] }>({ userReports: [], messageReports: [] });
+  const [unassignedReportsLoading, setUnassignedReportsLoading] = React.useState(false);
+  const [userMessages, setUserMessages] = React.useState<any[]>([]);
+  const [userMessagesLoading, setUserMessagesLoading] = React.useState(false);
+  const [reportViewTab, setReportViewTab] = React.useState<'flagged' | 'unassigned'>('flagged');
+  const [newFileDialogOpen, setNewFileDialogOpen] = React.useState(false);
+  const [newFileForm, setNewFileForm] = React.useState({ title: '', category: 'user_report', notes: '', priority: 1 });
+  const [newFileSubmitting, setNewFileSubmitting] = React.useState(false);
+  const [closeFileDialogOpen, setCloseFileDialogOpen] = React.useState(false);
+  const [closeFileForm, setCloseFileForm] = React.useState({ resolution: '', actionTaken: 'none' });
+  const [closeFileSubmitting, setCloseFileSubmitting] = React.useState(false);
+  const [escalateDialogOpen, setEscalateDialogOpen] = React.useState(false);
+  const [escalateLevel, setEscalateLevel] = React.useState(2);
+  const [escalateSubmitting, setEscalateSubmitting] = React.useState(false);
+  const [suspendDialogOpen, setSuspendDialogOpen] = React.useState(false);
+  const [suspendReason, setSuspendReason] = React.useState('');
+  const [suspendSubmitting, setSuspendSubmitting] = React.useState(false);
+
   const [memberList, setMemberList] = React.useState<ListedMember[]>([]);
   const [memberListLoading, setMemberListLoading] = React.useState(false);
   const [memberListError, setMemberListError] = React.useState<string | null>(
@@ -3716,6 +3754,370 @@ export const AdminPage: React.FC = () => {
     },
     [safeJson],
   );
+
+  // ---- Report Center Functions ----
+  const loadFlaggedUsersCount = React.useCallback(async () => {
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/reports/flagged-count", { headers, credentials: "same-origin" });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setFlaggedUsersCount(data?.flaggedUsers || 0);
+      }
+    } catch (err) {
+      console.error("Failed to load flagged users count:", err);
+    }
+  }, [safeJson]);
+
+  const loadFlaggedUsers = React.useCallback(async () => {
+    if (flaggedUsersLoading) return;
+    setFlaggedUsersLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/reports/flagged-users?status=all", { headers, credentials: "same-origin" });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setFlaggedUsers(data?.users || []);
+      }
+    } catch (err) {
+      console.error("Failed to load flagged users:", err);
+    } finally {
+      setFlaggedUsersLoading(false);
+    }
+  }, [flaggedUsersLoading, safeJson]);
+
+  const loadReportFiles = React.useCallback(async (userId: string, status = 'all') => {
+    if (reportFilesLoading) return;
+    setReportFilesLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch(`/api/admin/reports/files/${userId}?status=${status}`, { headers, credentials: "same-origin" });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setReportFiles(data?.files || []);
+      }
+    } catch (err) {
+      console.error("Failed to load report files:", err);
+    } finally {
+      setReportFilesLoading(false);
+    }
+  }, [reportFilesLoading, safeJson]);
+
+  const loadReportFileDetails = React.useCallback(async (fileId: string) => {
+    if (reportFileDetailsLoading) return;
+    setReportFileDetailsLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch(`/api/admin/reports/file/${fileId}`, { headers, credentials: "same-origin" });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setReportFileDetails(data);
+      }
+    } catch (err) {
+      console.error("Failed to load report file details:", err);
+    } finally {
+      setReportFileDetailsLoading(false);
+    }
+  }, [reportFileDetailsLoading, safeJson]);
+
+  const loadUnassignedReports = React.useCallback(async () => {
+    if (unassignedReportsLoading) return;
+    setUnassignedReportsLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/reports/unassigned", { headers, credentials: "same-origin" });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setUnassignedReports({
+          userReports: data?.userReports || [],
+          messageReports: data?.messageReports || []
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load unassigned reports:", err);
+    } finally {
+      setUnassignedReportsLoading(false);
+    }
+  }, [unassignedReportsLoading, safeJson]);
+
+  const loadUserMessages = React.useCallback(async (userId: string, conversationId?: string) => {
+    if (userMessagesLoading) return;
+    setUserMessagesLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const url = conversationId 
+        ? `/api/admin/reports/user/${userId}/messages?conversationId=${conversationId}`
+        : `/api/admin/reports/user/${userId}/messages`;
+      const resp = await fetch(url, { headers, credentials: "same-origin" });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setUserMessages(data?.messages || []);
+      }
+    } catch (err) {
+      console.error("Failed to load user messages:", err);
+    } finally {
+      setUserMessagesLoading(false);
+    }
+  }, [userMessagesLoading, safeJson]);
+
+  const createReportFile = React.useCallback(async (subjectUserId: string) => {
+    if (newFileSubmitting) return;
+    setNewFileSubmitting(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { "Accept": "application/json", "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch("/api/admin/reports/files", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          subjectUserId,
+          category: newFileForm.category,
+          title: newFileForm.title,
+          notes: newFileForm.notes,
+          priority: newFileForm.priority
+        })
+      });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setNewFileDialogOpen(false);
+        setNewFileForm({ title: '', category: 'user_report', notes: '', priority: 1 });
+        await loadReportFiles(subjectUserId);
+        await loadFlaggedUsers();
+        await loadFlaggedUsersCount();
+      } else {
+        alert(data?.error || "Failed to create report file");
+      }
+    } catch (err) {
+      console.error("Failed to create report file:", err);
+    } finally {
+      setNewFileSubmitting(false);
+    }
+  }, [newFileSubmitting, newFileForm, safeJson, loadReportFiles, loadFlaggedUsers, loadFlaggedUsersCount]);
+
+  const closeReportFile = React.useCallback(async (fileId: string) => {
+    if (closeFileSubmitting) return;
+    setCloseFileSubmitting(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { "Accept": "application/json", "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch(`/api/admin/reports/file/${fileId}/close`, {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          resolution: closeFileForm.resolution,
+          actionTaken: closeFileForm.actionTaken
+        })
+      });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setCloseFileDialogOpen(false);
+        setCloseFileForm({ resolution: '', actionTaken: 'none' });
+        setSelectedReportFile(null);
+        setReportFileDetails(null);
+        if (selectedReportUser?.id) {
+          await loadReportFiles(selectedReportUser.id);
+        }
+        await loadFlaggedUsers();
+        await loadFlaggedUsersCount();
+      } else {
+        alert(data?.error || "Failed to close report file");
+      }
+    } catch (err) {
+      console.error("Failed to close report file:", err);
+    } finally {
+      setCloseFileSubmitting(false);
+    }
+  }, [closeFileSubmitting, closeFileForm, safeJson, selectedReportUser, loadReportFiles, loadFlaggedUsers, loadFlaggedUsersCount]);
+
+  const escalateUser = React.useCallback(async (userId: string) => {
+    if (escalateSubmitting) return;
+    setEscalateSubmitting(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { "Accept": "application/json", "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch(`/api/admin/reports/user/${userId}/flag-level`, {
+        method: "PUT",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ flagLevel: escalateLevel })
+      });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setEscalateDialogOpen(false);
+        await loadFlaggedUsers();
+        await loadFlaggedUsersCount();
+        if (selectedReportUser?.id === userId) {
+          setSelectedReportUser((prev: any) => prev ? { ...prev, flag_level: escalateLevel, is_suspended: escalateLevel === 3 } : prev);
+        }
+      } else {
+        alert(data?.error || "Failed to update flag level");
+      }
+    } catch (err) {
+      console.error("Failed to escalate user:", err);
+    } finally {
+      setEscalateSubmitting(false);
+    }
+  }, [escalateSubmitting, escalateLevel, safeJson, selectedReportUser, loadFlaggedUsers, loadFlaggedUsersCount]);
+
+  const suspendUser = React.useCallback(async (userId: string) => {
+    if (suspendSubmitting) return;
+    setSuspendSubmitting(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { "Accept": "application/json", "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch(`/api/admin/reports/user/${userId}/suspend`, {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ reason: suspendReason })
+      });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        setSuspendDialogOpen(false);
+        setSuspendReason('');
+        await loadFlaggedUsers();
+        await loadFlaggedUsersCount();
+        if (selectedReportUser?.id === userId) {
+          setSelectedReportUser((prev: any) => prev ? { ...prev, flag_level: 3, is_suspended: true } : prev);
+          await loadReportFiles(userId);
+        }
+      } else {
+        alert(data?.error || "Failed to suspend user");
+      }
+    } catch (err) {
+      console.error("Failed to suspend user:", err);
+    } finally {
+      setSuspendSubmitting(false);
+    }
+  }, [suspendSubmitting, suspendReason, safeJson, selectedReportUser, loadFlaggedUsers, loadFlaggedUsersCount, loadReportFiles]);
+
+  const unsuspendUser = React.useCallback(async (userId: string, flagLevel = 2) => {
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { "Accept": "application/json", "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch(`/api/admin/reports/user/${userId}/unsuspend`, {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ flagLevel })
+      });
+      const data = await safeJson(resp);
+      if (resp.ok) {
+        await loadFlaggedUsers();
+        await loadFlaggedUsersCount();
+        if (selectedReportUser?.id === userId) {
+          setSelectedReportUser((prev: any) => prev ? { ...prev, flag_level: flagLevel, is_suspended: false } : prev);
+        }
+      } else {
+        alert(data?.error || "Failed to unsuspend user");
+      }
+    } catch (err) {
+      console.error("Failed to unsuspend user:", err);
+    }
+  }, [safeJson, selectedReportUser, loadFlaggedUsers, loadFlaggedUsersCount]);
+
+  // Load flagged users count on mount and when entering reports view
+  React.useEffect(() => {
+    if (activeTab === "members") {
+      loadFlaggedUsersCount();
+    }
+  }, [activeTab, loadFlaggedUsersCount]);
+
+  // Load flagged users when entering reports view
+  React.useEffect(() => {
+    if (activeTab === "members" && membersView === "reports") {
+      loadFlaggedUsers();
+      loadUnassignedReports();
+    }
+  }, [activeTab, membersView]);
+
+  // Load report files when selecting a user
+  React.useEffect(() => {
+    if (selectedReportUser?.id) {
+      loadReportFiles(selectedReportUser.id);
+    }
+  }, [selectedReportUser?.id]);
+
+  // Load report file details when selecting a file
+  React.useEffect(() => {
+    if (selectedReportFile?.id) {
+      loadReportFileDetails(selectedReportFile.id);
+    }
+  }, [selectedReportFile?.id]);
 
   const loadMemberList = React.useCallback(
     async (opts?: { reset?: boolean; sort?: MemberListSort; role?: string | null }) => {
@@ -4531,6 +4933,11 @@ export const AdminPage: React.FC = () => {
                           {uniqueRequestedPlantsCount}
                         </span>
                       )}
+                      {key === "members" && flaggedUsersCount > 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-red-500 text-white">
+                          {flaggedUsersCount}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
@@ -4611,6 +5018,15 @@ export const AdminPage: React.FC = () => {
                             } font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100 px-2 py-0.5`}
                           >
                             {uniqueRequestedPlantsCount}
+                          </span>
+                        )}
+                        {key === "members" && flaggedUsersCount > 0 && (
+                          <span
+                            className={`${
+                              sidebarCollapsed ? "text-[10px]" : "ml-auto text-xs"
+                            } font-semibold rounded-full bg-red-500 text-white px-2 py-0.5`}
+                          >
+                            {flaggedUsersCount}
                           </span>
                         )}
                       </Link>
@@ -7274,6 +7690,19 @@ export const AdminPage: React.FC = () => {
                         >
                           List
                         </Link>
+                        <span className="text-xs opacity-50">|</span>
+                        <Link
+                          to="/admin/members/reports"
+                          className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1 ${membersView === "reports" ? "bg-red-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                        >
+                          <Flag className="h-3.5 w-3.5" />
+                          Reports
+                          {flaggedUsersCount > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 text-xs bg-red-500 text-white rounded-full">
+                              {flaggedUsersCount}
+                            </span>
+                          )}
+                        </Link>
                       </div>
                       {membersView === "list" && (
                         <Button
@@ -7538,10 +7967,51 @@ export const AdminPage: React.FC = () => {
                                             ).toLocaleDateString()}
                                           </Badge>
                                         )}
+                                        {/* Flag Level Badge (Admin Only) */}
+                                        {memberData.profile?.flag_level && (
+                                          <Badge
+                                            variant={memberData.profile.flag_level === 3 ? 'destructive' : memberData.profile.flag_level === 2 ? 'secondary' : 'outline'}
+                                            className="rounded-full px-2 py-0.5"
+                                          >
+                                            <AlertOctagon className="h-3 w-3 mr-1" />
+                                            Threat Lvl {memberData.profile.flag_level}
+                                          </Badge>
+                                        )}
+                                        {memberData.profile?.is_suspended && (
+                                          <Badge
+                                            variant="destructive"
+                                            className="rounded-full px-2 py-0.5"
+                                          >
+                                            <Ban className="h-3 w-3 mr-1" />
+                                            Suspended
+                                          </Badge>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
+                                    {/* View Reports Button (if user has reports) */}
+                                    {(memberData.socialStats?.report_files_count > 0 || memberData.profile?.flag_level) && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-xl text-xs border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400"
+                                        onClick={() => {
+                                          setSelectedReportUser({
+                                            id: memberData.user?.id,
+                                            display_name: memberData.profile?.display_name,
+                                            email: memberData.user?.email,
+                                            avatar_url: memberData.profile?.avatar_url,
+                                            flag_level: memberData.profile?.flag_level,
+                                            is_suspended: memberData.profile?.is_suspended
+                                          });
+                                          navigate('/admin/members/reports');
+                                        }}
+                                      >
+                                        <FileText className="h-3 w-3 mr-1" />
+                                        Reports ({memberData.socialStats?.open_report_files_count || 0}/{memberData.socialStats?.report_files_count || 0})
+                                      </Button>
+                                    )}
                                     {memberData.profile?.display_name && (
                                       <Button
                                         variant="secondary"
@@ -7935,6 +8405,34 @@ export const AdminPage: React.FC = () => {
                                   {typeof memberData.meanRpm5m === "number"
                                     ? memberData.meanRpm5m.toFixed(2)
                                     : "-"}
+                                </div>
+                              </div>
+                              {/* Social Stats */}
+                              <div className="rounded-xl border p-3 text-center">
+                                <div className="text-[11px] opacity-60 flex items-center justify-center gap-1">
+                                  <Users className="h-3 w-3" />
+                                  Friends
+                                </div>
+                                <div className="text-base font-semibold tabular-nums">
+                                  {memberData.socialStats?.friends_count ?? "-"}
+                                </div>
+                              </div>
+                              <div className="rounded-xl border p-3 text-center">
+                                <div className="text-[11px] opacity-60 flex items-center justify-center gap-1">
+                                  <MessageSquare className="h-3 w-3" />
+                                  Messages
+                                </div>
+                                <div className="text-base font-semibold tabular-nums">
+                                  {memberData.socialStats?.messages_sent_count ?? "-"}
+                                </div>
+                              </div>
+                              <div className="rounded-xl border p-3 text-center">
+                                <div className="text-[11px] opacity-60 flex items-center justify-center gap-1">
+                                  <MessageSquare className="h-3 w-3" />
+                                  Conversations
+                                </div>
+                                <div className="text-base font-semibold tabular-nums">
+                                  {memberData.socialStats?.conversations_count ?? "-"}
                                 </div>
                               </div>
                               <div className="rounded-xl border p-3">
@@ -8844,6 +9342,571 @@ export const AdminPage: React.FC = () => {
                       </Card>
                   </div>
                 )}
+
+                    {/* Reports View */}
+                    {membersView === "reports" && (
+                      <div className="space-y-4">
+                        {/* View Tabs */}
+                        <div className="flex items-center gap-2 text-sm">
+                          <button
+                            onClick={() => setReportViewTab('flagged')}
+                            className={`px-3 py-1.5 rounded-full transition-colors ${reportViewTab === 'flagged' ? 'bg-red-600 text-white' : 'text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}
+                          >
+                            Flagged Users ({flaggedUsers.length})
+                          </button>
+                          <button
+                            onClick={() => setReportViewTab('unassigned')}
+                            className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1 ${reportViewTab === 'unassigned' ? 'bg-amber-600 text-white' : 'text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}
+                          >
+                            Unassigned Reports
+                            {(unassignedReports.userReports.length + unassignedReports.messageReports.length) > 0 && (
+                              <span className="px-1.5 py-0.5 text-xs bg-amber-500 text-white rounded-full">
+                                {unassignedReports.userReports.length + unassignedReports.messageReports.length}
+                              </span>
+                            )}
+                          </button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="ml-auto rounded-2xl"
+                            onClick={() => {
+                              loadFlaggedUsers();
+                              loadUnassignedReports();
+                              loadFlaggedUsersCount();
+                            }}
+                            disabled={flaggedUsersLoading || unassignedReportsLoading}
+                          >
+                            <RefreshCw className={`h-4 w-4 mr-2 ${flaggedUsersLoading || unassignedReportsLoading ? 'animate-spin' : ''}`} />
+                            Refresh
+                          </Button>
+                        </div>
+
+                        {/* Flagged Users Tab */}
+                        {reportViewTab === 'flagged' && (
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {/* Flagged Users List */}
+                            <div className="space-y-2">
+                              <h3 className="font-semibold text-sm flex items-center gap-2">
+                                <AlertOctagon className="h-4 w-4 text-red-500" />
+                                Flagged Users
+                              </h3>
+                              {flaggedUsersLoading ? (
+                                <Card className="rounded-2xl p-8 flex items-center justify-center">
+                                  <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
+                                </Card>
+                              ) : flaggedUsers.length === 0 ? (
+                                <Card className="rounded-2xl p-8 text-center text-stone-500">
+                                  <Shield className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                                  <p className="text-sm">No flagged users</p>
+                                </Card>
+                              ) : (
+                                <div className="space-y-1 max-h-[600px] overflow-y-auto">
+                                  {flaggedUsers.map((user) => (
+                                    <Card
+                                      key={user.id}
+                                      className={`rounded-xl p-3 cursor-pointer transition-all hover:shadow-md ${selectedReportUser?.id === user.id ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-950/20' : ''}`}
+                                      onClick={() => {
+                                        setSelectedReportUser(user);
+                                        setSelectedReportFile(null);
+                                        setReportFileDetails(null);
+                                      }}
+                                    >
+                                      <div className="flex items-start gap-3">
+                                        {user.avatar_url ? (
+                                          <img src={user.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />
+                                        ) : (
+                                          <div className="h-10 w-10 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center">
+                                            <Users className="h-5 w-5 text-stone-400" />
+                                          </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium text-sm truncate">{user.display_name || 'Unknown'}</span>
+                                            {user.flag_level && (
+                                              <Badge 
+                                                variant={user.flag_level === 3 ? 'destructive' : user.flag_level === 2 ? 'secondary' : 'outline'}
+                                                className="text-xs"
+                                              >
+                                                Lvl {user.flag_level}
+                                              </Badge>
+                                            )}
+                                            {user.is_suspended && (
+                                              <Badge variant="destructive" className="text-xs">
+                                                <Ban className="h-3 w-3 mr-1" />
+                                                Suspended
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <div className="text-xs text-stone-500 truncate">{user.email}</div>
+                                          <div className="flex items-center gap-2 mt-1 text-xs text-stone-400">
+                                            <span className="flex items-center gap-1">
+                                              <FileText className="h-3 w-3" />
+                                              {user.open_files_count || 0} open / {user.total_files_count || 0} total
+                                            </span>
+                                            <span>•</span>
+                                            <span className="flex items-center gap-1">
+                                              <Flag className="h-3 w-3" />
+                                              {user.user_reports_count || 0} reports
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </Card>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Report Files for Selected User */}
+                            <div className="space-y-2">
+                              {selectedReportUser ? (
+                                <>
+                                  <div className="flex items-center justify-between">
+                                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                                      <FileText className="h-4 w-4 text-blue-500" />
+                                      Report Files for {selectedReportUser.display_name}
+                                    </h3>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="rounded-xl text-xs"
+                                      onClick={() => setNewFileDialogOpen(true)}
+                                    >
+                                      <Plus className="h-3 w-3 mr-1" />
+                                      New File
+                                    </Button>
+                                  </div>
+                                  
+                                  {/* User Actions */}
+                                  <Card className="rounded-xl p-3 bg-stone-50 dark:bg-stone-900/50">
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="rounded-xl text-xs"
+                                        onClick={() => {
+                                          setEscalateLevel(selectedReportUser.flag_level === 1 ? 2 : selectedReportUser.flag_level === 2 ? 3 : 2);
+                                          setEscalateDialogOpen(true);
+                                        }}
+                                      >
+                                        <TrendingUp className="h-3 w-3 mr-1" />
+                                        Change Flag Level
+                                      </Button>
+                                      {!selectedReportUser.is_suspended ? (
+                                        <Button
+                                          size="sm"
+                                          variant="destructive"
+                                          className="rounded-xl text-xs"
+                                          onClick={() => setSuspendDialogOpen(true)}
+                                        >
+                                          <Ban className="h-3 w-3 mr-1" />
+                                          Suspend (Lvl 3)
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="rounded-xl text-xs border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                                          onClick={() => unsuspendUser(selectedReportUser.id)}
+                                        >
+                                          <Check className="h-3 w-3 mr-1" />
+                                          Unsuspend
+                                        </Button>
+                                      )}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="rounded-xl text-xs"
+                                        onClick={() => loadUserMessages(selectedReportUser.id)}
+                                      >
+                                        <MessageSquare className="h-3 w-3 mr-1" />
+                                        View Messages
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="rounded-xl text-xs"
+                                        onClick={() => lookupMember(selectedReportUser.email || selectedReportUser.display_name || selectedReportUser.id)}
+                                      >
+                                        <Eye className="h-3 w-3 mr-1" />
+                                        Full Profile
+                                      </Button>
+                                    </div>
+                                  </Card>
+                                  
+                                  {reportFilesLoading ? (
+                                    <Card className="rounded-2xl p-8 flex items-center justify-center">
+                                      <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
+                                    </Card>
+                                  ) : reportFiles.length === 0 ? (
+                                    <Card className="rounded-2xl p-8 text-center text-stone-500">
+                                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                                      <p className="text-sm">No report files yet</p>
+                                      <p className="text-xs mt-1">Create a new file to start tracking</p>
+                                    </Card>
+                                  ) : (
+                                    <div className="space-y-1 max-h-[500px] overflow-y-auto">
+                                      {reportFiles.map((file) => (
+                                        <Card
+                                          key={file.id}
+                                          className={`rounded-xl p-3 cursor-pointer transition-all hover:shadow-md ${selectedReportFile?.id === file.id ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950/20' : ''}`}
+                                          onClick={() => setSelectedReportFile(file)}
+                                        >
+                                          <div className="flex items-start justify-between">
+                                            <div>
+                                              <div className="flex items-center gap-2">
+                                                <span className="font-medium text-sm">{file.title}</span>
+                                                <Badge 
+                                                  variant={file.status === 'open' ? 'default' : 'secondary'}
+                                                  className="text-xs"
+                                                >
+                                                  {file.status}
+                                                </Badge>
+                                                <Badge 
+                                                  variant={file.priority === 3 ? 'destructive' : file.priority === 2 ? 'secondary' : 'outline'}
+                                                  className="text-xs"
+                                                >
+                                                  P{file.priority}
+                                                </Badge>
+                                              </div>
+                                              <div className="text-xs text-stone-500 mt-1">
+                                                {file.category.replace(/_/g, ' ')} • Created {new Date(file.created_at).toLocaleDateString()}
+                                              </div>
+                                              {file.status === 'closed' && file.closed_at && (
+                                                <div className="text-xs text-emerald-600 mt-1">
+                                                  Closed {new Date(file.closed_at).toLocaleDateString()} by {file.closed_by_name || 'Admin'}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </Card>
+                                      ))}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <Card className="rounded-2xl p-8 text-center text-stone-500">
+                                  <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                                  <p className="text-sm">Select a user to view their report files</p>
+                                </Card>
+                              )}
+                            </div>
+
+                            {/* Report File Details */}
+                            <div className="space-y-2">
+                              {selectedReportFile ? (
+                                <>
+                                  <div className="flex items-center justify-between">
+                                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                                      <Eye className="h-4 w-4 text-purple-500" />
+                                      File Details
+                                    </h3>
+                                    {selectedReportFile.status === 'open' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="rounded-xl text-xs border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                                        onClick={() => setCloseFileDialogOpen(true)}
+                                      >
+                                        <Check className="h-3 w-3 mr-1" />
+                                        Close File
+                                      </Button>
+                                    )}
+                                  </div>
+                                  
+                                  {reportFileDetailsLoading ? (
+                                    <Card className="rounded-2xl p-8 flex items-center justify-center">
+                                      <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
+                                    </Card>
+                                  ) : reportFileDetails ? (
+                                    <Card className="rounded-2xl p-4 space-y-4">
+                                      <div>
+                                        <div className="text-xs text-stone-500 uppercase tracking-wider mb-1">Title</div>
+                                        <div className="font-medium">{reportFileDetails.file.title}</div>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                          <div className="text-xs text-stone-500 uppercase tracking-wider mb-1">Category</div>
+                                          <div className="text-sm">{reportFileDetails.file.category.replace(/_/g, ' ')}</div>
+                                        </div>
+                                        <div>
+                                          <div className="text-xs text-stone-500 uppercase tracking-wider mb-1">Priority</div>
+                                          <Badge 
+                                            variant={reportFileDetails.file.priority === 3 ? 'destructive' : reportFileDetails.file.priority === 2 ? 'secondary' : 'outline'}
+                                          >
+                                            Level {reportFileDetails.file.priority}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                      
+                                      {reportFileDetails.file.notes && (
+                                        <div>
+                                          <div className="text-xs text-stone-500 uppercase tracking-wider mb-1">Notes</div>
+                                          <div className="text-sm whitespace-pre-wrap bg-stone-50 dark:bg-stone-900/50 p-2 rounded-lg">
+                                            {reportFileDetails.file.notes}
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {reportFileDetails.file.resolution && (
+                                        <div>
+                                          <div className="text-xs text-stone-500 uppercase tracking-wider mb-1">Resolution</div>
+                                          <div className="text-sm whitespace-pre-wrap bg-emerald-50 dark:bg-emerald-950/20 p-2 rounded-lg">
+                                            {reportFileDetails.file.resolution}
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {reportFileDetails.file.action_taken && (
+                                        <div>
+                                          <div className="text-xs text-stone-500 uppercase tracking-wider mb-1">Action Taken</div>
+                                          <Badge variant="secondary">{reportFileDetails.file.action_taken}</Badge>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Linked User Reports */}
+                                      {reportFileDetails.userReports?.length > 0 && (
+                                        <div>
+                                          <div className="text-xs text-stone-500 uppercase tracking-wider mb-2">Linked User Reports ({reportFileDetails.userReports.length})</div>
+                                          <div className="space-y-2">
+                                            {reportFileDetails.userReports.map((report: any) => (
+                                              <div key={report.id} className="text-sm bg-stone-50 dark:bg-stone-900/50 p-2 rounded-lg">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  <Badge variant="outline" className="text-xs">{report.reason}</Badge>
+                                                  <span className="text-xs text-stone-400">{new Date(report.created_at).toLocaleDateString()}</span>
+                                                </div>
+                                                {report.description && (
+                                                  <p className="text-xs text-stone-600 dark:text-stone-400">{report.description}</p>
+                                                )}
+                                                <p className="text-xs text-stone-400 mt-1">By: {report.reporter_name}</p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Linked Message Reports */}
+                                      {reportFileDetails.messageReports?.length > 0 && (
+                                        <div>
+                                          <div className="text-xs text-stone-500 uppercase tracking-wider mb-2">Linked Message Reports ({reportFileDetails.messageReports.length})</div>
+                                          <div className="space-y-2">
+                                            {reportFileDetails.messageReports.map((report: any) => (
+                                              <div key={report.id} className="text-sm bg-amber-50 dark:bg-amber-950/20 p-2 rounded-lg">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  <Badge variant="outline" className="text-xs">{report.reason}</Badge>
+                                                  <span className="text-xs text-stone-400">{new Date(report.created_at).toLocaleDateString()}</span>
+                                                </div>
+                                                <div className="text-xs bg-white dark:bg-stone-800 p-2 rounded border my-1">
+                                                  <p className="text-stone-600 dark:text-stone-300 italic">"{report.message_content}"</p>
+                                                </div>
+                                                {report.description && (
+                                                  <p className="text-xs text-stone-600 dark:text-stone-400">{report.description}</p>
+                                                )}
+                                                <p className="text-xs text-stone-400 mt-1">Reported by: {report.reporter_name}</p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Card>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <Card className="rounded-2xl p-8 text-center text-stone-500">
+                                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                                  <p className="text-sm">Select a file to view details</p>
+                                </Card>
+                              )}
+                              
+                              {/* User Messages Panel */}
+                              {userMessages.length > 0 && (
+                                <div className="mt-4">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                                      <MessageSquare className="h-4 w-4 text-blue-500" />
+                                      User's Messages
+                                    </h3>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 w-6 p-0"
+                                      onClick={() => setUserMessages([])}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                  <Card className="rounded-xl max-h-[300px] overflow-y-auto">
+                                    <div className="divide-y divide-stone-200 dark:divide-stone-700">
+                                      {userMessages.map((msg) => (
+                                        <div key={msg.id} className={`p-2 text-xs ${msg.is_reported ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-medium">{msg.sender_name}</span>
+                                            <span className="text-stone-400">{new Date(msg.created_at).toLocaleString()}</span>
+                                            {msg.is_reported && <Badge variant="destructive" className="text-xs">Reported</Badge>}
+                                          </div>
+                                          <p className="text-stone-600 dark:text-stone-300">{msg.content}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </Card>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Unassigned Reports Tab */}
+                        {reportViewTab === 'unassigned' && (
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Unassigned User Reports */}
+                            <div className="space-y-2">
+                              <h3 className="font-semibold text-sm flex items-center gap-2">
+                                <Flag className="h-4 w-4 text-amber-500" />
+                                Unassigned User Reports ({unassignedReports.userReports.length})
+                              </h3>
+                              {unassignedReportsLoading ? (
+                                <Card className="rounded-2xl p-8 flex items-center justify-center">
+                                  <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
+                                </Card>
+                              ) : unassignedReports.userReports.length === 0 ? (
+                                <Card className="rounded-2xl p-8 text-center text-stone-500">
+                                  <Check className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
+                                  <p className="text-sm">All user reports assigned</p>
+                                </Card>
+                              ) : (
+                                <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                                  {unassignedReports.userReports.map((report) => (
+                                    <Card key={report.id} className="rounded-xl p-3">
+                                      <div className="flex items-start gap-3">
+                                        {report.reported_avatar ? (
+                                          <img src={report.reported_avatar} alt="" className="h-10 w-10 rounded-full object-cover" />
+                                        ) : (
+                                          <div className="h-10 w-10 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center">
+                                            <Users className="h-5 w-5 text-stone-400" />
+                                          </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium text-sm">{report.reported_name || 'Unknown'}</span>
+                                            <Badge variant="outline" className="text-xs">{report.reason}</Badge>
+                                            {report.reported_flag_level && (
+                                              <Badge variant={report.reported_flag_level === 3 ? 'destructive' : 'secondary'} className="text-xs">
+                                                Lvl {report.reported_flag_level}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          {report.description && (
+                                            <p className="text-xs text-stone-500 mt-1">{report.description}</p>
+                                          )}
+                                          <div className="flex items-center gap-2 mt-2">
+                                            <span className="text-xs text-stone-400">By: {report.reporter_name}</span>
+                                            <span className="text-xs text-stone-400">•</span>
+                                            <span className="text-xs text-stone-400">{new Date(report.created_at).toLocaleDateString()}</span>
+                                          </div>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="mt-2 rounded-xl text-xs"
+                                            onClick={() => {
+                                              const user = flaggedUsers.find(u => u.id === report.reported_id) || {
+                                                id: report.reported_id,
+                                                display_name: report.reported_name,
+                                                avatar_url: report.reported_avatar,
+                                                flag_level: report.reported_flag_level
+                                              };
+                                              setSelectedReportUser(user);
+                                              setReportViewTab('flagged');
+                                            }}
+                                          >
+                                            <Eye className="h-3 w-3 mr-1" />
+                                            View User
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </Card>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Unassigned Message Reports */}
+                            <div className="space-y-2">
+                              <h3 className="font-semibold text-sm flex items-center gap-2">
+                                <MessageSquare className="h-4 w-4 text-amber-500" />
+                                Unassigned Message Reports ({unassignedReports.messageReports.length})
+                              </h3>
+                              {unassignedReportsLoading ? (
+                                <Card className="rounded-2xl p-8 flex items-center justify-center">
+                                  <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
+                                </Card>
+                              ) : unassignedReports.messageReports.length === 0 ? (
+                                <Card className="rounded-2xl p-8 text-center text-stone-500">
+                                  <Check className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
+                                  <p className="text-sm">All message reports assigned</p>
+                                </Card>
+                              ) : (
+                                <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                                  {unassignedReports.messageReports.map((report) => (
+                                    <Card key={report.id} className="rounded-xl p-3">
+                                      <div className="flex items-start gap-3">
+                                        {report.sender_avatar ? (
+                                          <img src={report.sender_avatar} alt="" className="h-10 w-10 rounded-full object-cover" />
+                                        ) : (
+                                          <div className="h-10 w-10 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center">
+                                            <Users className="h-5 w-5 text-stone-400" />
+                                          </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium text-sm">{report.sender_name || 'Unknown'}</span>
+                                            <Badge variant="outline" className="text-xs">{report.reason}</Badge>
+                                            {report.sender_flag_level && (
+                                              <Badge variant={report.sender_flag_level === 3 ? 'destructive' : 'secondary'} className="text-xs">
+                                                Lvl {report.sender_flag_level}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <div className="text-xs bg-stone-100 dark:bg-stone-800 p-2 rounded mt-1">
+                                            <p className="text-stone-600 dark:text-stone-300 italic">"{report.message_content}"</p>
+                                          </div>
+                                          {report.description && (
+                                            <p className="text-xs text-stone-500 mt-1">{report.description}</p>
+                                          )}
+                                          <div className="flex items-center gap-2 mt-2">
+                                            <span className="text-xs text-stone-400">By: {report.reporter_name}</span>
+                                            <span className="text-xs text-stone-400">•</span>
+                                            <span className="text-xs text-stone-400">{new Date(report.created_at).toLocaleDateString()}</span>
+                                          </div>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="mt-2 rounded-xl text-xs"
+                                            onClick={() => {
+                                              const user = flaggedUsers.find(u => u.id === report.sender_id) || {
+                                                id: report.sender_id,
+                                                display_name: report.sender_name,
+                                                avatar_url: report.sender_avatar,
+                                                flag_level: report.sender_flag_level
+                                              };
+                                              setSelectedReportUser(user);
+                                              setReportViewTab('flagged');
+                                            }}
+                                          >
+                                            <Eye className="h-3 w-3 mr-1" />
+                                            View User
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </Card>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -8854,6 +9917,257 @@ export const AdminPage: React.FC = () => {
         </main>
       </div>
     </div>
+
+    {/* New Report File Dialog */}
+    <Dialog open={newFileDialogOpen} onOpenChange={setNewFileDialogOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create Report File</DialogTitle>
+          <DialogDescription>
+            Create a new report file for {selectedReportUser?.display_name || 'this user'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Title</label>
+            <Input
+              value={newFileForm.title}
+              onChange={(e) => setNewFileForm({ ...newFileForm, title: e.target.value })}
+              placeholder="Brief description of the issue"
+              className="mt-1 rounded-xl"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Category</label>
+            <select
+              value={newFileForm.category}
+              onChange={(e) => setNewFileForm({ ...newFileForm, category: e.target.value })}
+              className="mt-1 w-full rounded-xl border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800 px-3 py-2"
+            >
+              <option value="user_report">User Report</option>
+              <option value="message_report">Message Report</option>
+              <option value="spam_abuse">Spam Abuse</option>
+              <option value="system_abuse">System Abuse</option>
+              <option value="rate_limit_violation">Rate Limit Violation</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Priority</label>
+            <div className="flex gap-2 mt-1">
+              {[1, 2, 3].map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setNewFileForm({ ...newFileForm, priority: level })}
+                  className={`flex-1 py-2 rounded-xl border transition-colors ${
+                    newFileForm.priority === level
+                      ? level === 3 ? 'bg-red-600 text-white border-red-600'
+                        : level === 2 ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-stone-600 text-white border-stone-600'
+                      : 'border-stone-300 dark:border-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800'
+                  }`}
+                >
+                  Level {level}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Notes (optional)</label>
+            <Textarea
+              value={newFileForm.notes}
+              onChange={(e) => setNewFileForm({ ...newFileForm, notes: e.target.value })}
+              placeholder="Additional details about the case..."
+              className="mt-1 rounded-xl"
+              rows={3}
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 mt-4">
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl">Cancel</Button>
+          </DialogClose>
+          <Button
+            onClick={() => selectedReportUser && createReportFile(selectedReportUser.id)}
+            disabled={!newFileForm.title || newFileSubmitting}
+            className="rounded-xl"
+          >
+            {newFileSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+            Create File
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Close Report File Dialog */}
+    <Dialog open={closeFileDialogOpen} onOpenChange={setCloseFileDialogOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Close Report File</DialogTitle>
+          <DialogDescription>
+            Mark this report file as resolved. Closed files are never deleted.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Action Taken</label>
+            <select
+              value={closeFileForm.actionTaken}
+              onChange={(e) => setCloseFileForm({ ...closeFileForm, actionTaken: e.target.value })}
+              className="mt-1 w-full rounded-xl border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800 px-3 py-2"
+            >
+              <option value="none">No action needed</option>
+              <option value="warning">Warning issued</option>
+              <option value="escalated">Escalated flag level</option>
+              <option value="suspended">Account suspended</option>
+              <option value="banned">Account banned</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Resolution Notes</label>
+            <Textarea
+              value={closeFileForm.resolution}
+              onChange={(e) => setCloseFileForm({ ...closeFileForm, resolution: e.target.value })}
+              placeholder="Describe how this was resolved..."
+              className="mt-1 rounded-xl"
+              rows={3}
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 mt-4">
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl">Cancel</Button>
+          </DialogClose>
+          <Button
+            onClick={() => selectedReportFile && closeReportFile(selectedReportFile.id)}
+            disabled={closeFileSubmitting}
+            className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+          >
+            {closeFileSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
+            Close File
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Escalate User Dialog */}
+    <Dialog open={escalateDialogOpen} onOpenChange={setEscalateDialogOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Change Flag Level</DialogTitle>
+          <DialogDescription>
+            Update the threat level for {selectedReportUser?.display_name || 'this user'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="text-sm text-stone-600 dark:text-stone-400">
+            Current level: <Badge variant={selectedReportUser?.flag_level === 3 ? 'destructive' : selectedReportUser?.flag_level === 2 ? 'secondary' : 'outline'}>
+              {selectedReportUser?.flag_level ? `Level ${selectedReportUser.flag_level}` : 'Not flagged'}
+            </Badge>
+          </div>
+          <div>
+            <label className="text-sm font-medium">New Level</label>
+            <div className="flex gap-2 mt-2">
+              {[1, 2, 3].map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setEscalateLevel(level)}
+                  className={`flex-1 py-3 rounded-xl border transition-colors ${
+                    escalateLevel === level
+                      ? level === 3 ? 'bg-red-600 text-white border-red-600'
+                        : level === 2 ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-stone-600 text-white border-stone-600'
+                      : 'border-stone-300 dark:border-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800'
+                  }`}
+                >
+                  <div className="font-medium">Level {level}</div>
+                  <div className="text-xs opacity-80">
+                    {level === 1 && 'First report'}
+                    {level === 2 && 'Under watch'}
+                    {level === 3 && 'Suspended'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          {escalateLevel === 3 && (
+            <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                <div className="text-sm text-red-700 dark:text-red-300">
+                  <strong>Warning:</strong> Setting to Level 3 will immediately suspend the user's account, set their profile to private, and send them a suspension email.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2 mt-4">
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl">Cancel</Button>
+          </DialogClose>
+          <Button
+            onClick={() => selectedReportUser && escalateUser(selectedReportUser.id)}
+            disabled={escalateSubmitting}
+            className={`rounded-xl ${escalateLevel === 3 ? 'bg-red-600 hover:bg-red-700' : ''}`}
+          >
+            {escalateSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <TrendingUp className="h-4 w-4 mr-2" />}
+            Set Level {escalateLevel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Suspend User Dialog */}
+    <Dialog open={suspendDialogOpen} onOpenChange={setSuspendDialogOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600">
+            <Ban className="h-5 w-5" />
+            Suspend Account
+          </DialogTitle>
+          <DialogDescription>
+            This will immediately suspend {selectedReportUser?.display_name || 'this user'}'s account.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
+            <div className="text-sm text-red-700 dark:text-red-300">
+              <strong>This action will:</strong>
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li>Set the user's flag level to 3</li>
+                <li>Prevent them from accessing their account</li>
+                <li>Set their profile to private</li>
+                <li>Send them a suspension notification email</li>
+              </ul>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Reason for Suspension</label>
+            <Textarea
+              value={suspendReason}
+              onChange={(e) => setSuspendReason(e.target.value)}
+              placeholder="Explain why this account is being suspended..."
+              className="mt-1 rounded-xl"
+              rows={3}
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 mt-4">
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl">Cancel</Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            onClick={() => selectedReportUser && suspendUser(selectedReportUser.id)}
+            disabled={suspendSubmitting}
+            className="rounded-xl"
+          >
+            {suspendSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Ban className="h-4 w-4 mr-2" />}
+            Suspend Account
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     {/* Add FROM Plant Dialog */}
     <Dialog open={addFromDialogOpen} onOpenChange={(open) => {
