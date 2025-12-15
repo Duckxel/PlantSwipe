@@ -10825,8 +10825,9 @@ async function getActiveBroadcastRow() {
 
 function broadcastToAll(payload) {
   try {
+    const enriched = { ...payload, serverTime: new Date().toISOString() }
     for (const res of Array.from(broadcastClients)) {
-      sseWrite(res, 'broadcast', payload)
+      sseWrite(res, 'broadcast', enriched)
     }
   } catch { }
 }
@@ -10889,6 +10890,7 @@ app.get('/api/broadcast/stream', async (req, res) => {
           expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
           createdBy: row.created_by ? String(row.created_by) : null,
           adminName: row.admin_name ? String(row.admin_name) : null,
+          serverTime: new Date().toISOString(),
         })
       }
     } catch { }
@@ -14771,6 +14773,7 @@ app.post('/api/admin/broadcast', async (req, res) => {
       expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
       createdBy: row.created_by ? String(row.created_by) : null,
       adminName: adminName ? String(adminName) : null,
+      serverTime: new Date().toISOString(),
     } : null
     if (payload) broadcastToAll(payload)
     res.json({ ok: true, broadcast: payload })
@@ -14836,6 +14839,7 @@ app.put('/api/admin/broadcast', async (req, res) => {
       expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
       createdBy: row.created_by ? String(row.created_by) : null,
       adminName: adminName ? String(adminName) : null,
+      serverTime: new Date().toISOString(),
     } : null
     if (payload) broadcastToAll(payload)
     res.json({ ok: true, broadcast: payload })
