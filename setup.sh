@@ -521,7 +521,7 @@ render_service_env() {
   {
     for k in "${!kv[@]}"; do printf "%s=%s\n" "$k" "${kv[$k]}"; done | sort
   } > "$tmp"
-  $SUDO install -m 0640 "$tmp" "$out"
+  $SUDO install -m 0640 -g "$SERVICE_USER" "$tmp" "$out"
   rm -f "$tmp"
 }
 
@@ -1509,6 +1509,7 @@ ADMIN_DEFAULT_SERVICE=plant-swipe-node
 ADMIN_STATIC_TOKEN=
 EOF
 "
+  $SUDO chown "root:$SERVICE_USER" "$ADMIN_ENV_FILE"
   $SUDO chmod 0640 "$ADMIN_ENV_FILE"
 fi
 
