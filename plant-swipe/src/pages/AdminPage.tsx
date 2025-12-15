@@ -9100,14 +9100,16 @@ const BroadcastControls: React.FC<{
     return () => clearInterval(id);
   }, []);
 
+  const [clockOffset, setClockOffset] = React.useState(0);
+
   const msRemaining = React.useCallback(
     (expiresAt: string | null): number | null => {
       if (!expiresAt) return null;
       const end = Date.parse(expiresAt);
       if (!Number.isFinite(end)) return null;
-      return Math.max(0, end - now);
+      return Math.max(0, end - (now + clockOffset));
     },
-    [now],
+    [now, clockOffset],
   );
 
   const formatDuration = (ms: number): string => {
@@ -9131,6 +9133,12 @@ const BroadcastControls: React.FC<{
       });
       if (r.ok) {
         const b = await r.json().catch(() => ({}));
+        if (b?.serverTime) {
+          const serverMs = Date.parse(b.serverTime);
+          if (Number.isFinite(serverMs)) {
+            setClockOffset(serverMs - Date.now());
+          }
+        }
         if (b?.broadcast) {
           setActive(b.broadcast);
           savePersistedBroadcast(b.broadcast);
@@ -9191,6 +9199,12 @@ const BroadcastControls: React.FC<{
               ? data.severity
               : "info") as any,
           );
+          if (data?.serverTime) {
+            const serverMs = Date.parse(data.serverTime);
+            if (Number.isFinite(serverMs)) {
+              setClockOffset(serverMs - Date.now());
+            }
+          }
           // Ask parent to open the section so admin sees edit/delete UI
           onActive?.();
         } catch {}
