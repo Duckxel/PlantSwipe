@@ -3174,6 +3174,128 @@ app.options('/api/admin/log-action', (_req, res) => {
   res.status(204).end()
 })
 
+const contactScreenshotUploadMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+})
+const singleContactScreenshotUpload = contactScreenshotUploadMulter.single('file')
+const contactScreenshotPrefix = 'contact/screenshots'
+
+app.post('/api/contact/upload-screenshot', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+
+    singleContactScreenshotUpload(req, res, (err) => {
+      if (err) {
+        const message = err.code === 'LIMIT_FILE_SIZE'
+          ? 'File too large. Max 5MB.'
+          : err.message || 'Upload failed'
+        res.status(400).json({ error: message })
+        return
+      }
+
+      ;(async () => {
+        const file = req.file
+        if (!file) {
+          res.status(400).json({ error: 'Missing file' })
+          return
+        }
+
+        // Optimize
+        let buffer
+        try {
+          buffer = await sharp(file.buffer)
+            .resize({ width: 1920, height: 1080, fit: 'inside', withoutEnlargement: true })
+            .webp({ quality: 80 })
+            .toBuffer()
+        } catch (e) {
+          res.status(400).json({ error: 'Invalid image file' })
+          return
+        }
+
+        const unique = crypto.randomUUID()
+        const path = `${contactScreenshotPrefix}/${user.id}/${unique}.webp`
+
+        try {
+          const { error: uploadError } = await supabaseServiceClient.storage
+            .from(adminUploadBucket)
+            .upload(path, buffer, {
+              contentType: 'image/webp',
+              cacheControl: '3600',
+              upsert: false
+            })
+
+          if (uploadError) throw uploadError
+
+          const { data: publicData } = supabaseServiceClient.storage
+            .from(adminUploadBucket)
+            .getPublicUrl(path)
+
+          // Use media proxy
+          const proxyUrl = supabaseStorageToMediaProxy(publicData.publicUrl)
+
+          res.json({ url: proxyUrl })
+        } catch (e) {
+          console.error('[contact-upload] upload failed', e)
+          res.status(500).json({ error: 'Storage upload failed' })
+        }
+      })().catch(e => {
+        console.error('[contact-upload] unexpected error', e)
+        res.status(500).json({ error: 'Unexpected error' })
+      })
+    })
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+app.post('/api/contact/delete-screenshot', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+
+    const { url } = req.body
+    if (!url) {
+      res.status(400).json({ error: 'URL required' })
+      return
+    }
+
+    const info = parseStoragePublicUrl(url)
+    if (!info || info.bucket !== adminUploadBucket) {
+      // Just ignore if it doesn't match our bucket, claim success
+      res.json({ ok: true })
+      return
+    }
+
+    // Check path prefix to ensure user can only delete their own screenshots
+    if (!info.path.startsWith(`${contactScreenshotPrefix}/${user.id}/`)) {
+      res.status(403).json({ error: 'Permission denied for this file' })
+      return
+    }
+
+    const { error } = await supabaseServiceClient.storage
+      .from(adminUploadBucket)
+      .remove([info.path])
+
+    if (error) {
+      console.error('[contact-delete] delete failed', error)
+      // Don't fail the request if delete fails, it's just cleanup
+    }
+
+    res.json({ ok: true })
+
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // Database health: returns ok along with latency; always 200 for easier probes
 app.get('/api/health/db', async (_req, res) => {
   const started = Date.now()

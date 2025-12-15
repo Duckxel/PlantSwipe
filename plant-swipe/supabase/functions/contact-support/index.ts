@@ -49,6 +49,7 @@ const contactSchema = z.object({
   message: z.string().trim().min(10).max(4000),
   submittedAt: z.string().optional(),
   audience: z.enum(["support", "business", "bug"]).optional(),
+  screenshotUrl: z.string().optional(),
   attachments: z
     .array(
       z.object({
@@ -133,7 +134,7 @@ serve(async (req) => {
     })
   }
 
-    const { name, email, subject, message, submittedAt, audience: parsedAudience, attachments } =
+    const { name, email, subject, message, submittedAt, audience: parsedAudience, attachments, screenshotUrl } =
       parsed.data
     const audience: Audience = parsedAudience ?? "support"
     const recipientEmails = RECIPIENT_EMAILS[audience]
@@ -187,6 +188,8 @@ serve(async (req) => {
       <p><strong>Audience:</strong> ${escapeHtml(audience)}</p>
       <p><strong>Delivered to:</strong> ${escapeHtml(recipientEmails.join(", "))}</p>
     ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
+    ${screenshotUrl ? `<p><strong>Screenshot:</strong> <a href="${escapeHtml(screenshotUrl)}" target="_blank">View Screenshot</a></p>` : ""}
+    ${screenshotUrl ? `<div style="margin:12px 0;"><img src="${escapeHtml(screenshotUrl)}" style="max-width:100%;border:1px solid #ddd;border-radius:8px;" alt="Bug report screenshot" /></div>` : ""}
     <hr style="margin:16px 0;" />
     <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
   `

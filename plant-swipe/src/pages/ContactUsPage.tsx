@@ -3,14 +3,16 @@ import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Clock, HelpCircle, Mail, MessageCircle, Check, Copy } from "lucide-react"
+import { Clock, HelpCircle, Mail, MessageCircle, Check, Copy, UploadCloud, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { supabase } from "@/lib/supabaseClient"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { useAuth } from "@/context/AuthContext"
 
 const CHANNEL_EMAILS = {
   support: "support@aphylia.app",
@@ -40,6 +42,7 @@ type ContactUsPageProps = {
 
 export default function ContactUsPage({ defaultChannel = "support" }: ContactUsPageProps) {
   const { t } = useTranslation('common')
+  const { user } = useAuth()
   const seoKey = defaultChannel === "business" ? "contactBusiness" : "contactSupport"
   const seoTitle = t(`seo.${seoKey}.title`, {
     defaultValue: defaultChannel === "business" ? "Contact Aphylia business team" : "Contact Aphylia support",
@@ -64,9 +67,32 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
   const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null)
   const [selectedChannel, setSelectedChannel] = useState<ContactChannel>(defaultChannel)
 
+  // Bug reporting specific state
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+
   useEffect(() => {
     setSelectedChannel(defaultChannel)
   }, [defaultChannel])
+
+  // Cleanup screenshot if user cancels or closes dialog
+  const handleCleanupScreenshot = async () => {
+    if (screenshotUrl && !formStatus.startsWith('success')) {
+      try {
+        await fetch('/api/contact/delete-screenshot', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': (await supabase.auth.getSession()).data.session?.access_token ? `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` : ''
+          },
+          body: JSON.stringify({ url: screenshotUrl })
+        })
+      } catch (e) {
+        console.error('Failed to cleanup screenshot', e)
+      }
+      setScreenshotUrl(null)
+    }
+  }
 
     const channelOptions = {
     support: {
@@ -80,6 +106,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
     bug: {
       label: t('contactUs.channelSelector.options.bug.name'),
       description: t('contactUs.channelSelector.options.bug.description'),
+      authRequired: true,
     },
   }
 
@@ -155,8 +182,8 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
   };
 
   const handleDialogOpenChange = (open: boolean) => {
-    setFormOpen(open)
     if (!open) {
+      handleCleanupScreenshot()
       setFormStatus("idle")
       setFormErrorMessage(null)
       setFormValues({
@@ -167,6 +194,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         attachment: undefined,
       })
     }
+    setFormOpen(open)
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,11 +211,6 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
     reader.onload = (e) => {
       const content = e.target?.result as string
       // content is like "data:image/png;base64,....."
-      // Resend expects just the base64 part for attachment.content, OR we can send the whole data URI?
-      // Actually Resend node SDK takes buffer, but via API it might expect Base64 string of content.
-      // Checking resend docs again or assuming standard base64 content field behavior.
-      // Usually "content" in API means base64 encoded content.
-      // If we pass the data URL, we need to strip the prefix.
       const base64Content = content.split(",")[1]
 
       setFormValues((prev) => ({
@@ -199,6 +222,62 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
       }))
     }
     reader.readAsDataURL(file)
+  }
+
+  const handleScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Max 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      setFormErrorMessage("Image too large. Max 5MB.")
+      return
+    }
+
+    setIsUploading(true)
+    setFormErrorMessage(null)
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const res = await fetch('/api/contact/upload-screenshot', {
+        method: 'POST',
+        headers: {
+          'Authorization': session?.access_token ? `Bearer ${session.access_token}` : ''
+        },
+        body: formData
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Upload failed')
+
+      // If there was an existing screenshot, delete it
+      if (screenshotUrl) {
+         try {
+           await fetch('/api/contact/delete-screenshot', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': session?.access_token ? `Bearer ${session.access_token}` : ''
+              },
+              body: JSON.stringify({ url: screenshotUrl })
+           })
+         } catch(_e) {
+           // ignore delete error
+         }
+      }
+
+      setScreenshotUrl(data.url)
+    } catch (e: any) {
+      console.error('Screenshot upload failed', e)
+      setFormErrorMessage(e.message || "Screenshot upload failed")
+    } finally {
+      setIsUploading(false)
+      // Reset input
+      event.target.value = ''
+    }
   }
 
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -247,6 +326,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
             submittedAt: new Date().toISOString(),
             audience: selectedChannel,
             attachments: formValues.attachment ? [formValues.attachment] : undefined,
+            screenshotUrl: screenshotUrl || undefined
           },
         })
 
@@ -265,6 +345,8 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         message: "",
         attachment: undefined,
       })
+      // Clear screenshot state without deleting from server (since it's now submitted)
+      setScreenshotUrl(null)
     } catch (err) {
       console.error('Unexpected error submitting contact form', err)
       setFormStatus("error")
@@ -272,7 +354,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
     }
   }
 
-  const inputsDisabled = formStatus === "loading" || formStatus === "success"
+  const inputsDisabled = formStatus === "loading" || formStatus === "success" || isUploading
   const glassCard =
     "rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1a1a1d]/85 backdrop-blur shadow-[0_25px_70px_-45px_rgba(15,23,42,0.65)]"
   const dialogSurface =
@@ -309,18 +391,39 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
                 <Label htmlFor="contact-channel" className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
                   {t('contactUs.channelSelector.label')}
                 </Label>
-                <select
-                  id="contact-channel"
-                  value={selectedChannel}
-                  onChange={(event) => setSelectedChannel(event.target.value as ContactChannel)}
-                  className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
-                >
-                  {CHANNEL_ORDER.map((key) => (
-                    <option key={key} value={key}>
-                      {channelOptions[key]?.label}
-                    </option>
-                  ))}
-                </select>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      id="contact-channel"
+                      className="w-full justify-between rounded-2xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30]"
+                    >
+                      {currentChannelLabel}
+                      <span className="opacity-50 text-[10px]">▼</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[240px] rounded-2xl">
+                    {CHANNEL_ORDER.map((key) => {
+                      const option = channelOptions[key]
+                      const isDisabled = option.authRequired && !user
+                      return (
+                        <DropdownMenuItem
+                          key={key}
+                          onClick={() => setSelectedChannel(key)}
+                          disabled={isDisabled}
+                          className="flex flex-col items-start gap-1 py-2 cursor-pointer"
+                        >
+                          <span className="font-medium">
+                            {option.label}
+                            {isDisabled && " (Login required)"}
+                          </span>
+                        </DropdownMenuItem>
+                      )
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 <p className="text-xs text-stone-500 dark:text-stone-400">
                   {currentChannelDescription || t('contactUs.channelSelector.helper')}
                 </p>
@@ -509,17 +612,63 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="contact-attachment">{t('contactUs.form.attachmentLabel')}</Label>
-              <Input
-                id="contact-attachment"
-                name="attachment"
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                disabled={inputsDisabled}
-              />
-            </div>
+            {/* Screenshot upload for Bug Reports */}
+            {selectedChannel === 'bug' && (
+              <div className="grid gap-2">
+                <Label htmlFor="contact-screenshot">Screenshot (Optional)</Label>
+
+                {screenshotUrl ? (
+                   <div className="relative group w-fit">
+                      <img src={screenshotUrl} alt="Screenshot" className="h-24 w-auto rounded-lg border border-stone-200" />
+                      <button
+                        type="button"
+                        onClick={handleCleanupScreenshot}
+                        className="absolute -top-2 -right-2 bg-stone-100 hover:bg-red-100 text-stone-500 hover:text-red-500 rounded-full p-1 border shadow-sm transition-colors"
+                      >
+                         <X className="h-3 w-3" />
+                      </button>
+                   </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-2xl gap-2"
+                      onClick={() => document.getElementById('contact-screenshot')?.click()}
+                      disabled={inputsDisabled}
+                    >
+                      {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                      {isUploading ? "Uploading..." : "Upload Screenshot"}
+                    </Button>
+                    <Input
+                      id="contact-screenshot"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleScreenshotUpload}
+                      disabled={inputsDisabled}
+                    />
+                    <span className="text-xs text-stone-500">Max 5MB (JPG, PNG, WebP)</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* General attachment for other channels (or in addition) */}
+            {selectedChannel !== 'bug' && (
+              <div className="grid gap-2">
+                <Label htmlFor="contact-attachment">{t('contactUs.form.attachmentLabel')}</Label>
+                <Input
+                  id="contact-attachment"
+                  name="attachment"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  disabled={inputsDisabled}
+                />
+              </div>
+            )}
 
             <DialogFooter className="pt-2">
               <Button
@@ -547,4 +696,3 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
     </div>
   );
 }
-

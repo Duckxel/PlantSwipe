@@ -1460,6 +1460,14 @@ export default function PlantSwipe() {
               }
             />
             <Route
+              path="/contact/bug"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ContactUsPageLazy defaultChannel="bug" />
+                </Suspense>
+              }
+            />
+            <Route
               path="/contact"
               element={
                 <Suspense fallback={routeLoadingFallback}>
