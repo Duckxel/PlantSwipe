@@ -94,7 +94,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
     }
   }
 
-    const channelOptions = {
+  const channelOptions: Record<ContactChannel, { label: string; description: string; authRequired?: boolean }> = {
     support: {
       label: t('contactUs.channelSelector.options.support.name'),
       description: t('contactUs.channelSelector.options.support.description'),
