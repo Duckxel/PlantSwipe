@@ -57,6 +57,7 @@ const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
 const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
 const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
+const NotificationsPageLazy = lazy(() => import("@/pages/NotificationsPage"))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -1457,6 +1458,16 @@ export default function PlantSwipe() {
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
                   <MessagesPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/notifications"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <NotificationsPageLazy />
                 </Suspense>
               ) : (
                 <Navigate to="/" replace />
