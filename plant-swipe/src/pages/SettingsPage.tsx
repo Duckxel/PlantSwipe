@@ -510,7 +510,7 @@ export default function SettingsPage() {
   // Tab configuration
   const tabs: { id: SettingsTab; icon: React.ReactNode; label: string }[] = [
     { id: 'account', icon: <User className="h-4 w-4" />, label: t('settings.tabs.account', { defaultValue: 'Account' }) },
-    { id: 'notifications', icon: <Bell className="h-4 w-4" />, label: t('settings.tabs.notifications', { defaultValue: 'Notifications' }) },
+    { id: 'notifications', icon: <Bell className="h-4 w-4" />, label: t('settings.tabs.notifications', { defaultValue: 'Notification Settings' }) },
     { id: 'privacy', icon: <Shield className="h-4 w-4" />, label: t('settings.tabs.privacy', { defaultValue: 'Privacy' }) },
     { id: 'preferences', icon: <Settings className="h-4 w-4" />, label: t('settings.tabs.preferences', { defaultValue: 'Preferences' }) },
     { id: 'danger', icon: <AlertTriangle className="h-4 w-4" />, label: t('settings.tabs.danger', { defaultValue: 'Danger Zone' }) },
