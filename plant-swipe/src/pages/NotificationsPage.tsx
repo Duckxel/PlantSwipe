@@ -1,12 +1,11 @@
 import React from "react"
 import { useTranslation } from "react-i18next"
 import { useNotifications } from "@/hooks/useNotifications"
-import { format, formatDistanceToNow } from "date-fns"
+import { formatDistanceToNow } from "date-fns"
 import { enUS, fr } from "date-fns/locale"
 import { useLanguage } from "@/lib/i18nRouting"
-import { Bell, Check, ExternalLink, Calendar, Info, BellOff } from "lucide-react"
+import { Bell, Check, ExternalLink, BellOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Link } from "@/components/i18n/Link"
 
 export default function NotificationsPage() {
