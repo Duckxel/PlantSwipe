@@ -6259,79 +6259,6 @@ app.get('/api/admin/reports/flagged-count', async (req, res) => {
     return
   }
   try {
-    // Ensure notification tables exist first
-    console.log('[notification-automations] Ensuring tables exist...')
-    await ensureNotificationTables()
-    // Ensure default automations exist
-    console.log('[notification-automations] Ensuring default automations exist...')
-    await ensureDefaultAutomations()
-
-    // First, get basic automations
-    const rows = await sql`
-      select a.*,
-             t.title as template_title
-      from public.notification_automations a
-      left join public.notification_templates t on t.id = a.template_id
-      order by a.created_at asc
-    `
-    console.log('[notification-automations] Query returned:', rows?.length || 0, 'rows')
-
-    // Calculate recipient counts separately to avoid query failures
-    const automationsWithCounts = await Promise.all((rows || []).map(async (row) => {
-      let recipientCount = 0
-      try {
-        if (row.trigger_type === 'weekly_inactive_reminder') {
-          const countResult = await sql`
-            select count(*)::bigint as cnt
-            from public.profiles p
-            left join auth.users u on u.id = p.id
-            where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
-          `
-          recipientCount = Number(countResult?.[0]?.cnt || 0)
-        } else if (row.trigger_type === 'daily_task_reminder') {
-          try {
-            const countResult = await sql`
-              select count(distinct p.id)::bigint as cnt
-              from public.profiles p
-              join public.garden_members gm on gm.user_id = p.id
-              join public.garden_plant_tasks t on t.garden_id = gm.garden_id
-              join public.garden_plant_task_occurrences occ on occ.task_id = t.id
-              where (p.notify_push is null or p.notify_push = true)
-                and occ.due_at::date = current_date
-                and (occ.completed_count < occ.required_count or occ.completed_count = 0)
-            `
-            recipientCount = Number(countResult?.[0]?.cnt || 0)
-          } catch (e) {
-            // Table might not exist
-            recipientCount = 0
-          }
-        } else if (row.trigger_type === 'journal_continue_reminder') {
-          try {
-            const countResult = await sql`
-              select count(distinct p.id)::bigint as cnt
-              from public.profiles p
-              join public.garden_members gm on gm.user_id = p.id
-              join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
-              where (p.notify_push is null or p.notify_push = true)
-                and gal.kind = 'note'
-                and gal.occurred_at::date = current_date - interval '1 day'
-            `
-            recipientCount = Number(countResult?.[0]?.cnt || 0)
-          } catch (e) {
-            // Table might not exist
-            recipientCount = 0
-          }
-        }
-      } catch (countErr) {
-        console.error('[notification-automations] Error counting recipients for', row.trigger_type, countErr)
-      }
-      return { ...row, recipient_count: recipientCount }
-    }))
-
-    const automations = automationsWithCounts.map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
-    console.log('[notification-automations] Returning:', automations.length, 'automations')
-    res.json({ automations })
     const result = await sql`
       select 
         count(distinct subject_user_id)::integer as flagged_users,
@@ -6349,7 +6276,6 @@ app.get('/api/admin/reports/flagged-count', async (req, res) => {
   }
 })
 
-// Get all flagged users with their report files
 app.get('/api/admin/reports/flagged-users', async (req, res) => {
   const adminId = await ensureAdmin(req, res)
   if (!adminId) return
@@ -7791,14 +7717,6 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
 
 // Public endpoint to send automatic email (called from auth flow)
 // Uses the same method as campaign emails: direct Resend API call with wrapper
-app.post('/api/send-automatic-email', async (req, res) => {
-  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
-  if (!apiKey) {
-    console.error('[send-automatic-email] No Resend API key configured')
-    res.status(500).json({ error: 'Email service not configured' })
-    return
-  }
-
 app.delete('/api/admin/email-templates/:id', async (req, res) => {
   const adminId = await ensureEditor(req, res)
   if (!adminId) return
@@ -11312,22 +11230,6 @@ app.get('/api/admin/download-backup', async (req, res) => {
   const uid = "public"
   if (!uid) return
 
-app.post('/api/recaptcha/verify', async (req, res) => {
-  try {
-    const { token, action } = req.body || {}
-
-    if (!token) {
-      res.status(400).json({ success: false, error: 'Missing reCAPTCHA token' })
-      return
-    }
-
-    if (!GOOGLE_API_KEY) {
-      // If no API key configured, log warning and allow request
-      // This enables development without reCAPTCHA verification
-      console.warn('[recaptcha] No GOOGLE_API_KEY configured, skipping verification')
-      res.json({ success: true, score: 1.0, warning: 'verification_skipped' })
-      return
-    }
   const token = (req.query.token || '').toString().trim()
   if (!token) {
     res.status(400).json({ error: 'Missing token' })
@@ -11365,14 +11267,6 @@ app.post('/api/recaptcha/verify', async (req, res) => {
   res.on('finish', cleanup)
   res.on('close', cleanup)
 })
-
-    // Check the token properties
-    const tokenProperties = verifyData.tokenProperties
-    const riskAnalysis = verifyData.riskAnalysis
-
-    if (!tokenProperties?.valid) {
-      console.warn('[recaptcha] Invalid token:', tokenProperties?.invalidReason)
-      res.status(400).json({ success: false, error: 'Invalid token', reason: tokenProperties?.invalidReason })
 // Admin: refresh website by invoking scripts/refresh-plant-swipe.sh from repo root
 async function handlePullCode(req, res) {
   try {
