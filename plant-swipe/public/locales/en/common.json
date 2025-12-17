@@ -24,6 +24,8 @@
     "edit": "Edit",
     "create": "Create",
     "update": "Update",
+    "accept": "Accept",
+    "decline": "Decline",
     "submitting": "Submitting...",
     "result": "result",
     "results": "results",
@@ -2534,5 +2536,36 @@
       "miscellaneous": "Miscellaneous",
       "meta": "Meta"
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No new notifications",
+    "viewAll": "View all",
+    "friendRequests": "Friend Requests",
+    "gardenInvites": "Garden Invites",
+    "wantsToBeYourFriend": "wants to be your friend",
+    "invitedBy": "Invited by",
+    "acceptedYourRequest": "accepted your friend request",
+    "declinedYourRequest": "declined your friend request",
+    "invitedYouToGarden": "invited you to join",
+    "acceptedGardenInvite": "accepted your garden invite",
+    "declinedGardenInvite": "declined your garden invite"
+  },
+  "gardenInvites": {
+    "title": "Garden Invitations",
+    "noInvites": "No pending invitations",
+    "inviteUser": "Invite user",
+    "sendInvite": "Send invite",
+    "cancelInvite": "Cancel invite",
+    "pendingInvites": "Pending invites",
+    "acceptInvite": "Accept",
+    "declineInvite": "Decline",
+    "invitedTo": "You've been invited to join",
+    "sentBy": "from",
+    "privacySetting": "Garden invite privacy",
+    "privacyAnyone": "Anyone can invite me",
+    "privacyFriendsOnly": "Only friends can invite me",
+    "privacyDescription": "Control who can send you garden invitations",
+    "userOnlyAcceptsFriendInvites": "This user only accepts garden invites from friends"
   }
 }

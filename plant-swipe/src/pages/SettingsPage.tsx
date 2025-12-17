@@ -49,6 +49,7 @@ export default function SettingsPage() {
   const [showPasswordForm, setShowPasswordForm] = React.useState(false)
   const [isPrivate, setIsPrivate] = React.useState(false)
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
+  const [gardenInvitePrivacy, setGardenInvitePrivacy] = React.useState<'anyone' | 'friends_only'>('anyone')
   const [notifyPush, setNotifyPush] = React.useState(true)
   const [notifyEmail, setNotifyEmail] = React.useState(true)
   const [timezone, setTimezone] = React.useState<string>("")
@@ -164,18 +165,20 @@ export default function SettingsPage() {
         if (profile) {
           setIsPrivate(Boolean((profile as any).is_private || false))
           setDisableFriendRequests(Boolean((profile as any).disable_friend_requests || false))
+          setGardenInvitePrivacy((profile as any).garden_invite_privacy || 'anyone')
           const savedTimezone = (profile as any).timezone
           setTimezone(savedTimezone || detectedTimezone)
         } else {
           // Fetch profile if not loaded
           const { data } = await supabase
             .from('profiles')
-            .select('is_private, disable_friend_requests, timezone')
+            .select('is_private, disable_friend_requests, garden_invite_privacy, timezone')
             .eq('id', user.id)
             .maybeSingle()
           if (data) {
             setIsPrivate(Boolean(data.is_private || false))
             setDisableFriendRequests(Boolean(data.disable_friend_requests || false))
+            setGardenInvitePrivacy((data as any).garden_invite_privacy || 'anyone')
             setTimezone(data.timezone || detectedTimezone)
           } else {
             setTimezone(detectedTimezone)
@@ -339,6 +342,42 @@ export default function SettingsPage() {
     } catch (e: any) {
       setError(e?.message || t('settings.friendRequests.failedToUpdate'))
       setDisableFriendRequests(!newValue)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleToggleGardenInvitePrivacy = async () => {
+    if (!user?.id) return
+
+    const newValue = gardenInvitePrivacy === 'anyone' ? 'friends_only' : 'anyone'
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ garden_invite_privacy: newValue })
+        .eq('id', user.id)
+
+      if (updateError) {
+        // Column might not exist yet - show helpful message
+        if (updateError.message?.includes('column') || updateError.code === '42703') {
+          throw new Error(t('gardenInvites.columnNotReady', { defaultValue: 'This feature is not available yet.' }))
+        }
+        throw updateError
+      }
+
+      setGardenInvitePrivacy(newValue)
+      setSuccess(newValue === 'friends_only' 
+        ? t('gardenInvites.privacyFriendsOnly', { defaultValue: 'Only friends can invite me' })
+        : t('gardenInvites.privacyAnyone', { defaultValue: 'Anyone can invite me' })
+      )
+      await refreshProfile()
+    } catch (e: any) {
+      setError(e?.message || t('gardenInvites.failedToUpdate', { defaultValue: 'Failed to update privacy setting' }))
+      setGardenInvitePrivacy(gardenInvitePrivacy === 'anyone' ? 'anyone' : 'friends_only')
     } finally {
       setSaving(false)
     }
@@ -952,6 +991,30 @@ export default function SettingsPage() {
                   </Label>
                   <p className="text-sm opacity-70 mt-1">
                     {t('settings.friendRequests.disableDescription')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <input
+                  type="checkbox"
+                  id="garden-invite-privacy"
+                  checked={gardenInvitePrivacy === 'friends_only'}
+                  onChange={handleToggleGardenInvitePrivacy}
+                  disabled={saving}
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="garden-invite-privacy" className="font-semibold cursor-pointer text-base">
+                    {t('gardenInvites.privacySetting', { defaultValue: 'Garden invite privacy' })}
+                  </Label>
+                  <p className="text-sm opacity-70 mt-1">
+                    {gardenInvitePrivacy === 'friends_only' 
+                      ? t('gardenInvites.privacyFriendsOnly', { defaultValue: 'Only friends can invite me' })
+                      : t('gardenInvites.privacyAnyone', { defaultValue: 'Anyone can invite me' })
+                    }
+                  </p>
+                  <p className="text-xs opacity-50 mt-1">
+                    {t('gardenInvites.privacyDescription', { defaultValue: 'Control who can send you garden invitations' })}
                   </p>
                 </div>
               </div>

@@ -24,6 +24,8 @@
     "edit": "Modifier",
     "create": "Créer",
     "update": "Mettre à jour",
+    "accept": "Accepter",
+    "decline": "Refuser",
     "submitting": "Envoi en cours...",
     "result": "résultat",
     "results": "résultats",
@@ -2534,5 +2536,36 @@
       "miscellaneous": "Divers",
       "meta": "Méta"
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "Aucune nouvelle notification",
+    "viewAll": "Voir tout",
+    "friendRequests": "Demandes d'amis",
+    "gardenInvites": "Invitations de jardin",
+    "wantsToBeYourFriend": "souhaite être votre ami(e)",
+    "invitedBy": "Invité(e) par",
+    "acceptedYourRequest": "a accepté votre demande d'ami",
+    "declinedYourRequest": "a refusé votre demande d'ami",
+    "invitedYouToGarden": "vous a invité(e) à rejoindre",
+    "acceptedGardenInvite": "a accepté votre invitation au jardin",
+    "declinedGardenInvite": "a refusé votre invitation au jardin"
+  },
+  "gardenInvites": {
+    "title": "Invitations de jardin",
+    "noInvites": "Aucune invitation en attente",
+    "inviteUser": "Inviter un utilisateur",
+    "sendInvite": "Envoyer l'invitation",
+    "cancelInvite": "Annuler l'invitation",
+    "pendingInvites": "Invitations en attente",
+    "acceptInvite": "Accepter",
+    "declineInvite": "Refuser",
+    "invitedTo": "Vous avez été invité(e) à rejoindre",
+    "sentBy": "de",
+    "privacySetting": "Confidentialité des invitations",
+    "privacyAnyone": "Tout le monde peut m'inviter",
+    "privacyFriendsOnly": "Seuls mes amis peuvent m'inviter",
+    "privacyDescription": "Contrôlez qui peut vous envoyer des invitations de jardin",
+    "userOnlyAcceptsFriendInvites": "Cet utilisateur n'accepte que les invitations de ses amis"
   }
 }
