@@ -15,6 +15,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
+import { sendFriendRequestPushNotification } from "@/lib/notifications";
 
 type FriendRequest = {
   id: string;
@@ -55,7 +56,7 @@ type SearchResult = {
 };
 
 export const FriendsPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
   const [friends, setFriends] = React.useState<Friend[]>([]);
@@ -398,6 +399,21 @@ export const FriendsPage: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [dialogSearchQuery, handleDialogSearch]);
 
+  // Helper function to send push notification for friend request
+  const sendFriendRequestNotification = React.useCallback(async (recipientId: string) => {
+    const senderName = profile?.display_name || 'Someone';
+    const { data: recipientProfile } = await supabase
+      .from("profiles")
+      .select("language")
+      .eq("id", recipientId)
+      .maybeSingle();
+    sendFriendRequestPushNotification(
+      recipientId,
+      senderName,
+      recipientProfile?.language || 'en'
+    ).catch(() => {});
+  }, [profile?.display_name]);
+
   const sendFriendRequest = React.useCallback(
     async (recipientId: string) => {
       if (!user?.id) return;
@@ -443,6 +459,9 @@ export const FriendsPage: React.FC = () => {
             handleDialogSearch();
             await loadPendingRequests();
             setError(null);
+            
+            // Send push notification for re-activated request
+            sendFriendRequestNotification(recipientId);
             return;
           }
         }
@@ -456,6 +475,9 @@ export const FriendsPage: React.FC = () => {
 
         if (err) throw err;
 
+        // Send push notification for new friend request
+        sendFriendRequestNotification(recipientId);
+
         // Refresh search results and pending requests
         handleDialogSearch();
         await Promise.all([loadPendingRequests(), loadSentPendingRequests()]);
@@ -468,6 +490,7 @@ export const FriendsPage: React.FC = () => {
     },
     [
       user?.id,
+      sendFriendRequestNotification,
       handleDialogSearch,
       loadPendingRequests,
       loadSentPendingRequests,

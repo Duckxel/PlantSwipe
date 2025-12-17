@@ -15027,6 +15027,117 @@ app.delete('/api/push/subscribe', async (req, res) => {
   }
 })
 
+// ========== Instant Push Notification API ==========
+// Sends an immediate push notification for social events (friend requests, garden invites)
+// This is called internally when creating these events
+app.post('/api/push/instant', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { recipientId, type, title, body, data } = req.body || {}
+  
+  if (!recipientId || !type || !title || !body) {
+    res.status(400).json({ error: 'Missing required fields: recipientId, type, title, body' })
+    return
+  }
+  
+  // Validate notification type
+  const validTypes = ['friend_request', 'garden_invite', 'friend_request_accepted', 'garden_invite_accepted']
+  if (!validTypes.includes(type)) {
+    res.status(400).json({ error: `Invalid notification type. Must be one of: ${validTypes.join(', ')}` })
+    return
+  }
+  
+  try {
+    // Check if push notifications are enabled
+    if (!pushNotificationsEnabled) {
+      console.warn('[push/instant] Push notifications disabled (VAPID keys not configured)')
+      res.json({ ok: true, sent: false, reason: 'PUSH_DISABLED' })
+      return
+    }
+    
+    // Get recipient's push subscriptions
+    const subscriptions = await sql`
+      select id::text as id, user_id::text as user_id, endpoint, subscription
+      from public.user_push_subscriptions
+      where user_id = ${recipientId}::uuid
+    `
+    
+    if (!subscriptions || subscriptions.length === 0) {
+      console.log(`[push/instant] No push subscriptions found for user ${recipientId}`)
+      res.json({ ok: true, sent: false, reason: 'NO_SUBSCRIPTION' })
+      return
+    }
+    
+    // Send notification to all of recipient's subscriptions
+    let sent = false
+    const staleSubscriptionIds = []
+    
+    for (const sub of subscriptions) {
+      try {
+        const payload = sub.subscription && typeof sub.subscription === 'string'
+          ? JSON.parse(sub.subscription)
+          : sub.subscription
+          
+        await webpush.sendNotification(
+          payload,
+          JSON.stringify({
+            title,
+            body,
+            tag: `${type}-${user.id}`,
+            data: {
+              type,
+              senderId: user.id,
+              ...data,
+            },
+          })
+        )
+        sent = true
+        
+        // Update last_used_at
+        await sql`
+          update public.user_push_subscriptions
+          set last_used_at = now()
+          where id = ${sub.id}::uuid
+        `
+      } catch (err) {
+        const statusCode = err?.statusCode || err?.statuscode
+        if (statusCode === 404 || statusCode === 410) {
+          // Subscription expired, mark for cleanup
+          staleSubscriptionIds.push(sub.id)
+        } else {
+          console.warn('[push/instant] Push delivery failed:', err?.message || err)
+        }
+      }
+    }
+    
+    // Clean up stale subscriptions
+    if (staleSubscriptionIds.length > 0) {
+      await sql`
+        delete from public.user_push_subscriptions
+        where id = any(${staleSubscriptionIds}::uuid[])
+      `
+      console.log(`[push/instant] Cleaned up ${staleSubscriptionIds.length} expired subscription(s)`)
+    }
+    
+    if (sent) {
+      console.log(`[push/instant] Successfully sent ${type} notification to user ${recipientId}`)
+    }
+    
+    res.json({ ok: true, sent, type })
+  } catch (err) {
+    console.error('[push/instant] Failed to send notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
 const notificationWorkerIntervalMs = Math.max(15000, Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS || 60000))
 const notificationDeliveryBatchSize = Math.min(
   Math.max(Number(process.env.NOTIFICATION_DELIVERY_BATCH_SIZE || 200), 25),

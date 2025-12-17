@@ -332,8 +332,9 @@ export async function sendGardenInvite(params: {
   inviteeId: string
   role?: 'member' | 'owner'
   message?: string | null
+  inviterDisplayName?: string | null
 }): Promise<GardenInvite> {
-  const { gardenId, inviterId, inviteeId, role = 'member', message = null } = params
+  const { gardenId, inviterId, inviteeId, role = 'member', message = null, inviterDisplayName } = params
 
   // Check if user is already a member
   const { data: existingMember } = await supabase
@@ -387,10 +388,37 @@ export async function sendGardenInvite(params: {
 
   if (error) throw new Error(error.message)
 
+  const gardenName = (data.gardens as any)?.name || ''
+  
+  // Send push notification (fire and forget - don't block on this)
+  // Get inviter display name if not provided
+  let senderName = inviterDisplayName
+  if (!senderName) {
+    const { data: inviterProfile } = await supabase
+      .from('profiles')
+      .select('display_name, language')
+      .eq('id', inviterId)
+      .maybeSingle()
+    senderName = inviterProfile?.display_name || 'Someone'
+  }
+  
+  // Get invitee's language preference
+  const { data: inviteeProfile } = await supabase
+    .from('profiles')
+    .select('language')
+    .eq('id', inviteeId)
+    .maybeSingle()
+  const inviteeLanguage = inviteeProfile?.language || 'en'
+  
+  // Send push notification asynchronously
+  sendGardenInvitePushNotification(inviteeId, senderName, gardenName, inviteeLanguage).catch(() => {
+    // Silently fail - push notifications are best effort
+  })
+
   return {
     id: String(data.id),
     gardenId: String(data.garden_id),
-    gardenName: (data.gardens as any)?.name || '',
+    gardenName,
     inviterId: String(data.inviter_id),
     inviterName: null,
     inviteeId: String(data.invitee_id),
@@ -547,6 +575,119 @@ export async function canSendGardenInvite(
     canInvite: false, 
     reason: 'User only accepts garden invites from friends' 
   }
+}
+
+// ===== Push Notifications =====
+
+type InstantPushType = 'friend_request' | 'garden_invite' | 'friend_request_accepted' | 'garden_invite_accepted'
+
+interface SendInstantPushParams {
+  recipientId: string
+  type: InstantPushType
+  title: string
+  body: string
+  data?: Record<string, unknown>
+}
+
+/**
+ * Send an instant push notification to a user's device
+ * Used for friend requests and garden invites
+ */
+export async function sendInstantPushNotification(params: SendInstantPushParams): Promise<{ sent: boolean; reason?: string }> {
+  const { recipientId, type, title, body, data } = params
+  
+  try {
+    const session = (await supabase.auth.getSession()).data.session
+    const token = session?.access_token
+    
+    if (!token) {
+      console.warn('[push] Cannot send notification: not authenticated')
+      return { sent: false, reason: 'NOT_AUTHENTICATED' }
+    }
+    
+    const response = await fetch('/api/push/instant', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({ recipientId, type, title, body, data })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      console.warn('[push] Failed to send notification:', errorData?.error || response.status)
+      return { sent: false, reason: errorData?.error || 'REQUEST_FAILED' }
+    }
+    
+    const result = await response.json()
+    return { sent: result.sent ?? false, reason: result.reason }
+  } catch (err) {
+    console.warn('[push] Error sending notification:', (err as Error)?.message)
+    return { sent: false, reason: 'ERROR' }
+  }
+}
+
+/**
+ * Send a push notification for a friend request
+ */
+export async function sendFriendRequestPushNotification(
+  recipientId: string,
+  senderDisplayName: string,
+  language: string = 'en'
+): Promise<{ sent: boolean }> {
+  const translations: Record<string, { title: string; body: string }> = {
+    en: {
+      title: 'New Friend Request',
+      body: `${senderDisplayName} wants to be your friend`
+    },
+    fr: {
+      title: 'Nouvelle demande d\'ami',
+      body: `${senderDisplayName} souhaite être votre ami(e)`
+    }
+  }
+  
+  const t = translations[language] || translations.en
+  
+  return sendInstantPushNotification({
+    recipientId,
+    type: 'friend_request',
+    title: t.title,
+    body: t.body,
+    data: { senderDisplayName }
+  })
+}
+
+/**
+ * Send a push notification for a garden invite
+ */
+export async function sendGardenInvitePushNotification(
+  recipientId: string,
+  senderDisplayName: string,
+  gardenName: string,
+  language: string = 'en'
+): Promise<{ sent: boolean }> {
+  const translations: Record<string, { title: string; body: string }> = {
+    en: {
+      title: 'Garden Invitation',
+      body: `${senderDisplayName} invited you to join "${gardenName}"`
+    },
+    fr: {
+      title: 'Invitation de jardin',
+      body: `${senderDisplayName} vous a invité(e) à rejoindre "${gardenName}"`
+    }
+  }
+  
+  const t = translations[language] || translations.en
+  
+  return sendInstantPushNotification({
+    recipientId,
+    type: 'garden_invite',
+    title: t.title,
+    body: t.body,
+    data: { senderDisplayName, gardenName }
+  })
 }
 
 // ===== Helper Functions =====
