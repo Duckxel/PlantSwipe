@@ -13,6 +13,7 @@ import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPa
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
 import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
+import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -106,6 +107,7 @@ const {
 type AdminTab =
   | "overview"
   | "members"
+  | "reports"
   | "requests"
   | "stocks"
   | "upload"
@@ -3419,6 +3421,7 @@ export const AdminPage: React.FC = () => {
   }> = [
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin", adminOnly: true },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
+    { key: "reports", label: "Reports", Icon: AlertTriangle, path: "/admin/reports", adminOnly: true },
     { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
     { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
@@ -3435,6 +3438,7 @@ export const AdminPage: React.FC = () => {
 
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
+    if (currentPath.includes("/admin/reports")) return "reports";
     if (currentPath.includes("/admin/requests")) return "requests";
     if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
@@ -3447,7 +3451,7 @@ export const AdminPage: React.FC = () => {
   // Redirect editors away from admin-only tabs
   React.useEffect(() => {
     if (isFullAdmin) return; // Admins can access everything
-    const adminOnlyTabs: AdminTab[] = ["overview", "members", "stocks", "admin_logs"];
+    const adminOnlyTabs: AdminTab[] = ["overview", "members", "reports", "stocks", "admin_logs"];
     if (adminOnlyTabs.includes(activeTab)) {
       // Redirect to requests tab (default for editors)
       navigate("/admin/requests", { replace: true });
@@ -7255,6 +7259,9 @@ export const AdminPage: React.FC = () => {
 
                   {/* Advanced Tab */}
                   {activeTab === "admin_logs" && <AdminAdvancedPanel />}
+
+                {/* Reports Tab */}
+                {activeTab === "reports" && <AdminReportsPanel />}
 
                 {/* Members Tab */}
                 {activeTab === "members" && (
