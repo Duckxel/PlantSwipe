@@ -120,6 +120,7 @@ do $$ declare
     'friends',
     'bookmarks',
     'bookmark_items',
+    'garden_invites',
     -- Moderation & analytics
     'web_visits',
     'banned_accounts',
@@ -181,6 +182,8 @@ alter table if exists public.profiles add column if not exists accent_key text d
 alter table if exists public.profiles add column if not exists is_private boolean not null default false;
 -- Friend requests setting: when true, users cannot send friend requests (prevents unwanted invites)
 alter table if exists public.profiles add column if not exists disable_friend_requests boolean not null default false;
+-- Garden invite privacy: 'anyone' (default) or 'friends_only' to restrict who can send garden invites
+alter table if exists public.profiles add column if not exists garden_invite_privacy text default 'anyone' check (garden_invite_privacy in ('anyone', 'friends_only'));
 -- Language preference: stores user's preferred language code (e.g., 'en', 'fr')
 alter table if exists public.profiles add column if not exists language text default 'en';
 -- Notification preferences: push notifications and email campaigns (default to true/enabled)
@@ -4669,6 +4672,89 @@ end;
 $$;
 
 grant execute on function public.get_friend_email(uuid) to authenticated;
+
+-- ========== Garden Invites (invitation system for gardens) ==========
+create table if not exists public.garden_invites (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  inviter_id uuid not null references public.profiles(id) on delete cascade,
+  invitee_id uuid not null references public.profiles(id) on delete cascade,
+  role text not null default 'member' check (role in ('owner','member')),
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined', 'cancelled')),
+  message text,
+  created_at timestamptz not null default now(),
+  responded_at timestamptz,
+  unique(garden_id, invitee_id),
+  check (inviter_id <> invitee_id)
+);
+
+-- Indexes for garden_invites
+create index if not exists garden_invites_garden_idx on public.garden_invites(garden_id);
+create index if not exists garden_invites_inviter_idx on public.garden_invites(inviter_id);
+create index if not exists garden_invites_invitee_idx on public.garden_invites(invitee_id);
+create index if not exists garden_invites_status_idx on public.garden_invites(status);
+
+-- Enable RLS for garden_invites
+alter table public.garden_invites enable row level security;
+
+-- RLS policies for garden_invites
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_select_own') then
+    drop policy garden_invites_select_own on public.garden_invites;
+  end if;
+  create policy garden_invites_select_own on public.garden_invites for select to authenticated
+    using (
+      inviter_id = (select auth.uid())
+      or invitee_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_insert_own') then
+    drop policy garden_invites_insert_own on public.garden_invites;
+  end if;
+  -- Only garden owners/members can send invites
+  create policy garden_invites_insert_own on public.garden_invites for insert to authenticated
+    with check (
+      inviter_id = (select auth.uid())
+      and exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_invites.garden_id
+        and gm.user_id = (select auth.uid())
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_update_own') then
+    drop policy garden_invites_update_own on public.garden_invites;
+  end if;
+  -- Invitee can update (accept/decline), inviter can update (cancel)
+  create policy garden_invites_update_own on public.garden_invites for update to authenticated
+    using (
+      invitee_id = (select auth.uid())
+      or inviter_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    )
+    with check (
+      invitee_id = (select auth.uid())
+      or inviter_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_delete_own') then
+    drop policy garden_invites_delete_own on public.garden_invites;
+  end if;
+  create policy garden_invites_delete_own on public.garden_invites for delete to authenticated
+    using (
+      inviter_id = (select auth.uid())
+      or invitee_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
 
 -- Function to search user profiles with friend prioritization and privacy metadata
 create or replace function public.search_user_profiles(_term text, _limit integer default 3)
