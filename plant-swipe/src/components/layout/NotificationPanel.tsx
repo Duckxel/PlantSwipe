@@ -40,7 +40,7 @@ type FriendRequest = {
 interface NotificationPanelProps {
   isOpen: boolean
   onClose: () => void
-  anchorRef: React.RefObject<HTMLElement>
+  anchorRef: React.RefObject<HTMLElement | null>
   friendRequests: FriendRequest[]
   gardenInvites: GardenInvite[]
   onRefresh: () => Promise<void>

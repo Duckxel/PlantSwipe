@@ -8,10 +8,9 @@ import React from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import {
   getNotificationCounts,
-  getPendingGardenInvites,
-  type NotificationCounts
+  getPendingGardenInvites
 } from '@/lib/notifications'
-import type { GardenInvite } from '@/types/notification'
+import type { GardenInvite, NotificationCounts } from '@/types/notification'
 
 type FriendRequest = {
   id: string

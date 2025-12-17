@@ -10,7 +10,6 @@ import { useNotifications } from "@/hooks/useNotifications"
 import { useTranslation } from "react-i18next"
 import { checkEditorAccess } from "@/constants/userRoles"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { NotificationBell } from "@/components/layout/NotificationPanel"
 
 interface MobileNavBarProps {
   canCreate?: boolean
@@ -75,7 +74,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "mobile" })
-  const { totalCount, friendRequests, gardenInvites, refresh: refreshNotifications } = useNotifications(user?.id ?? null, { channelKey: "mobile" })
+  const { totalCount, friendRequests, gardenInvites } = useNotifications(user?.id ?? null, { channelKey: "mobile" })
   const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
   const [guestMenuOpen, setGuestMenuOpen] = React.useState(false)

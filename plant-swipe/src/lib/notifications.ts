@@ -420,7 +420,7 @@ export async function sendGardenInvite(params: {
   const inviteeLanguage = inviteeProfile?.language || 'en'
   
   // Send push notification asynchronously
-  sendGardenInvitePushNotification(inviteeId, senderName, gardenName, inviteeLanguage).catch(() => {
+  sendGardenInvitePushNotification(inviteeId, senderName || 'Someone', gardenName, inviteeLanguage).catch(() => {
     // Silently fail - push notifications are best effort
   })
 
