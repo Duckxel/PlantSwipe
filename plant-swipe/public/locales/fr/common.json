@@ -2567,5 +2567,65 @@
     "privacyFriendsOnly": "Seuls mes amis peuvent m'inviter",
     "privacyDescription": "Contrôlez qui peut vous envoyer des invitations de jardin",
     "userOnlyAcceptsFriendInvites": "Cet utilisateur n'accepte que les invitations de ses amis"
+  },
+  "moderation": {
+    "report": {
+      "title": "Signaler l'utilisateur",
+      "description": "Dites-nous pourquoi vous signalez cet utilisateur",
+      "reasonPlaceholder": "Veuillez décrire la raison de votre signalement...",
+      "submit": "Envoyer le signalement",
+      "success": "Signalement envoyé avec succès",
+      "error": "Échec de l'envoi du signalement",
+      "alreadyReported": "Vous avez déjà signalé cet utilisateur"
+    },
+    "block": {
+      "title": "Bloquer l'utilisateur",
+      "description": "Bloquer cet utilisateur l'empêchera de vous envoyer des demandes d'ami, des invitations de jardin et de voir votre profil.",
+      "confirm": "Bloquer l'utilisateur",
+      "success": "Utilisateur bloqué",
+      "error": "Échec du blocage de l'utilisateur",
+      "unblock": "Débloquer",
+      "unblockSuccess": "Utilisateur débloqué",
+      "blockedUsers": "Utilisateurs bloqués",
+      "noBlockedUsers": "Aucun utilisateur bloqué"
+    },
+    "threatLevel": {
+      "title": "Niveau de menace",
+      "safe": "Sûr",
+      "safeDescription": "Aucun incident",
+      "sus": "Suspect",
+      "susDescription": "A eu 1 incident",
+      "danger": "Danger",
+      "dangerDescription": "A plusieurs incidents",
+      "banned": "Banni",
+      "bannedDescription": "Banni de la plateforme"
+    },
+    "admin": {
+      "reports": "Signalements",
+      "reportsDescription": "Gérer les signalements d'utilisateurs",
+      "reviewStatus": "À examiner",
+      "classifiedStatus": "Classé",
+      "allReports": "Tous les signalements",
+      "pendingReports": "Signalements en attente",
+      "noReports": "Aucun signalement à examiner",
+      "viewUser": "Voir l'utilisateur",
+      "classify": "Classer",
+      "addNote": "Ajouter une note",
+      "notePlaceholder": "Ajouter une note à ce signalement...",
+      "reportedBy": "Signalé par",
+      "reportedAt": "Signalé le",
+      "classifiedBy": "Classé par",
+      "classifiedAt": "Classé le",
+      "reportReason": "Raison",
+      "reportNotes": "Notes admin",
+      "setThreatLevel": "Définir le niveau de menace",
+      "banUser": "Bannir l'utilisateur",
+      "banConfirm": "Êtes-vous sûr de vouloir bannir cet utilisateur ? Il sera déconnecté et ne pourra plus accéder à la plateforme.",
+      "banSuccess": "L'utilisateur a été banni",
+      "unbanUser": "Débannir l'utilisateur",
+      "unbanSuccess": "L'utilisateur a été débanni",
+      "allFilesForUser": "Tous les signalements pour l'utilisateur",
+      "totalReports": "Total des signalements"
+    }
   }
 }

@@ -2567,5 +2567,65 @@
     "privacyFriendsOnly": "Only friends can invite me",
     "privacyDescription": "Control who can send you garden invitations",
     "userOnlyAcceptsFriendInvites": "This user only accepts garden invites from friends"
+  },
+  "moderation": {
+    "report": {
+      "title": "Report User",
+      "description": "Let us know why you're reporting this user",
+      "reasonPlaceholder": "Please describe the reason for your report...",
+      "submit": "Submit Report",
+      "success": "Report submitted successfully",
+      "error": "Failed to submit report",
+      "alreadyReported": "You have already reported this user"
+    },
+    "block": {
+      "title": "Block User",
+      "description": "Blocking this user will prevent them from sending you friend requests, garden invites, and viewing your profile.",
+      "confirm": "Block User",
+      "success": "User blocked",
+      "error": "Failed to block user",
+      "unblock": "Unblock",
+      "unblockSuccess": "User unblocked",
+      "blockedUsers": "Blocked Users",
+      "noBlockedUsers": "No blocked users"
+    },
+    "threatLevel": {
+      "title": "Threat Level",
+      "safe": "Safe",
+      "safeDescription": "No incidents",
+      "sus": "Sus",
+      "susDescription": "Had 1 incident",
+      "danger": "Danger",
+      "dangerDescription": "Has multiple incidents",
+      "banned": "Banned",
+      "bannedDescription": "Banned from platform"
+    },
+    "admin": {
+      "reports": "Reports",
+      "reportsDescription": "Manage user reports",
+      "reviewStatus": "Review",
+      "classifiedStatus": "Classified",
+      "allReports": "All Reports",
+      "pendingReports": "Pending Reports",
+      "noReports": "No reports to review",
+      "viewUser": "View User",
+      "classify": "Classify",
+      "addNote": "Add Note",
+      "notePlaceholder": "Add a note about this report...",
+      "reportedBy": "Reported by",
+      "reportedAt": "Reported",
+      "classifiedBy": "Classified by",
+      "classifiedAt": "Classified",
+      "reportReason": "Reason",
+      "reportNotes": "Admin Notes",
+      "setThreatLevel": "Set Threat Level",
+      "banUser": "Ban User",
+      "banConfirm": "Are you sure you want to ban this user? They will be logged out and unable to access the platform.",
+      "banSuccess": "User has been banned",
+      "unbanUser": "Unban User",
+      "unbanSuccess": "User has been unbanned",
+      "allFilesForUser": "All Reports for User",
+      "totalReports": "Total Reports"
+    }
   }
 }

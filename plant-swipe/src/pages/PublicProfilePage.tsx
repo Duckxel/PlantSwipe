@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2 } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
 import type { UserRole } from "@/constants/userRoles"
 import { SearchInput } from "@/components/ui/search-input"
@@ -20,6 +20,9 @@ import { BookmarksSection } from "@/components/profile/BookmarksSection"
 import { PublicGardensSection } from "@/components/profile/PublicGardensSection"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { Link } from "@/components/i18n/Link"
+import { ReportUserDialog } from "@/components/moderation/ReportUserDialog"
+import { BlockUserDialog } from "@/components/moderation/BlockUserDialog"
+import { hasBlockedUser, unblockUser } from "@/lib/moderation"
 
 type PublicProfile = {
   id: string
@@ -446,6 +449,18 @@ export default function PublicProfilePage() {
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null)
 
+  // Other user menu (report/block) state
+  const [otherMenuOpen, setOtherMenuOpen] = React.useState(false)
+  const otherMenuAnchorRef = React.useRef<HTMLDivElement | null>(null)
+  const otherMenuRef = React.useRef<HTMLDivElement | null>(null)
+  const [otherMenuPos, setOtherMenuPos] = React.useState<{ top: number; right: number } | null>(null)
+  
+  // Report/Block dialog state
+  const [reportDialogOpen, setReportDialogOpen] = React.useState(false)
+  const [blockDialogOpen, setBlockDialogOpen] = React.useState(false)
+  const [isBlocked, setIsBlocked] = React.useState(false)
+  const [blockLoading, setBlockLoading] = React.useState(false)
+
   // Share button state
   const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'error'>('idle')
   const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -677,6 +692,55 @@ export default function PublicProfilePage() {
       window.removeEventListener('scroll', recompute, true)
     }
   }, [menuOpen])
+
+  // Handle other user menu (report/block) positioning
+  React.useEffect(() => {
+    if (!otherMenuOpen) return
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (otherMenuRef.current && otherMenuRef.current.contains(t)) return
+      if (otherMenuAnchorRef.current && otherMenuAnchorRef.current.contains(t)) return
+      setOtherMenuOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOtherMenuOpen(false) }
+    const recompute = () => {
+      const a = otherMenuAnchorRef.current
+      if (!a) return
+      const r = a.getBoundingClientRect()
+      setOtherMenuPos({ top: r.bottom + 8, right: Math.max(0, window.innerWidth - r.right) })
+    }
+    document.addEventListener('click', onDoc)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', recompute)
+    window.addEventListener('scroll', recompute, true)
+    recompute()
+    return () => {
+      document.removeEventListener('click', onDoc)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', recompute)
+      window.removeEventListener('scroll', recompute, true)
+    }
+  }, [otherMenuOpen])
+
+  // Check if user is blocked
+  React.useEffect(() => {
+    if (!user?.id || !pp?.id || isOwner) return
+    hasBlockedUser(pp.id).then(setIsBlocked).catch(() => {})
+  }, [user?.id, pp?.id, isOwner])
+
+  // Handle unblock
+  const handleUnblock = React.useCallback(async () => {
+    if (!pp?.id) return
+    setBlockLoading(true)
+    try {
+      await unblockUser(pp.id)
+      setIsBlocked(false)
+    } catch (e) {
+      console.error('Failed to unblock:', e)
+    } finally {
+      setBlockLoading(false)
+    }
+  }, [pp?.id])
 
   const daysFlat = React.useMemo(() => {
     // Build a fixed 28-day window (UTC)
@@ -983,6 +1047,123 @@ export default function PublicProfilePage() {
                           )}
                         </div>
                       )}
+                      {/* 3-dots menu for report/block */}
+                      <div ref={otherMenuAnchorRef}>
+                        <Button 
+                          className="rounded-2xl" 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => setOtherMenuOpen((o) => !o)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {otherMenuOpen && otherMenuPos && createPortal(
+                        <div 
+                          ref={otherMenuRef} 
+                          className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-lg z-[60] p-1" 
+                          style={{ position: 'fixed', top: otherMenuPos.top, right: otherMenuPos.right }}
+                        >
+                          {isBlocked ? (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={async (e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                await handleUnblock();
+                              }}
+                              disabled={blockLoading}
+                            >
+                              <Ban className="h-4 w-4" />
+                              {t('moderation.block.unblock')}
+                            </button>
+                          ) : (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={(e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                setBlockDialogOpen(true);
+                              }}
+                            >
+                              <Ban className="h-4 w-4" />
+                              {t('moderation.block.title')}
+                            </button>
+                          )}
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              setReportDialogOpen(true);
+                            }}
+                          >
+                            <AlertTriangle className="h-4 w-4" />
+                            {t('moderation.report.title')}
+                          </button>
+                        </div>,
+                        document.body
+                      )}
+                    </>
+                  ) : user?.id ? (
+                    /* User is logged in but friend requests are disabled - still show 3-dots menu */
+                    <>
+                      <div ref={otherMenuAnchorRef}>
+                        <Button 
+                          className="rounded-2xl" 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => setOtherMenuOpen((o) => !o)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {otherMenuOpen && otherMenuPos && createPortal(
+                        <div 
+                          ref={otherMenuRef} 
+                          className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-lg z-[60] p-1" 
+                          style={{ position: 'fixed', top: otherMenuPos.top, right: otherMenuPos.right }}
+                        >
+                          {isBlocked ? (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={async (e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                await handleUnblock();
+                              }}
+                              disabled={blockLoading}
+                            >
+                              <Ban className="h-4 w-4" />
+                              {t('moderation.block.unblock')}
+                            </button>
+                          ) : (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={(e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                setBlockDialogOpen(true);
+                              }}
+                            >
+                              <Ban className="h-4 w-4" />
+                              {t('moderation.block.title')}
+                            </button>
+                          )}
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              setReportDialogOpen(true);
+                            }}
+                          >
+                            <AlertTriangle className="h-4 w-4" />
+                            {t('moderation.report.title')}
+                          </button>
+                        </div>,
+                        document.body
+                      )}
                     </>
                   ) : null}
                 </div>
@@ -1161,6 +1342,27 @@ export default function PublicProfilePage() {
                   setEditSubmitting(false)
                 }
               }}
+            />
+          )}
+          
+          {/* Report User Dialog */}
+          {pp && !isOwner && (
+            <ReportUserDialog
+              open={reportDialogOpen}
+              onOpenChange={setReportDialogOpen}
+              userId={pp.id}
+              displayName={pp.display_name}
+            />
+          )}
+          
+          {/* Block User Dialog */}
+          {pp && !isOwner && (
+            <BlockUserDialog
+              open={blockDialogOpen}
+              onOpenChange={setBlockDialogOpen}
+              userId={pp.id}
+              displayName={pp.display_name}
+              onBlocked={() => setIsBlocked(true)}
             />
           )}
         </>

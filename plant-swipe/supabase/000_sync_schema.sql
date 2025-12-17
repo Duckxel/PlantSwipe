@@ -121,6 +121,7 @@ do $$ declare
     'bookmarks',
     'bookmark_items',
     'garden_invites',
+    'user_blocks',
     -- Moderation & analytics
     'web_visits',
     'banned_accounts',
@@ -128,6 +129,8 @@ do $$ declare
     'broadcast_messages',
     'blog_posts',
     'profile_admin_notes',
+    'user_reports',
+    'user_report_notes',
     -- Notifications
     'notification_campaigns',
     'notification_templates',
@@ -191,8 +194,12 @@ alter table if exists public.profiles add column if not exists notify_push boole
 alter table if exists public.profiles add column if not exists notify_email boolean default true;
 -- User roles: admin, editor, pro, merchant, creator, vip, plus
 alter table if exists public.profiles add column if not exists roles text[] default '{}';
+-- Threat level: 0=Safe, 1=Sus (1 incident), 2=Danger (multiple incidents), 3=Banned
+alter table if exists public.profiles add column if not exists threat_level integer not null default 0 check (threat_level >= 0 and threat_level <= 3);
 -- Create GIN index for efficient role queries
 create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
+-- Create index for threat level queries
+create index if not exists idx_profiles_threat_level on public.profiles (threat_level) where threat_level > 0;
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin
@@ -3765,6 +3772,113 @@ do $$ begin
   create policy banned_ips_admin_select on public.banned_ips for select to authenticated
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
+
+-- ========== User Reports (Moderation) ==========
+-- Files/cases for user reports that admins review
+create table if not exists public.user_reports (
+  id uuid primary key default gen_random_uuid(),
+  reported_user_id uuid not null references public.profiles(id) on delete cascade,
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  reason text not null,
+  status text not null default 'review' check (status in ('review', 'classified')),
+  created_at timestamptz not null default now(),
+  classified_at timestamptz,
+  classified_by uuid references public.profiles(id) on delete set null
+);
+create index if not exists user_reports_reported_user_idx on public.user_reports (reported_user_id);
+create index if not exists user_reports_reporter_idx on public.user_reports (reporter_id);
+create index if not exists user_reports_status_idx on public.user_reports (status);
+create index if not exists user_reports_created_at_idx on public.user_reports (created_at desc);
+
+-- Admin notes on user reports
+create table if not exists public.user_report_notes (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references public.user_reports(id) on delete cascade,
+  admin_id uuid not null references public.profiles(id) on delete cascade,
+  note text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists user_report_notes_report_idx on public.user_report_notes (report_id);
+
+-- RLS for user_reports: admins can read all, users can create reports
+alter table public.user_reports enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_admin_all') then
+    drop policy user_reports_admin_all on public.user_reports;
+  end if;
+  create policy user_reports_admin_all on public.user_reports for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_user_insert') then
+    drop policy user_reports_user_insert on public.user_reports;
+  end if;
+  create policy user_reports_user_insert on public.user_reports for insert to authenticated
+    with check (reporter_id = (select auth.uid()));
+end $$;
+
+-- RLS for user_report_notes: admins only
+alter table public.user_report_notes enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_report_notes' and policyname='user_report_notes_admin_all') then
+    drop policy user_report_notes_admin_all on public.user_report_notes;
+  end if;
+  create policy user_report_notes_admin_all on public.user_report_notes for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- ========== User Blocks ==========
+-- Users can block other users to prevent friend requests, garden invites, etc.
+create table if not exists public.user_blocks (
+  id uuid primary key default gen_random_uuid(),
+  blocker_id uuid not null references public.profiles(id) on delete cascade,
+  blocked_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(blocker_id, blocked_id),
+  check (blocker_id <> blocked_id)
+);
+create index if not exists user_blocks_blocker_idx on public.user_blocks (blocker_id);
+create index if not exists user_blocks_blocked_idx on public.user_blocks (blocked_id);
+
+-- RLS for user_blocks: users can manage their own blocks
+alter table public.user_blocks enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_blocks' and policyname='user_blocks_own') then
+    drop policy user_blocks_own on public.user_blocks;
+  end if;
+  create policy user_blocks_own on public.user_blocks for all to authenticated
+    using (blocker_id = (select auth.uid()) or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (blocker_id = (select auth.uid()));
+end $$;
+
+-- Function to check if a user is blocked
+create or replace function public.is_user_blocked(_blocker_id uuid, _blocked_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_blocks
+    where blocker_id = _blocker_id and blocked_id = _blocked_id
+  );
+$$;
+grant execute on function public.is_user_blocked(uuid, uuid) to authenticated;
+
+-- Function to check if either user has blocked the other (bidirectional)
+create or replace function public.are_users_blocked(_user1_id uuid, _user2_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_blocks
+    where (blocker_id = _user1_id and blocked_id = _user2_id)
+       or (blocker_id = _user2_id and blocked_id = _user1_id)
+  );
+$$;
+grant execute on function public.are_users_blocked(uuid, uuid) to authenticated;
 
 -- ========== Cleanup of unused objects ==========
 -- The app does not use these legacy functions; drop if present to declutter.
