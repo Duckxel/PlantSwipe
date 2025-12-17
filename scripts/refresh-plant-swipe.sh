@@ -235,7 +235,19 @@ case "${PLANTSWIPE_DISABLE_DEFAULT_BRANCH_FALLBACK:-}" in
 esac
 
 # Internal flag: when true, skip the git pull step (e.g., no upstream and fallback disabled)
-SKIP_PULL=false
+# Can be set via environment variable SKIP_PULL=true or command line --skip-pull
+if [[ "${SKIP_PULL:-}" == "true" ]]; then
+  SKIP_PULL=true
+else
+  SKIP_PULL=false
+fi
+for arg in "$@"; do
+  case "$arg" in
+    --skip-pull|--no-pull)
+      SKIP_PULL=true
+      ;;
+  esac
+done
 
 log "Repo (cwd): $WORK_DIR"
 log "Node app: $NODE_DIR"

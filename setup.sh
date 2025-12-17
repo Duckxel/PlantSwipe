@@ -554,16 +554,41 @@ else
 fi
 
 # Build frontend and API bundle
-log "Installing PlantSwipe client dependencies (PWA ready)…"
-# Ensure a clean install owned by the service user and use a per-repo npm cache
-sudo -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
-sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && rm -rf node_modules"
-sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
-
-log "Building PlantSwipe web client + API bundle (base ${PWA_BASE_PATH})…"
-# Limit Node.js memory to prevent OOM on low-RAM servers (default 512MB, override with NODE_BUILD_MEMORY)
-NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
-sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+# Delegate to refresh script if available (avoids code duplication and uses optimized build)
+REFRESH_SCRIPT="$REPO_DIR/scripts/refresh-plant-swipe.sh"
+if [[ -f "$REFRESH_SCRIPT" ]]; then
+  log "Delegating build to refresh script for optimized install/build…"
+  # Set environment for refresh script
+  export PLANTSWIPE_REPO_DIR="$REPO_DIR"
+  export PLANTSWIPE_REPO_OWNER="$SERVICE_USER"
+  export NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
+  export SKIP_SERVICE_RESTARTS=true  # Don't restart services yet (setup will do it later)
+  export SKIP_SUPABASE_DEPLOY=true   # Skip Supabase deploy (setup handles it separately)
+  export SKIP_ENV_SYNC=true          # Skip env sync (setup handles it separately)
+  export VITE_APP_BASE_PATH="${PWA_BASE_PATH}"
+  
+  # Run refresh script for npm install + build (skip git pull since we just cloned/pulled)
+  chmod +x "$REFRESH_SCRIPT" 2>/dev/null || true
+  if sudo -u "$SERVICE_USER" -H bash -lc "cd '$REPO_DIR' && PLANTSWIPE_DISABLE_DEFAULT_BRANCH_FALLBACK=true SKIP_PULL=true bash '$REFRESH_SCRIPT' --no-restart" 2>&1; then
+    log "Build completed via refresh script."
+  else
+    log "[WARN] Refresh script failed, falling back to direct build…"
+    # Fallback: direct build
+    log "Installing PlantSwipe client dependencies (PWA ready)…"
+    sudo -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
+    sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
+    log "Building PlantSwipe web client + API bundle (base ${PWA_BASE_PATH})…"
+    sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+  fi
+else
+  # Fallback: refresh script not found, do direct install/build
+  log "Installing PlantSwipe client dependencies (PWA ready)…"
+  sudo -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
+  sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
+  log "Building PlantSwipe web client + API bundle (base ${PWA_BASE_PATH})…"
+  NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
+  sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+fi
 
 # Link web root expected by nginx config to the repo copy, unless that would create
 # a self-referential link (e.g., when the repo itself lives at /var/www/PlantSwipe).
