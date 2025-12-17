@@ -74,14 +74,14 @@
     --secondary: 0 0% 96.1%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
+    --muted-foreground: 0 0% 40%; /* Improved contrast from 45.1% */
     /* Accent values are overridden by runtime selection; defaults are soft neutral */
     --accent: 142 72% 40%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
+    --border: 0 0% 82%; /* Improved visibility from 89.8% - more visible border */
+    --input: 0 0% 82%; /* Improved visibility from 89.8% - matches border */
     --ring: 0 0% 3.9%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -110,8 +110,8 @@
     --accent-foreground: 0 0% 95%;
     --destructive: 0 65% 50%;
     --destructive-foreground: 0 0% 95%;
-    --border: 240 3% 25%; /* #3e3e42 */
-    --input: 240 3% 18%; /* #2d2d30 */
+    --border: 240 3% 28%; /* Improved visibility from 25% - #474749 */
+    --input: 240 3% 25%; /* Improved visibility from 18% - matches border more closely */
     --ring: 0 0% 70%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
