@@ -9399,6 +9399,22 @@ app.get('/api/banned/check', async (req, res) => {
           return
         }
       } catch { }
+      
+      // Also check threat_level in profiles for users with this email
+      try {
+        const profileRows = await sql`
+          select p.threat_level 
+          from public.profiles p
+          join auth.users u on u.id = p.id
+          where lower(u.email) = ${emailParam.toLowerCase()}
+          and p.threat_level = 3
+          limit 1
+        `
+        if (Array.isArray(profileRows) && profileRows.length > 0) {
+          res.json({ banned: true, source: 'threat_level', reason: 'Your account has been banned from the platform.' })
+          return
+        }
+      } catch { }
     }
     res.json({ banned: false })
   } catch (e) {

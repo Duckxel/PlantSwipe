@@ -336,6 +336,15 @@ export async function sendGardenInvite(params: {
 }): Promise<GardenInvite> {
   const { gardenId, inviterId, inviteeId, role = 'member', message = null, inviterDisplayName } = params
 
+  // Check if either user has blocked the other
+  const { data: blockedData } = await supabase.rpc('are_users_blocked', {
+    _user1_id: inviterId,
+    _user2_id: inviteeId
+  })
+  if (blockedData === true) {
+    throw new Error('Cannot send invite to this user')
+  }
+
   // Check if user is already a member
   const { data: existingMember } = await supabase
     .from('garden_members')

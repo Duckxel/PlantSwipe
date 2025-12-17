@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { sendFriendRequestPushNotification } from "@/lib/notifications";
+import { areUsersBlocked } from "@/lib/moderation";
 
 type FriendRequest = {
   id: string;
@@ -418,6 +419,13 @@ export const FriendsPage: React.FC = () => {
     async (recipientId: string) => {
       if (!user?.id) return;
       try {
+        // Check if either user has blocked the other
+        const blocked = await areUsersBlocked(user.id, recipientId);
+        if (blocked) {
+          setError(t("friends.errors.cannotSendRequest", { defaultValue: "Cannot send friend request to this user" }));
+          return;
+        }
+        
         // Check if already friends
         const { data: existingFriend } = await supabase
           .from("friends")

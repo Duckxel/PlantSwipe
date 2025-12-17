@@ -53,10 +53,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests')
+      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, threat_level')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
+      // Check if user is banned (threat_level === 3)
+      if (data?.threat_level === 3) {
+        // User is banned - sign them out
+        console.warn('[auth] User is banned, signing out')
+        await supabase.auth.signOut()
+        setUser(null)
+        setProfile(null)
+        try { localStorage.removeItem('plantswipe.profile') } catch {}
+        return
+      }
+      
       setProfile(data as any)
       
       // Auto-update timezone and language if missing
