@@ -52,7 +52,18 @@ interface UseNotificationsReturn {
 }
 
 const ERROR_LOGGED = new Set<string>()
+const MAX_ERROR_LOG_SIZE = 50 // Limit the number of unique errors we track
 const REFRESH_INTERVAL_MS = 30_000
+
+function trackError(key: string): boolean {
+  if (ERROR_LOGGED.has(key)) return false
+  // If we've tracked too many errors, clear and start fresh
+  if (ERROR_LOGGED.size >= MAX_ERROR_LOG_SIZE) {
+    ERROR_LOGGED.clear()
+  }
+  ERROR_LOGGED.add(key)
+  return true
+}
 
 export function useNotifications(
   userId: string | null | undefined,
@@ -106,8 +117,7 @@ export function useNotifications(
       setGardenInvites(gardenInvitesData)
       setError(null)
     } catch (e: any) {
-      if (!ERROR_LOGGED.has('notifications')) {
-        ERROR_LOGGED.add('notifications')
+      if (trackError('notifications')) {
         console.warn('[useNotifications] Failed to load notifications:', e)
       }
       if (mountedRef.current) {

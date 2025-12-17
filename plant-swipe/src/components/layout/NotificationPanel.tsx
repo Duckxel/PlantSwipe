@@ -218,14 +218,14 @@ export function NotificationPanel({
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mt-3">
-                        {request.requester_profile?.display_name && (
+                        {request.requester_profile?.display_name && request.requester_profile.display_name.trim() && (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-8 rounded-lg text-xs"
                             onClick={() => {
                               onClose()
-                              navigate(`/u/${encodeURIComponent(request.requester_profile?.display_name || '')}`)
+                              navigate(`/u/${encodeURIComponent(request.requester_profile!.display_name!)}`)
                             }}
                           >
                             <ArrowUpRight className="h-3.5 w-3.5 mr-1" />

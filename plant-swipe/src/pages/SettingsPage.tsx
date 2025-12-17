@@ -377,7 +377,8 @@ export default function SettingsPage() {
       await refreshProfile()
     } catch (e: any) {
       setError(e?.message || t('gardenInvites.failedToUpdate', { defaultValue: 'Failed to update privacy setting' }))
-      setGardenInvitePrivacy(gardenInvitePrivacy === 'anyone' ? 'anyone' : 'friends_only')
+      // Revert to opposite of what was attempted
+      setGardenInvitePrivacy(newValue === 'anyone' ? 'friends_only' : 'anyone')
     } finally {
       setSaving(false)
     }

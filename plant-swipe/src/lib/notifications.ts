@@ -111,8 +111,11 @@ export async function getNotificationCounts(userId: string): Promise<Notificatio
       .eq('invitee_id', userId)
       .eq('status', 'pending')
 
-    if (giError && !giError.message?.includes('does not exist')) {
-      // Table might not exist yet, return 0
+    if (giError) {
+      // If table doesn't exist or other error, return counts without garden invites
+      if (!giError.message?.includes('does not exist')) {
+        console.warn('[notifications] Error fetching garden invites:', giError)
+      }
       return {
         total: (unreadCount || 0) + (friendRequestCount || 0),
         unread: unreadCount || 0,
