@@ -22,7 +22,7 @@ import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { Link } from "@/components/i18n/Link"
 import { ReportUserDialog } from "@/components/moderation/ReportUserDialog"
 import { BlockUserDialog } from "@/components/moderation/BlockUserDialog"
-import { hasBlockedUser, unblockUser } from "@/lib/moderation"
+import { hasBlockedUser, unblockUser, isBlockedByUser } from "@/lib/moderation"
 
 type PublicProfile = {
   id: string
@@ -211,7 +211,20 @@ export default function PublicProfilePage() {
         // Check if viewer can see this profile
         let viewerCanSee = true
         let isAdminViewingPrivateNonFriend = false
-        if (profileIsPrivate && !isOwnerViewing && !viewerIsAdmin) {
+        let treatingAsPrivateDueToBlock = false
+        
+        // Check if the profile owner has blocked the viewer
+        // If blocked, treat the profile as private (even if it's not)
+        if (!isOwnerViewing && user?.id) {
+          const blockedByOwner = await isBlockedByUser(userId)
+          if (blockedByOwner && !viewerIsAdmin) {
+            // Profile owner blocked the viewer - show as private
+            viewerCanSee = false
+            treatingAsPrivateDueToBlock = true
+          }
+        }
+        
+        if (!treatingAsPrivateDueToBlock && profileIsPrivate && !isOwnerViewing && !viewerIsAdmin) {
           // Check if they are friends
           if (user?.id) {
             // Check if friendship exists in either direction
@@ -233,7 +246,7 @@ export default function PublicProfilePage() {
           } else {
             viewerCanSee = false
           }
-        } else if (profileIsPrivate && !isOwnerViewing && viewerIsAdmin) {
+        } else if (!treatingAsPrivateDueToBlock && profileIsPrivate && !isOwnerViewing && viewerIsAdmin) {
           // Admin viewing private profile - check if they're friends
           if (user?.id) {
             const { data: friendCheck1 } = await supabase

@@ -383,6 +383,25 @@ export async function hasBlockedUser(blockedId: string): Promise<boolean> {
 }
 
 /**
+ * Check if a specific user has blocked the current user
+ * (used to show blocked content as "private" to the blocked user)
+ */
+export async function isBlockedByUser(blockerId: string): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user?.id) return false
+
+  const { data, error } = await supabase
+    .from('user_blocks')
+    .select('id')
+    .eq('blocker_id', blockerId)
+    .eq('blocked_id', user.id)
+    .maybeSingle()
+
+  if (error) return false
+  return Boolean(data)
+}
+
+/**
  * Check if either user has blocked the other (bidirectional check)
  */
 export async function areUsersBlocked(user1Id: string, user2Id: string): Promise<boolean> {

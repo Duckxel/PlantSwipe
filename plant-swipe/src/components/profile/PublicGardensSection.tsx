@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { TreeDeciduous, ChevronDown, ChevronUp } from 'lucide-react'
 import { PublicGardenCard } from './PublicGardenCard'
 import { getUserPublicGardens, type PublicGardenWithPreview } from '@/lib/gardens'
+import { isBlockedByUser } from '@/lib/moderation'
 
 interface PublicGardensSectionProps {
   userId: string
@@ -14,10 +15,23 @@ export const PublicGardensSection: React.FC<PublicGardensSectionProps> = ({ user
   const [gardens, setGardens] = React.useState<PublicGardenWithPreview[]>([])
   const [loading, setLoading] = React.useState(true)
   const [expanded, setExpanded] = React.useState(false)
+  const [isBlocked, setIsBlocked] = React.useState(false)
 
   const fetchGardens = React.useCallback(async () => {
     setLoading(true)
     try {
+      // Check if the profile owner has blocked the current viewer
+      // If blocked, don't show any gardens
+      if (!isOwner) {
+        const blocked = await isBlockedByUser(userId)
+        if (blocked) {
+          setIsBlocked(true)
+          setGardens([])
+          setLoading(false)
+          return
+        }
+      }
+      
       const data = await getUserPublicGardens(userId)
       setGardens(data)
     } catch (e) {
@@ -25,14 +39,14 @@ export const PublicGardensSection: React.FC<PublicGardensSectionProps> = ({ user
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [userId, isOwner])
 
   React.useEffect(() => {
     fetchGardens()
   }, [fetchGardens])
 
-  // Hide section if empty and not owner
-  if (!loading && gardens.length === 0 && !isOwner) {
+  // Hide section if blocked or if empty and not owner
+  if (!loading && (isBlocked || (gardens.length === 0 && !isOwner))) {
     return null
   }
 
