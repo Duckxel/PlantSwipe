@@ -561,7 +561,9 @@ sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && rm -rf node_modules"
 sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
 
 log "Building PlantSwipe web client + API bundle (base ${PWA_BASE_PATH})…"
-sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+# Limit Node.js memory to prevent OOM on low-RAM servers (default 512MB, override with NODE_BUILD_MEMORY)
+NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
+sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
 
 # Link web root expected by nginx config to the repo copy, unless that would create
 # a self-referential link (e.g., when the repo itself lives at /var/www/PlantSwipe).
