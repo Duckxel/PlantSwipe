@@ -2600,6 +2600,37 @@
       "banned": "Banni",
       "bannedDescription": "Banni de la plateforme"
     },
+    "proAdvice": {
+      "eyebrow": "Conseil pro",
+      "title": "Conseils professionnels",
+      "subtitle": "Des notes professionnelles peuvent être épinglées ici sans modifier la fiche de la plante.",
+      "contentLabel": "Conseil",
+      "referenceLabel": "Lien de référence (optionnel)",
+      "imageLabel": "Joindre une image (optionnel)",
+      "pickImage": "Téléverser une image",
+      "clearImage": "Retirer l'image",
+      "placeholder": "Partage ce qu'il faut savoir sur {{plant}}...",
+      "helper": "Reste bref et actionnable. Les sources sont les bienvenues.",
+      "uploading": "Téléversement de l'image...",
+      "submit": "Publier le conseil",
+      "loading": "Chargement des conseils pro...",
+      "empty": "Aucun conseil professionnel n'a encore été partagé pour cette plante.",
+      "noAccess": "Seuls les Admins, Éditeurs ou Pros peuvent ajouter un conseil professionnel.",
+      "signIn": "Se connecter pour contribuer",
+      "success": "Conseil ajouté",
+      "deleted": "Conseil supprimé",
+      "delete": "Supprimer le conseil",
+      "deleteError": "Impossible de supprimer le conseil",
+      "submitError": "Impossible d'ajouter le conseil. Réessaie.",
+      "loadError": "Impossible de charger les conseils pro.",
+      "unknownAuthor": "Auteur inconnu",
+      "referenceLink": "Lien de référence",
+      "goToProfile": "Voir le profil de {{name}}",
+      "postedAt": "Publié le {{date}}",
+      "validation": {
+        "missingContent": "Ajoute quelques mots pour partager ton conseil."
+      }
+    },
     "admin": {
       "reports": "Signalements",
       "reportsDescription": "Gérer les signalements d'utilisateurs",

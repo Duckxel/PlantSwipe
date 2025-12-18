@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
 import { DimensionCube } from '@/components/plant/DimensionCube'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
 import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
@@ -602,6 +603,7 @@ const PlantInfoPage: React.FC = () => {
         isBookmarked={isBookmarked}
       />
       <MoreInformationSection plant={plant} />
+      <ProAdviceSection plantId={plant.id} plantName={plant.name} />
       
       {user?.id && plant && (
         <AddToBookmarkDialog 
