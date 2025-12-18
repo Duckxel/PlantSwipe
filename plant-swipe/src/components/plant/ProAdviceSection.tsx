@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/context/AuthContext"
 import { useAuthActions } from "@/context/AuthActionsContext"
 import { hasAnyRole, USER_ROLES, checkEditorAccess } from "@/constants/userRoles"
+import type { UserRole } from "@/constants/userRoles"
 import { useTranslation } from "react-i18next"
-import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, User, Sparkles, Megaphone } from "lucide-react"
+import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone } from "lucide-react"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { cn } from "@/lib/utils"
 import { createPlantProAdvice, deletePlantProAdvice, fetchPlantProAdvices, uploadProAdviceImage } from "@/lib/proAdvice"
@@ -38,7 +39,7 @@ const Avatar: React.FC<{ name?: string | null; src?: string | null }> = ({ name,
   )
 }
 
-const AdviceBadge: React.FC<{ roles?: string[] | null }> = ({ roles }) => {
+const AdviceBadge: React.FC<{ roles?: UserRole[] | null }> = ({ roles }) => {
   if (!roles || roles.length === 0) return null
   if (roles.includes(USER_ROLES.ADMIN)) {
     return <Badge className="rounded-full bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-200 dark:border-purple-700">Admin</Badge>
@@ -69,13 +70,18 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
   const [submitting, setSubmitting] = React.useState(false)
   const [formNotice, setFormNotice] = React.useState<{ type: "success" | "error"; text: string } | null>(null)
 
+  const normalizeRoles = React.useCallback((roles?: string[] | null): UserRole[] => {
+    if (!roles) return []
+    return roles.filter((role): role is UserRole => Object.values(USER_ROLES).includes(role as UserRole))
+  }, [])
+
   const canModerate = React.useMemo(() => checkEditorAccess(profile), [profile])
   const canContribute = React.useMemo(() => {
     if (!profile) return false
     if (profile.is_admin) return true
-    const roles = (profile.roles || []) as string[]
+    const roles = normalizeRoles(profile.roles)
     return hasAnyRole(roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR, USER_ROLES.PRO])
-  }, [profile])
+  }, [normalizeRoles, profile])
 
   React.useEffect(() => {
     let cancelled = false
@@ -136,7 +142,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
         authorDisplayName: profile?.display_name || null,
         authorUsername: (profile as any)?.username || null,
         authorAvatarUrl: profile?.avatar_url || null,
-        authorRoles: (profile?.roles as string[] | undefined) || [],
+        authorRoles: normalizeRoles(profile?.roles),
       })
       setAdvices((prev) => [advice, ...prev])
       setFormNotice({ type: "success", text: t("proAdvice.success") })
