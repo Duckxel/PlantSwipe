@@ -7282,6 +7282,37 @@ function normalizeEmailCampaignRow(row) {
 }
 
 // ---- Admin email triggers (automatic emails) ----
+const DEFAULT_EMAIL_TRIGGERS = [
+  {
+    triggerType: 'WELCOME_EMAIL',
+    displayName: 'New User Welcome Email',
+    description: 'Automatically sent when a new user creates an account',
+  },
+  {
+    triggerType: 'BAN_USER',
+    displayName: 'User Ban Notification',
+    description: 'Sent when a user is marked as threat level 3 (ban)',
+  },
+]
+
+async function ensureDefaultEmailTriggers() {
+  if (!sql) return
+  for (const trigger of DEFAULT_EMAIL_TRIGGERS) {
+    try {
+      await sql`
+        insert into public.admin_email_triggers (trigger_type, display_name, description)
+        values (${trigger.triggerType}, ${trigger.displayName}, ${trigger.description})
+        on conflict (trigger_type) do update
+          set display_name = excluded.display_name,
+              description = excluded.description,
+              updated_at = now()
+      `
+    } catch (err) {
+      console.error('[email-triggers] failed to upsert default trigger', trigger.triggerType, err)
+    }
+  }
+}
+
 function normalizeEmailTriggerRow(row) {
   if (!row) return null
   return {
@@ -7305,6 +7336,7 @@ app.get('/api/admin/email-triggers', async (req, res) => {
     return
   }
   try {
+    await ensureDefaultEmailTriggers()
     const rows = await sql`
       select t.*, tpl.title as template_title
       from public.admin_email_triggers t
@@ -7332,6 +7364,7 @@ app.get('/api/admin/email-triggers/:id', async (req, res) => {
     return
   }
   try {
+    await ensureDefaultEmailTriggers()
     const rows = await sql`
       select t.*, tpl.title as template_title
       from public.admin_email_triggers t
@@ -7444,6 +7477,7 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
   const lang = userLanguage || 'en'
 
   try {
+    await ensureDefaultEmailTriggers()
     const triggerRows = await sql`
       select t.*, tpl.title as template_title, tpl.subject, tpl.body_html
       from public.admin_email_triggers t
