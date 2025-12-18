@@ -178,14 +178,14 @@
 
   /* Global colors - Light mode */
   --tt-bg-color: var(--white);
-  --tt-border-color: var(--tt-gray-light-a-300); /* Improved visibility from a-200 */
-  --tt-border-color-tint: var(--tt-gray-light-a-200); /* Improved visibility from a-100 */
+  --tt-border-color: var(--tt-gray-light-a-400); /* Strong visibility - increased from a-300 */
+  --tt-border-color-tint: var(--tt-gray-light-a-300); /* Improved visibility from a-200 */
   --tt-sidebar-bg-color: var(--tt-gray-light-100);
-  --tt-scrollbar-color: var(--tt-gray-light-a-300); /* Improved visibility from a-200 */
+  --tt-scrollbar-color: var(--tt-gray-light-a-400); /* Strong visibility - increased from a-300 */
   --tt-cursor-color: var(--tt-brand-color-500);
   --tt-selection-color: rgba(157, 138, 255, 0.2);
   --tt-card-bg-color: var(--white);
-  --tt-card-border-color: var(--tt-gray-light-a-200); /* Improved visibility from a-100 */
+  --tt-card-border-color: var(--tt-gray-light-a-300); /* Strong visibility - increased from a-200 */
 }
 
 /* Global colors - Dark mode */
