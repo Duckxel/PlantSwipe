@@ -265,19 +265,36 @@ export async function getUserThreatLevel(userId: string): Promise<ThreatLevel> {
     return 0
   }
 
-  return (data?.threat_level ?? 0) as ThreatLevel
+ return (data?.threat_level ?? 0) as ThreatLevel
 }
 
 /**
  * Set a user's threat level (admin only)
  */
-export async function setUserThreatLevel(userId: string, threatLevel: ThreatLevel): Promise<void> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ threat_level: threatLevel })
-    .eq('id', userId)
+export async function setUserThreatLevel(userId: string, threatLevel: ThreatLevel): Promise<any> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const token = session?.access_token
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  }
+  if (token) headers["Authorization"] = `Bearer ${token}`
+  try {
+    const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+    if (adminToken) headers["X-Admin-Token"] = String(adminToken)
+  } catch {}
 
-  if (error) throw new Error(error.message)
+  const resp = await fetch("/api/admin/threat-level", {
+    method: "POST",
+    headers,
+    credentials: "same-origin",
+    body: JSON.stringify({ userId, threatLevel }),
+  })
+  const data = await resp.json().catch(() => ({}))
+  if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+  return data
 }
 
 /**

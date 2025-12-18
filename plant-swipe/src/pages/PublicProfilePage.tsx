@@ -992,10 +992,10 @@ export default function PublicProfilePage() {
                     </>
                   )}
                 </div>
-                <div className="ml-auto flex items-center gap-2" ref={anchorRef}>
+                <div className="ml-auto flex items-start gap-2" ref={anchorRef}>
                   {/* Share button - always visible */}
                   <Button 
-                    className="rounded-2xl" 
+                    className="rounded-2xl self-start" 
                     variant="secondary" 
                     onClick={handleShare}
                     aria-label={t('common.share', { defaultValue: 'Share' })}
@@ -1011,7 +1011,7 @@ export default function PublicProfilePage() {
                   </Button>
                   {isOwner ? (
                     <>
-                      <Button className="rounded-2xl" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
+                      <Button className="rounded-2xl self-start" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
                       {menuOpen && menuPos && createPortal(
                         <div ref={menuRef} className="w-40 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
@@ -1063,7 +1063,7 @@ export default function PublicProfilePage() {
                       {/* 3-dots menu for report/block */}
                       <div ref={otherMenuAnchorRef}>
                         <Button 
-                          className="rounded-2xl" 
+                          className="rounded-2xl self-start" 
                           variant="ghost" 
                           size="icon"
                           onClick={() => setOtherMenuOpen((o) => !o)}
@@ -1383,4 +1383,3 @@ export default function PublicProfilePage() {
     </div>
   )
 }
-
