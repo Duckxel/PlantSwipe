@@ -9,7 +9,7 @@ import { useAuthActions } from "@/context/AuthActionsContext"
 import { hasAnyRole, USER_ROLES, checkEditorAccess } from "@/constants/userRoles"
 import type { UserRole } from "@/constants/userRoles"
 import { useTranslation } from "react-i18next"
-import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone } from "lucide-react"
+import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, ChevronDown, ChevronUp } from "lucide-react"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { cn } from "@/lib/utils"
 import { createPlantProAdvice, deletePlantProAdvice, fetchPlantProAdvices, uploadProAdviceImage } from "@/lib/proAdvice"
@@ -54,7 +54,8 @@ const AdviceBadge: React.FC<{ roles?: UserRole[] | null }> = ({ roles }) => {
 }
 
 export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, plantName }) => {
-  const { t } = useTranslation("common")
+  const { t } = useTranslation("common", { keyPrefix: "moderation.proAdvice" })
+  const { t: tCommon } = useTranslation("common")
   const { user, profile } = useAuth()
   const { openLogin } = useAuthActions()
   const navigate = useLanguageNavigate()
@@ -69,6 +70,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
   const [uploading, setUploading] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [formNotice, setFormNotice] = React.useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [formOpen, setFormOpen] = React.useState(false)
 
   const normalizeRoles = React.useCallback((roles?: string[] | null): UserRole[] => {
     if (!roles) return []
@@ -92,7 +94,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
         const rows = await fetchPlantProAdvices(plantId)
         if (!cancelled) setAdvices(rows)
       } catch (err: any) {
-        if (!cancelled) setError(err?.message || t("proAdvice.loadError"))
+        if (!cancelled) setError(err?.message || t("loadError"))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -102,6 +104,12 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
       cancelled = true
     }
   }, [plantId, t])
+
+  React.useEffect(() => {
+    if (!canContribute) {
+      setFormOpen(false)
+    }
+  }, [canContribute])
 
   const resetForm = () => {
     setContent("")
@@ -116,12 +124,12 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
       return
     }
     if (!canContribute) {
-      setFormNotice({ type: "error", text: t("proAdvice.noAccess") })
+      setFormNotice({ type: "error", text: t("noAccess") })
       return
     }
     const trimmed = content.trim()
     if (!trimmed) {
-      setFormNotice({ type: "error", text: t("proAdvice.validation.missingContent") })
+      setFormNotice({ type: "error", text: t("validation.missingContent") })
       return
     }
 
@@ -145,12 +153,12 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
         authorRoles: normalizeRoles(profile?.roles),
       })
       setAdvices((prev) => [advice, ...prev])
-      setFormNotice({ type: "success", text: t("proAdvice.success") })
+      setFormNotice({ type: "success", text: t("success") })
       resetForm()
     } catch (err: any) {
       setFormNotice({
         type: "error",
-        text: err?.message || t("proAdvice.submitError"),
+        text: err?.message || t("submitError"),
       })
     } finally {
       setUploading(false)
@@ -169,11 +177,11 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
     try {
       await deletePlantProAdvice(id)
       setAdvices((prev) => prev.filter((a) => a.id !== id))
-      setFormNotice({ type: "success", text: t("proAdvice.deleted") })
+      setFormNotice({ type: "success", text: t("deleted") })
     } catch (err: any) {
       setFormNotice({
         type: "error",
-        text: err?.message || t("proAdvice.deleteError"),
+        text: err?.message || t("deleteError"),
       })
     }
   }
@@ -200,20 +208,20 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
           <div className="space-y-1">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700 shadow-sm ring-1 ring-emerald-200/70 dark:bg-white/5 dark:text-emerald-200 dark:ring-emerald-700/40">
               <Sparkles className="h-3.5 w-3.5" />
-              {t("proAdvice.eyebrow")}
+              {t("eyebrow")}
             </div>
-            <h3 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">{t("proAdvice.title")}</h3>
+            <h3 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">{t("title")}</h3>
             <p className="text-sm text-stone-600 dark:text-stone-300 max-w-2xl">
-              {t("proAdvice.subtitle")}
+              {t("subtitle")}
             </p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs text-emerald-800 dark:text-emerald-200">
               <Badge className="rounded-full bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-500 shadow">
                 <ShieldCheck className="h-3.5 w-3.5 mr-1" />
-                {t("proAdvice.title")}
+                {t("title")}
               </Badge>
               <Badge className="rounded-full bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-100 dark:border-amber-700">
                 <Megaphone className="h-3.5 w-3.5 mr-1" />
-                {t("proAdvice.helper")}
+                {t("helper")}
               </Badge>
             </div>
           </div>
@@ -221,90 +229,117 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
         </div>
 
         {canContribute && (
-          <form className="relative mt-5 space-y-3 rounded-2xl border border-emerald-200/70 bg-white/80 p-3 sm:p-4 shadow-inner dark:border-emerald-700/50 dark:bg-[#0f1f1f]/80" onSubmit={handleSubmit}>
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-xs font-semibold text-stone-700 dark:text-stone-100">
+          <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-emerald-200/70 bg-white/80 p-3 sm:p-4 shadow-inner dark:border-emerald-700/50 dark:bg-[#0f1f1f]/80">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-stone-600 dark:text-stone-300 flex items-center gap-2">
                 <Megaphone className="h-4 w-4 text-emerald-600" />
-                {t("proAdvice.contentLabel")}
-              </label>
-              <Textarea
-                value={content}
-                onChange={(e) => {
-                  setContent(e.target.value)
+                {t("helper")}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700/60 dark:bg-transparent dark:text-emerald-200"
+                onClick={() => {
+                  setFormOpen((prev) => !prev)
                   setFormNotice(null)
                 }}
-                placeholder={t("proAdvice.placeholder", { plant: plantName })}
-                rows={4}
-                className="rounded-xl border-emerald-200/70 focus:ring-emerald-400 dark:border-emerald-700/60 dark:bg-[#0f1816]"
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("proAdvice.referenceLabel")}</label>
-                <Input
-                  value={referenceUrl}
-                  onChange={(e) => {
-                    setReferenceUrl(e.target.value)
-                    setFormNotice(null)
-                  }}
-                  placeholder="https://"
-                  type="url"
-                  className="rounded-xl border-emerald-200/70 focus:ring-emerald-400 dark:border-emerald-700/60 dark:bg-[#0f1816]"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("proAdvice.imageLabel")}</label>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm cursor-pointer transition hover:-translate-y-[1px] hover:shadow dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-100">
-                    <Upload className="h-4 w-4" />
-                    <span>{file ? file.name : t("proAdvice.pickImage")}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        setFile(e.target.files?.[0] || null)
-                        setFormNotice(null)
-                      }}
-                    />
-                  </label>
-                  {file && (
-                    <Button type="button" variant="ghost" size="icon" onClick={() => setFile(null)} aria-label={t("proAdvice.clearImage")}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-            {formNotice && (
-              <div
-                className={cn(
-                  "text-xs rounded-lg px-3 py-2",
-                  formNotice.type === "success"
-                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
-                    : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200"
-                )}
               >
-                {formNotice.text}
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-stone-500 dark:text-stone-400">
-                {uploading ? t("proAdvice.uploading") : t("proAdvice.helper")}
-              </div>
-              <Button type="submit" disabled={submitting || uploading} className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md">
-                <Plus className="h-4 w-4 mr-2" />
-                {t("proAdvice.submit")}
+                {formOpen ? <ChevronUp className="mr-2 h-4 w-4" /> : <ChevronDown className="mr-2 h-4 w-4" />}
+                {formOpen ? tCommon("close", { defaultValue: "Close" }) : t("submit")}
               </Button>
             </div>
-          </form>
+
+            {formOpen && (
+              <form
+                className="relative mt-2 space-y-3 rounded-2xl border border-emerald-200/70 bg-white/80 p-3 sm:p-4 shadow-inner dark:border-emerald-700/50 dark:bg-[#0f1f1f]/80"
+                onSubmit={handleSubmit}
+              >
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-stone-700 dark:text-stone-100">
+                    <Megaphone className="h-4 w-4 text-emerald-600" />
+                    {t("contentLabel")}
+                  </label>
+                  <Textarea
+                    value={content}
+                    onChange={(e) => {
+                      setContent(e.target.value)
+                      setFormNotice(null)
+                    }}
+                    placeholder={t("placeholder", { plant: plantName })}
+                    rows={4}
+                    className="rounded-xl border-emerald-200/70 focus:ring-emerald-400 dark:border-emerald-700/60 dark:bg-[#0f1816]"
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("referenceLabel")}</label>
+                    <Input
+                      value={referenceUrl}
+                      onChange={(e) => {
+                        setReferenceUrl(e.target.value)
+                        setFormNotice(null)
+                      }}
+                      placeholder="https://"
+                      type="url"
+                      className="rounded-xl border-emerald-200/70 focus:ring-emerald-400 dark:border-emerald-700/60 dark:bg-[#0f1816]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("imageLabel")}</label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm cursor-pointer transition hover:-translate-y-[1px] hover:shadow dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-100">
+                        <Upload className="h-4 w-4" />
+                        <span>{file ? file.name : t("pickImage")}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            setFile(e.target.files?.[0] || null)
+                            setFormNotice(null)
+                          }}
+                        />
+                      </label>
+                      {file && (
+                        <Button type="button" variant="ghost" size="icon" onClick={() => setFile(null)} aria-label={t("clearImage")}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {formNotice && (
+                  <div
+                    className={cn(
+                      "text-xs rounded-lg px-3 py-2",
+                      formNotice.type === "success"
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
+                        : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200"
+                    )}
+                  >
+                    {formNotice.text}
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-stone-500 dark:text-stone-400">
+                    {uploading ? t("uploading") : t("helper")}
+                  </div>
+                  <Button type="submit" disabled={submitting || uploading} className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md">
+                    <Plus className="h-4 w-4 mr-2" />
+                    {t("submit")}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
         )}
       </div>
 
       <div className="space-y-3 sm:space-y-4">
         {loading && (
           <Card className="rounded-xl border-stone-200 dark:border-stone-700">
-            <CardContent className="p-4 text-sm text-stone-500 dark:text-stone-400">{t("proAdvice.loading")}</CardContent>
+            <CardContent className="p-4 text-sm text-stone-500 dark:text-stone-400">{t("loading")}</CardContent>
           </Card>
         )}
         {error && (
@@ -316,7 +351,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
           <Card className="rounded-xl border-dashed border-emerald-200 bg-emerald-50/60 dark:border-emerald-800 dark:bg-emerald-950/20">
             <CardContent className="p-4 text-sm text-stone-700 dark:text-stone-200 flex items-center gap-2">
               <ImageIcon className="h-4 w-4 text-emerald-500" />
-              {t("proAdvice.empty")}
+              {t("empty")}
             </CardContent>
           </Card>
         )}
@@ -331,7 +366,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                     type="button"
                     onClick={() => handleProfileClick(advice)}
                     className="focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-full"
-                    aria-label={t("proAdvice.goToProfile", { name: advice.authorDisplayName || advice.authorUsername || "" })}
+                    aria-label={t("goToProfile", { name: advice.authorDisplayName || advice.authorUsername || "" })}
                   >
                     <Avatar name={advice.authorDisplayName || advice.authorUsername} src={advice.authorAvatarUrl} />
                   </button>
@@ -342,17 +377,17 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                         onClick={() => handleProfileClick(advice)}
                         className="text-sm font-semibold text-stone-900 hover:text-emerald-700 dark:text-stone-100 dark:hover:text-emerald-300"
                       >
-                        {advice.authorDisplayName || advice.authorUsername || t("proAdvice.unknownAuthor")}
+                        {advice.authorDisplayName || advice.authorUsername || t("unknownAuthor")}
                       </button>
                       <AdviceBadge roles={advice.authorRoles || []} />
                     </div>
                     <p className="text-[11px] text-stone-500 dark:text-stone-400 flex items-center gap-1">
                       <CalendarClock className="h-3.5 w-3.5" />
-                      {t("proAdvice.postedAt", { date: formatDate(advice.createdAt) })}
+                      {t("postedAt", { date: formatDate(advice.createdAt) })}
                     </p>
                   </div>
                   {canDelete && (
-                    <Button type="button" variant="ghost" size="icon" onClick={() => handleDelete(advice.id)} aria-label={t("proAdvice.delete")}>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => handleDelete(advice.id)} aria-label={t("delete")}>
                       <X className="h-4 w-4" />
                     </Button>
                   )}
@@ -362,7 +397,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                 <p className="text-sm text-stone-800 whitespace-pre-line leading-relaxed dark:text-stone-100">
                   <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700 dark:bg-amber-900/30 dark:text-amber-100 mr-2">
                     <Sparkles className="h-3 w-3 mr-1" />
-                    {t("proAdvice.title")}
+                    {t("title")}
                   </span>
                   {advice.content}
                 </p>
@@ -382,7 +417,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                     rel="noreferrer"
                   >
                     <ExternalLink className="h-4 w-4" />
-                    {t("proAdvice.referenceLink")}
+                    {t("referenceLink")}
                   </a>
                 )}
               </CardContent>

@@ -603,7 +603,6 @@ const PlantInfoPage: React.FC = () => {
         isBookmarked={isBookmarked}
       />
       <MoreInformationSection plant={plant} />
-      <ProAdviceSection plantId={plant.id} plantName={plant.name} />
       
       {user?.id && plant && (
         <AddToBookmarkDialog 
@@ -1429,6 +1428,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </div>
           </section>
         )}
+
+      <ProAdviceSection plantId={plant.id} plantName={plant.name} />
 
       {/* Prominent Toxicity Warning Banner - Placed before detailed info cards */}
         <ToxicityWarningBanner
