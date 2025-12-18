@@ -198,11 +198,13 @@ export function NotificationPanel({
                   </span>
                   <span className="ml-auto text-xs text-blue-500 font-medium">{friendRequests.length}</span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2" role="list" aria-label={t('notifications.friendRequests', { defaultValue: 'Friend Requests' })}>
                   {friendRequests.map((request) => (
                     <div
                       key={request.id}
                       className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20"
+                      role="listitem"
+                      aria-label={`${t('notifications.friendRequests', { defaultValue: 'Friend request' })} from ${request.requester_profile?.display_name || t('friends.unknown', { defaultValue: 'Unknown' })}`}
                     >
                       <div className="flex items-start gap-3">
                         <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
@@ -218,20 +220,26 @@ export function NotificationPanel({
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mt-3">
-                        {request.requester_profile?.display_name && request.requester_profile.display_name.trim() && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 rounded-lg text-xs"
-                            onClick={() => {
-                              onClose()
-                              navigate(`/u/${encodeURIComponent(request.requester_profile!.display_name!)}`)
-                            }}
-                          >
-                            <ArrowUpRight className="h-3.5 w-3.5 mr-1" />
-                            {t('common.profile', { defaultValue: 'Profile' })}
-                          </Button>
-                        )}
+                        {(() => {
+                          const displayName = request.requester_profile?.display_name
+                          if (displayName && displayName.trim()) {
+                            return (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 rounded-lg text-xs"
+                                onClick={() => {
+                                  onClose()
+                                  navigate(`/u/${encodeURIComponent(displayName)}`)
+                                }}
+                              >
+                                <ArrowUpRight className="h-3.5 w-3.5 mr-1" />
+                                {t('common.profile', { defaultValue: 'Profile' })}
+                              </Button>
+                            )
+                          }
+                          return null
+                        })()}
                         <div className="flex-1" />
                         <Button
                           variant="ghost"
@@ -279,11 +287,13 @@ export function NotificationPanel({
                   </span>
                   <span className="ml-auto text-xs text-emerald-500 font-medium">{gardenInvites.length}</span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2" role="list" aria-label={t('notifications.gardenInvites', { defaultValue: 'Garden Invites' })}>
                   {gardenInvites.map((invite) => (
                     <div
                       key={invite.id}
                       className="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/20"
+                      role="listitem"
+                      aria-label={`${t('notifications.gardenInvites', { defaultValue: 'Garden invite' })} to ${invite.gardenName} from ${invite.inviterName || t('friends.unknown', { defaultValue: 'Unknown' })}`}
                     >
                       <div className="flex items-start gap-3">
                         {invite.gardenCoverImageUrl ? (
