@@ -840,6 +840,8 @@ const adminUploadPrefixRaw = (process.env.ADMIN_UPLOAD_PREFIX || 'admin/uploads'
 const adminUploadPrefix = adminUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'admin/uploads'
 const blogUploadPrefixRaw = (process.env.BLOG_UPLOAD_PREFIX || 'blog').trim()
 const blogUploadPrefix = blogUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'blog'
+const proAdviceUploadPrefixRaw = (process.env.PRO_ADVICE_UPLOAD_PREFIX || 'pro-advice').trim()
+const proAdviceUploadPrefix = proAdviceUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'pro-advice'
 const adminUploadMaxBytes = (() => {
   const raw = Number(process.env.ADMIN_UPLOAD_MAX_BYTES)
   if (Number.isFinite(raw) && raw > 0) return raw
@@ -1535,6 +1537,66 @@ async function isEditorFromRequest(req) {
   }
 }
 
+// Determine whether a user has pro-level access (pro, editor, or admin)
+async function isProOrEditorFromRequest(req) {
+  try {
+    // Editors/admins are already allowed
+    if (await isEditorFromRequest(req)) return true
+    if (adminPublicMode === true) return true
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return true
+
+    const user = await getUserFromRequest(req)
+    if (!user?.id) return false
+    let hasAccess = false
+
+    if (sql) {
+      try {
+        const exists = await sql`select 1 from information_schema.tables where table_schema='public' and table_name='profiles'`
+        if (exists?.length) {
+          const rows = await sql`select is_admin, roles from public.profiles where id = ${user.id} limit 1`
+          if (rows?.[0]) {
+            if (rows[0].is_admin === true) hasAccess = true
+            const roles = Array.isArray(rows[0].roles) ? rows[0].roles : []
+            if (roles.includes('admin') || roles.includes('editor') || roles.includes('pro')) hasAccess = true
+          }
+        }
+      } catch { }
+    }
+
+    if (!hasAccess && supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const bearer = getBearerTokenFromRequest(req)
+        if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
+        const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin,roles&limit=1`
+        const resp = await fetch(url, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          if (Array.isArray(arr) && arr[0]) {
+            if (arr[0].is_admin === true) hasAccess = true
+            const roles = Array.isArray(arr[0].roles) ? arr[0].roles : []
+            if (roles.includes('admin') || roles.includes('editor') || roles.includes('pro')) hasAccess = true
+          }
+        }
+      } catch { }
+    }
+
+    if (!hasAccess) {
+      const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      const allowedUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+      const email = (user.email || '').toLowerCase()
+      if ((email && allowedEmails.includes(email)) || allowedUserIds.includes(user.id)) {
+        hasAccess = true
+      }
+    }
+
+    return hasAccess
+  } catch {
+    return false
+  }
+}
+
 // Helper function to ensure editor access (admin OR editor role)
 async function ensureEditor(req, res) {
   try {
@@ -1553,6 +1615,31 @@ async function ensureEditor(req, res) {
     const hasAccess = await isEditorFromRequest(req)
     if (!hasAccess) {
       res.status(403).json({ error: 'Editor privileges required' })
+      return null
+    }
+    return user.id
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Authorization check failed' })
+    return null
+  }
+}
+
+// Helper to ensure pro/editor/admin access (used for professional advice uploads)
+async function ensureProOrEditor(req, res) {
+  try {
+    if (adminPublicMode === true) return 'public'
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return 'static-admin'
+
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return null
+    }
+
+    const hasAccess = await isProOrEditorFromRequest(req)
+    if (!hasAccess) {
+      res.status(403).json({ error: 'Pro, editor, or admin privileges required' })
       return null
     }
     return user.id
@@ -4938,6 +5025,42 @@ app.post('/api/blog/upload-image', async (req, res) => {
     prefixBuilder: ({ req }) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [blogUploadPrefix, folder].filter(Boolean).join('/')
+    },
+  })
+})
+
+app.post('/api/pro-advice/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const principal = await ensureProOrEditor(req, res)
+  if (!principal) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  let uploader = null
+  try {
+    uploader = await getUserFromRequest(req)
+  } catch { }
+  let uploaderDisplayName = null
+  if (uploader?.id) {
+    uploaderDisplayName = await getAdminProfileName(uploader.id)
+  }
+
+  await handleScopedImageUpload(req, res, {
+    actorId: principal,
+    auditLabel: 'pro-advice',
+    uploaderInfo: {
+      id: uploader?.id || null,
+      email: uploader?.email || null,
+      name: uploaderDisplayName || null,
+    },
+    prefixBuilder: ({ req }) => {
+      const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
+      return [proAdviceUploadPrefix, folder].filter(Boolean).join('/')
     },
   })
 })

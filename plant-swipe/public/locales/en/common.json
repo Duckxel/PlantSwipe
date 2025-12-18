@@ -2600,6 +2600,37 @@
       "banned": "Banned",
       "bannedDescription": "Banned from platform"
     },
+    "proAdvice": {
+      "eyebrow": "Trusted by pros",
+      "title": "Pro insights",
+      "subtitle": "Professional notes can be pinned here without changing the plant data.",
+      "contentLabel": "Advice",
+      "referenceLabel": "Reference link (optional)",
+      "imageLabel": "Attach image (optional)",
+      "pickImage": "Upload image",
+      "clearImage": "Remove image",
+      "placeholder": "Share what growers should know about {{plant}}...",
+      "helper": "Keep it concise and actionable. Sources are encouraged.",
+      "uploading": "Uploading image...",
+      "submit": "Post advice",
+      "loading": "Loading professional advice...",
+      "empty": "No professional advice has been shared for this plant yet.",
+      "noAccess": "Only Admins, Editors, or Pros can add professional advice.",
+      "signIn": "Sign in to share",
+      "success": "Advice added",
+      "deleted": "Advice removed",
+      "delete": "Remove advice",
+      "deleteError": "Failed to delete advice",
+      "submitError": "Unable to add advice. Please try again.",
+      "loadError": "Failed to load pro advice.",
+      "unknownAuthor": "Unknown author",
+      "referenceLink": "Reference link",
+      "goToProfile": "View {{name}}'s profile",
+      "postedAt": "Posted on {{date}}",
+      "validation": {
+        "missingContent": "Add a few words to share your advice."
+      }
+    },
     "admin": {
       "reports": "Reports",
       "reportsDescription": "Manage user reports",
