@@ -16,6 +16,14 @@ import type {
 
 // ===== Notification CRUD =====
 
+const isMissingTableError = (error?: { message?: string; code?: string; status?: number | string }) => {
+  if (!error) return false
+  if (error.message?.includes('does not exist')) return true
+  if (error.code === '42P01') return true
+  if (error.code === '404' || error.status === 404 || error.status === '404') return true
+  return false
+}
+
 /**
  * Get all notifications for a user
  */
@@ -47,7 +55,7 @@ export async function getUserNotifications(
 
   if (error) {
     // If table doesn't exist, return empty array
-    if (error.message?.includes('does not exist') || error.code === '42P01') {
+    if (isMissingTableError(error)) {
       console.warn('[notifications] Table does not exist yet')
       return []
     }
@@ -68,7 +76,7 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
     .eq('status', 'unread')
 
   if (error) {
-    if (error.message?.includes('does not exist') || error.code === '42P01') {
+    if (isMissingTableError(error)) {
       return 0
     }
     throw new Error(error.message)
@@ -89,7 +97,7 @@ export async function getNotificationCounts(userId: string): Promise<Notificatio
       .eq('user_id', userId)
       .eq('status', 'unread')
 
-    if (unreadError && !unreadError.message?.includes('does not exist')) {
+    if (unreadError && !isMissingTableError(unreadError)) {
       throw unreadError
     }
 
@@ -100,7 +108,7 @@ export async function getNotificationCounts(userId: string): Promise<Notificatio
       .eq('recipient_id', userId)
       .eq('status', 'pending')
 
-    if (frError && !frError.message?.includes('does not exist')) {
+    if (frError && !isMissingTableError(frError)) {
       throw frError
     }
 
@@ -113,7 +121,7 @@ export async function getNotificationCounts(userId: string): Promise<Notificatio
 
     if (giError) {
       // If table doesn't exist or other error, return counts without garden invites
-      if (!giError.message?.includes('does not exist')) {
+      if (!isMissingTableError(giError)) {
         console.warn('[notifications] Error fetching garden invites:', giError)
       }
       return {
@@ -160,7 +168,7 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
     .eq('user_id', userId)
     .eq('status', 'unread')
 
-  if (error && !error.message?.includes('does not exist')) {
+  if (error && !isMissingTableError(error)) {
     throw new Error(error.message)
   }
 }
@@ -233,7 +241,7 @@ export async function getPendingGardenInvites(userId: string): Promise<GardenInv
     .order('created_at', { ascending: false })
 
   if (error) {
-    if (error.message?.includes('does not exist') || error.code === '42P01') {
+    if (isMissingTableError(error)) {
       return []
     }
     throw new Error(error.message)
