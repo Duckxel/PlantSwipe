@@ -2,10 +2,11 @@ import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, LayoutGrid, HelpCircle, LogIn, UserPlus } from "lucide-react"
+import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut, Crown, LayoutGrid, HelpCircle, LogIn, UserPlus, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
+import { useNotifications } from "@/hooks/useNotifications"
 import { useTranslation } from "react-i18next"
 import { checkEditorAccess } from "@/constants/userRoles"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -73,6 +74,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "mobile" })
+  const { totalCount, friendRequests, gardenInvites } = useNotifications(user?.id ?? null, { channelKey: "mobile" })
   const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
   const [guestMenuOpen, setGuestMenuOpen] = React.useState(false)
@@ -146,15 +148,25 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   <Search className="h-6 w-6" />
                 </Link>
               </Button>
-              <Button
-                variant={"secondary"}
-                size={"icon"}
-                className={currentView === 'profile' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}
-                onClick={() => setProfileMenuOpen(true)}
-                aria-label="Profile"
-              >
-                <User className="h-6 w-6" />
-              </Button>
+              <div className="relative">
+                <Button
+                  variant={"secondary"}
+                  size={"icon"}
+                  className={currentView === 'profile' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}
+                  onClick={() => setProfileMenuOpen(true)}
+                  aria-label="Profile"
+                >
+                  <User className="h-6 w-6" />
+                </Button>
+                {totalCount > 0 && (
+                  <span
+                    className="pointer-events-none absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-medium flex items-center justify-center ring-2 ring-white dark:ring-[#252526]"
+                    aria-hidden="true"
+                  >
+                    {totalCount > 99 ? '99+' : totalCount}
+                  </span>
+                )}
+              </div>
             </>
           ) : (
             // Logged-out navigation: Features, FAQ, Encyclopedia, Login (all pages)
@@ -195,6 +207,48 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             <SheetTitle>{label}</SheetTitle>
           </SheetHeader>
           <div className="mt-6 space-y-2">
+            {/* Notifications Section - show if there are pending items */}
+            {totalCount > 0 && (
+              <div className="mb-4 p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <div className="flex items-center gap-3 mb-2">
+                  <Bell className="h-5 w-5 text-amber-600" />
+                  <span className="font-medium text-amber-900 dark:text-amber-100">
+                    {t("notifications.title", { defaultValue: "Notifications" })}
+                  </span>
+                  <span className="ml-auto px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-medium">
+                    {totalCount}
+                  </span>
+                </div>
+                {friendRequests.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setProfileMenuOpen(false)
+                      navigate("/friends")
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 flex items-center gap-2 text-sm"
+                  >
+                    <UserPlus className="h-4 w-4 text-blue-500" />
+                    <span className="text-amber-900 dark:text-amber-100">
+                      {friendRequests.length} {t("notifications.friendRequests", { defaultValue: "Friend Requests" })}
+                    </span>
+                  </button>
+                )}
+                {gardenInvites.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setProfileMenuOpen(false)
+                      navigate("/gardens")
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 flex items-center gap-2 text-sm"
+                  >
+                    <Sprout className="h-4 w-4 text-emerald-500" />
+                    <span className="text-amber-900 dark:text-amber-100">
+                      {gardenInvites.length} {t("notifications.gardenInvites", { defaultValue: "Garden Invites" })}
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
             {checkEditorAccess(profile) && (
               <button
                 onClick={() => {
