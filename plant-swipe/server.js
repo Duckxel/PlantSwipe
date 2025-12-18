@@ -7429,33 +7429,21 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
   }
 })
 
-// Public endpoint to send automatic email (called from auth flow)
-// Uses the same method as campaign emails: direct Resend API call with wrapper
-app.post('/api/send-automatic-email', async (req, res) => {
+async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayName, userLanguage }) {
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
   if (!apiKey) {
-    console.error('[send-automatic-email] No Resend API key configured')
-    res.status(500).json({ error: 'Email service not configured' })
-    return
+    console.error('[sendAutomaticEmail] No Resend API key configured')
+    return { sent: false, reason: 'Email service not configured' }
   }
 
   if (!sql) {
-    console.error('[send-automatic-email] Database connection not available')
-    res.status(500).json({ error: 'Database not configured' })
-    return
-  }
-
-  const { triggerType, userId, userEmail, userDisplayName, userLanguage } = req.body || {}
-
-  if (!triggerType || !userId || !userEmail || !userDisplayName) {
-    res.status(400).json({ error: 'Missing required fields: triggerType, userId, userEmail, userDisplayName' })
-    return
+    console.error('[sendAutomaticEmail] Database connection not available')
+    return { sent: false, reason: 'Database not configured' }
   }
 
   const lang = userLanguage || 'en'
 
   try {
-    // 1. Load trigger configuration
     const triggerRows = await sql`
       select t.*, tpl.title as template_title, tpl.subject, tpl.body_html
       from public.admin_email_triggers t
@@ -7465,27 +7453,22 @@ app.post('/api/send-automatic-email', async (req, res) => {
     `
 
     if (!triggerRows || !triggerRows.length) {
-      console.log(`[send-automatic-email] Trigger type "${triggerType}" not found`)
-      res.json({ sent: false, reason: 'Trigger not configured' })
-      return
+      console.log(`[sendAutomaticEmail] Trigger type "${triggerType}" not found`)
+      return { sent: false, reason: 'Trigger not configured' }
     }
 
     const trigger = triggerRows[0]
 
-    // 2. Check if enabled and has a template
     if (!trigger.is_enabled) {
-      console.log(`[send-automatic-email] Trigger "${triggerType}" is disabled`)
-      res.json({ sent: false, reason: 'Trigger is disabled' })
-      return
+      console.log(`[sendAutomaticEmail] Trigger "${triggerType}" is disabled`)
+      return { sent: false, reason: 'Trigger is disabled' }
     }
 
     if (!trigger.template_id) {
-      console.log(`[send-automatic-email] Trigger "${triggerType}" has no template configured`)
-      res.json({ sent: false, reason: 'No template configured' })
-      return
+      console.log(`[sendAutomaticEmail] Trigger "${triggerType}" has no template configured`)
+      return { sent: false, reason: 'No template configured' }
     }
 
-    // 3. Check if we've already sent this automatic email to this user
     const existingSend = await sql`
       select id from public.admin_automatic_email_sends
       where trigger_type = ${triggerType} and user_id = ${userId}
@@ -7493,30 +7476,23 @@ app.post('/api/send-automatic-email', async (req, res) => {
     `
 
     if (existingSend && existingSend.length > 0) {
-      console.log(`[send-automatic-email] Already sent "${triggerType}" to user ${userId}`)
-      res.json({ sent: false, reason: 'Already sent to this user' })
-      return
+      console.log(`[sendAutomaticEmail] Already sent "${triggerType}" to user ${userId}`)
+      return { sent: false, reason: 'Already sent to this user' }
     }
 
-    // 4. Load translations for the template (for multi-language support)
     const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
-
-    // 5. Get user's language-specific content (fallback to template's default content)
     const translation = emailTranslations.get(lang)
     const rawSubject = translation?.subject || trigger.subject
     const rawBodyHtml = translation?.bodyHtml || trigger.body_html
 
     if (!rawSubject || !rawBodyHtml) {
-      console.error(`[send-automatic-email] Template "${trigger.template_id}" has no content`)
-      res.status(500).json({ error: 'Template has no content' })
-      return
+      console.error(`[sendAutomaticEmail] Template "${trigger.template_id}" has no content`)
+      return { sent: false, reason: 'Template has no content' }
     }
 
-    // 6. Prepare variable replacement context (same as campaign emails)
     const userRaw = userDisplayName || 'User'
     const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
 
-    // Generate random 10-character string (uppercase, lowercase, numbers)
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     let randomStr = ''
     for (let i = 0; i < 10; i++) {
@@ -7525,28 +7501,21 @@ app.post('/api/send-automatic-email', async (req, res) => {
 
     const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
 
-    // Variables available for replacement in email templates
     const context = {
-      user: userCap,                                     // User's display name (capitalized)
-      email: userEmail,                                  // User's email address
-      random: randomStr,                                 // 10 random characters (unique per email)
-      url: websiteUrl.replace(/^https?:\/\//, ''),       // Website URL without protocol (e.g., "aphylia.app")
-      code: 'XXXXXX'                                     // Placeholder (real codes are for transactional emails)
+      user: userCap,
+      email: userEmail,
+      random: randomStr,
+      url: websiteUrl.replace(/^https?:\/\//, ''),
+      code: 'XXXXXX',
     }
     const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
 
-    // 7. Render the email content
     const subject = replaceVars(rawSubject)
     const bodyHtmlRaw = replaceVars(rawBodyHtml)
-
-    // 8. Sanitize HTML for email client compatibility (same as campaigns)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
-
-    // 9. Wrap with the beautiful email wrapper (same as campaigns)
     const html = wrapEmailHtml(bodyHtml, subject, lang)
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
 
-    // 10. Send via Resend API (same method as campaigns)
     const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
 
     const resendResponse = await fetch('https://api.resend.com/emails', {
@@ -7568,30 +7537,44 @@ app.post('/api/send-automatic-email', async (req, res) => {
 
     if (!resendResponse.ok) {
       const errorText = await resendResponse.text().catch(() => '')
-      console.error(`[send-automatic-email] Resend API error (${resendResponse.status}):`, errorText)
-      res.status(500).json({ error: `Failed to send email: ${errorText || resendResponse.status}` })
-      return
+      console.error(`[sendAutomaticEmail] Resend API error (${resendResponse.status}):`, errorText)
+      return { sent: false, reason: errorText || 'Failed to send email' }
     }
 
     const resendData = await resendResponse.json().catch(() => ({}))
-    console.log(`[send-automatic-email] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
+    console.log(`[sendAutomaticEmail] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
 
-    // 11. Record the send to prevent duplicates
     try {
       await sql`
         insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
         values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
       `
     } catch (logErr) {
-      // Don't fail the request if logging fails, email was already sent
-      console.warn('[send-automatic-email] Failed to log send:', logErr?.message || logErr)
+      console.warn('[sendAutomaticEmail] Failed to log send:', logErr?.message || logErr)
     }
 
-    res.json({ sent: true, resendId: resendData.id })
+    return { sent: true, resendId: resendData.id || null, trigger }
   } catch (err) {
-    console.error('[send-automatic-email] Error:', err)
-    res.status(500).json({ error: err?.message || 'Failed to send email' })
+    console.error('[sendAutomaticEmail] Error:', err)
+    return { sent: false, error: err?.message || 'Failed to send email' }
   }
+}
+
+// Public endpoint to send automatic email (called from auth flow)
+// Uses the same method as campaign emails: direct Resend API call with wrapper
+app.post('/api/send-automatic-email', async (req, res) => {
+  const { triggerType, userId, userEmail, userDisplayName, userLanguage } = req.body || {}
+  if (!triggerType || !userId || !userEmail || !userDisplayName) {
+    res.status(400).json({ error: 'Missing required fields: triggerType, userId, userEmail, userDisplayName' })
+    return
+  }
+  const result = await sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayName, userLanguage })
+  if (result.sent) {
+    res.json({ sent: true, resendId: result.resendId })
+    return
+  }
+  const status = result?.reason === 'Trigger not configured' ? 404 : result?.reason === 'Email service not configured' ? 500 : 200
+  res.status(status).json(result)
 })
 
 // Admin: global stats (bypass RLS via server connection)
@@ -7736,7 +7719,7 @@ app.get('/api/admin/member', async (req, res) => {
       // Profile (best-effort; may be null without Authorization due to RLS)
       let profile = null
       try {
-        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin,roles`, {
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin,roles,threat_level`, {
           headers: baseHeaders,
         })
         if (pr.ok) {
@@ -7801,10 +7784,13 @@ app.get('/api/admin/member', async (req, res) => {
       let isBannedEmail = false
       let bannedReason = null
       let bannedAt = null
+      let bannedById = null
+      let bannedByName = null
       let bannedIps = []
+      let userFiles = []
       try {
         const emailForBan = (resolvedEmail || emailParam || '').toLowerCase()
-        const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(emailForBan)}&select=reason,banned_at&order=banned_at.desc&limit=1`, {
+        const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(emailForBan)}&select=reason,banned_at,banned_by&order=banned_at.desc&limit=1`, {
           headers: baseHeaders,
         })
         if (br.ok) {
@@ -7813,6 +7799,16 @@ app.get('/api/admin/member', async (req, res) => {
             isBannedEmail = true
             bannedReason = arr[0].reason || null
             bannedAt = arr[0].banned_at || null
+            bannedById = arr[0].banned_by || null
+            if (bannedById) {
+              try {
+                const ba = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(bannedById)}&select=display_name&limit=1`, { headers: baseHeaders })
+                if (ba.ok) {
+                  const bArr = await ba.json().catch(() => [])
+                  bannedByName = Array.isArray(bArr) && bArr[0] ? bArr[0].display_name || null : null
+                }
+              } catch { }
+            }
           }
         }
       } catch { }
@@ -7856,6 +7852,26 @@ app.get('/api/admin/member', async (req, res) => {
             const arr = await gpResp.json().catch(() => [])
             plantsTotal = Array.isArray(arr) ? arr.reduce((acc, r) => acc + Number(r?.plants_on_hand ?? 0), 0) : undefined
           }
+        }
+      } catch { }
+
+      try {
+        const fr = await fetch(`${supabaseUrlEnv}/rest/v1/garden_plant_images?uploaded_by=eq.${encodeURIComponent(targetId)}&select=id,image_url,caption,uploaded_at,garden_plant_id,garden_plants(plant_id,plants(name,admin_commentary))&order=uploaded_at.desc&limit=25`, {
+          headers: baseHeaders,
+        })
+        if (fr.ok) {
+          const arr = await fr.json().catch(() => [])
+          userFiles = Array.isArray(arr)
+            ? arr.map((r) => ({
+                id: String(r.id),
+                imageUrl: r.image_url || null,
+                caption: r.caption || null,
+                uploadedAt: r.uploaded_at || null,
+                gardenPlantId: r?.garden_plant_id || null,
+                plantName: r?.garden_plants?.plants?.name || null,
+                adminCommentary: r?.garden_plants?.plants?.admin_commentary || null,
+              }))
+            : []
         }
       } catch { }
 
@@ -7913,6 +7929,7 @@ app.get('/api/admin/member', async (req, res) => {
         const adminName = null
         if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
       } catch { }
+      const threatLevel = typeof profile?.threat_level === 'number' ? profile.threat_level : null
       res.json({
         ok: true,
         user: { id: targetId, email: resolvedEmail || emailParam || null, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
@@ -7928,7 +7945,11 @@ app.get('/api/admin/member', async (req, res) => {
         isBannedEmail,
         bannedReason,
         bannedAt,
+        bannedById,
+        bannedByName,
         bannedIps,
+        threatLevel,
+        files: userFiles,
         topReferrers: memberTopReferrers.slice(0, 5),
         topCountries: memberTopCountries.slice(0, 5),
         topDevices: memberTopDevices.slice(0, 5),
@@ -7966,8 +7987,9 @@ app.get('/api/admin/member', async (req, res) => {
     }
     let profile = null
     try {
-      const rows = await sql`select id, display_name, is_admin, roles from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin, roles, threat_level from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
+      threatLevel = profile?.threat_level ?? null
     } catch { }
     // Load latest admin notes for this profile (DB or REST)
     let adminNotes = []
@@ -8000,7 +8022,11 @@ app.get('/api/admin/member', async (req, res) => {
     let isBannedEmail = false
     let bannedReason = null
     let bannedAt = null
+    let bannedById = null
+    let bannedByName = null
     let bannedIps = []
+    let threatLevel = profile?.threat_level ?? null
+    let userFiles = []
     let plantsTotal = 0
     try {
       const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null order by ip asc`, [user.id])
@@ -8052,8 +8078,8 @@ app.get('/api/admin/member', async (req, res) => {
       plantsTotal = rows?.[0]?.c ?? 0
     } catch { }
     try {
-      const br = await sql`
-        select reason, banned_at
+        const br = await sql`
+        select reason, banned_at, banned_by
         from public.banned_accounts
         where lower(email) = ${email ? email : (user.email ? user.email.toLowerCase() : '')}
         order by banned_at desc
@@ -8063,6 +8089,13 @@ app.get('/api/admin/member', async (req, res) => {
         isBannedEmail = true
         bannedReason = br[0].reason || null
         bannedAt = br[0].banned_at || null
+        bannedById = br[0].banned_by || null
+        if (bannedById) {
+          try {
+            const bn = await sql`select display_name from public.profiles where id = ${bannedById} limit 1`
+            bannedByName = bn?.[0]?.display_name || null
+          } catch { }
+        }
       }
     } catch { }
     try {
@@ -8072,6 +8105,34 @@ app.get('/api/admin/member', async (req, res) => {
         where user_id = ${user.id} or lower(email) = ${email ? email : (user.email ? user.email.toLowerCase() : '')}
       `
       bannedIps = Array.isArray(bi) ? bi.map(r => String(r.ip)).filter(Boolean) : []
+    } catch { }
+    try {
+      const fileRows = await sql`
+        select gpi.id,
+               gpi.image_url,
+               gpi.caption,
+               gpi.uploaded_at,
+               gp.id as garden_plant_id,
+               p.name as plant_name,
+               p.admin_commentary
+        from public.garden_plant_images gpi
+        left join public.garden_plants gp on gp.id = gpi.garden_plant_id
+        left join public.plants p on p.id = gp.plant_id
+        where gpi.uploaded_by = ${user.id}
+        order by gpi.uploaded_at desc
+        limit 25
+      `
+      userFiles = Array.isArray(fileRows)
+        ? fileRows.map((r) => ({
+            id: String(r.id),
+            imageUrl: r.image_url || null,
+            caption: r.caption || null,
+            uploadedAt: r.uploaded_at || null,
+            gardenPlantId: r.garden_plant_id || null,
+            plantName: r.plant_name || null,
+            adminCommentary: r.admin_commentary || null,
+          }))
+        : []
     } catch { }
     // Aggregates (SQL path)
     let topReferrers = []
@@ -8135,6 +8196,7 @@ app.get('/api/admin/member', async (req, res) => {
       const adminName = null
       if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || qLower || null}, ${sql.json({ via: 'db' })})`
     } catch { }
+    const currentThreatLevel = typeof threatLevel === 'number' ? threatLevel : (typeof profile?.threat_level === 'number' ? profile.threat_level : null)
     res.json({
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at, email_confirmed_at: user.email_confirmed_at || null, last_sign_in_at: user.last_sign_in_at || null },
@@ -8150,7 +8212,11 @@ app.get('/api/admin/member', async (req, res) => {
       isBannedEmail,
       bannedReason,
       bannedAt,
+      bannedById,
+      bannedByName,
       bannedIps,
+      threatLevel: currentThreatLevel,
+      files: userFiles,
       topReferrers: topReferrers.slice(0, 5),
       topCountries: topCountries.slice(0, 5),
       topDevices: topDevices.slice(0, 5),
@@ -9578,6 +9644,150 @@ app.post('/api/admin/ban', async (req, res) => {
     res.json({ ok: true, userId: userId || null, email, ipCount: ips.length, bannedAt: new Date().toISOString() })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to ban user' })
+  }
+})
+
+// Admin: set user threat level (records bans and triggers ban email when level is 3)
+app.post('/api/admin/threat-level', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const { userId, threatLevel, reason } = req.body || {}
+    const uid = typeof userId === 'string' ? userId.trim() : ''
+    const level = Number.isFinite(Number(threatLevel)) ? Number(threatLevel) : NaN
+    if (!uid || !Number.isInteger(level) || level < 0 || level > 3) {
+      res.status(400).json({ error: 'Invalid userId or threatLevel' })
+      return
+    }
+
+    let existingLevel = null
+    let userEmail = null
+    let userDisplayName = null
+    let userLanguage = 'en'
+    try {
+      const rows = await sql`
+        select p.threat_level, p.display_name, coalesce(p.language, 'en') as language, u.email
+        from public.profiles p
+        left join auth.users u on u.id = p.id
+        where p.id = ${uid}
+        limit 1
+      `
+      if (!rows || !rows.length) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      existingLevel = rows[0].threat_level
+      userEmail = rows[0].email || null
+      userDisplayName = rows[0].display_name || rows[0].email || 'User'
+      userLanguage = rows[0].language || 'en'
+    } catch (lookupErr) {
+      console.error('[threat-level] failed to load user', lookupErr)
+      res.status(500).json({ error: 'Failed to load user' })
+      return
+    }
+
+    try {
+      await sql`update public.profiles set threat_level = ${level} where id = ${uid}`
+    } catch (err) {
+      console.error('[threat-level] failed to update level', err)
+      res.status(500).json({ error: 'Failed to update threat level' })
+      return
+    }
+
+    let bannedIps = []
+    let bannedAt = null
+    let bannedByName = null
+    let emailResult = null
+
+    if (level === 3) {
+      try {
+        const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [uid])
+        bannedIps = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
+      } catch { }
+
+      try {
+        const adminNameRows = await sql`select display_name from public.profiles where id = ${adminUserId} limit 1`
+        bannedByName = adminNameRows?.[0]?.display_name || null
+      } catch { }
+
+      const normalizedEmail = userEmail ? userEmail.toLowerCase() : null
+      try {
+        const existingBan = await sql`
+          select id from public.banned_accounts
+          where (user_id = ${uid} or lower(email) = ${normalizedEmail || null})
+          order by banned_at desc
+          limit 1
+        `
+        if (existingBan && existingBan[0]) {
+          const updateRows = await sql`
+            update public.banned_accounts
+            set banned_by = ${adminUserId},
+                reason = coalesce(${reason || null}, reason),
+                ip_addresses = ${sql.array(bannedIps, 'text')},
+                banned_at = now()
+            where id = ${existingBan[0].id}
+            returning banned_at
+          `
+          bannedAt = updateRows?.[0]?.banned_at || null
+        } else {
+          const insertRows = await sql`
+            insert into public.banned_accounts (user_id, email, ip_addresses, reason, banned_by)
+            values (${uid}, ${normalizedEmail}, ${sql.array(bannedIps, 'text')}, ${reason || null}, ${adminUserId})
+            returning banned_at
+          `
+          bannedAt = insertRows?.[0]?.banned_at || null
+        }
+      } catch (banErr) {
+        console.warn('[threat-level] failed to persist banned_accounts record', banErr)
+      }
+
+      for (const ip of bannedIps) {
+        try {
+          await sql`
+            insert into public.banned_ips (ip_address, reason, banned_by, user_id, email)
+            values (${ip}::inet, ${reason || null}, ${adminUserId}, ${uid}, ${normalizedEmail})
+            on conflict (ip_address) do update set
+              reason = coalesce(excluded.reason, public.banned_ips.reason),
+              banned_by = coalesce(excluded.banned_by, public.banned_ips.banned_by),
+              banned_at = excluded.banned_at,
+              user_id = coalesce(excluded.user_id, public.banned_ips.user_id),
+              email = coalesce(excluded.email, public.banned_ips.email)
+          `
+        } catch (ipErr) {
+          console.warn('[threat-level] failed to upsert banned_ip', ipErr)
+        }
+      }
+
+      if (existingLevel !== 3 && normalizedEmail) {
+        emailResult = await sendAutomaticEmail('BAN_USER', {
+          userId: uid,
+          userEmail: normalizedEmail,
+          userDisplayName,
+          userLanguage,
+        })
+      }
+    }
+
+    try {
+      await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUserId}, 'set_threat_level', ${uid}, ${sql.json({ previous: existingLevel, level, reason })})`
+    } catch { }
+
+    res.json({
+      ok: true,
+      threatLevel: level,
+      previousLevel: existingLevel,
+      bannedIps,
+      bannedAt,
+      bannedById: level === 3 ? adminUserId : null,
+      bannedByName: level === 3 ? bannedByName : null,
+      email: emailResult,
+    })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to update threat level' })
   }
 })
 
@@ -18665,4 +18875,3 @@ if (shouldListen) {
 
 // Export app for testing and tooling
 export { app }
-

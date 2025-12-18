@@ -36,6 +36,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   })
   const [loading, setLoading] = React.useState(true)
 
+  const clearCachedAuth = React.useCallback(() => {
+    try {
+      localStorage.removeItem('plantswipe.auth')
+      localStorage.removeItem('plantswipe.profile')
+    } catch {}
+  }, [])
+
+  const forceSignOut = React.useCallback(async () => {
+    clearCachedAuth()
+    setUser(null)
+    setProfile(null)
+    await supabase.auth.signOut()
+  }, [clearCachedAuth])
+
   const loadSession = React.useCallback(async () => {
     const { data } = await supabase.auth.getSession()
     const s = data.session
@@ -59,12 +73,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!error) {
       // Check if user is banned (threat_level === 3)
       if (data?.threat_level === 3) {
-        // User is banned - sign them out
         console.warn('[auth] User is banned, signing out')
-        await supabase.auth.signOut()
-        setUser(null)
-        setProfile(null)
-        try { localStorage.removeItem('plantswipe.profile') } catch {}
+        await forceSignOut()
         return
       }
       
@@ -125,7 +135,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try { applyAccentByKey((data as any).accent_key) } catch {}
       }
     }
-  }, [])
+  }, [forceSignOut])
+
+  // Immediately sign out if a cached profile shows a ban
+  React.useEffect(() => {
+    if (profile?.threat_level === 3) {
+      forceSignOut().catch(() => {})
+    }
+  }, [forceSignOut, profile?.threat_level])
 
   React.useEffect(() => {
     ;(async () => {
@@ -272,8 +289,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!rpcErr && data) loginEmail = String(data)
       } catch {}
     }
-    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
     if (error) return { error: error.message }
+
+    // Immediately validate threat level after login to prevent banned users from staying signed in
+    const uid = signInData.user?.id || (await supabase.auth.getUser()).data.user?.id
+    if (uid) {
+      try {
+        const { data: threatRow } = await supabase
+          .from('profiles')
+          .select('threat_level')
+          .eq('id', uid)
+          .maybeSingle()
+        if (threatRow?.threat_level === 3) {
+          await forceSignOut()
+          return { error: 'Your account has been banned.' }
+        }
+      } catch {}
+    }
+
     // Fetch profile in background; do not block sign-in completion
     refreshProfile().catch(() => {})
     return {}
@@ -281,10 +315,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut: AuthContextValue['signOut'] = async () => {
     // Optimistically clear local state and storage to ensure UI updates immediately
-    try {
-      localStorage.removeItem('plantswipe.auth')
-      localStorage.removeItem('plantswipe.profile')
-    } catch {}
+    clearCachedAuth()
     setProfile(null)
     setUser(null)
     await supabase.auth.signOut()
@@ -351,5 +382,4 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
 }
-
 

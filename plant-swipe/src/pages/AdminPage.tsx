@@ -68,6 +68,9 @@ import {
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
+import { cn } from "@/lib/utils";
+import { setUserThreatLevel } from "@/lib/moderation";
+import { type ThreatLevel } from "@/types/moderation";
 import {
   loadPersistedBroadcast,
   savePersistedBroadcast,
@@ -133,6 +136,29 @@ type RoleStats = {
 };
 
 const MEMBER_LIST_PAGE_SIZE = 20;
+
+const THREAT_LEVEL_META: Record<number, { label: string; badge: string; text: string }> = {
+  0: {
+    label: "Sage",
+    badge: "bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800",
+    text: "User is in good standing.",
+  },
+  1: {
+    label: "Sus",
+    badge: "bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800",
+    text: "Review behavior closely.",
+  },
+  2: {
+    label: "Danger",
+    badge: "bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800",
+    text: "High risk – monitor or restrict.",
+  },
+  3: {
+    label: "Ban",
+    badge: "bg-black text-white border border-black/60 dark:bg-black dark:text-white",
+    text: "User is banned from the platform.",
+  },
+};
 
 type RequestViewMode = "requests" | "plants";
 type NormalizedPlantStatus =
@@ -3517,6 +3543,7 @@ export const AdminPage: React.FC = () => {
     user: { id: string; email: string; created_at?: string } | null;
     profile: any;
     ips: string[];
+    threatLevel?: number | null;
     lastOnlineAt?: string | null;
     lastIp?: string | null;
     visitsCount?: number;
@@ -3525,6 +3552,8 @@ export const AdminPage: React.FC = () => {
     isBannedEmail?: boolean;
     bannedReason?: string | null;
     bannedAt?: string | null;
+    bannedById?: string | null;
+    bannedByName?: string | null;
     bannedIps?: string[];
     topReferrers?: Array<{ source: string; visits: number }>;
     topCountries?: Array<{ country: string; visits: number }>;
@@ -3537,6 +3566,15 @@ export const AdminPage: React.FC = () => {
       message: string;
       created_at: string | null;
     }>;
+    files?: Array<{
+      id: string;
+      imageUrl: string | null;
+      caption: string | null;
+      uploadedAt: string | null;
+      gardenPlantId: string | null;
+      plantName: string | null;
+      adminCommentary: string | null;
+    }>;
   } | null>(null);
   const [banReason, setBanReason] = React.useState("");
   const [banSubmitting, setBanSubmitting] = React.useState(false);
@@ -3545,6 +3583,16 @@ export const AdminPage: React.FC = () => {
   const [promoteSubmitting, setPromoteSubmitting] = React.useState(false);
   const [demoteOpen, setDemoteOpen] = React.useState(false);
   const [demoteSubmitting, setDemoteSubmitting] = React.useState(false);
+  const [threatLevelSelection, setThreatLevelSelection] = React.useState<number>(0);
+  const [threatLevelUpdating, setThreatLevelUpdating] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof memberData?.threatLevel === "number") {
+      setThreatLevelSelection(memberData.threatLevel);
+    } else {
+      setThreatLevelSelection(0);
+    }
+  }, [memberData?.threatLevel]);
 
   // Roles management state
   const [memberRoles, setMemberRoles] = React.useState<UserRole[]>([]);
@@ -3867,6 +3915,12 @@ export const AdminPage: React.FC = () => {
           user: data?.user || null,
           profile: data?.profile || null,
           ips: Array.isArray(data?.ips) ? data.ips : [],
+          threatLevel:
+            typeof data?.threatLevel === "number"
+              ? data.threatLevel
+              : typeof data?.profile?.threat_level === "number"
+                ? data.profile.threat_level
+                : null,
           lastOnlineAt: data?.lastOnlineAt ?? null,
           lastIp: data?.lastIp ?? null,
           visitsCount:
@@ -3884,6 +3938,8 @@ export const AdminPage: React.FC = () => {
           isBannedEmail: !!data?.isBannedEmail,
           bannedReason: data?.bannedReason ?? null,
           bannedAt: data?.bannedAt ?? null,
+          bannedById: data?.bannedById ?? null,
+          bannedByName: data?.bannedByName ?? null,
           bannedIps: Array.isArray(data?.bannedIps) ? data.bannedIps : [],
           topReferrers: Array.isArray(data?.topReferrers)
             ? data.topReferrers
@@ -3901,6 +3957,17 @@ export const AdminPage: React.FC = () => {
                 admin_name: n?.admin_name || null,
                 message: String(n?.message || ""),
                 created_at: n?.created_at || null,
+              }))
+            : [],
+          files: Array.isArray(data?.files)
+            ? data.files.map((file: any) => ({
+                id: String(file.id),
+                imageUrl: file?.imageUrl || file?.image_url || null,
+                caption: file?.caption || null,
+                uploadedAt: file?.uploadedAt || file?.uploaded_at || null,
+                gardenPlantId: file?.gardenPlantId || file?.garden_plant_id || null,
+                plantName: file?.plantName || file?.plant_name || null,
+                adminCommentary: file?.adminCommentary || file?.admin_commentary || null,
               }))
             : [],
         });
@@ -3969,6 +4036,45 @@ export const AdminPage: React.FC = () => {
     },
     [lookupEmail, memberLoading, safeJson],
   );
+
+  const handleSetThreatLevel = React.useCallback(async () => {
+    if (!memberData?.user?.id) return;
+    setThreatLevelUpdating(true);
+    setMemberError(null);
+    try {
+      const result = await setUserThreatLevel(
+        memberData.user.id,
+        threatLevelSelection as ThreatLevel,
+      );
+      setMemberData((prev) => {
+        if (!prev) return prev;
+        const updatedLevel =
+          typeof result?.threatLevel === "number"
+            ? result.threatLevel
+            : threatLevelSelection;
+        return {
+          ...prev,
+          threatLevel: updatedLevel,
+          profile: {
+            ...(prev.profile || {}),
+            threat_level: updatedLevel,
+          },
+          bannedAt: result?.bannedAt ?? prev.bannedAt ?? null,
+          bannedIps: Array.isArray(result?.bannedIps)
+            ? result.bannedIps
+            : prev.bannedIps,
+          bannedById: result?.bannedById ?? prev.bannedById ?? null,
+          bannedByName: result?.bannedByName ?? prev.bannedByName ?? null,
+        };
+      });
+      await lookupMember(memberData.user.id);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setMemberError(msg || "Failed to update threat level");
+    } finally {
+      setThreatLevelUpdating(false);
+    }
+  }, [lookupMember, memberData?.user?.id, threatLevelSelection]);
 
   const lookupByIp = React.useCallback(
     async (overrideIp?: string) => {
@@ -7488,18 +7594,39 @@ export const AdminPage: React.FC = () => {
                                       </div>
                                       <div className="flex flex-wrap gap-1 mt-1">
                                         {/* Role Badges */}
-                                        {memberRoles.map((role) => (
-                                          <UserRoleBadge
-                                            key={role}
-                                            role={role}
-                                            size="sm"
-                                            showLabel
-                                          />
-                                        ))}
-                                        {memberData.isBannedEmail && (
-                                          <Badge
-                                            variant="destructive"
-                                            className="rounded-full px-2 py-0.5"
+                                      {memberRoles.map((role) => (
+                                        <UserRoleBadge
+                                          key={role}
+                                          role={role}
+                                          size="sm"
+                                          showLabel
+                                        />
+                                      ))}
+                                      {(() => {
+                                        const level =
+                                          typeof memberData.threatLevel ===
+                                          "number"
+                                            ? memberData.threatLevel
+                                            : 0;
+                                        const meta =
+                                          THREAT_LEVEL_META[level] ||
+                                          THREAT_LEVEL_META[0];
+                                        return (
+                                          <span
+                                            className={cn(
+                                              "rounded-full px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1",
+                                              meta.badge,
+                                            )}
+                                          >
+                                            <Shield className="h-3 w-3" />
+                                            Lvl {level} - {meta.label}
+                                          </span>
+                                        );
+                                      })()}
+                                      {memberData.isBannedEmail && (
+                                        <Badge
+                                          variant="destructive"
+                                          className="rounded-full px-2 py-0.5"
                                           >
                                             Banned
                                           </Badge>
@@ -7731,6 +7858,87 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               );
                             })()}
+
+                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 space-y-2">
+                              {(() => {
+                                const level =
+                                  typeof threatLevelSelection === "number"
+                                    ? threatLevelSelection
+                                    : 0;
+                                const meta =
+                                  THREAT_LEVEL_META[level] ||
+                                  THREAT_LEVEL_META[0];
+                                return (
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <div className="text-sm font-semibold">
+                                        Threat level
+                                      </div>
+                                      <div className="text-xs text-stone-500 dark:text-stone-400">
+                                        {meta.text}
+                                      </div>
+                                      {memberData.threatLevel === 3 &&
+                                        (memberData.bannedByName ||
+                                          memberData.bannedAt) && (
+                                          <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                                            Banned by{" "}
+                                            {memberData.bannedByName ||
+                                              "admin"}
+                                            {memberData.bannedAt
+                                              ? ` on ${new Date(
+                                                  memberData.bannedAt,
+                                                ).toLocaleString()}`
+                                              : ""}
+                                          </div>
+                                        )}
+                                    </div>
+                                    <span
+                                      className={cn(
+                                        "rounded-full px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1 h-fit",
+                                        meta.badge,
+                                      )}
+                                    >
+                                      Lvl {level} - {meta.label}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <select
+                                  value={threatLevelSelection}
+                                  onChange={(e) =>
+                                    setThreatLevelSelection(
+                                      Number(e.target.value),
+                                    )
+                                  }
+                                  className="h-10 rounded-lg border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] px-3 text-sm"
+                                >
+                                  {[0, 1, 2, 3].map((lvl) => (
+                                    <option key={lvl} value={lvl}>
+                                      Lvl {lvl} - {THREAT_LEVEL_META[lvl].label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  onClick={async () => {
+                                    await handleSetThreatLevel();
+                                  }}
+                                  disabled={
+                                    threatLevelUpdating || !memberData?.user?.id
+                                  }
+                                  className="rounded-xl"
+                                >
+                                  {threatLevelUpdating ? (
+                                    <>
+                                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                      Updating...
+                                    </>
+                                  ) : (
+                                    "Update level"
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
 
                             {/* Roles Management Section - Redesigned */}
                             <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e]">
@@ -8315,6 +8523,75 @@ export const AdminPage: React.FC = () => {
                                     );
                                   })()
                                 )}
+                            </CardContent>
+                          </Card>
+
+                            <Card className="rounded-2xl">
+                              <CardContent className="p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="text-sm font-medium">User files</div>
+                                  <span className="text-xs text-stone-500">
+                                    {(memberData.files || []).length} total
+                                  </span>
+                                </div>
+                                {(!memberData.files || memberData.files.length === 0) && (
+                                  <div className="text-sm opacity-60">
+                                    No files uploaded by this user yet.
+                                  </div>
+                                )}
+                                {memberData.files && memberData.files.length > 0 && (
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    {memberData.files.slice(0, 6).map((file) => {
+                                      const uploaded = file.uploadedAt
+                                        ? new Date(file.uploadedAt).toLocaleString()
+                                        : null;
+                                      return (
+                                        <div
+                                          key={file.id}
+                                          className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 bg-stone-50 dark:bg-[#1b1b1d] space-y-1.5"
+                                        >
+                                          <div className="flex items-center justify-between gap-2">
+                                            <div className="text-sm font-semibold truncate">
+                                              {file.plantName || "File"}
+                                            </div>
+                                            {file.adminCommentary && (
+                                              <Badge
+                                                variant="outline"
+                                                className="rounded-full text-[11px] px-2 py-0.5"
+                                              >
+                                                Admin comment
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          {file.caption && (
+                                            <div className="text-xs text-stone-600 dark:text-stone-300 line-clamp-2">
+                                              {file.caption}
+                                            </div>
+                                          )}
+                                          <div className="text-[11px] text-stone-500 dark:text-stone-400">
+                                            Uploaded {uploaded || "-"}
+                                          </div>
+                                          {file.adminCommentary && (
+                                            <div className="text-xs text-stone-700 dark:text-stone-200 bg-white dark:bg-[#252526] border border-stone-200 dark:border-[#3e3e42] rounded-lg p-2">
+                                              {file.adminCommentary}
+                                            </div>
+                                          )}
+                                          {file.imageUrl && (
+                                            <a
+                                              href={file.imageUrl}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
+                                            >
+                                              <ExternalLink className="h-3.5 w-3.5" />
+                                              Open file
+                                            </a>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </CardContent>
                             </Card>
 
@@ -8360,11 +8637,16 @@ export const AdminPage: React.FC = () => {
                                   <div className="text-sm mt-1">
                                     Email banned{" "}
                                     {memberData.bannedAt
-                                      ? `on ? ${new Date(memberData.bannedAt).toLocaleString()}`
+                                      ? `on ${new Date(memberData.bannedAt).toLocaleString()}`
                                       : ""}
                                     {memberData.bannedReason
-                                      ? ` ? ? ${memberData.bannedReason}`
+                                      ? ` — ${memberData.bannedReason}`
                                       : ""}
+                                  </div>
+                                )}
+                                {memberData.bannedByName && (
+                                  <div className="text-xs text-stone-700 dark:text-stone-300 mt-1">
+                                    Banned by {memberData.bannedByName}
                                   </div>
                                 )}
                                 {memberData.bannedIps &&
@@ -9732,4 +10014,3 @@ function NoteRow({
     </div>
   );
 }
-

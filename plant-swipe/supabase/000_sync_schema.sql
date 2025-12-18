@@ -4282,7 +4282,8 @@ create table if not exists public.admin_email_triggers (
 -- Insert default trigger types
 insert into public.admin_email_triggers (trigger_type, display_name, description, is_enabled)
 values 
-  ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false)
+  ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false),
+  ('BAN_USER', 'User Ban Notification', 'Sent when a user is marked as threat level 3 (ban)', false)
 on conflict (trigger_type) do nothing;
 
 alter table public.admin_email_triggers enable row level security;
