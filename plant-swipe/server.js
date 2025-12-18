@@ -10818,7 +10818,7 @@ async function getActiveBroadcastRow() {
       const row = Array.isArray(rows) && rows[0] ? rows[0] : null
       if (row && row.created_by) {
         try {
-          const p = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+          const p = await sql`select coalesce(display_name, username, '') as name from public.profiles where id = ${row.created_by} limit 1`
           if (p && p[0]) row.admin_name = p[0].name
         } catch { /* ignore profile fetch error */ }
       }
@@ -14785,7 +14785,7 @@ app.post('/api/admin/broadcast', async (req, res) => {
     let adminName = null
     if (row?.created_by && sql) {
       try {
-        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        const nameRows = await sql`select coalesce(display_name, username, '') as name from public.profiles where id = ${row.created_by} limit 1`
         adminName = nameRows?.[0]?.name || null
       } catch { }
     }
@@ -14851,7 +14851,7 @@ app.put('/api/admin/broadcast', async (req, res) => {
     let adminName = null
     if (row?.created_by && sql) {
       try {
-        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        const nameRows = await sql`select coalesce(display_name, username, '') as name from public.profiles where id = ${row.created_by} limit 1`
         adminName = nameRows?.[0]?.name || null
       } catch { }
     }
@@ -15730,7 +15730,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
   for (const chunk of chunks) {
     // Fetch user display names, language preferences, and timezones for this chunk
     const userProfiles = await sql`
-      select id::text as id, display_name, username, email, timezone
+      select id::text as id, display_name, username, timezone
       from public.profiles
       where id = any(${sql.array(chunk)}::uuid[])
     `
@@ -15740,7 +15740,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
 
     // Get display names and timezones
     for (const profile of userProfiles || []) {
-      const displayName = profile.display_name || profile.username || profile.email || 'User'
+      const displayName = profile.display_name || profile.username || 'User'
       userDisplayNames.set(profile.id, displayName)
       if (profile.timezone) {
         userTimezones.set(profile.id, String(profile.timezone))
@@ -16119,6 +16119,7 @@ async function processDueNotificationCampaigns() {
 
   // First, recover any campaigns stuck in 'processing' for more than 5 minutes
   try {
+    const resetAt = new Date().toISOString()
     const stuckCampaigns = await sql`
       update public.notification_campaigns
       set state = case 
@@ -16128,7 +16129,7 @@ async function processDueNotificationCampaigns() {
           end,
           last_run_summary = jsonb_build_object(
             'error', 'Campaign was stuck in processing state and has been reset',
-            'resetAt', ${new Date().toISOString()}
+            'resetAt', ${resetAt}::text
           ),
           updated_at = now()
       where deleted_at is null
