@@ -40,8 +40,6 @@ export default defineConfig({
       filename: 'sw.ts',
       includeAssets: [
         'env-loader.js',
-        'env.js',
-        'api/env.js',
         'icons/plant-swipe-icon.svg',
         'icons/plant-swipe-icon-outline.svg',
         'icons/icon-192x192.png',
@@ -82,7 +80,9 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff,woff2,ttf}'],
-        globIgnores: ['**/*.map', '**/node_modules/**'],
+        // Never precache runtime env endpoints; they must come from the active host
+        // (often dynamic) rather than a baked fallback bundled at build time.
+        globIgnores: ['**/*.map', '**/node_modules/**', '**/env.js', '**/api/env.js'],
       },
       devOptions: {
         enabled: process.env.VITE_ENABLE_PWA === 'true',
