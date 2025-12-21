@@ -9,10 +9,6 @@ export const plantSchema = {
   description: 'longtext',
   identity: {
     name: 'text',
-    plant_type: 'enum',
-    utility: 'enum[]',
-    comestible_part: 'enum[]',
-    fruit_type: 'enum[]',
     given_names: 'tag[]',
     scientific_name: 'text',
     family: 'text',

@@ -111,6 +111,14 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       type IdentityComposition = NonNullable<NonNullable<Plant['identity']>['composition']>
       const payload = { ...(data as Record<string, unknown>) }
       delete (payload as any).colors
+      // Remove fields that belong at the top level, not in identity
+      delete (payload as any).plant_type
+      delete (payload as any).plantType
+      delete (payload as any).utility
+      delete (payload as any).comestible_part
+      delete (payload as any).comestiblePart
+      delete (payload as any).fruit_type
+      delete (payload as any).fruitType
       if ('composition' in payload) {
         const normalizedComposition = expandCompositionFromDb(
           payload.composition as string[] | null | undefined,
