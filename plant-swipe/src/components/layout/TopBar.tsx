@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -31,7 +31,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPosition, setMenuPosition] = React.useState<{ top: number; right: number } | null>(null)
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "topbar" })
-  const { totalCount, friendRequests, gardenInvites, refresh: refreshNotifications } = useNotifications(user?.id ?? null, { channelKey: "topbar" })
+  const { totalCount, counts, friendRequests, gardenInvites, refresh: refreshNotifications } = useNotifications(user?.id ?? null, { channelKey: "topbar" })
 
   const recomputeMenuPosition = React.useCallback(() => {
     const anchor = anchorRef.current
@@ -132,6 +132,26 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
           </>
         ) : (
           <div className="flex items-center gap-2">
+            {/* Messages Button */}
+            <div className="relative">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="rounded-2xl h-9 w-9"
+                onClick={() => navigate('/messages')}
+                aria-label={t('common.messages', { defaultValue: 'Messages' })}
+              >
+                <MessageCircle className="h-4 w-4" />
+              </Button>
+              {counts.unreadMessages > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-blue-500 text-white text-[10px] font-medium flex items-center justify-center ring-2 ring-white dark:ring-[#252526]"
+                  aria-hidden="true"
+                >
+                  {counts.unreadMessages > 99 ? '99+' : counts.unreadMessages}
+                </span>
+              )}
+            </div>
             <NotificationBell
               totalCount={totalCount}
               friendRequests={friendRequests}
@@ -161,6 +181,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                   </button>
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                     <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
+                  </button>
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/messages') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                    <MessageCircle className="h-4 w-4" /> {t('common.messages', { defaultValue: 'Messages' })}
                   </button>
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                     <Settings className="h-4 w-4" /> {t('common.settings')}

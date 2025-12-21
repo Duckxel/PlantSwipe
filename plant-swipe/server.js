@@ -15432,7 +15432,7 @@ app.post('/api/push/instant', async (req, res) => {
   }
   
   // Validate notification type
-  const validTypes = ['friend_request', 'garden_invite', 'friend_request_accepted', 'garden_invite_accepted']
+  const validTypes = ['friend_request', 'garden_invite', 'friend_request_accepted', 'garden_invite_accepted', 'new_message']
   if (!validTypes.includes(type)) {
     res.status(400).json({ error: `Invalid notification type. Must be one of: ${validTypes.join(', ')}` })
     return

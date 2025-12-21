@@ -10,6 +10,7 @@ import {
   getNotificationCounts,
   getPendingGardenInvites
 } from '@/lib/notifications'
+import { getUnreadMessageCount } from '@/lib/messaging'
 import type { GardenInvite, NotificationCounts } from '@/types/notification'
 
 type FriendRequest = {
@@ -75,7 +76,8 @@ export function useNotifications(
     total: 0,
     unread: 0,
     friendRequests: 0,
-    gardenInvites: 0
+    gardenInvites: 0,
+    unreadMessages: 0
   })
   const [friendRequests, setFriendRequests] = React.useState<FriendRequest[]>([])
   const [gardenInvites, setGardenInvites] = React.useState<GardenInvite[]>([])
@@ -87,7 +89,7 @@ export function useNotifications(
 
   const refresh = React.useCallback(async () => {
     if (!userId) {
-      setCounts({ total: 0, unread: 0, friendRequests: 0, gardenInvites: 0 })
+      setCounts({ total: 0, unread: 0, friendRequests: 0, gardenInvites: 0, unreadMessages: 0 })
       setFriendRequests([])
       setGardenInvites([])
       setLoading(false)
@@ -103,15 +105,23 @@ export function useNotifications(
 
     try {
       // Fetch all data in parallel
-      const [countsData, friendRequestsData, gardenInvitesData] = await Promise.all([
+      const [countsData, friendRequestsData, gardenInvitesData, unreadMsgCount] = await Promise.all([
         getNotificationCounts(userId),
         loadFriendRequests(userId),
-        getPendingGardenInvites(userId).catch(() => [])
+        getPendingGardenInvites(userId).catch(() => []),
+        getUnreadMessageCount().catch(() => 0)
       ])
 
       if (!mountedRef.current) return
 
-      setCounts(countsData)
+      // Merge message count into countsData
+      const mergedCounts = {
+        ...countsData,
+        unreadMessages: unreadMsgCount,
+        total: countsData.total + unreadMsgCount
+      }
+
+      setCounts(mergedCounts)
       setFriendRequests(friendRequestsData)
       setGardenInvites(gardenInvitesData)
       setError(null)
@@ -195,6 +205,14 @@ export function useNotifications(
         schema: 'public',
         table: 'notifications',
         filter: `user_id=eq.${userId}`
+      }, () => {
+        refresh()
+      })
+      // Listen for new messages (via conversations that user is part of)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages'
       }, () => {
         refresh()
       })

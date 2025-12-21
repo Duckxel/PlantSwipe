@@ -138,11 +138,12 @@ export async function getNotificationCounts(userId: string): Promise<Notificatio
       total,
       unread: unreadCount || 0,
       friendRequests: friendRequestCount || 0,
-      gardenInvites: gardenInviteCount || 0
+      gardenInvites: gardenInviteCount || 0,
+      unreadMessages: 0 // Will be populated by useNotifications hook
     }
   } catch (error) {
     console.warn('[notifications] Failed to get counts:', error)
-    return { total: 0, unread: 0, friendRequests: 0, gardenInvites: 0 }
+    return { total: 0, unread: 0, friendRequests: 0, gardenInvites: 0, unreadMessages: 0 }
   }
 }
 
