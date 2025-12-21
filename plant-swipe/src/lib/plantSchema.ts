@@ -1,7 +1,10 @@
 // Structured schema definition used for AI fill requests.
 // This mirrors the columnar plant model (no legacy JSON) with categories and fields.
 export const plantSchema = {
-  plantType: 'enum',
+  plantType: {
+    type: 'enum',
+    options: ['plant', 'flower', 'bamboo', 'shrub', 'tree', 'cactus', 'succulent'],
+  },
   utility: 'enum[]',
   comestiblePart: 'enum[]',
   fruitType: 'enum[]',

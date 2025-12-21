@@ -77,7 +77,15 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       return { ...next, id: typeof data === 'string' ? data : next.id }
     case 'plantType': {
       const result = normalizeEnumValueInput(plantTypeEnum as EnumTools, data)
-      if (!result.shouldUpdate) return next
+      if (!result.shouldUpdate) {
+        // If AI returned an unrecognized value but data was provided, default to 'plant'
+        // This prevents database constraint violations when an unrecognized type is returned
+        if (data !== undefined && data !== null && typeof data === 'string' && data.trim()) {
+          console.warn(`[applyAiField] Unrecognized plantType "${data}", defaulting to "plant"`)
+          return { ...next, plantType: 'plant' }
+        }
+        return next
+      }
       return { ...next, plantType: result.value as Plant['plantType'] | undefined }
     }
     case 'utility': {
