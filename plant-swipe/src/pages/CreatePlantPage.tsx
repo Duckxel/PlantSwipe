@@ -1165,7 +1165,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
-        const normalizedPlantType = plantTypeEnum.toDb(plantToSave.plantType)
+        // Normalize plantType - if toDb returns null but plantType has a value, default to 'plant'
+        // This prevents constraint violations when AI returns unrecognized plant types
+        let normalizedPlantType = plantTypeEnum.toDb(plantToSave.plantType)
+        if (normalizedPlantType === null && plantToSave.plantType && typeof plantToSave.plantType === 'string' && plantToSave.plantType.trim()) {
+          console.warn(`[savePlant] Unrecognized plantType "${plantToSave.plantType}", defaulting to "plant"`)
+          normalizedPlantType = 'plant'
+        }
         const normalizedUtility = utilityEnum.toDbArray(plantToSave.utility)
         const normalizedComestible = comestiblePartEnum.toDbArray(plantToSave.comestiblePart)
         const normalizedFruit = fruitTypeEnum.toDbArray(plantToSave.fruitType)
