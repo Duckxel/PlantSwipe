@@ -198,13 +198,13 @@ function createEnumTools(configs: readonly EnumConfig[]): EnumTools {
 }
 
 export const plantTypeEnum = createEnumTools([
-  { dbValue: 'plant', uiValue: 'plant' },
-  { dbValue: 'flower', uiValue: 'flower' },
-  { dbValue: 'bamboo', uiValue: 'bamboo' },
-  { dbValue: 'shrub', uiValue: 'shrub' },
-  { dbValue: 'tree', uiValue: 'tree' },
-  { dbValue: 'cactus', uiValue: 'cactus' },
-  { dbValue: 'succulent', uiValue: 'succulent' },
+  { dbValue: 'plant', uiValue: 'plant', aliases: ['herb', 'grass', 'fern', 'vine', 'bulb', 'perennial', 'annual', 'herbaceous', 'foliage', 'groundcover', 'ground cover', 'climber', 'creeper', 'aquatic'] },
+  { dbValue: 'flower', uiValue: 'flower', aliases: ['flowering plant', 'flowering', 'blooming'] },
+  { dbValue: 'bamboo', uiValue: 'bamboo', aliases: ['bamboos'] },
+  { dbValue: 'shrub', uiValue: 'shrub', aliases: ['bush', 'bushes', 'shrubs', 'subshrub', 'sub-shrub'] },
+  { dbValue: 'tree', uiValue: 'tree', aliases: ['trees', 'palm', 'palms', 'conifer', 'conifers', 'evergreen', 'deciduous'] },
+  { dbValue: 'cactus', uiValue: 'cactus', aliases: ['cacti', 'cactuses'] },
+  { dbValue: 'succulent', uiValue: 'succulent', aliases: ['succulents'] },
 ])
 
 export const utilityEnum = createEnumTools([
