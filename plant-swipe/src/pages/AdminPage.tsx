@@ -65,6 +65,13 @@ import {
   Pencil,
   Shield,
   Store,
+  ShieldAlert,
+  Ban,
+  Eye,
+  X,
+  Image,
+  ZoomIn,
+  CircleCheck,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -137,26 +144,45 @@ type RoleStats = {
 
 const MEMBER_LIST_PAGE_SIZE = 20;
 
-const THREAT_LEVEL_META: Record<number, { label: string; badge: string; text: string }> = {
+const THREAT_LEVEL_META: Record<number, { 
+  label: string; 
+  badge: string; 
+  text: string;
+  cardBg: string;
+  cardBorder: string;
+  iconColor: string;
+}> = {
   0: {
-    label: "Sage",
+    label: "Safe",
     badge: "bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800",
-    text: "User is in good standing.",
+    text: "User is in good standing with no incidents.",
+    cardBg: "bg-emerald-50 dark:bg-emerald-950/30",
+    cardBorder: "border-emerald-300 dark:border-emerald-700",
+    iconColor: "text-emerald-600 dark:text-emerald-400",
   },
   1: {
-    label: "Sus",
+    label: "Suspicious",
     badge: "bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800",
-    text: "Review behavior closely.",
+    text: "User has had minor incidents. Monitor activity.",
+    cardBg: "bg-amber-50 dark:bg-amber-950/30",
+    cardBorder: "border-amber-300 dark:border-amber-700",
+    iconColor: "text-amber-600 dark:text-amber-400",
   },
   2: {
     label: "Danger",
     badge: "bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800",
-    text: "High risk – monitor or restrict.",
+    text: "High risk user with multiple incidents. Consider restrictions.",
+    cardBg: "bg-red-50 dark:bg-red-950/30",
+    cardBorder: "border-red-300 dark:border-red-700",
+    iconColor: "text-red-600 dark:text-red-400",
   },
   3: {
-    label: "Ban",
+    label: "Banned",
     badge: "bg-black text-white border border-black/60 dark:bg-black dark:text-white",
-    text: "User is banned from the platform.",
+    text: "User is permanently banned from the platform.",
+    cardBg: "bg-stone-900 dark:bg-black",
+    cardBorder: "border-stone-800 dark:border-stone-700",
+    iconColor: "text-white",
   },
 };
 
@@ -3585,6 +3611,12 @@ export const AdminPage: React.FC = () => {
   const [demoteSubmitting, setDemoteSubmitting] = React.useState(false);
   const [threatLevelSelection, setThreatLevelSelection] = React.useState<number>(0);
   const [threatLevelUpdating, setThreatLevelUpdating] = React.useState(false);
+  const [threatLevelConfirmOpen, setThreatLevelConfirmOpen] = React.useState(false);
+  const [pendingThreatLevel, setPendingThreatLevel] = React.useState<number | null>(null);
+  
+  // Files viewer state
+  const [filesExpanded, setFilesExpanded] = React.useState(false);
+  const [selectedFileIndex, setSelectedFileIndex] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     if (typeof memberData?.threatLevel === "number") {
@@ -7859,86 +7891,201 @@ export const AdminPage: React.FC = () => {
                               );
                             })()}
 
-                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-3 space-y-2">
-                              {(() => {
-                                const level =
-                                  typeof threatLevelSelection === "number"
-                                    ? threatLevelSelection
-                                    : 0;
-                                const meta =
-                                  THREAT_LEVEL_META[level] ||
-                                  THREAT_LEVEL_META[0];
-                                return (
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                      <div className="text-sm font-semibold">
-                                        Threat level
-                                      </div>
-                                      <div className="text-xs text-stone-500 dark:text-stone-400">
-                                        {meta.text}
-                                      </div>
-                                      {memberData.threatLevel === 3 &&
-                                        (memberData.bannedByName ||
-                                          memberData.bannedAt) && (
-                                          <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                                            Banned by{" "}
-                                            {memberData.bannedByName ||
-                                              "admin"}
-                                            {memberData.bannedAt
-                                              ? ` on ${new Date(
-                                                  memberData.bannedAt,
-                                                ).toLocaleString()}`
-                                              : ""}
+                            {/* Threat Level Section - Improved UI */}
+                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden">
+                              {/* Header */}
+                              <div className="px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] border-b border-stone-200 dark:border-[#3e3e42]">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Shield className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                    <span className="text-sm font-semibold">Threat Level</span>
+                                  </div>
+                                  {(() => {
+                                    const currentLevel = typeof memberData.threatLevel === "number" ? memberData.threatLevel : 0;
+                                    const meta = THREAT_LEVEL_META[currentLevel] || THREAT_LEVEL_META[0];
+                                    return (
+                                      <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", meta.badge)}>
+                                        Level {currentLevel} – {meta.label}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                                {memberData.threatLevel === 3 && (memberData.bannedByName || memberData.bannedAt) && (
+                                  <div className="mt-2 text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1.5">
+                                    <Ban className="h-3 w-3" />
+                                    Banned by {memberData.bannedByName || "admin"}
+                                    {memberData.bannedAt ? ` on ${new Date(memberData.bannedAt).toLocaleString()}` : ""}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Threat Level Cards */}
+                              <div className="p-4 space-y-3">
+                                <div className="grid grid-cols-2 gap-2">
+                                  {([0, 1, 2, 3] as const).map((level) => {
+                                    const meta = THREAT_LEVEL_META[level];
+                                    const isSelected = threatLevelSelection === level;
+                                    const isCurrent = memberData.threatLevel === level;
+                                    const ThreatIcon = level === 0 ? CircleCheck : level === 1 ? AlertTriangle : level === 2 ? ShieldAlert : Ban;
+                                    
+                                    return (
+                                      <button
+                                        key={level}
+                                        type="button"
+                                        onClick={() => {
+                                          if (level === 3 && level !== threatLevelSelection) {
+                                            setPendingThreatLevel(3);
+                                            setThreatLevelConfirmOpen(true);
+                                          } else {
+                                            setThreatLevelSelection(level);
+                                          }
+                                        }}
+                                        className={cn(
+                                          "relative p-3 rounded-xl border-2 text-left transition-all",
+                                          isSelected 
+                                            ? `${meta.cardBg} ${meta.cardBorder} ring-2 ring-offset-1 ring-offset-white dark:ring-offset-[#1e1e20]`
+                                            : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52] bg-white dark:bg-[#252526]",
+                                          isSelected && level === 0 && "ring-emerald-400",
+                                          isSelected && level === 1 && "ring-amber-400",
+                                          isSelected && level === 2 && "ring-red-400",
+                                          isSelected && level === 3 && "ring-stone-600"
+                                        )}
+                                      >
+                                        {isCurrent && (
+                                          <div className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                                            Current
                                           </div>
                                         )}
-                                    </div>
-                                    <span
-                                      className={cn(
-                                        "rounded-full px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1 h-fit",
-                                        meta.badge,
-                                      )}
-                                    >
-                                      Lvl {level} - {meta.label}
-                                    </span>
-                                  </div>
-                                );
-                              })()}
-                              <div className="flex flex-wrap items-center gap-2">
-                                <select
-                                  value={threatLevelSelection}
-                                  onChange={(e) =>
-                                    setThreatLevelSelection(
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  className="h-10 rounded-lg border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] px-3 text-sm"
-                                >
-                                  {[0, 1, 2, 3].map((lvl) => (
-                                    <option key={lvl} value={lvl}>
-                                      Lvl {lvl} - {THREAT_LEVEL_META[lvl].label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <Button
-                                  onClick={async () => {
-                                    await handleSetThreatLevel();
-                                  }}
-                                  disabled={
-                                    threatLevelUpdating || !memberData?.user?.id
-                                  }
-                                  className="rounded-xl"
-                                >
-                                  {threatLevelUpdating ? (
-                                    <>
-                                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                      Updating...
-                                    </>
-                                  ) : (
-                                    "Update level"
-                                  )}
-                                </Button>
+                                        <div className="flex items-start gap-2">
+                                          <div className={cn(
+                                            "p-1.5 rounded-lg",
+                                            isSelected ? meta.cardBg : "bg-stone-100 dark:bg-[#2d2d30]"
+                                          )}>
+                                            <ThreatIcon className={cn("h-4 w-4", isSelected ? meta.iconColor : "text-stone-500 dark:text-stone-400")} />
+                                          </div>
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className={cn(
+                                                "text-sm font-semibold",
+                                                level === 3 && isSelected && "text-white"
+                                              )}>
+                                                {meta.label}
+                                              </span>
+                                              <span className={cn(
+                                                "text-[10px] opacity-60 font-medium",
+                                                level === 3 && isSelected && "text-white/70"
+                                              )}>
+                                                Lvl {level}
+                                              </span>
+                                            </div>
+                                            <p className={cn(
+                                              "text-[11px] leading-tight mt-0.5 line-clamp-2",
+                                              level === 3 && isSelected ? "text-white/80" : "text-stone-500 dark:text-stone-400"
+                                            )}>
+                                              {meta.text}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        {isSelected && (
+                                          <div className="absolute bottom-2 right-2">
+                                            <Check className={cn("h-4 w-4", level === 3 ? "text-white" : meta.iconColor)} />
+                                          </div>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                
+                                {/* Update Button */}
+                                <div className="flex items-center gap-2 pt-2 border-t border-stone-100 dark:border-[#3e3e42]">
+                                  <Button
+                                    onClick={handleSetThreatLevel}
+                                    disabled={threatLevelUpdating || !memberData?.user?.id || threatLevelSelection === memberData.threatLevel}
+                                    className={cn(
+                                      "flex-1 rounded-xl transition-all",
+                                      threatLevelSelection === 3 
+                                        ? "bg-red-600 hover:bg-red-700 text-white" 
+                                        : threatLevelSelection === memberData.threatLevel 
+                                          ? "bg-stone-200 text-stone-500 dark:bg-stone-700 dark:text-stone-400"
+                                          : ""
+                                    )}
+                                  >
+                                    {threatLevelUpdating ? (
+                                      <>
+                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        Updating...
+                                      </>
+                                    ) : threatLevelSelection === memberData.threatLevel ? (
+                                      "No changes"
+                                    ) : threatLevelSelection === 3 ? (
+                                      <>
+                                        <Ban className="h-4 w-4 mr-2" />
+                                        Set to Banned
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Shield className="h-4 w-4 mr-2" />
+                                        Update Threat Level
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
                               </div>
                             </div>
+                            
+                            {/* Ban Confirmation Dialog */}
+                            <Dialog open={threatLevelConfirmOpen} onOpenChange={setThreatLevelConfirmOpen}>
+                              <DialogContent className="max-w-md">
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                                    <Ban className="h-5 w-5" />
+                                    Confirm Ban Level
+                                  </DialogTitle>
+                                  <DialogDescription className="space-y-3 pt-2">
+                                    <p>
+                                      You are about to set the threat level to <strong className="text-red-600">Banned</strong> for{" "}
+                                      <span className="font-medium text-stone-900 dark:text-stone-100">
+                                        {memberData?.profile?.display_name || memberData?.user?.email || "this user"}
+                                      </span>.
+                                    </p>
+                                    <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
+                                      <div className="flex items-start gap-2">
+                                        <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                                        <div className="text-xs text-red-800 dark:text-red-200">
+                                          <strong>This action will:</strong>
+                                          <ul className="mt-1 ml-3 list-disc space-y-0.5">
+                                            <li>Mark the user as permanently banned</li>
+                                            <li>Restrict their access to platform features</li>
+                                            <li>Record this action in admin logs</li>
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter className="gap-2 sm:gap-0">
+                                  <DialogClose asChild>
+                                    <Button variant="secondary" className="rounded-xl">
+                                      Cancel
+                                    </Button>
+                                  </DialogClose>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={() => {
+                                      if (pendingThreatLevel !== null) {
+                                        setThreatLevelSelection(pendingThreatLevel);
+                                      }
+                                      setThreatLevelConfirmOpen(false);
+                                      setPendingThreatLevel(null);
+                                    }}
+                                    className="rounded-xl"
+                                  >
+                                    <Ban className="h-4 w-4 mr-2" />
+                                    Confirm Ban Level
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
 
                             {/* Roles Management Section - Redesigned */}
                             <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e]">
@@ -8526,74 +8673,274 @@ export const AdminPage: React.FC = () => {
                             </CardContent>
                           </Card>
 
-                            <Card className="rounded-2xl">
-                              <CardContent className="p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <div className="text-sm font-medium">User files</div>
-                                  <span className="text-xs text-stone-500">
-                                    {(memberData.files || []).length} total
-                                  </span>
+                            {/* User Files Section - Improved UI */}
+                            <Card className="rounded-2xl overflow-hidden">
+                              <CardContent className="p-0">
+                                {/* Header */}
+                                <div className="px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] border-b border-stone-200 dark:border-[#3e3e42]">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Image className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                      <span className="text-sm font-semibold">User Files</span>
+                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                                        {(memberData.files || []).length}
+                                      </span>
+                                    </div>
+                                    {memberData.files && memberData.files.length > 6 && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setFilesExpanded(!filesExpanded)}
+                                        className="rounded-lg text-xs h-7 px-2"
+                                      >
+                                        {filesExpanded ? "Show less" : `Show all (${memberData.files.length})`}
+                                        <ChevronDown className={cn("h-3 w-3 ml-1 transition-transform", filesExpanded && "rotate-180")} />
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
-                                {(!memberData.files || memberData.files.length === 0) && (
-                                  <div className="text-sm opacity-60">
-                                    No files uploaded by this user yet.
-                                  </div>
-                                )}
-                                {memberData.files && memberData.files.length > 0 && (
-                                  <div className="grid gap-2 sm:grid-cols-2">
-                                    {memberData.files.slice(0, 6).map((file) => {
-                                      const uploaded = file.uploadedAt
-                                        ? new Date(file.uploadedAt).toLocaleString()
-                                        : null;
-                                      return (
-                                        <div
-                                          key={file.id}
-                                          className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 bg-stone-50 dark:bg-[#1b1b1d] space-y-1.5"
-                                        >
-                                          <div className="flex items-center justify-between gap-2">
-                                            <div className="text-sm font-semibold truncate">
-                                              {file.plantName || "File"}
-                                            </div>
-                                            {file.adminCommentary && (
-                                              <Badge
-                                                variant="outline"
-                                                className="rounded-full text-[11px] px-2 py-0.5"
-                                              >
-                                                Admin comment
-                                              </Badge>
-                                            )}
-                                          </div>
-                                          {file.caption && (
-                                            <div className="text-xs text-stone-600 dark:text-stone-300 line-clamp-2">
-                                              {file.caption}
-                                            </div>
-                                          )}
-                                          <div className="text-[11px] text-stone-500 dark:text-stone-400">
-                                            Uploaded {uploaded || "-"}
-                                          </div>
-                                          {file.adminCommentary && (
-                                            <div className="text-xs text-stone-700 dark:text-stone-200 bg-white dark:bg-[#252526] border border-stone-200 dark:border-[#3e3e42] rounded-lg p-2">
-                                              {file.adminCommentary}
-                                            </div>
-                                          )}
-                                          {file.imageUrl && (
-                                            <a
-                                              href={file.imageUrl}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
+                                
+                                {/* Files Content */}
+                                <div className="p-4">
+                                  {(!memberData.files || memberData.files.length === 0) ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                      <div className="w-12 h-12 rounded-full bg-stone-100 dark:bg-[#2d2d30] flex items-center justify-center mb-3">
+                                        <Image className="h-6 w-6 text-stone-400" />
+                                      </div>
+                                      <p className="text-sm text-stone-500 dark:text-stone-400">No files uploaded by this user yet</p>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {/* Files Grid with Thumbnails */}
+                                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        {(filesExpanded ? memberData.files : memberData.files.slice(0, 6)).map((file, index) => {
+                                          const uploaded = file.uploadedAt
+                                            ? new Date(file.uploadedAt).toLocaleDateString()
+                                            : null;
+                                          const hasImage = !!file.imageUrl;
+                                          
+                                          return (
+                                            <div
+                                              key={file.id}
+                                              className={cn(
+                                                "group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-stone-50 dark:bg-[#1b1b1d] transition-all hover:shadow-lg hover:border-stone-300 dark:hover:border-[#4e4e52]",
+                                                file.adminCommentary && "ring-2 ring-amber-300 dark:ring-amber-600"
+                                              )}
                                             >
-                                              <ExternalLink className="h-3.5 w-3.5" />
-                                              Open file
-                                            </a>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                              {/* Thumbnail / Preview */}
+                                              <div 
+                                                className="aspect-square bg-stone-100 dark:bg-[#252526] relative cursor-pointer"
+                                                onClick={() => hasImage && setSelectedFileIndex(index)}
+                                              >
+                                                {hasImage ? (
+                                                  <>
+                                                    <img
+                                                      src={file.imageUrl!}
+                                                      alt={file.plantName || "File"}
+                                                      className="w-full h-full object-cover"
+                                                      loading="lazy"
+                                                    />
+                                                    {/* Hover Overlay */}
+                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                      <div className="bg-white/90 dark:bg-black/80 rounded-full p-2">
+                                                        <ZoomIn className="h-5 w-5 text-stone-700 dark:text-stone-200" />
+                                                      </div>
+                                                    </div>
+                                                  </>
+                                                ) : (
+                                                  <div className="w-full h-full flex items-center justify-center">
+                                                    <Image className="h-8 w-8 text-stone-300 dark:text-stone-600" />
+                                                  </div>
+                                                )}
+                                                
+                                                {/* Admin Comment Badge */}
+                                                {file.adminCommentary && (
+                                                  <div className="absolute top-2 right-2">
+                                                    <div className="bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                                                      <AlertTriangle className="h-2.5 w-2.5" />
+                                                      Note
+                                                    </div>
+                                                  </div>
+                                                )}
+                                              </div>
+                                              
+                                              {/* File Info */}
+                                              <div className="p-2.5 space-y-1">
+                                                <div className="text-xs font-semibold truncate" title={file.plantName || "File"}>
+                                                  {file.plantName || "File"}
+                                                </div>
+                                                {file.caption && (
+                                                  <p className="text-[11px] text-stone-500 dark:text-stone-400 line-clamp-1" title={file.caption}>
+                                                    {file.caption}
+                                                  </p>
+                                                )}
+                                                <div className="flex items-center justify-between pt-1">
+                                                  <span className="text-[10px] text-stone-400">
+                                                    {uploaded || "-"}
+                                                  </span>
+                                                  {hasImage && (
+                                                    <a
+                                                      href={file.imageUrl!}
+                                                      target="_blank"
+                                                      rel="noreferrer"
+                                                      onClick={(e) => e.stopPropagation()}
+                                                      className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+                                                    >
+                                                      <ExternalLink className="h-3 w-3" />
+                                                      Open
+                                                    </a>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                      
+                                      {/* Show More Button (for mobile) */}
+                                      {!filesExpanded && memberData.files.length > 6 && (
+                                        <Button
+                                          variant="ghost"
+                                          className="w-full mt-3 rounded-xl text-xs"
+                                          onClick={() => setFilesExpanded(true)}
+                                        >
+                                          Show {memberData.files.length - 6} more files
+                                          <ChevronDown className="h-3 w-3 ml-1" />
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
                               </CardContent>
                             </Card>
+                            
+                            {/* File Viewer Modal/Lightbox */}
+                            {selectedFileIndex !== null && memberData.files && memberData.files[selectedFileIndex] && (
+                              <Dialog open={selectedFileIndex !== null} onOpenChange={() => setSelectedFileIndex(null)}>
+                                <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-2xl">
+                                  {(() => {
+                                    const file = memberData.files![selectedFileIndex!];
+                                    const uploaded = file.uploadedAt
+                                      ? new Date(file.uploadedAt).toLocaleString()
+                                      : null;
+                                    const totalFiles = memberData.files!.length;
+                                    const hasPrev = selectedFileIndex > 0;
+                                    const hasNext = selectedFileIndex < totalFiles - 1;
+                                    
+                                    return (
+                                      <>
+                                        {/* Close Button */}
+                                        <button
+                                          onClick={() => setSelectedFileIndex(null)}
+                                          className="absolute top-4 right-4 z-10 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+                                        >
+                                          <X className="h-5 w-5" />
+                                        </button>
+                                        
+                                        {/* Image */}
+                                        <div className="relative bg-stone-900 flex items-center justify-center min-h-[300px] max-h-[70vh]">
+                                          {file.imageUrl ? (
+                                            <img
+                                              src={file.imageUrl}
+                                              alt={file.plantName || "File"}
+                                              className="max-w-full max-h-[70vh] object-contain"
+                                            />
+                                          ) : (
+                                            <div className="flex items-center justify-center py-20">
+                                              <Image className="h-20 w-20 text-stone-600" />
+                                            </div>
+                                          )}
+                                          
+                                          {/* Navigation Arrows */}
+                                          {hasPrev && (
+                                            <button
+                                              onClick={() => setSelectedFileIndex(selectedFileIndex - 1)}
+                                              className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-3 transition-colors"
+                                            >
+                                              <ChevronLeft className="h-6 w-6" />
+                                            </button>
+                                          )}
+                                          {hasNext && (
+                                            <button
+                                              onClick={() => setSelectedFileIndex(selectedFileIndex + 1)}
+                                              className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-3 transition-colors"
+                                            >
+                                              <ChevronRight className="h-6 w-6" />
+                                            </button>
+                                          )}
+                                          
+                                          {/* Counter */}
+                                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-sm px-3 py-1 rounded-full">
+                                            {selectedFileIndex + 1} / {totalFiles}
+                                          </div>
+                                        </div>
+                                        
+                                        {/* File Details */}
+                                        <div className="p-4 bg-white dark:bg-[#1e1e20] space-y-3">
+                                          <div className="flex items-start justify-between gap-4">
+                                            <div className="min-w-0">
+                                              <h3 className="font-semibold text-lg truncate">
+                                                {file.plantName || "Untitled File"}
+                                              </h3>
+                                              {file.caption && (
+                                                <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
+                                                  {file.caption}
+                                                </p>
+                                              )}
+                                            </div>
+                                            {file.imageUrl && (
+                                              <a
+                                                href={file.imageUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="shrink-0"
+                                              >
+                                                <Button variant="outline" size="sm" className="rounded-lg">
+                                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                                  Open Original
+                                                </Button>
+                                              </a>
+                                            )}
+                                          </div>
+                                          
+                                          <div className="flex items-center gap-4 text-xs text-stone-500">
+                                            {uploaded && (
+                                              <span className="flex items-center gap-1">
+                                                <Clock className="h-3 w-3" />
+                                                {uploaded}
+                                              </span>
+                                            )}
+                                            {file.gardenPlantId && (
+                                              <span className="flex items-center gap-1">
+                                                <Leaf className="h-3 w-3" />
+                                                {file.gardenPlantId}
+                                              </span>
+                                            )}
+                                          </div>
+                                          
+                                          {/* Admin Commentary */}
+                                          {file.adminCommentary && (
+                                            <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
+                                              <div className="flex items-start gap-2">
+                                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                                                <div>
+                                                  <div className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">
+                                                    Admin Note
+                                                  </div>
+                                                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                                                    {file.adminCommentary}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
+                                </DialogContent>
+                              </Dialog>
+                            )}
 
                             <Card className="rounded-2xl">
                               <CardContent className="p-4 space-y-2">
