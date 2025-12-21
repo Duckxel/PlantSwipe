@@ -190,6 +190,23 @@ function parseSupabaseError(error: any, context?: string): string {
     return 'A referenced record does not exist. Please ensure all related data is saved first.'
   }
   
+  // Handle check constraint violations
+  if (code === '23514' || message.includes('check constraint') || message.includes('violates check constraint')) {
+    if (message.includes('plant_type')) {
+      return 'Invalid plant type. Please select a valid plant type (plant, flower, bamboo, shrub, tree, cactus, or succulent).'
+    }
+    if (message.includes('utility')) {
+      return 'Invalid utility value. Please check the selected utility options.'
+    }
+    if (message.includes('life_cycle')) {
+      return 'Invalid life cycle. Please select a valid life cycle option.'
+    }
+    if (message.includes('conservation_status')) {
+      return 'Invalid conservation status. Please select a valid conservation status.'
+    }
+    return 'Invalid field value. Please check the entered data matches the expected format.'
+  }
+  
   // Handle network/timeout errors
   if (message.includes('network') || message.includes('timeout') || message.includes('ERR_CONNECTION')) {
     return 'Network error. Please check your connection and try again.'
