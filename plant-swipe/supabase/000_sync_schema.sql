@@ -573,6 +573,35 @@ alter table if exists public.plants drop column if exists water_freq_unit;
 alter table if exists public.plants drop column if exists water_freq_value;
 alter table if exists public.plants drop column if exists updated_at;
 
+-- Update plant_type check constraint to include all valid types (including 'succulent')
+-- This fixes databases where the column was created with an older constraint
+do $$ begin
+  -- Drop the old constraint if it exists (constraint name may vary)
+  if exists (
+    select 1 from pg_constraint c
+    join pg_namespace n on n.oid = c.connamespace
+    where c.conrelid = 'public.plants'::regclass
+    and c.contype = 'c'
+    and c.conname like '%plant_type%'
+  ) then
+    execute (
+      select 'alter table public.plants drop constraint ' || quote_ident(c.conname)
+      from pg_constraint c
+      join pg_namespace n on n.oid = c.connamespace
+      where c.conrelid = 'public.plants'::regclass
+      and c.contype = 'c'
+      and c.conname like '%plant_type%'
+      limit 1
+    );
+  end if;
+  -- Add the updated constraint with all valid plant types
+  alter table public.plants add constraint plants_plant_type_check 
+    check (plant_type is null or plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent'));
+exception when duplicate_object then
+  -- Constraint already exists with correct definition
+  null;
+end $$;
+
 -- Strict column whitelist for plants (drops anything not declared above)
 do $$ declare
   allowed_columns constant text[] := array[
