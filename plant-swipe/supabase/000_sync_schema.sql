@@ -146,7 +146,11 @@ do $$ declare
     'garden_plant_images',
     -- Journal
     'garden_journal_entries',
-    'garden_journal_photos'
+    'garden_journal_photos',
+    -- Messaging
+    'conversations',
+    'messages',
+    'message_reactions'
   ];
   rec record;
 begin

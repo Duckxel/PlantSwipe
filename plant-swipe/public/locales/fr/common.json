@@ -2568,6 +2568,58 @@
     "privacyDescription": "Contrôlez qui peut vous envoyer des invitations de jardin",
     "userOnlyAcceptsFriendInvites": "Cet utilisateur n'accepte que les invitations de ses amis"
   },
+  "messages": {
+    "title": "Messages",
+    "subtitle": "Discutez avec vos amis",
+    "newMessage": "Nouveau message",
+    "newConversation": "Nouvelle conversation",
+    "selectFriend": "Sélectionnez un ami pour commencer à discuter",
+    "searchFriends": "Rechercher des amis...",
+    "searchPlaceholder": "Rechercher des conversations...",
+    "noConversations": "Pas encore de messages",
+    "noSearchResults": "Aucune conversation trouvée",
+    "startConversation": "Démarrer une conversation",
+    "noFriends": "Ajoutez des amis pour commencer à discuter !",
+    "noFriendsFound": "Aucun ami trouvé",
+    "unknownUser": "Utilisateur inconnu",
+    "noMessagesYet": "Pas encore de messages",
+    "you": "Vous :",
+    "mute": "Mettre en sourdine",
+    "unmute": "Réactiver",
+    "pleaseLogin": "Veuillez vous connecter pour voir vos messages.",
+    "typePlaceholder": "Tapez un message...",
+    "startChatting": "Commencez la conversation ! Dites bonjour 👋",
+    "replyingTo": "Réponse à",
+    "sharingLink": "Partage d'un lien",
+    "sharedLink": "A partagé un lien",
+    "link": "Lien",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "edited": "modifié",
+    "messageDeleted": "Ce message a été supprimé",
+    "shareLink": "Partager un lien",
+    "shareLinkDescription": "Partagez des plantes, jardins ou liens externes",
+    "share": "Partager",
+    "search": "Rechercher...",
+    "noResults": "Aucun résultat trouvé",
+    "startTyping": "Commencez à taper pour rechercher...",
+    "enterUrl": "https://exemple.com",
+    "shareTab": {
+      "plants": "Plantes",
+      "gardens": "Jardins",
+      "bookmarks": "Favoris",
+      "url": "URL"
+    },
+    "time": {
+      "justNow": "à l'instant",
+      "minutesAgo": "il y a {{count}}m",
+      "hoursAgo": "il y a {{count}}h",
+      "daysAgo": "il y a {{count}}j"
+    },
+    "errors": {
+      "failedToLoad": "Échec du chargement des conversations"
+    }
+  },
   "moderation": {
     "report": {
       "title": "Signaler l'utilisateur",

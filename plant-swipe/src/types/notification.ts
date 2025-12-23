@@ -10,6 +10,7 @@ export type NotificationType =
   | 'garden_invite'
   | 'garden_invite_accepted'
   | 'task_reminder'
+  | 'new_message'
   | 'system'
 
 export type NotificationStatus = 'unread' | 'read' | 'dismissed'
@@ -57,4 +58,5 @@ export interface NotificationCounts {
   unread: number
   friendRequests: number
   gardenInvites: number
+  unreadMessages: number
 }

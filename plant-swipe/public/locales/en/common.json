@@ -2568,6 +2568,58 @@
     "privacyDescription": "Control who can send you garden invitations",
     "userOnlyAcceptsFriendInvites": "This user only accepts garden invites from friends"
   },
+  "messages": {
+    "title": "Messages",
+    "subtitle": "Chat with your friends",
+    "newMessage": "New Message",
+    "newConversation": "New Conversation",
+    "selectFriend": "Select a friend to start chatting",
+    "searchFriends": "Search friends...",
+    "searchPlaceholder": "Search conversations...",
+    "noConversations": "No messages yet",
+    "noSearchResults": "No conversations found",
+    "startConversation": "Start a conversation",
+    "noFriends": "Add some friends to start chatting!",
+    "noFriendsFound": "No friends found",
+    "unknownUser": "Unknown User",
+    "noMessagesYet": "No messages yet",
+    "you": "You:",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "pleaseLogin": "Please log in to view your messages.",
+    "typePlaceholder": "Type a message...",
+    "startChatting": "Start the conversation! Say hello 👋",
+    "replyingTo": "Replying to",
+    "sharingLink": "Sharing link",
+    "sharedLink": "Shared a link",
+    "link": "Link",
+    "edit": "Edit",
+    "delete": "Delete",
+    "edited": "edited",
+    "messageDeleted": "This message was deleted",
+    "shareLink": "Share a Link",
+    "shareLinkDescription": "Share plants, gardens, or external links",
+    "share": "Share",
+    "search": "Search...",
+    "noResults": "No results found",
+    "startTyping": "Start typing to search...",
+    "enterUrl": "https://example.com",
+    "shareTab": {
+      "plants": "Plants",
+      "gardens": "Gardens",
+      "bookmarks": "Bookmarks",
+      "url": "URL"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
+    },
+    "errors": {
+      "failedToLoad": "Failed to load conversations"
+    }
+  },
   "moderation": {
     "report": {
       "title": "Report User",
