@@ -120,6 +120,9 @@
       <!-- For dev/preview where src is served: -->
       <noscript><link rel="stylesheet" href="/src/index.scss" /></noscript>
       <title>Aphylia</title>
+
+      <!-- Ensure runtime environment variables load before the app initializes -->
+      <script src="/env-loader.js" data-base="/" crossorigin="anonymous"></script>
     </head>
     <body>
       <div id="root">

@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Sprout, Check, X, Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   getUserGardens,
@@ -38,6 +38,8 @@ import {
   refreshGardenTaskCache,
   refreshUserTaskCache,
 } from "@/lib/gardens";
+import { getPendingGardenInvites, acceptGardenInvite, declineGardenInvite } from "@/lib/notifications";
+import type { GardenInvite } from "@/types/notification";
 import { useAuthActions } from "@/context/AuthActionsContext";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -104,6 +106,9 @@ export const GardenListPage: React.FC = () => {
     Set<string>
   >(new Set());
   const [markingAllCompleted, setMarkingAllCompleted] = React.useState(false);
+  // Garden invites state
+  const [gardenInvites, setGardenInvites] = React.useState<GardenInvite[]>([]);
+  const [processingInviteId, setProcessingInviteId] = React.useState<string | null>(null);
 
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -2002,6 +2007,50 @@ export const GardenListPage: React.FC = () => {
     [todayTaskOccurrences],
   );
 
+  // Load garden invites
+  const loadGardenInvites = React.useCallback(async () => {
+    if (!user?.id) {
+      setGardenInvites([]);
+      return;
+    }
+    try {
+      const invites = await getPendingGardenInvites(user.id);
+      setGardenInvites(invites);
+    } catch (e) {
+      console.warn('[GardenList] Failed to load garden invites:', e);
+    }
+  }, [user?.id]);
+
+  React.useEffect(() => {
+    loadGardenInvites();
+  }, [loadGardenInvites]);
+
+  // Handle accept garden invite
+  const handleAcceptInvite = React.useCallback(async (inviteId: string) => {
+    setProcessingInviteId(inviteId);
+    try {
+      await acceptGardenInvite(inviteId);
+      await Promise.all([loadGardenInvites(), loadGardens()]);
+    } catch (e: any) {
+      console.error('Failed to accept invite:', e);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  }, [loadGardenInvites]);
+
+  // Handle decline garden invite
+  const handleDeclineInvite = React.useCallback(async (inviteId: string) => {
+    setProcessingInviteId(inviteId);
+    try {
+      await declineGardenInvite(inviteId);
+      await loadGardenInvites();
+    } catch (e: any) {
+      console.error('Failed to decline invite:', e);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  }, [loadGardenInvites]);
+
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16">
       <div
@@ -2451,6 +2500,88 @@ export const GardenListPage: React.FC = () => {
                     </div>
                   </Card>
                 ))}
+
+              {/* Garden Invitations Section */}
+              {gardenInvites.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-stone-200/70 dark:border-[#3e3e42]/70">
+                  <div className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Sprout className="h-5 w-5 text-emerald-500" />
+                    {t("gardenInvites.title", { defaultValue: "Garden Invitations" })}
+                    <span className="ml-auto text-sm font-medium px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                      {gardenInvites.length}
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {gardenInvites.map((invite) => (
+                      <Card
+                        key={invite.id}
+                        className="rounded-[20px] border border-emerald-200/70 dark:border-emerald-900/30 bg-emerald-50/50 dark:bg-emerald-900/10 p-4"
+                      >
+                        <div className="flex items-start gap-3">
+                          {invite.gardenCoverImageUrl ? (
+                            <img
+                              src={invite.gardenCoverImageUrl}
+                              alt=""
+                              className="w-12 h-12 rounded-xl object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+                              <Sprout className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-stone-900 dark:text-white truncate">
+                              {invite.gardenName}
+                            </p>
+                            <p className="text-xs text-stone-500 dark:text-stone-400">
+                              {t("gardenInvites.sentBy", { defaultValue: "from" })} {invite.inviterName || t("friends.unknown", { defaultValue: "Unknown" })}
+                            </p>
+                          </div>
+                        </div>
+                        {invite.message && (
+                          <p className="mt-2 text-xs text-stone-600 dark:text-stone-400 italic">
+                            "{invite.message}"
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 mt-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex-1 h-9 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            onClick={() => handleDeclineInvite(invite.id)}
+                            disabled={processingInviteId === invite.id}
+                          >
+                            {processingInviteId === invite.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <X className="h-4 w-4 mr-1" />
+                                {t("gardenInvites.declineInvite", { defaultValue: "Decline" })}
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="flex-1 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                            onClick={() => handleAcceptInvite(invite.id)}
+                            disabled={processingInviteId === invite.id}
+                          >
+                            {processingInviteId === invite.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Check className="h-4 w-4 mr-1" />
+                                {t("gardenInvites.acceptInvite", { defaultValue: "Accept" })}
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </aside>
         )}

@@ -82,6 +82,7 @@ do $$ declare
     'plant_watering_schedules',
     'plant_sources',
     'plant_infusion_mixes',
+    'plant_pro_advices',
     'plant_images',
     'colors',
     'plant_colors',
@@ -120,6 +121,8 @@ do $$ declare
     'friends',
     'bookmarks',
     'bookmark_items',
+    'garden_invites',
+    'user_blocks',
     -- Moderation & analytics
     'web_visits',
     'banned_accounts',
@@ -127,6 +130,8 @@ do $$ declare
     'broadcast_messages',
     'blog_posts',
     'profile_admin_notes',
+    'user_reports',
+    'user_report_notes',
     -- Notifications
     'notification_campaigns',
     'notification_templates',
@@ -141,7 +146,11 @@ do $$ declare
     'garden_plant_images',
     -- Journal
     'garden_journal_entries',
-    'garden_journal_photos'
+    'garden_journal_photos',
+    -- Messaging
+    'conversations',
+    'messages',
+    'message_reactions'
   ];
   rec record;
 begin
@@ -181,6 +190,8 @@ alter table if exists public.profiles add column if not exists accent_key text d
 alter table if exists public.profiles add column if not exists is_private boolean not null default false;
 -- Friend requests setting: when true, users cannot send friend requests (prevents unwanted invites)
 alter table if exists public.profiles add column if not exists disable_friend_requests boolean not null default false;
+-- Garden invite privacy: 'anyone' (default) or 'friends_only' to restrict who can send garden invites
+alter table if exists public.profiles add column if not exists garden_invite_privacy text default 'anyone' check (garden_invite_privacy in ('anyone', 'friends_only'));
 -- Language preference: stores user's preferred language code (e.g., 'en', 'fr')
 alter table if exists public.profiles add column if not exists language text default 'en';
 -- Notification preferences: push notifications and email campaigns (default to true/enabled)
@@ -188,8 +199,12 @@ alter table if exists public.profiles add column if not exists notify_push boole
 alter table if exists public.profiles add column if not exists notify_email boolean default true;
 -- User roles: admin, editor, pro, merchant, creator, vip, plus
 alter table if exists public.profiles add column if not exists roles text[] default '{}';
+-- Threat level: 0=Safe, 1=Sus (1 incident), 2=Danger (multiple incidents), 3=Banned
+alter table if exists public.profiles add column if not exists threat_level integer not null default 0 check (threat_level >= 0 and threat_level <= 3);
 -- Create GIN index for efficient role queries
 create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
+-- Create index for threat level queries
+create index if not exists idx_profiles_threat_level on public.profiles (threat_level) where threat_level > 0;
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin
@@ -204,6 +219,37 @@ drop index if exists public.profiles_username_unique;
 
 -- Unique index on display_name (case-insensitive)
 create unique index if not exists profiles_display_name_lower_unique on public.profiles ((lower(display_name)));
+
+-- Role helper functions for policy checks
+create or replace function public.has_role(_user_id uuid, _role text)
+returns boolean
+language sql
+stable
+security definer
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = _user_id
+      and _role = any(coalesce(roles, '{}'))
+  );
+$$;
+
+create or replace function public.has_any_role(_user_id uuid, _roles text[])
+returns boolean
+language sql
+stable
+security definer
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = _user_id
+      and coalesce(roles, '{}') && _roles
+  );
+$$;
+
+grant execute on function public.has_role(uuid, text) to anon, authenticated;
+grant execute on function public.has_any_role(uuid, text[]) to anon, authenticated;
+
 alter table public.profiles enable row level security;
 -- Helper to avoid RLS self-recursion when checking admin
 -- Uses SECURITY DEFINER to bypass RLS on public.profiles
@@ -531,6 +577,35 @@ alter table if exists public.plants drop column if exists water_freq_unit;
 alter table if exists public.plants drop column if exists water_freq_value;
 alter table if exists public.plants drop column if exists updated_at;
 
+-- Update plant_type check constraint to include all valid types (including 'succulent')
+-- This fixes databases where the column was created with an older constraint
+do $$ begin
+  -- Drop the old constraint if it exists (constraint name may vary)
+  if exists (
+    select 1 from pg_constraint c
+    join pg_namespace n on n.oid = c.connamespace
+    where c.conrelid = 'public.plants'::regclass
+    and c.contype = 'c'
+    and c.conname like '%plant_type%'
+  ) then
+    execute (
+      select 'alter table public.plants drop constraint ' || quote_ident(c.conname)
+      from pg_constraint c
+      join pg_namespace n on n.oid = c.connamespace
+      where c.conrelid = 'public.plants'::regclass
+      and c.contype = 'c'
+      and c.conname like '%plant_type%'
+      limit 1
+    );
+  end if;
+  -- Add the updated constraint with all valid plant types
+  alter table public.plants add constraint plants_plant_type_check 
+    check (plant_type is null or plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent'));
+exception when duplicate_object then
+  -- Constraint already exists with correct definition
+  null;
+end $$;
+
 -- Strict column whitelist for plants (drops anything not declared above)
 do $$ declare
   allowed_columns constant text[] := array[
@@ -753,6 +828,66 @@ do $$ begin
     drop policy plant_infusion_mixes_all on public.plant_infusion_mixes;
   end if;
   create policy plant_infusion_mixes_all on public.plant_infusion_mixes for all to authenticated using (true) with check (true);
+end $$;
+
+-- ========== Plant professional advice (Pro/Admin/Editor contributions) ==========
+create table if not exists public.plant_pro_advices (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  author_display_name text,
+  author_username text,
+  author_avatar_url text,
+  author_roles text[] not null default '{}'::text[],
+  content text not null,
+  image_url text,
+  reference_url text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  constraint plant_pro_advices_content_not_blank check (char_length(btrim(content)) > 0),
+  constraint plant_pro_advices_metadata_object check (metadata is null or jsonb_typeof(metadata) = 'object')
+);
+create index if not exists plant_pro_advices_plant_created_idx on public.plant_pro_advices (plant_id, created_at desc);
+alter table public.plant_pro_advices enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_pro_advices' and policyname='plant_pro_advices_select_all') then
+    drop policy plant_pro_advices_select_all on public.plant_pro_advices;
+  end if;
+  create policy plant_pro_advices_select_all on public.plant_pro_advices for select to authenticated, anon using (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_pro_advices' and policyname='plant_pro_advices_insert_authorized') then
+    drop policy plant_pro_advices_insert_authorized on public.plant_pro_advices;
+  end if;
+  create policy plant_pro_advices_insert_authorized on public.plant_pro_advices for insert to authenticated
+    with check (
+      author_id = auth.uid()
+      and coalesce(public.has_any_role(auth.uid(), array['admin','editor','pro']), false)
+    );
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_pro_advices' and policyname='plant_pro_advices_update_moderate') then
+    drop policy plant_pro_advices_update_moderate on public.plant_pro_advices;
+  end if;
+  create policy plant_pro_advices_update_moderate on public.plant_pro_advices for update to authenticated
+    using (
+      author_id = auth.uid()
+      or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false)
+    )
+    with check (
+      author_id = auth.uid()
+      or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false)
+    );
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_pro_advices' and policyname='plant_pro_advices_delete_moderate') then
+    drop policy plant_pro_advices_delete_moderate on public.plant_pro_advices;
+  end if;
+  create policy plant_pro_advices_delete_moderate on public.plant_pro_advices for delete to authenticated
+    using (
+      author_id = auth.uid()
+      or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false)
+    );
 end $$;
 
 -- ========== Plant images ==========
@@ -3763,6 +3898,113 @@ do $$ begin
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- ========== User Reports (Moderation) ==========
+-- Files/cases for user reports that admins review
+create table if not exists public.user_reports (
+  id uuid primary key default gen_random_uuid(),
+  reported_user_id uuid not null references public.profiles(id) on delete cascade,
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  reason text not null,
+  status text not null default 'review' check (status in ('review', 'classified')),
+  created_at timestamptz not null default now(),
+  classified_at timestamptz,
+  classified_by uuid references public.profiles(id) on delete set null
+);
+create index if not exists user_reports_reported_user_idx on public.user_reports (reported_user_id);
+create index if not exists user_reports_reporter_idx on public.user_reports (reporter_id);
+create index if not exists user_reports_status_idx on public.user_reports (status);
+create index if not exists user_reports_created_at_idx on public.user_reports (created_at desc);
+
+-- Admin notes on user reports
+create table if not exists public.user_report_notes (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references public.user_reports(id) on delete cascade,
+  admin_id uuid not null references public.profiles(id) on delete cascade,
+  note text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists user_report_notes_report_idx on public.user_report_notes (report_id);
+
+-- RLS for user_reports: admins can read all, users can create reports
+alter table public.user_reports enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_admin_all') then
+    drop policy user_reports_admin_all on public.user_reports;
+  end if;
+  create policy user_reports_admin_all on public.user_reports for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_user_insert') then
+    drop policy user_reports_user_insert on public.user_reports;
+  end if;
+  create policy user_reports_user_insert on public.user_reports for insert to authenticated
+    with check (reporter_id = (select auth.uid()));
+end $$;
+
+-- RLS for user_report_notes: admins only
+alter table public.user_report_notes enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_report_notes' and policyname='user_report_notes_admin_all') then
+    drop policy user_report_notes_admin_all on public.user_report_notes;
+  end if;
+  create policy user_report_notes_admin_all on public.user_report_notes for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- ========== User Blocks ==========
+-- Users can block other users to prevent friend requests, garden invites, etc.
+create table if not exists public.user_blocks (
+  id uuid primary key default gen_random_uuid(),
+  blocker_id uuid not null references public.profiles(id) on delete cascade,
+  blocked_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(blocker_id, blocked_id),
+  check (blocker_id <> blocked_id)
+);
+create index if not exists user_blocks_blocker_idx on public.user_blocks (blocker_id);
+create index if not exists user_blocks_blocked_idx on public.user_blocks (blocked_id);
+
+-- RLS for user_blocks: users can manage their own blocks
+alter table public.user_blocks enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_blocks' and policyname='user_blocks_own') then
+    drop policy user_blocks_own on public.user_blocks;
+  end if;
+  create policy user_blocks_own on public.user_blocks for all to authenticated
+    using (blocker_id = (select auth.uid()) or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (blocker_id = (select auth.uid()));
+end $$;
+
+-- Function to check if a user is blocked
+create or replace function public.is_user_blocked(_blocker_id uuid, _blocked_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_blocks
+    where blocker_id = _blocker_id and blocked_id = _blocked_id
+  );
+$$;
+grant execute on function public.is_user_blocked(uuid, uuid) to authenticated;
+
+-- Function to check if either user has blocked the other (bidirectional)
+create or replace function public.are_users_blocked(_user1_id uuid, _user2_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_blocks
+    where (blocker_id = _user1_id and blocked_id = _user2_id)
+       or (blocker_id = _user2_id and blocked_id = _user1_id)
+  );
+$$;
+grant execute on function public.are_users_blocked(uuid, uuid) to authenticated;
+
 -- ========== Cleanup of unused objects ==========
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)
@@ -4165,7 +4407,8 @@ create table if not exists public.admin_email_triggers (
 -- Insert default trigger types
 insert into public.admin_email_triggers (trigger_type, display_name, description, is_enabled)
 values 
-  ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false)
+  ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false),
+  ('BAN_USER', 'User Ban Notification', 'Sent when a user is marked as threat level 3 (ban)', false)
 on conflict (trigger_type) do nothing;
 
 alter table public.admin_email_triggers enable row level security;
@@ -4669,6 +4912,89 @@ end;
 $$;
 
 grant execute on function public.get_friend_email(uuid) to authenticated;
+
+-- ========== Garden Invites (invitation system for gardens) ==========
+create table if not exists public.garden_invites (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  inviter_id uuid not null references public.profiles(id) on delete cascade,
+  invitee_id uuid not null references public.profiles(id) on delete cascade,
+  role text not null default 'member' check (role in ('owner','member')),
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined', 'cancelled')),
+  message text,
+  created_at timestamptz not null default now(),
+  responded_at timestamptz,
+  unique(garden_id, invitee_id),
+  check (inviter_id <> invitee_id)
+);
+
+-- Indexes for garden_invites
+create index if not exists garden_invites_garden_idx on public.garden_invites(garden_id);
+create index if not exists garden_invites_inviter_idx on public.garden_invites(inviter_id);
+create index if not exists garden_invites_invitee_idx on public.garden_invites(invitee_id);
+create index if not exists garden_invites_status_idx on public.garden_invites(status);
+
+-- Enable RLS for garden_invites
+alter table public.garden_invites enable row level security;
+
+-- RLS policies for garden_invites
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_select_own') then
+    drop policy garden_invites_select_own on public.garden_invites;
+  end if;
+  create policy garden_invites_select_own on public.garden_invites for select to authenticated
+    using (
+      inviter_id = (select auth.uid())
+      or invitee_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_insert_own') then
+    drop policy garden_invites_insert_own on public.garden_invites;
+  end if;
+  -- Only garden owners/members can send invites
+  create policy garden_invites_insert_own on public.garden_invites for insert to authenticated
+    with check (
+      inviter_id = (select auth.uid())
+      and exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_invites.garden_id
+        and gm.user_id = (select auth.uid())
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_update_own') then
+    drop policy garden_invites_update_own on public.garden_invites;
+  end if;
+  -- Invitee can update (accept/decline), inviter can update (cancel)
+  create policy garden_invites_update_own on public.garden_invites for update to authenticated
+    using (
+      invitee_id = (select auth.uid())
+      or inviter_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    )
+    with check (
+      invitee_id = (select auth.uid())
+      or inviter_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_delete_own') then
+    drop policy garden_invites_delete_own on public.garden_invites;
+  end if;
+  create policy garden_invites_delete_own on public.garden_invites for delete to authenticated
+    using (
+      inviter_id = (select auth.uid())
+      or invitee_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
 
 -- Function to search user profiles with friend prioritization and privacy metadata
 create or replace function public.search_user_profiles(_term text, _limit integer default 3)

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
 import { DimensionCube } from '@/components/plant/DimensionCube'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
 import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
@@ -1427,6 +1428,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </div>
           </section>
         )}
+
+      <ProAdviceSection plantId={plant.id} plantName={plant.name} />
 
       {/* Prominent Toxicity Warning Banner - Placed before detailed info cards */}
         <ToxicityWarningBanner

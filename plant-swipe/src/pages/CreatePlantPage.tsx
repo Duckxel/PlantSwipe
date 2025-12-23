@@ -190,6 +190,23 @@ function parseSupabaseError(error: any, context?: string): string {
     return 'A referenced record does not exist. Please ensure all related data is saved first.'
   }
   
+  // Handle check constraint violations
+  if (code === '23514' || message.includes('check constraint') || message.includes('violates check constraint')) {
+    if (message.includes('plant_type')) {
+      return 'Invalid plant type. Please select a valid plant type (plant, flower, bamboo, shrub, tree, cactus, or succulent).'
+    }
+    if (message.includes('utility')) {
+      return 'Invalid utility value. Please check the selected utility options.'
+    }
+    if (message.includes('life_cycle')) {
+      return 'Invalid life cycle. Please select a valid life cycle option.'
+    }
+    if (message.includes('conservation_status')) {
+      return 'Invalid conservation status. Please select a valid conservation status.'
+    }
+    return 'Invalid field value. Please check the entered data matches the expected format.'
+  }
+  
   // Handle network/timeout errors
   if (message.includes('network') || message.includes('timeout') || message.includes('ERR_CONNECTION')) {
     return 'Network error. Please check your connection and try again.'
@@ -1165,7 +1182,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
-        const normalizedPlantType = plantTypeEnum.toDb(plantToSave.plantType)
+        // Normalize plantType - if toDb returns null but plantType has a value, default to 'plant'
+        // This prevents constraint violations when AI returns unrecognized plant types
+        let normalizedPlantType = plantTypeEnum.toDb(plantToSave.plantType)
+        if (normalizedPlantType === null && plantToSave.plantType && typeof plantToSave.plantType === 'string' && plantToSave.plantType.trim()) {
+          console.warn(`[savePlant] Unrecognized plantType "${plantToSave.plantType}", defaulting to "plant"`)
+          normalizedPlantType = 'plant'
+        }
         const normalizedUtility = utilityEnum.toDbArray(plantToSave.utility)
         const normalizedComestible = comestiblePartEnum.toDbArray(plantToSave.comestiblePart)
         const normalizedFruit = fruitTypeEnum.toDbArray(plantToSave.fruitType)
