@@ -128,7 +128,8 @@ export async function getNotificationCounts(userId: string): Promise<Notificatio
         total: (unreadCount || 0) + (friendRequestCount || 0),
         unread: unreadCount || 0,
         friendRequests: friendRequestCount || 0,
-        gardenInvites: 0
+        gardenInvites: 0,
+        unreadMessages: 0
       }
     }
 
