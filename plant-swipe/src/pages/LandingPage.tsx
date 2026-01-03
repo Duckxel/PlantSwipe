@@ -57,6 +57,34 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-24 pt-2 md:px-8 md:pb-8 md:pt-4 overflow-x-hidden overflow-y-visible">
+      {/* Mobile Logo Header - only shown on mobile, only on landing page */}
+      <header className="md:hidden flex items-center justify-center py-4">
+        <Link
+          to={user ? "/discovery" : "/"}
+          className="flex items-center gap-2 no-underline"
+        >
+          <img 
+            src="/icons/plant-swipe-icon.svg" 
+            alt="Aphylia" 
+            className="h-10 w-9 plant-icon-theme"
+            draggable="false"
+          />
+          <span className="font-brand text-2xl font-semibold tracking-tight text-black dark:text-white">
+            {t("common.appName", { ns: "common", defaultValue: "Aphylia" })}
+          </span>
+        </Link>
+      </header>
+
+      {/* Style for plant icon to work in dark mode */}
+      <style>{`
+        .plant-icon-theme {
+          filter: brightness(0) saturate(100%);
+        }
+        .dark .plant-icon-theme {
+          filter: brightness(0) saturate(100%) invert(100%);
+        }
+      `}</style>
+
       {/* Desktop Navigation - uses the real TopBar */}
       <div className="overflow-y-visible">
         <TopBar
