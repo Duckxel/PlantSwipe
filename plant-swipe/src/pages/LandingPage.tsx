@@ -58,18 +58,21 @@ const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-24 pt-2 md:px-8 md:pb-8 md:pt-4 overflow-x-hidden overflow-y-visible">
       {/* Mobile Logo Header - only shown on mobile, only on landing page */}
-      <header className="md:hidden flex items-center justify-center py-4">
+      <header className="md:hidden flex items-center justify-center py-6 mb-2">
         <Link
           to={user ? "/discovery" : "/"}
-          className="flex items-center gap-2 no-underline"
+          className="flex items-center gap-3 no-underline group"
         >
-          <img 
-            src="/icons/plant-swipe-icon.svg" 
-            alt="Aphylia" 
-            className="h-10 w-9 plant-icon-theme"
-            draggable="false"
-          />
-          <span className="font-brand text-2xl font-semibold tracking-tight text-black dark:text-white">
+          <div className="relative">
+            <div className="absolute inset-0 bg-emerald-500/20 rounded-xl blur-lg group-hover:bg-emerald-500/30 transition-colors" />
+            <img 
+              src="/icons/plant-swipe-icon.svg" 
+              alt="Aphylia" 
+              className="relative h-11 w-10 plant-icon-theme"
+              draggable="false"
+            />
+          </div>
+          <span className="font-brand text-[1.75rem] font-bold tracking-tight text-stone-900 dark:text-white">
             {t("common.appName", { ns: "common", defaultValue: "Aphylia" })}
           </span>
         </Link>
