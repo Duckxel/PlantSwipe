@@ -107,13 +107,14 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     }
   }, [])
   
-  const currentView: "discovery" | "gardens" | "search" | "create" | "profile" | "home" =
+  const currentView: "discovery" | "gardens" | "search" | "messages" | "create" | "profile" | "home" =
     pathWithoutLang === "/" ? "home" :
     pathWithoutLang === "/discovery" || pathWithoutLang.startsWith("/discovery/") ? "discovery" :
     pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
     pathWithoutLang.startsWith("/search") ? "search" :
+    pathWithoutLang.startsWith("/messages") ? "messages" :
     pathWithoutLang.startsWith("/create") ? "create" :
-    pathWithoutLang.startsWith("/profile") || pathWithoutLang.startsWith("/u/") || pathWithoutLang.startsWith("/friends") || pathWithoutLang.startsWith("/settings") || pathWithoutLang.startsWith("/messages") ? "profile" :
+    pathWithoutLang.startsWith("/profile") || pathWithoutLang.startsWith("/u/") || pathWithoutLang.startsWith("/friends") || pathWithoutLang.startsWith("/settings") ? "profile" :
     "discovery"
 
   const displayName = profile?.display_name || null
@@ -151,7 +152,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
           {/* Navigation Items */}
           <div className="flex items-center justify-around">
             {user ? (
-              // Logged-in navigation with labels
+              // Logged-in navigation with labels - Messages is now a primary nav item
               <>
                 <NavItem 
                   to="/discovery" 
@@ -167,17 +168,18 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   showDot={hasUnfinished}
                 />
                 <NavItem 
-                  to="/search" 
-                  icon={<Search className="h-5 w-5" />} 
-                  label={t('common.search', { defaultValue: 'Search' })}
-                  isActive={currentView === 'search'}
+                  to="/messages" 
+                  icon={<MessageCircle className="h-5 w-5" />} 
+                  label={t('common.messages', { defaultValue: 'Chats' })}
+                  isActive={currentView === 'messages'}
+                  badge={counts.unreadMessages > 0 ? counts.unreadMessages : undefined}
                 />
                 <NavItemButton
                   icon={<User className="h-5 w-5" />}
                   label={t('common.menu', { defaultValue: 'Menu' })}
-                  isActive={currentView === 'profile'}
+                  isActive={currentView === 'profile' || currentView === 'search'}
                   onClick={() => setProfileMenuOpen(true)}
-                  badge={combinedNotificationCount > 0 ? combinedNotificationCount : undefined}
+                  badge={totalCount > 0 ? totalCount : undefined}
                 />
               </>
             ) : (
@@ -272,20 +274,19 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
               </p>
               <div className="grid grid-cols-3 gap-2">
                 <QuickActionButton
-                  icon={<MessageCircle className="h-5 w-5" />}
-                  label={t("common.messages", { defaultValue: "Messages" })}
-                  badge={counts.unreadMessages > 0 ? counts.unreadMessages : undefined}
-                  onClick={() => {
-                    setProfileMenuOpen(false)
-                    navigate("/messages")
-                  }}
-                />
-                <QuickActionButton
                   icon={<HeartHandshake className="h-5 w-5" />}
                   label={t("common.friends", { defaultValue: "Friends" })}
                   onClick={() => {
                     setProfileMenuOpen(false)
                     navigate("/friends")
+                  }}
+                />
+                <QuickActionButton
+                  icon={<Search className="h-5 w-5" />}
+                  label={t("common.search", { defaultValue: "Search" })}
+                  onClick={() => {
+                    setProfileMenuOpen(false)
+                    navigate("/search")
                   }}
                 />
                 <QuickActionButton
@@ -394,19 +395,21 @@ function NavItem({
   icon, 
   label, 
   isActive, 
-  showDot 
+  showDot,
+  badge
 }: { 
   to: string
   icon: React.ReactNode
   label: string
   isActive: boolean
   showDot?: boolean
+  badge?: number
 }) {
   return (
     <Link
       to={to}
       className={`
-        flex flex-col items-center justify-center gap-0.5 px-3 py-2 min-w-[64px] rounded-xl no-underline
+        flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-w-[56px] rounded-xl no-underline
         transition-colors duration-150 active:scale-95
         ${isActive 
           ? 'text-emerald-600 dark:text-emerald-400' 
@@ -417,11 +420,19 @@ function NavItem({
     >
       <div className="relative">
         {icon}
-        {showDot && (
+        {showDot && !badge && (
           <span
             className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#1a1a1c]"
             aria-hidden="true"
           />
+        )}
+        {badge !== undefined && badge > 0 && (
+          <span
+            className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#1a1a1c]"
+            aria-hidden="true"
+          >
+            {badge > 99 ? '99+' : badge}
+          </span>
         )}
       </div>
       <span className={`text-[10px] font-medium ${isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
@@ -452,7 +463,7 @@ function NavItemButton({
       type="button"
       onClick={onClick}
       className={`
-        flex flex-col items-center justify-center gap-0.5 px-3 py-2 min-w-[64px] rounded-xl
+        flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-w-[56px] rounded-xl
         transition-colors duration-150 active:scale-95
         ${highlight
           ? 'text-emerald-600 dark:text-emerald-400'
@@ -466,7 +477,7 @@ function NavItemButton({
         {icon}
         {badge !== undefined && badge > 0 && (
           <span
-            className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#1a1a1c]"
+            className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#1a1a1c]"
             aria-hidden="true"
           >
             {badge > 99 ? '99+' : badge}
