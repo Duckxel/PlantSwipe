@@ -16,6 +16,8 @@ import { Footer } from "@/components/layout/Footer";
 import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
+import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
+import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant, PlantSeason } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -146,6 +148,18 @@ export default function PlantSwipe() {
     pathWithoutLang.startsWith("/search") ? "search" :
     pathWithoutLang.startsWith("/profile") ? "profile" :
     pathWithoutLang.startsWith("/create") ? "create" : "discovery"
+  
+  // Message notifications - determine if user is on messages page
+  const isOnMessagesPage = pathWithoutLang.startsWith('/messages')
+  const { 
+    notification: messageNotification, 
+    dismiss: dismissMessageNotification
+  } = useMessageNotifications({
+    userId: user?.id ?? null,
+    enabled: Boolean(user),
+    // Don't show notifications when already on messages page
+    currentConversationId: isOnMessagesPage ? 'all' : null
+  })
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -1803,6 +1817,15 @@ export default function PlantSwipe() {
       <Footer />
       <BroadcastToast />
       <RequestPlantDialog open={requestPlantDialogOpen} onOpenChange={setRequestPlantDialogOpen} />
+      
+      {/* Message notification toast - shows when new messages arrive */}
+      <MessageNotificationToast
+        notification={messageNotification}
+        onDismiss={dismissMessageNotification}
+        onOpen={(conversationId) => {
+          navigate(`/messages?conversation=${conversationId}`)
+        }}
+      />
     </div>
     </AuthActionsProvider>
   )

@@ -645,6 +645,7 @@ export function parseImageMessage(content: string): { imageUrl: string; caption?
 
 /**
  * Send a push notification for a new message.
+ * This sends a push notification to the recipient's registered devices.
  */
 export async function sendMessagePushNotification(
   recipientId: string,
@@ -655,16 +656,20 @@ export async function sendMessagePushNotification(
 ): Promise<{ sent: boolean; reason?: string }> {
   const translations: Record<string, { title: string; body: string }> = {
     en: {
-      title: `New message from ${senderDisplayName}`,
+      title: `${senderDisplayName}`,
       body: messagePreview.length > 100 ? messagePreview.slice(0, 100) + '...' : messagePreview
     },
     fr: {
-      title: `Nouveau message de ${senderDisplayName}`,
+      title: `${senderDisplayName}`,
       body: messagePreview.length > 100 ? messagePreview.slice(0, 100) + '...' : messagePreview
     }
   }
   
   const t = translations[language] || translations.en
+  
+  // Build the conversation URL for navigation when notification is clicked
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const conversationUrl = `${baseUrl}/messages?conversation=${conversationId}`
   
   try {
     const session = (await supabase.auth.getSession()).data.session
@@ -686,7 +691,15 @@ export async function sendMessagePushNotification(
         type: 'new_message',
         title: t.title,
         body: t.body,
-        data: { conversationId, senderDisplayName }
+        tag: `message-${conversationId}`, // Group notifications by conversation
+        renotify: true, // Show new notification even if one exists with same tag
+        data: { 
+          conversationId, 
+          senderDisplayName,
+          type: 'new_message',
+          url: conversationUrl,
+          ctaUrl: conversationUrl
+        }
       })
     })
     

@@ -7,6 +7,7 @@
 
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { 
@@ -27,6 +28,7 @@ import { NewConversationDialog } from '@/components/messaging/NewConversationDia
 export const MessagesPage: React.FC = () => {
   const { t } = useTranslation('common')
   const { user, profile } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   
   const [conversations, setConversations] = React.useState<ConversationWithDetails[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -35,6 +37,20 @@ export const MessagesPage: React.FC = () => {
   const [selectedConversationId, setSelectedConversationId] = React.useState<string | null>(null)
   const [newConversationOpen, setNewConversationOpen] = React.useState(false)
   const [isSearching, setIsSearching] = React.useState(false)
+  
+  // Handle conversation query parameter from push notifications
+  React.useEffect(() => {
+    const conversationParam = searchParams.get('conversation')
+    if (conversationParam && !loading && conversations.length > 0) {
+      // Check if this conversation exists in our list
+      const exists = conversations.some(c => c.conversationId === conversationParam)
+      if (exists) {
+        setSelectedConversationId(conversationParam)
+        // Clear the query param after opening
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [searchParams, loading, conversations, setSearchParams])
   
   // Get the selected conversation details
   const selectedConversation = React.useMemo(() => {
