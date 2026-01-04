@@ -152,7 +152,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
           {/* Navigation Items */}
           <div className="flex items-center justify-around">
             {user ? (
-              // Logged-in navigation with labels - Messages is now a primary nav item
+              // Logged-in navigation with labels - Search is now a primary nav item
               <>
                 <NavItem 
                   to="/discovery" 
@@ -168,18 +168,17 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   showDot={hasUnfinished}
                 />
                 <NavItem 
-                  to="/messages" 
-                  icon={<MessageCircle className="h-5 w-5" />} 
-                  label={t('common.messages', { defaultValue: 'Chats' })}
-                  isActive={currentView === 'messages'}
-                  badge={counts.unreadMessages > 0 ? counts.unreadMessages : undefined}
+                  to="/search" 
+                  icon={<Search className="h-5 w-5" />} 
+                  label={t('common.search', { defaultValue: 'Search' })}
+                  isActive={currentView === 'search'}
                 />
                 <NavItemButton
                   icon={<User className="h-5 w-5" />}
                   label={t('common.menu', { defaultValue: 'Menu' })}
-                  isActive={currentView === 'profile' || currentView === 'search'}
+                  isActive={currentView === 'profile' || currentView === 'messages'}
                   onClick={() => setProfileMenuOpen(true)}
-                  badge={totalCount > 0 ? totalCount : undefined}
+                  badge={(totalCount + (counts.unreadMessages || 0)) > 0 ? (totalCount + (counts.unreadMessages || 0)) : undefined}
                 />
               </>
             ) : (
@@ -237,6 +236,29 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   {t("common.viewProfile", { defaultValue: "View profile" })}
                 </button>
               </div>
+              {/* Notification Bell - matches web version style */}
+              <div className="relative">
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="rounded-2xl h-9 w-9"
+                  onClick={() => {
+                    setProfileMenuOpen(false)
+                    setNotificationSheetOpen(true)
+                  }}
+                  aria-label="Notifications"
+                >
+                  <Bell className="h-4 w-4" />
+                </Button>
+                {totalCount > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-medium flex items-center justify-center ring-2 ring-white dark:ring-[#252526]"
+                    aria-hidden="true"
+                  >
+                    {totalCount > 99 ? '99+' : totalCount}
+                  </span>
+                )}
+              </div>
             </div>
           </SheetHeader>
           
@@ -282,12 +304,13 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   }}
                 />
                 <QuickActionButton
-                  icon={<Search className="h-5 w-5" />}
-                  label={t("common.search", { defaultValue: "Search" })}
+                  icon={<MessageCircle className="h-5 w-5" />}
+                  label={t("common.messages", { defaultValue: "Chats" })}
                   onClick={() => {
                     setProfileMenuOpen(false)
-                    navigate("/search")
+                    navigate("/messages")
                   }}
+                  badge={counts.unreadMessages > 0 ? counts.unreadMessages : undefined}
                 />
                 <QuickActionButton
                   icon={<Settings className="h-5 w-5" />}
