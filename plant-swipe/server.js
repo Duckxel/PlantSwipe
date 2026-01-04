@@ -4262,11 +4262,10 @@ const DEFAULT_TIMEZONE = 'Europe/London'
 
 async function ensureNotificationTables() {
   if (!sql) {
-    console.log('[ensureNotificationTables] No SQL connection')
     return
   }
   if (notificationTablesEnsured) {
-    console.log('[ensureNotificationTables] Already ensured, skipping')
+    // Already ensured - skip silently to avoid log spam
     return
   }
   console.log('[ensureNotificationTables] Starting table creation...')
@@ -5294,11 +5293,7 @@ app.options('/api/admin/media/:id', (_req, res) => {
   res.status(204).end()
 })
 
-app.get('/api/env.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript')
-  const token = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
-  res.send(`window.__ENV__ = window.__ENV__ || {}; window.__ENV__.VITE_ADMIN_STATIC_TOKEN = "${token}";`)
-})
+// Note: /api/env.js is served by the main handler at the top (includes Supabase credentials)
 
 app.get('/api/admin/notifications', async (req, res) => {
   const adminId = await ensureEditor(req, res)
@@ -14994,13 +14989,7 @@ app.post('/api/garden/:id/upload', async (req, res) => {
   }
 })
 
-// Serve environment config for admin frontend
-app.get('/api/env.js', (req, res) => {
-  const adminToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
-  const content = `window.__ENV__ = { VITE_ADMIN_STATIC_TOKEN: "${adminToken}" };`
-  res.setHeader('Content-Type', 'application/javascript')
-  res.send(content)
-})
+// Note: /api/env.js is served by the main handler (includes Supabase credentials and admin token)
 
 // Admin: Get all email templates
 app.get('/api/admin/email-templates', async (req, res) => {
@@ -16338,7 +16327,7 @@ async function deliverPushNotifications(notifications, campaign) {
 
 async function processDueUserNotifications() {
   if (!sql) return
-  await ensureNotificationTables()
+  // Note: ensureNotificationTables() is called once at the start of runNotificationWorkerTick()
   while (true) {
     const pending = await sql`
       select
@@ -16482,7 +16471,7 @@ async function runNotificationCampaign(row) {
 
 async function processDueNotificationCampaigns() {
   if (!sql) return
-  await ensureNotificationTables()
+  // Note: ensureNotificationTables() is called once at the start of runNotificationWorkerTick()
 
   // First, recover any campaigns stuck in 'processing' for more than 5 minutes
   try {
@@ -16538,6 +16527,8 @@ async function runNotificationWorkerTick() {
   if (notificationWorkerBusy) return
   notificationWorkerBusy = true
   try {
+    // Ensure notification tables exist once per tick, not in each sub-function
+    await ensureNotificationTables()
     await processDueNotificationCampaigns()
     await processDueAutomations()
     await processDueUserNotifications()

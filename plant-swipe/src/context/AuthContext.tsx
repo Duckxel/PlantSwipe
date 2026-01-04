@@ -162,27 +162,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken }) => {
     // Verify reCAPTCHA token before attempting signup
+    // Use AbortController with timeout to prevent hanging if server is slow
     if (recaptchaToken) {
       try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
         const verifyResp = await fetch('/api/recaptcha/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: recaptchaToken, action: 'signup' }),
           credentials: 'same-origin',
+          signal: controller.signal,
         })
+        clearTimeout(timeoutId)
         const verifyResult = await verifyResp.json().catch(() => ({ success: false }))
         if (!verifyResult.success) {
           return { error: 'reCAPTCHA verification failed. Please try again.' }
         }
       } catch {
-        // If verification endpoint fails, continue but log warning
+        // If verification endpoint fails or times out, continue but log warning
         console.warn('reCAPTCHA verification endpoint failed')
       }
     }
 
     // Check ban by email and IP before attempting signup
+    // Use AbortController with timeout to prevent hanging if server is slow
     try {
-      const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+      const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { 
+        credentials: 'same-origin',
+        signal: controller.signal
+      }).then(r => r.json()).catch(() => ({ banned: false })).finally(() => clearTimeout(timeoutId))
       if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
     } catch {}
     // Validate and normalize the display name (username)
@@ -258,27 +269,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn: AuthContextValue['signIn'] = async ({ email, password, recaptchaToken }) => {
     // Verify reCAPTCHA token before attempting login
+    // Use AbortController with timeout to prevent hanging if server is slow
     if (recaptchaToken) {
       try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
         const verifyResp = await fetch('/api/recaptcha/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: recaptchaToken, action: 'login' }),
           credentials: 'same-origin',
+          signal: controller.signal,
         })
+        clearTimeout(timeoutId)
         const verifyResult = await verifyResp.json().catch(() => ({ success: false }))
         if (!verifyResult.success) {
           return { error: 'reCAPTCHA verification failed. Please try again.' }
         }
       } catch {
-        // If verification endpoint fails, continue but log warning
+        // If verification endpoint fails or times out, continue but log warning
         console.warn('reCAPTCHA verification endpoint failed')
       }
     }
 
     // Gate sign-in if email/IP banned, and show a clear message
+    // Use AbortController with timeout to prevent hanging if server is slow
     try {
-      const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+      const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { 
+        credentials: 'same-origin',
+        signal: controller.signal
+      }).then(r => r.json()).catch(() => ({ banned: false })).finally(() => clearTimeout(timeoutId))
       if (check?.banned) return { error: 'Your account has been banned.' }
     } catch {}
     // Allow login with display name (username) or email
