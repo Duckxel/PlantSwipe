@@ -152,7 +152,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
           {/* Navigation Items */}
           <div className="flex items-center justify-around">
             {user ? (
-              // Logged-in navigation with labels - Messages is now a primary nav item
+              // Logged-in navigation with labels - Search is now a primary nav item
               <>
                 <NavItem 
                   to="/discovery" 
@@ -168,18 +168,17 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   showDot={hasUnfinished}
                 />
                 <NavItem 
-                  to="/messages" 
-                  icon={<MessageCircle className="h-5 w-5" />} 
-                  label={t('common.messages', { defaultValue: 'Chats' })}
-                  isActive={currentView === 'messages'}
-                  badge={counts.unreadMessages > 0 ? counts.unreadMessages : undefined}
+                  to="/search" 
+                  icon={<Search className="h-5 w-5" />} 
+                  label={t('common.search', { defaultValue: 'Search' })}
+                  isActive={currentView === 'search'}
                 />
                 <NavItemButton
                   icon={<User className="h-5 w-5" />}
                   label={t('common.menu', { defaultValue: 'Menu' })}
-                  isActive={currentView === 'profile' || currentView === 'search'}
+                  isActive={currentView === 'profile' || currentView === 'messages'}
                   onClick={() => setProfileMenuOpen(true)}
-                  badge={totalCount > 0 ? totalCount : undefined}
+                  badge={(totalCount + (counts.unreadMessages || 0)) > 0 ? (totalCount + (counts.unreadMessages || 0)) : undefined}
                 />
               </>
             ) : (
@@ -282,12 +281,13 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   }}
                 />
                 <QuickActionButton
-                  icon={<Search className="h-5 w-5" />}
-                  label={t("common.search", { defaultValue: "Search" })}
+                  icon={<MessageCircle className="h-5 w-5" />}
+                  label={t("common.messages", { defaultValue: "Chats" })}
                   onClick={() => {
                     setProfileMenuOpen(false)
-                    navigate("/search")
+                    navigate("/messages")
                   }}
+                  badge={counts.unreadMessages > 0 ? counts.unreadMessages : undefined}
                 />
                 <QuickActionButton
                   icon={<Settings className="h-5 w-5" />}
