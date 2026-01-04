@@ -7,10 +7,21 @@
 
 export type LinkType = 'plant' | 'garden' | 'bookmark' | 'profile' | 'external'
 
+export type MessageType = 'text' | 'image' | 'link'
+
 export interface LinkPreview {
   title?: string
   description?: string
   image?: string
+}
+
+export interface ImageAttachment {
+  url: string
+  thumbnailUrl?: string
+  width?: number
+  height?: number
+  size?: number // in bytes
+  mimeType?: string
 }
 
 export interface Message {
@@ -18,6 +29,11 @@ export interface Message {
   conversationId: string
   senderId: string
   content: string
+  // Message type
+  messageType?: MessageType
+  // Image attachments
+  imageUrl?: string | null
+  imageAttachment?: ImageAttachment | null
   // Optional link sharing
   linkType?: LinkType | null
   linkId?: string | null
@@ -82,6 +98,9 @@ export interface ConversationWithDetails {
 export interface SendMessageParams {
   conversationId: string
   content: string
+  messageType?: MessageType
+  imageUrl?: string | null
+  imageAttachment?: ImageAttachment | null
   linkType?: LinkType | null
   linkId?: string | null
   linkUrl?: string | null

@@ -530,10 +530,122 @@ export function parseLinkUrl(url: string): { type: LinkType; id: string } | null
   }
 }
 
+// ===== Image Upload =====
+
+/**
+ * Upload an image for messaging.
+ * Returns the public URL of the uploaded image.
+ */
+export async function uploadMessageImage(file: File): Promise<{ url: string; thumbnailUrl?: string }> {
+  const session = (await supabase.auth.getSession()).data.session
+  if (!session?.user?.id) {
+    throw new Error('Not authenticated')
+  }
+  
+  // Validate file type
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.')
+  }
+  
+  // Validate file size (max 10MB)
+  const maxSize = 10 * 1024 * 1024
+  if (file.size > maxSize) {
+    throw new Error('File too large. Maximum size is 10MB.')
+  }
+  
+  // Generate unique filename
+  const ext = file.name.split('.').pop() || 'jpg'
+  const timestamp = Date.now()
+  const randomId = Math.random().toString(36).substring(2, 10)
+  const filename = `${session.user.id}/${timestamp}-${randomId}.${ext}`
+  
+  // Upload to Supabase storage
+  const { error } = await supabase.storage
+    .from('message-images')
+    .upload(filename, file, {
+      cacheControl: '31536000', // 1 year cache
+      upsert: false
+    })
+  
+  if (error) {
+    // If bucket doesn't exist, try uploads bucket as fallback
+    const { error: fallbackError } = await supabase.storage
+      .from('uploads')
+      .upload(`messages/${filename}`, file, {
+        cacheControl: '31536000',
+        upsert: false
+      })
+    
+    if (fallbackError) {
+      console.error('[messaging] Failed to upload image:', fallbackError)
+      throw new Error('Failed to upload image')
+    }
+    
+    const { data: urlData } = supabase.storage
+      .from('uploads')
+      .getPublicUrl(`messages/${filename}`)
+    
+    return { url: urlData.publicUrl }
+  }
+  
+  const { data: urlData } = supabase.storage
+    .from('message-images')
+    .getPublicUrl(filename)
+  
+  return { url: urlData.publicUrl }
+}
+
+/**
+ * Send an image message.
+ * Images are sent with a special content format that the UI renders as images.
+ */
+export async function sendImageMessage(
+  conversationId: string,
+  imageUrl: string,
+  caption?: string,
+  replyToId?: string
+): Promise<Message> {
+  // Use a special format to identify image messages
+  // Format: [image:URL] optional caption
+  const content = caption 
+    ? `[image:${imageUrl}] ${caption}`
+    : `[image:${imageUrl}]`
+  
+  return sendMessage({
+    conversationId,
+    content,
+    messageType: 'image',
+    imageUrl,
+    replyToId
+  })
+}
+
+/**
+ * Check if a message is an image message.
+ */
+export function isImageMessage(content: string): boolean {
+  return content.startsWith('[image:')
+}
+
+/**
+ * Extract image URL and caption from an image message content.
+ */
+export function parseImageMessage(content: string): { imageUrl: string; caption?: string } | null {
+  const match = content.match(/^\[image:(.*?)\](.*)$/)
+  if (!match) return null
+  
+  return {
+    imageUrl: match[1],
+    caption: match[2]?.trim() || undefined
+  }
+}
+
 // ===== Push Notifications =====
 
 /**
  * Send a push notification for a new message.
+ * This sends a push notification to the recipient's registered devices.
  */
 export async function sendMessagePushNotification(
   recipientId: string,
@@ -544,16 +656,20 @@ export async function sendMessagePushNotification(
 ): Promise<{ sent: boolean; reason?: string }> {
   const translations: Record<string, { title: string; body: string }> = {
     en: {
-      title: `New message from ${senderDisplayName}`,
+      title: `${senderDisplayName}`,
       body: messagePreview.length > 100 ? messagePreview.slice(0, 100) + '...' : messagePreview
     },
     fr: {
-      title: `Nouveau message de ${senderDisplayName}`,
+      title: `${senderDisplayName}`,
       body: messagePreview.length > 100 ? messagePreview.slice(0, 100) + '...' : messagePreview
     }
   }
   
   const t = translations[language] || translations.en
+  
+  // Build the conversation URL for navigation when notification is clicked
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const conversationUrl = `${baseUrl}/messages?conversation=${conversationId}`
   
   try {
     const session = (await supabase.auth.getSession()).data.session
@@ -575,7 +691,15 @@ export async function sendMessagePushNotification(
         type: 'new_message',
         title: t.title,
         body: t.body,
-        data: { conversationId, senderDisplayName }
+        tag: `message-${conversationId}`, // Group notifications by conversation
+        renotify: true, // Show new notification even if one exists with same tag
+        data: { 
+          conversationId, 
+          senderDisplayName,
+          type: 'new_message',
+          url: conversationUrl,
+          ctaUrl: conversationUrl
+        }
       })
     })
     
