@@ -236,6 +236,29 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   {t("common.viewProfile", { defaultValue: "View profile" })}
                 </button>
               </div>
+              {/* Notification Bell - matches web version style */}
+              <div className="relative">
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="rounded-2xl h-9 w-9"
+                  onClick={() => {
+                    setProfileMenuOpen(false)
+                    setNotificationSheetOpen(true)
+                  }}
+                  aria-label="Notifications"
+                >
+                  <Bell className="h-4 w-4" />
+                </Button>
+                {totalCount > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-medium flex items-center justify-center ring-2 ring-white dark:ring-[#252526]"
+                    aria-hidden="true"
+                  >
+                    {totalCount > 99 ? '99+' : totalCount}
+                  </span>
+                )}
+              </div>
             </div>
           </SheetHeader>
           
@@ -271,7 +294,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
               <p className="px-2 py-2 text-xs font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wider">
                 {t("common.quickActions", { defaultValue: "Quick Actions" })}
               </p>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <QuickActionButton
                   icon={<HeartHandshake className="h-5 w-5" />}
                   label={t("common.friends", { defaultValue: "Friends" })}
@@ -279,15 +302,6 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                     setProfileMenuOpen(false)
                     navigate("/friends")
                   }}
-                />
-                <QuickActionButton
-                  icon={<Bell className="h-5 w-5" />}
-                  label={t("notifications.title", { defaultValue: "Alerts" })}
-                  onClick={() => {
-                    setProfileMenuOpen(false)
-                    setNotificationSheetOpen(true)
-                  }}
-                  badge={totalCount > 0 ? totalCount : undefined}
                 />
                 <QuickActionButton
                   icon={<MessageCircle className="h-5 w-5" />}
