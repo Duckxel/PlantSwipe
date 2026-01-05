@@ -8,8 +8,6 @@ from flask import Flask, request, abort, jsonify, Response
 from pathlib import Path
 import os
 from dotenv import load_dotenv
-from pathlib import Path
-import shlex
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 
@@ -49,13 +47,24 @@ def _load_repo_env():
         here = Path(__file__).resolve().parent
         # repo root is parent of admin_api
         repo = here.parent
-        # Prefer plant-swipe/.env and .env.server if present
-        env1 = repo / 'plant-swipe' / '.env'
-        env2 = repo / 'plant-swipe' / '.env.server'
-        if env1.is_file():
-            load_dotenv(dotenv_path=str(env1), override=False)
-        if env2.is_file():
-            load_dotenv(dotenv_path=str(env2), override=False)
+        
+        # Also check for common deployment locations
+        env_candidates = [
+            repo / 'plant-swipe' / '.env',
+            repo / 'plant-swipe' / '.env.server',
+            Path('/var/www/PlantSwipe/plant-swipe/.env'),
+            Path('/var/www/PlantSwipe/plant-swipe/.env.server'),
+            Path('/etc/admin-api/env'),  # Systemd env file
+        ]
+        
+        for env_path in env_candidates:
+            try:
+                if env_path.is_file():
+                    load_dotenv(dotenv_path=str(env_path), override=False)
+            except Exception:
+                # Skip problematic env files
+                continue
+        
         # Map common aliases so Admin API can reuse same env file
         def prefer_env(target: str, sources: list[str]) -> None:
             if os.environ.get(target):
@@ -70,6 +79,7 @@ def _load_repo_env():
         prefer_env('SUPABASE_DB_PASSWORD', ['PGPASSWORD', 'POSTGRES_PASSWORD'])
         prefer_env('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
     except Exception:
+        # Never let env loading crash the app
         pass
 
 _load_repo_env()
@@ -78,6 +88,7 @@ app = Flask(__name__)
 
 # Optional: forward admin actions to Node app for centralized logging
 def _log_admin_action(action: str, target: str = "", detail: dict | None = None) -> None:
+    """Best-effort logging to Node app. Never blocks or raises."""
     try:
         import requests
         node_url = os.environ.get("NODE_APP_URL", "http://127.0.0.1:3000")
@@ -93,9 +104,17 @@ def _log_admin_action(action: str, target: str = "", detail: dict | None = None)
         url = f"{node_url}/api/admin/log-action"
         payload = {"action": action, "target": target or None, "detail": detail or {}}
         try:
-            requests.post(url, json=payload, headers=headers, timeout=2)
+            # Short timeout - this is best-effort logging, shouldn't delay responses
+            requests.post(url, json=payload, headers=headers, timeout=(1, 2))  # (connect, read)
+        except requests.exceptions.Timeout:
+            pass
+        except requests.exceptions.ConnectionError:
+            pass
         except Exception:
             pass
+    except ImportError:
+        # requests not installed
+        pass
     except Exception:
         pass
 
@@ -140,10 +159,10 @@ def _reboot_machine() -> None:
 def _get_repo_root() -> str:
     # Prefer explicit env override
     env_dir = _get_env_var("PLANTSWIPE_REPO_DIR", "").strip()
-    if env_dir:
+    if env_dir and Path(env_dir).is_dir():
         return env_dir
     here = Path(__file__).resolve().parent
-    # Try git to resolve toplevel
+    # Try git to resolve toplevel with a short timeout
     try:
         cmd = [
             "git",
@@ -154,13 +173,21 @@ def _get_repo_root() -> str:
             "rev-parse",
             "--show-toplevel",
         ]
-        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=5)
+        out = subprocess.check_output(
+            cmd,
+            stderr=subprocess.DEVNULL,
+            timeout=3,  # Shorter timeout to fail fast
+            start_new_session=True,  # Don't let it hang the process group
+        )
         root = out.decode("utf-8").strip()
-        if root:
+        if root and Path(root).is_dir():
             return root
+    except subprocess.TimeoutExpired:
+        # Git command hung, fall through to fallback
+        pass
     except Exception:
         pass
-    # Fallback to workspace root (two levels up from this file)
+    # Fallback to workspace root (parent of this file's directory)
     fallback = here.parent
     return str(fallback)
 
@@ -255,16 +282,31 @@ def _psql_available() -> bool:
         return False
 
 
+def _git_cmd(repo_root: str, *args: str) -> list:
+    """Build a git command list with safe.directory set."""
+    return ["git", "-c", f"safe.directory={repo_root}", "-C", repo_root] + list(args)
+
+
 @app.get("/admin/branches")
 def list_branches():
     _verify_request()
     repo_root = _get_repo_root()
-    git_base = f'git -c "safe.directory={repo_root}" -C "{repo_root}"'
     try:
         # Prune remotes quickly; ignore failures
-        subprocess.run(shlex.split(f"{git_base} remote update --prune"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        subprocess.run(
+            _git_cmd(repo_root, "remote", "update", "--prune"),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30
+        )
         # List remote branches
-        res = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/remotes/origin"), capture_output=True, text=True, timeout=30, check=False)
+        res = subprocess.run(
+            _git_cmd(repo_root, "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin"),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False
+        )
         # Normalize remote ref names and exclude non-branch entries
         branches = []
         for raw in (res.stdout or "").split("\n"):
@@ -278,9 +320,21 @@ def list_branches():
             branches.append(name)
         if not branches:
             # fallback to local
-            res_local = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/heads"), capture_output=True, text=True, timeout=30, check=False)
+            res_local = subprocess.run(
+                _git_cmd(repo_root, "for-each-ref", "--format=%(refname:short)", "refs/heads"),
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False
+            )
             branches = [s.strip() for s in (res_local.stdout or "").split("\n") if s.strip()]
-        cur = subprocess.run(shlex.split(f"{git_base} rev-parse --abbrev-ref HEAD"), capture_output=True, text=True, timeout=10, check=False)
+        cur = subprocess.run(
+            _git_cmd(repo_root, "rev-parse", "--abbrev-ref", "HEAD"),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False
+        )
         current = (cur.stdout or "").strip()
         branches = sorted(set(branches))
         
@@ -462,7 +516,26 @@ def admin_deploy_edge_functions():
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True})
+    """Health check endpoint - no auth required."""
+    return jsonify({"ok": True, "service": "admin-api"})
+
+
+@app.get("/admin/health")
+def admin_health():
+    """More detailed health check with auth."""
+    _verify_request()
+    try:
+        repo_root = _get_repo_root()
+        repo_exists = Path(repo_root).is_dir()
+    except Exception as e:
+        repo_root = str(e)
+        repo_exists = False
+    return jsonify({
+        "ok": True,
+        "service": "admin-api",
+        "repo_root": repo_root,
+        "repo_exists": repo_exists,
+    })
 
 
 @app.post("/admin/restart-app")
