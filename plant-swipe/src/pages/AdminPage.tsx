@@ -72,6 +72,13 @@ import {
   Image,
   ZoomIn,
   CircleCheck,
+  Loader2,
+  Square,
+  Bot,
+  Save,
+  Settings2,
+  FileText,
+  MessageCircle,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -84,6 +91,10 @@ import {
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
+import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill";
+import { plantSchema } from "@/lib/plantSchema";
+import { applyAiFieldToPlant } from "@/lib/applyAiField";
+import type { Plant, PlantMeta, PlantWateringSchedule } from "@/types/plant";
 import {
   Dialog,
   DialogTrigger,
@@ -118,7 +129,7 @@ type AdminTab =
   | "overview"
   | "members"
   | "reports"
-  | "requests"
+  | "plants"
   | "stocks"
   | "upload"
   | "notifications"
@@ -194,8 +205,8 @@ type NormalizedPlantStatus =
   | "approved"
   | "other";
 const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
-  { key: "requests", label: "Requests" },
   { key: "plants", label: "Plants" },
+  { key: "requests", label: "Requests" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -1590,9 +1601,15 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
   const [createPlantName, setCreatePlantName] = React.useState<string>("");
+  // Bulk AI state
+  const [bulkAiRunning, setBulkAiRunning] = React.useState<boolean>(false);
+  const [bulkAiCurrentRequestId, setBulkAiCurrentRequestId] = React.useState<string | null>(null);
+  const [bulkAiError, setBulkAiError] = React.useState<string | null>(null);
+  const [bulkAiProcessedCount, setBulkAiProcessedCount] = React.useState<number>(0);
+  const bulkAiAbortRef = React.useRef<AbortController | null>(null);
   const requestViewMode: RequestViewMode = React.useMemo(() => {
-    if (currentPath.includes("/admin/requests/plants")) return "plants";
-    return "requests";
+    if (currentPath.includes("/admin/plants/requests")) return "requests";
+    return "plants";
   }, [currentPath]);
   const [plantDashboardRows, setPlantDashboardRows] = React.useState<
     PlantDashboardRow[]
@@ -2308,6 +2325,290 @@ export const AdminPage: React.FC = () => {
     await loadPlantRequests({ initial: false });
   }, [createPlantRequestId, completePlantRequest, loadPlantRequests]);
 
+  // --- Bulk AI Fill Functions ---
+  const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta']);
+  const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres';
+  
+  const generateUUIDv4 = (): string => {
+    try {
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    } catch {}
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
+  const normalizeSchedules = (entries?: PlantWateringSchedule[]): PlantWateringSchedule[] => {
+    if (!entries?.length) return [];
+    return entries
+      .map((entry) => {
+        const qty = entry.quantity;
+        const parsedQuantity = typeof qty === 'string' ? parseInt(qty, 10) : qty;
+        return {
+          ...entry,
+          quantity: Number.isFinite(parsedQuantity as number) ? Number(parsedQuantity) : undefined,
+          season: entry.season?.trim() || undefined,
+        };
+      })
+      .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod);
+  };
+
+  const normalizePlantWatering = (candidate: Plant): Plant => ({
+    ...candidate,
+    plantCare: {
+      ...(candidate.plantCare || {}),
+      watering: { ...(candidate.plantCare?.watering || {}), schedules: normalizeSchedules(candidate.plantCare?.watering?.schedules) },
+    },
+  });
+
+  const targetFields = React.useMemo(
+    () =>
+      [
+        'plantType',
+        'utility',
+        'comestiblePart',
+        'fruitType',
+        'seasons',
+        'description',
+        'identity',
+        'plantCare',
+        'growth',
+        'usage',
+        'ecology',
+        'danger',
+        'miscellaneous',
+      ].filter((key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase())),
+    [],
+  );
+
+  const basicFieldOrder = React.useMemo(
+    () => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description', 'identity'],
+    [],
+  );
+
+  const aiFieldOrder = React.useMemo(() => {
+    const prioritized = basicFieldOrder.filter((key) => targetFields.includes(key));
+    const remaining = targetFields.filter((key) => !prioritized.includes(key));
+    return [...prioritized, ...remaining];
+  }, [basicFieldOrder, targetFields]);
+
+  const savePlantToDb = React.useCallback(async (plantToSave: Plant): Promise<string | null> => {
+    const trimmedName = plantToSave.name.trim();
+    if (!trimmedName) return null;
+    
+    const plantId = plantToSave.id || generateUUIDv4();
+    const normalizedStatus = (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase();
+    const createdByValue = profile?.display_name || null;
+    const createdTimeValue = new Date().toISOString();
+    
+    try {
+      // Save base plant record
+      const basePayload = {
+        id: plantId,
+        name: trimmedName,
+        scientific_name: plantToSave.identity?.scientificName || null,
+        plant_type: plantToSave.plantType || null,
+        utility: plantToSave.utility || [],
+        comestible_part: plantToSave.comestiblePart || [],
+        fruit_type: plantToSave.fruitType || [],
+        status: normalizedStatus,
+        created_by: createdByValue,
+        created_time: createdTimeValue,
+        updated_by: createdByValue,
+        updated_time: createdTimeValue,
+      };
+      
+      const { error: insertError } = await supabase
+        .from('plants')
+        .upsert(basePayload);
+      
+      if (insertError) {
+        console.error('[savePlantToDb] Insert error:', insertError);
+        return null;
+      }
+      
+      // Save translation
+      const translationPayload = {
+        plant_id: plantId,
+        language: 'en',
+        name: trimmedName,
+        given_names: plantToSave.identity?.givenNames || [],
+        overview: plantToSave.identity?.overview || null,
+        allergens: plantToSave.identity?.allergens || [],
+        symbolism: plantToSave.identity?.symbolism || [],
+        origin: plantToSave.plantCare?.origin || [],
+        advice_soil: plantToSave.plantCare?.adviceSoil || null,
+        advice_mulching: plantToSave.plantCare?.adviceMulching || null,
+        advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
+        advice_tutoring: plantToSave.growth?.adviceTutoring || null,
+        advice_sowing: plantToSave.growth?.adviceSowing || null,
+        cut: plantToSave.growth?.cut || null,
+        advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+        nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
+        recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+        advice_infusion: plantToSave.usage?.adviceInfusion || null,
+        ground_effect: plantToSave.ecology?.groundEffect || null,
+        tags: plantToSave.miscellaneous?.tags || [],
+      };
+      
+      const { error: translationError } = await supabase
+        .from('plant_translations')
+        .upsert(translationPayload, { onConflict: 'plant_id,language' });
+      
+      if (translationError) {
+        console.error('[savePlantToDb] Translation error:', translationError);
+      }
+      
+      return plantId;
+    } catch (err) {
+      console.error('[savePlantToDb] Error:', err);
+      return null;
+    }
+  }, [profile?.display_name]);
+
+  const runBulkAiFill = React.useCallback(async () => {
+    if (bulkAiRunning || plantRequests.length === 0) return;
+    
+    // Create new abort controller
+    const abortController = new AbortController();
+    bulkAiAbortRef.current = abortController;
+    
+    setBulkAiRunning(true);
+    setBulkAiError(null);
+    setBulkAiProcessedCount(0);
+    
+    let processedCount = 0;
+    
+    // Get current list of requests to process
+    const requestsToProcess = [...plantRequests];
+    
+    for (const request of requestsToProcess) {
+      // Check if aborted
+      if (abortController.signal.aborted) {
+        console.log('[BulkAI] Processing stopped by user');
+        break;
+      }
+      
+      setBulkAiCurrentRequestId(request.id);
+      
+      const plantName = request.plant_name.trim();
+      if (!plantName) {
+        processedCount += 1;
+        setBulkAiProcessedCount(processedCount);
+        continue;
+      }
+      
+      // Create empty plant with name
+      const newPlantId = generateUUIDv4();
+      let plant: Plant = {
+        id: newPlantId,
+        name: plantName,
+        utility: [],
+        comestiblePart: [],
+        fruitType: [],
+        images: [],
+        identity: { givenNames: [], colors: [], multicolor: false, bicolor: false },
+        plantCare: { watering: { schedules: [] } },
+        growth: {},
+        usage: {},
+        ecology: {},
+        danger: {},
+        miscellaneous: { sources: [] },
+        meta: { status: IN_PROGRESS_STATUS },
+        seasons: [],
+        colors: [],
+      };
+      
+      const applyWithStatus = (candidate: Plant): Plant => ({
+        ...candidate,
+        meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
+      });
+      
+      try {
+        // Run AI fill
+        const aiData = await fetchAiPlantFill({
+          plantName,
+          schema: plantSchema,
+          existingData: plant,
+          fields: aiFieldOrder,
+          language: 'en',
+          signal: abortController.signal,
+          continueOnFieldError: true,
+          onFieldComplete: ({ field, data }) => {
+            if (field === 'complete') return;
+            plant = applyAiFieldToPlant(plant, field, data);
+            plant = normalizePlantWatering(plant);
+            plant = applyWithStatus(plant);
+          },
+        });
+        
+        // Apply any remaining AI data
+        if (aiData && typeof aiData === 'object') {
+          for (const [fieldKey, data] of Object.entries(aiData as Record<string, unknown>)) {
+            plant = applyAiFieldToPlant(plant, fieldKey, data);
+          }
+          plant = normalizePlantWatering(plant);
+          plant = applyWithStatus(plant);
+        }
+        
+        // Ensure some defaults
+        const ensuredWater = (plant.plantCare?.watering?.schedules || []).length
+          ? normalizeSchedules(plant.plantCare?.watering?.schedules)
+          : [{ season: undefined, quantity: 1, timePeriod: 'week' as const }];
+        const ensuredGrowth = {
+          sowingMonth: plant.growth?.sowingMonth?.length ? plant.growth.sowingMonth : [3],
+          floweringMonth: plant.growth?.floweringMonth?.length ? plant.growth.floweringMonth : [6],
+          fruitingMonth: plant.growth?.fruitingMonth?.length ? plant.growth.fruitingMonth : [9],
+        };
+        
+        plant = {
+          ...plant,
+          plantCare: {
+            ...(plant.plantCare || {}),
+            origin: (plant.plantCare?.origin || []).length ? plant.plantCare?.origin : ['Unknown'],
+            watering: { ...(plant.plantCare?.watering || {}), schedules: ensuredWater },
+          },
+          growth: { ...(plant.growth || {}), ...ensuredGrowth },
+          meta: { ...(plant.meta || {}), status: IN_PROGRESS_STATUS },
+        };
+        
+        // Save plant to database
+        const savedId = await savePlantToDb(plant);
+        
+        if (savedId) {
+          // Complete the request (delete it)
+          await completePlantRequest(request.id);
+        }
+        
+      } catch (err: any) {
+        if (err?.message === 'AI fill was cancelled' || abortController.signal.aborted) {
+          console.log('[BulkAI] Processing cancelled');
+          break;
+        }
+        console.error(`[BulkAI] Error processing "${plantName}":`, err);
+        setBulkAiError(`Error processing "${plantName}": ${err?.message || 'Unknown error'}`);
+      }
+      
+      processedCount += 1;
+      setBulkAiProcessedCount(processedCount);
+    }
+    
+    setBulkAiRunning(false);
+    setBulkAiCurrentRequestId(null);
+    bulkAiAbortRef.current = null;
+    
+    // Refresh requests list
+    await loadPlantRequests({ initial: false });
+  }, [bulkAiRunning, plantRequests, aiFieldOrder, savePlantToDb, completePlantRequest, loadPlantRequests]);
+
+  const stopBulkAiFill = React.useCallback(() => {
+    if (bulkAiAbortRef.current) {
+      bulkAiAbortRef.current.abort();
+    }
+  }, []);
+
   // Presence fallback removed by request: rely on DB-backed API only
 
   // --- Health monitor: ping API, Admin, DB every minute ---
@@ -2357,6 +2658,25 @@ export const AdminPage: React.FC = () => {
   const [systemHealth, setSystemHealth] = React.useState<SystemHealthStats>(emptySystemHealth);
   const [systemHealthLoading, setSystemHealthLoading] = React.useState<boolean>(true);
   const [systemHealthError, setSystemHealthError] = React.useState<string | null>(null);
+
+  // AI Model Settings State
+  const [aiModelSettingsExpanded, setAiModelSettingsExpanded] = React.useState<boolean>(false);
+  // Model tier names
+  const [aiModelFast, setAiModelFast] = React.useState<string>("");
+  const [aiModelAvg, setAiModelAvg] = React.useState<string>("");
+  const [aiModelHigh, setAiModelHigh] = React.useState<string>("");
+  // Endpoint tier selections
+  const [aiTierPlantFill, setAiTierPlantFill] = React.useState<string>("avg");
+  const [aiTierPlantVerify, setAiTierPlantVerify] = React.useState<string>("fast");
+  const [aiTierBlogSummary, setAiTierBlogSummary] = React.useState<string>("fast");
+  const [aiTierGardenAdviceText, setAiTierGardenAdviceText] = React.useState<string>("avg");
+  const [aiTierGardenAdviceVision, setAiTierGardenAdviceVision] = React.useState<string>("high");
+  const [aiTierJournalText, setAiTierJournalText] = React.useState<string>("avg");
+  const [aiTierJournalVision, setAiTierJournalVision] = React.useState<string>("high");
+  const [aiModelSettingsLoading, setAiModelSettingsLoading] = React.useState<boolean>(false);
+  const [aiModelSettingsSaving, setAiModelSettingsSaving] = React.useState<boolean>(false);
+  const [aiModelSettingsError, setAiModelSettingsError] = React.useState<string | null>(null);
+  const [aiModelSettingsSuccess, setAiModelSettingsSuccess] = React.useState<string | null>(null);
 
   // Track mount state to avoid setState on unmounted component during async probes
   const isMountedRef = React.useRef(true);
@@ -2642,6 +2962,118 @@ export const AdminPage: React.FC = () => {
     }, 30000); // Every 30 seconds
     return () => clearInterval(intervalId);
   }, [loadSystemHealth]);
+
+  // AI Model Settings - Load and Save
+  const loadAiModelSettings = React.useCallback(async () => {
+    setAiModelSettingsLoading(true);
+    setAiModelSettingsError(null);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      
+      const resp = await fetch("/api/admin/ai-models", {
+        headers,
+        credentials: "same-origin",
+      });
+      const data = await safeJson(resp);
+      
+      if (!resp.ok) {
+        throw new Error(data?.error || `HTTP ${resp.status}`);
+      }
+      
+      if (isMountedRef.current) {
+        // Model tier names
+        setAiModelFast(data?.modelFast || "");
+        setAiModelAvg(data?.modelAvg || "");
+        setAiModelHigh(data?.modelHigh || "");
+        // Endpoint tier selections
+        setAiTierPlantFill(data?.tierPlantFill || "avg");
+        setAiTierPlantVerify(data?.tierPlantVerify || "fast");
+        setAiTierBlogSummary(data?.tierBlogSummary || "fast");
+        setAiTierGardenAdviceText(data?.tierGardenAdviceText || "avg");
+        setAiTierGardenAdviceVision(data?.tierGardenAdviceVision || "high");
+        setAiTierJournalText(data?.tierJournalText || "avg");
+        setAiTierJournalVision(data?.tierJournalVision || "high");
+      }
+    } catch (e: unknown) {
+      if (isMountedRef.current) {
+        setAiModelSettingsError(e instanceof Error ? e.message : "Failed to load AI model settings");
+      }
+    } finally {
+      if (isMountedRef.current) setAiModelSettingsLoading(false);
+    }
+  }, [safeJson]);
+
+  const saveAiModelSettings = React.useCallback(async () => {
+    setAiModelSettingsSaving(true);
+    setAiModelSettingsError(null);
+    setAiModelSettingsSuccess(null);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { 
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      
+      const resp = await fetch("/api/admin/ai-models", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          // Model tier names
+          modelFast: aiModelFast.trim(),
+          modelAvg: aiModelAvg.trim(),
+          modelHigh: aiModelHigh.trim(),
+          // Endpoint tier selections
+          tierPlantFill: aiTierPlantFill,
+          tierPlantVerify: aiTierPlantVerify,
+          tierBlogSummary: aiTierBlogSummary,
+          tierGardenAdviceText: aiTierGardenAdviceText,
+          tierGardenAdviceVision: aiTierGardenAdviceVision,
+          tierJournalText: aiTierJournalText,
+          tierJournalVision: aiTierJournalVision,
+        }),
+      });
+      const data = await safeJson(resp);
+      
+      if (!resp.ok) {
+        throw new Error(data?.error || `HTTP ${resp.status}`);
+      }
+      
+      if (isMountedRef.current) {
+        setAiModelSettingsSuccess("AI model settings saved successfully!");
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          if (isMountedRef.current) setAiModelSettingsSuccess(null);
+        }, 3000);
+      }
+    } catch (e: unknown) {
+      if (isMountedRef.current) {
+        setAiModelSettingsError(e instanceof Error ? e.message : "Failed to save AI model settings");
+      }
+    } finally {
+      if (isMountedRef.current) setAiModelSettingsSaving(false);
+    }
+  }, [safeJson, aiModelFast, aiModelAvg, aiModelHigh, aiTierPlantFill, aiTierPlantVerify, aiTierBlogSummary, aiTierGardenAdviceText, aiTierGardenAdviceVision, aiTierJournalText, aiTierJournalVision]);
+
+  // Load AI model settings when overview tab is active
+  React.useEffect(() => {
+    if (activeTab === "overview" && aiModelSettingsExpanded && !aiModelFast && !aiModelAvg && !aiModelHigh) {
+      loadAiModelSettings();
+    }
+  }, [activeTab, aiModelSettingsExpanded, aiModelFast, aiModelAvg, aiModelHigh, loadAiModelSettings]);
 
   // Helper to format uptime
   const formatUptime = (seconds: number | null): string => {
@@ -3474,7 +3906,7 @@ export const AdminPage: React.FC = () => {
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin", adminOnly: true },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
     { key: "reports", label: "Reports", Icon: AlertTriangle, path: "/admin/reports", adminOnly: true },
-    { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
+    { key: "plants", label: "Plants", Icon: Leaf, path: "/admin/plants" },
     { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
@@ -3491,7 +3923,7 @@ export const AdminPage: React.FC = () => {
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
     if (currentPath.includes("/admin/reports")) return "reports";
-    if (currentPath.includes("/admin/requests")) return "requests";
+    if (currentPath.includes("/admin/plants")) return "plants";
     if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
@@ -3505,8 +3937,8 @@ export const AdminPage: React.FC = () => {
     if (isFullAdmin) return; // Admins can access everything
     const adminOnlyTabs: AdminTab[] = ["overview", "members", "reports", "stocks", "admin_logs"];
     if (adminOnlyTabs.includes(activeTab)) {
-      // Redirect to requests tab (default for editors)
-      navigate("/admin/requests", { replace: true });
+      // Redirect to plants tab (default for editors)
+      navigate("/admin/plants", { replace: true });
     }
   }, [activeTab, isFullAdmin, navigate]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
@@ -3523,13 +3955,13 @@ export const AdminPage: React.FC = () => {
   }, [plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
-    if (activeTab !== "requests" || plantRequestsInitialized) return;
+    if (activeTab !== "plants" || plantRequestsInitialized) return;
     loadPlantRequests({ initial: true });
   }, [activeTab, plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
     if (
-      activeTab !== "requests" ||
+      activeTab !== "plants" ||
       !plantViewIsPlants ||
       plantDashboardInitialized ||
       plantDashboardLoading
@@ -6522,6 +6954,194 @@ export const AdminPage: React.FC = () => {
                           </a>
                         </Button>
                       </div>
+
+                      {/* AI Model Settings - Collapsible Section */}
+                      <Card className={cn(glassCardClass, "mt-6")}>
+                        <CardContent className="p-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAiModelSettingsExpanded(!aiModelSettingsExpanded);
+                              if (!aiModelSettingsExpanded && !aiModelFast && !aiModelAvg && !aiModelHigh) {
+                                loadAiModelSettings();
+                              }
+                            }}
+                            className="w-full flex items-center justify-between p-4 hover:bg-stone-50 dark:hover:bg-[#252528] transition-colors rounded-2xl"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 flex items-center justify-center">
+                                <Bot className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                              </div>
+                              <div className="text-left">
+                                <div className="font-medium text-stone-900 dark:text-white">AI Model Settings</div>
+                                <div className="text-xs text-stone-500 dark:text-stone-400">Configure AI models for garden advice and plant fill</div>
+                              </div>
+                            </div>
+                            <ChevronDown className={`h-5 w-5 text-stone-400 transition-transform duration-200 ${aiModelSettingsExpanded ? "rotate-180" : ""}`} />
+                          </button>
+                          
+                          {aiModelSettingsExpanded && (
+                            <div className="px-4 pb-4 space-y-4 border-t border-stone-100 dark:border-[#2a2a2d] pt-4">
+                              {aiModelSettingsLoading ? (
+                                <div className="flex items-center justify-center py-8 gap-2 text-stone-500">
+                                  <Loader2 className="h-5 w-5 animate-spin" />
+                                  <span className="text-sm">Loading AI model settings...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  {aiModelSettingsError && (
+                                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200 flex items-center gap-2">
+                                      <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                                      <span>{aiModelSettingsError}</span>
+                                      <button
+                                        type="button"
+                                        className="ml-auto text-red-500 hover:text-red-700 dark:hover:text-red-300"
+                                        onClick={() => setAiModelSettingsError(null)}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  )}
+                                  
+                                  {aiModelSettingsSuccess && (
+                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/30 dark:text-emerald-200 flex items-center gap-2">
+                                      <Check className="h-4 w-4 flex-shrink-0" />
+                                      <span>{aiModelSettingsSuccess}</span>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Model Tier Names */}
+                                  <div className="space-y-3">
+                                    <h4 className="text-sm font-semibold text-stone-700 dark:text-stone-300 flex items-center gap-2">
+                                      <Sparkles className="h-4 w-4 text-violet-500" />
+                                      Model Tiers
+                                    </h4>
+                                    <div className="grid gap-3 sm:grid-cols-3">
+                                      <div className="space-y-1">
+                                        <label className="flex items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-400">
+                                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                          Fast (Cheap)
+                                        </label>
+                                        <Input
+                                          type="text"
+                                          value={aiModelFast}
+                                          onChange={(e) => setAiModelFast(e.target.value)}
+                                          placeholder="e.g., gpt-4o-mini"
+                                          className="rounded-lg h-9 text-sm"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="flex items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-400">
+                                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                          Average (Balanced)
+                                        </label>
+                                        <Input
+                                          type="text"
+                                          value={aiModelAvg}
+                                          onChange={(e) => setAiModelAvg(e.target.value)}
+                                          placeholder="e.g., gpt-4o"
+                                          className="rounded-lg h-9 text-sm"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="flex items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-400">
+                                          <span className="w-2 h-2 rounded-full bg-violet-500"></span>
+                                          High (Quality)
+                                        </label>
+                                        <Input
+                                          type="text"
+                                          value={aiModelHigh}
+                                          onChange={(e) => setAiModelHigh(e.target.value)}
+                                          placeholder="e.g., gpt-4-turbo"
+                                          className="rounded-lg h-9 text-sm"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Endpoint Tier Selections */}
+                                  <div className="space-y-3 pt-3 border-t border-stone-100 dark:border-[#2a2a2d]">
+                                    <h4 className="text-sm font-semibold text-stone-700 dark:text-stone-300 flex items-center gap-2">
+                                      <Settings2 className="h-4 w-4 text-blue-500" />
+                                      Endpoint Settings
+                                    </h4>
+                                    <div className="grid gap-2">
+                                      {[
+                                        { key: "tierPlantFill", label: "Plant Fill", icon: Sparkles, color: "text-violet-500", value: aiTierPlantFill, setter: setAiTierPlantFill },
+                                        { key: "tierPlantVerify", label: "Plant Name Verify", icon: CircleCheck, color: "text-emerald-500", value: aiTierPlantVerify, setter: setAiTierPlantVerify },
+                                        { key: "tierBlogSummary", label: "Blog Summary", icon: FileText, color: "text-blue-500", value: aiTierBlogSummary, setter: setAiTierBlogSummary },
+                                        { key: "tierGardenAdviceText", label: "Garden Advice (Text)", icon: Leaf, color: "text-emerald-500", value: aiTierGardenAdviceText, setter: setAiTierGardenAdviceText },
+                                        { key: "tierGardenAdviceVision", label: "Garden Advice (Vision)", icon: Eye, color: "text-blue-500", value: aiTierGardenAdviceVision, setter: setAiTierGardenAdviceVision },
+                                        { key: "tierJournalText", label: "Journal Feedback (Text)", icon: MessageCircle, color: "text-amber-500", value: aiTierJournalText, setter: setAiTierJournalText },
+                                        { key: "tierJournalVision", label: "Journal Feedback (Vision)", icon: Eye, color: "text-violet-500", value: aiTierJournalVision, setter: setAiTierJournalVision },
+                                      ].map((endpoint) => {
+                                        const Icon = endpoint.icon;
+                                        return (
+                                          <div key={endpoint.key} className="flex items-center justify-between py-2 px-3 rounded-lg bg-stone-50 dark:bg-[#252528]">
+                                            <div className="flex items-center gap-2">
+                                              <Icon className={`h-4 w-4 ${endpoint.color}`} />
+                                              <span className="text-sm text-stone-700 dark:text-stone-300">{endpoint.label}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              {["fast", "avg", "high"].map((tier) => (
+                                                <button
+                                                  key={tier}
+                                                  type="button"
+                                                  onClick={() => endpoint.setter(tier)}
+                                                  className={`px-3 py-1 text-xs font-medium rounded-full transition-all ${
+                                                    endpoint.value === tier
+                                                      ? tier === "fast"
+                                                        ? "bg-emerald-500 text-white"
+                                                        : tier === "avg"
+                                                        ? "bg-amber-500 text-white"
+                                                        : "bg-violet-500 text-white"
+                                                      : "bg-stone-200 dark:bg-[#3a3a3d] text-stone-600 dark:text-stone-400 hover:bg-stone-300 dark:hover:bg-[#4a4a4d]"
+                                                  }`}
+                                                >
+                                                  {tier === "fast" ? "Fast" : tier === "avg" ? "Avg" : "High"}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex items-center justify-between pt-3 border-t border-stone-100 dark:border-[#2a2a2d]">
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                                      <span className="font-medium">Tip:</span> Use models like <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-4o-mini</code>, <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-4o</code>, or <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-5-nano</code>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        variant="outline"
+                                        className="rounded-xl"
+                                        onClick={loadAiModelSettings}
+                                        disabled={aiModelSettingsLoading || aiModelSettingsSaving}
+                                      >
+                                        <RefreshCw className={`h-4 w-4 mr-2 ${aiModelSettingsLoading ? "animate-spin" : ""}`} />
+                                        Reload
+                                      </Button>
+                                      <Button
+                                        className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white"
+                                        onClick={saveAiModelSettings}
+                                        disabled={aiModelSettingsLoading || aiModelSettingsSaving}
+                                      >
+                                        {aiModelSettingsSaving ? (
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                          <Save className="h-4 w-4 mr-2" />
+                                        )}
+                                        Save Changes
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
                   </>
                 )}
 
@@ -6530,14 +7150,14 @@ export const AdminPage: React.FC = () => {
                   <AdminStocksPanel />
                 )}
 
-                {/* Requests Tab */}
-                  {activeTab === "requests" && (
+                {/* Plants Tab */}
+                  {activeTab === "plants" && (
                     <div className="space-y-4">
                       <div className="flex justify-center">
                         <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
                           {REQUEST_VIEW_TABS.map((tab) => {
                             const isActive = requestViewMode === tab.key;
-                            const tabPath = tab.key === "plants" ? "/admin/requests/plants" : "/admin/requests";
+                            const tabPath = tab.key === "requests" ? "/admin/plants/requests" : "/admin/plants";
                             return (
                               <Link
                                 key={tab.key}
@@ -7084,6 +7704,29 @@ export const AdminPage: React.FC = () => {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {/* Bulk AI Button */}
+                            {bulkAiRunning ? (
+                              <Button
+                                variant="destructive"
+                                className="rounded-xl"
+                                onClick={stopBulkAiFill}
+                              >
+                                <Square className="h-4 w-4 mr-2" />
+                                <span className="hidden sm:inline">Stop AI ({bulkAiProcessedCount}/{plantRequests.length + bulkAiProcessedCount})</span>
+                                <span className="sm:hidden inline">Stop</span>
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white border-0"
+                                onClick={runBulkAiFill}
+                                disabled={plantRequests.length === 0 || plantRequestsLoading}
+                              >
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                <span className="hidden sm:inline">BULK AI</span>
+                                <span className="sm:hidden inline">AI</span>
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               className="rounded-xl"
@@ -7091,7 +7734,7 @@ export const AdminPage: React.FC = () => {
                                 loadPlantRequests({ initial: false })
                               }
                               disabled={
-                                plantRequestsLoading || plantRequestsRefreshing
+                                plantRequestsLoading || plantRequestsRefreshing || bulkAiRunning
                               }
                             >
                               <RefreshCw
@@ -7105,6 +7748,7 @@ export const AdminPage: React.FC = () => {
                                 <Button
                                   className="rounded-l-xl rounded-r-none bg-emerald-600 hover:bg-emerald-700 text-white"
                                   onClick={() => navigate("/create")}
+                                  disabled={bulkAiRunning}
                                 >
                                   <Plus className="h-4 w-4 mr-1" />
                                   <span className="hidden sm:inline">Add Plant</span>
@@ -7113,6 +7757,7 @@ export const AdminPage: React.FC = () => {
                                 <Button
                                   className="rounded-l-none rounded-r-xl bg-emerald-600 hover:bg-emerald-700 text-white border-l border-emerald-500 px-2"
                                   onClick={() => setAddButtonExpanded(!addButtonExpanded)}
+                                  disabled={bulkAiRunning}
                                 >
                                   <ChevronDown className={`h-4 w-4 transition-transform ${addButtonExpanded ? "rotate-180" : ""}`} />
                                 </Button>
@@ -7156,6 +7801,51 @@ export const AdminPage: React.FC = () => {
                                 {plantRequests.length}
                               </span>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Bulk AI Progress */}
+                        {bulkAiRunning && (
+                          <div className="rounded-xl border border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-violet-500 to-purple-600 flex items-center justify-center">
+                                  <Sparkles className="h-4 w-4 text-white animate-pulse" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-violet-900 dark:text-violet-100">
+                                    Bulk AI Processing
+                                  </div>
+                                  <div className="text-xs text-violet-600 dark:text-violet-300">
+                                    Processing {bulkAiProcessedCount + 1} of {plantRequests.length + bulkAiProcessedCount} plants...
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-32 h-2 bg-violet-200 dark:bg-violet-800 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-gradient-to-r from-violet-500 to-purple-600 rounded-full transition-all duration-300"
+                                    style={{ width: `${((bulkAiProcessedCount) / (plantRequests.length + bulkAiProcessedCount)) * 100}%` }}
+                                  />
+                                </div>
+                                <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Bulk AI Error */}
+                        {bulkAiError && !bulkAiRunning && (
+                          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200 flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                            <span>{bulkAiError}</span>
+                            <button
+                              type="button"
+                              className="ml-auto text-red-500 hover:text-red-700 dark:hover:text-red-300"
+                              onClick={() => setBulkAiError(null)}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
                           </div>
                         )}
 
@@ -7218,9 +7908,22 @@ export const AdminPage: React.FC = () => {
                                       className="flex flex-col gap-3 rounded-xl border bg-white p-3 dark:bg-[#252526] dark:border-[#3e3e42] md:flex-row md:items-center md:justify-between"
                                     >
                                       <div className="flex items-start gap-2 flex-1">
+                                        {/* Loading spinner for bulk AI processing */}
+                                        {bulkAiCurrentRequestId === req.id && (
+                                          <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-violet-500/20 to-purple-600/20 animate-pulse">
+                                            <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                                          </div>
+                                        )}
                                         <div className="flex-1">
-                                          <div className="text-sm font-medium">
-                                            {req.plant_name}
+                                          <div className="flex items-center gap-2">
+                                            <span className={`text-sm font-medium ${bulkAiCurrentRequestId === req.id ? 'text-violet-600 dark:text-violet-400' : ''}`}>
+                                              {req.plant_name}
+                                            </span>
+                                            {bulkAiCurrentRequestId === req.id && (
+                                              <span className="text-xs bg-gradient-to-r from-violet-500 to-purple-600 text-white px-2 py-0.5 rounded-full">
+                                                AI Filling...
+                                              </span>
+                                            )}
                                           </div>
                                           <div
                                             className="text-xs opacity-60"
@@ -7237,6 +7940,7 @@ export const AdminPage: React.FC = () => {
                                             handleOpenInfoDialog(req)
                                           }
                                           title="View request details"
+                                          disabled={bulkAiRunning}
                                         >
                                           <Info className="h-4 w-4" />
                                         </Button>
@@ -7244,7 +7948,7 @@ export const AdminPage: React.FC = () => {
                                       <div className="flex items-center gap-3">
                                         <Badge
                                           variant="secondary"
-                                          className="rounded-xl px-2 py-1 text-xs"
+                                          className={`rounded-xl px-2 py-1 text-xs ${bulkAiCurrentRequestId === req.id ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : ''}`}
                                         >
                                           {req.request_count}{" "}
                                           {req.request_count === 1
@@ -7257,6 +7961,7 @@ export const AdminPage: React.FC = () => {
                                           onClick={() =>
                                             handleOpenCreatePlantDialog(req)
                                           }
+                                          disabled={bulkAiRunning}
                                         >
                                           <Plus className="h-4 w-4 mr-2" />
                                           Add Plant
@@ -7268,7 +7973,7 @@ export const AdminPage: React.FC = () => {
                                             completePlantRequest(req.id)
                                           }
                                           disabled={
-                                            completingRequestId === req.id
+                                            completingRequestId === req.id || bulkAiRunning
                                           }
                                         >
                                           {completingRequestId === req.id
