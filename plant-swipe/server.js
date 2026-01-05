@@ -759,11 +759,37 @@ const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
   : null
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
-let openaiModelPlantFill = process.env.OPENAI_MODEL || 'gpt-4o'
-let openaiModelGardenAdvice = process.env.OPENAI_MODEL_GARDEN_ADVICE || 'gpt-4o-mini'
-let openaiModelVision = process.env.OPENAI_MODEL_VISION || 'gpt-4o' // For image analysis tasks
-// Keep legacy reference for backward compatibility
+
+// AI Model Tiers - configurable model names for each quality level
+let aiModelFast = process.env.AI_MODEL_FAST || 'gpt-4o-mini'
+let aiModelAvg = process.env.AI_MODEL_AVG || 'gpt-4o'
+let aiModelHigh = process.env.AI_MODEL_HIGH || 'gpt-4-turbo'
+
+// AI Endpoint Tier Selections - which tier each endpoint uses ('fast', 'avg', 'high')
+let aiTierPlantFill = 'avg'
+let aiTierPlantVerify = 'fast'
+let aiTierBlogSummary = 'fast'
+let aiTierGardenAdviceText = 'avg'
+let aiTierGardenAdviceVision = 'high'
+let aiTierJournalText = 'avg'
+let aiTierJournalVision = 'high'
+
+// Helper to get the actual model name for an endpoint
+function getModelForTier(tier) {
+  switch (tier) {
+    case 'fast': return aiModelFast
+    case 'high': return aiModelHigh
+    case 'avg':
+    default: return aiModelAvg
+  }
+}
+
+// Keep legacy references for backward compatibility
+let openaiModelPlantFill = aiModelAvg
+let openaiModelGardenAdvice = aiModelAvg
+let openaiModelVision = aiModelHigh
 const openaiModel = openaiModelPlantFill
+
 let openaiClient = null
 let openai = null // Alias for garden advice endpoints
 if (openaiApiKey) {
@@ -782,9 +808,18 @@ if (openaiApiKey) {
 // Helper function to get AI model settings from admin_secrets table
 async function getAiModelSettings() {
   const settings = {
-    gardenAdvice: openaiModelGardenAdvice,
-    plantFill: openaiModelPlantFill,
-    vision: openaiModelVision,
+    // Model tier names
+    modelFast: aiModelFast,
+    modelAvg: aiModelAvg,
+    modelHigh: aiModelHigh,
+    // Endpoint tier selections
+    tierPlantFill: aiTierPlantFill,
+    tierPlantVerify: aiTierPlantVerify,
+    tierBlogSummary: aiTierBlogSummary,
+    tierGardenAdviceText: aiTierGardenAdviceText,
+    tierGardenAdviceVision: aiTierGardenAdviceVision,
+    tierJournalText: aiTierJournalText,
+    tierJournalVision: aiTierJournalVision,
   }
   
   if (!sql) return settings
@@ -792,15 +827,21 @@ async function getAiModelSettings() {
   try {
     const rows = await sql`
       SELECT key, value FROM public.admin_secrets 
-      WHERE key IN ('AI_MODEL_GARDEN_ADVICE', 'AI_MODEL_PLANT_FILL', 'AI_MODEL_VISION')
+      WHERE key LIKE 'AI_MODEL_%' OR key LIKE 'AI_TIER_%'
     `
     for (const row of rows || []) {
-      if (row.key === 'AI_MODEL_GARDEN_ADVICE' && row.value) {
-        settings.gardenAdvice = row.value
-      } else if (row.key === 'AI_MODEL_PLANT_FILL' && row.value) {
-        settings.plantFill = row.value
-      } else if (row.key === 'AI_MODEL_VISION' && row.value) {
-        settings.vision = row.value
+      if (!row.value) continue
+      switch (row.key) {
+        case 'AI_MODEL_FAST': settings.modelFast = row.value; break
+        case 'AI_MODEL_AVG': settings.modelAvg = row.value; break
+        case 'AI_MODEL_HIGH': settings.modelHigh = row.value; break
+        case 'AI_TIER_PLANT_FILL': settings.tierPlantFill = row.value; break
+        case 'AI_TIER_PLANT_VERIFY': settings.tierPlantVerify = row.value; break
+        case 'AI_TIER_BLOG_SUMMARY': settings.tierBlogSummary = row.value; break
+        case 'AI_TIER_GARDEN_ADVICE_TEXT': settings.tierGardenAdviceText = row.value; break
+        case 'AI_TIER_GARDEN_ADVICE_VISION': settings.tierGardenAdviceVision = row.value; break
+        case 'AI_TIER_JOURNAL_TEXT': settings.tierJournalText = row.value; break
+        case 'AI_TIER_JOURNAL_VISION': settings.tierJournalVision = row.value; break
       }
     }
   } catch (err) {
@@ -811,38 +852,37 @@ async function getAiModelSettings() {
 }
 
 // Helper function to save AI model settings to admin_secrets table
-async function saveAiModelSettings(gardenAdvice, plantFill, vision) {
+async function saveAiModelSettings(settings) {
   if (!sql) {
     throw new Error('Database not configured')
   }
   
+  const keyMap = {
+    modelFast: { key: 'AI_MODEL_FAST', desc: 'Fast tier AI model name', varSetter: (v) => { aiModelFast = v } },
+    modelAvg: { key: 'AI_MODEL_AVG', desc: 'Average tier AI model name', varSetter: (v) => { aiModelAvg = v } },
+    modelHigh: { key: 'AI_MODEL_HIGH', desc: 'High tier AI model name', varSetter: (v) => { aiModelHigh = v } },
+    tierPlantFill: { key: 'AI_TIER_PLANT_FILL', desc: 'Tier for plant fill endpoint', varSetter: (v) => { aiTierPlantFill = v } },
+    tierPlantVerify: { key: 'AI_TIER_PLANT_VERIFY', desc: 'Tier for plant name verification', varSetter: (v) => { aiTierPlantVerify = v } },
+    tierBlogSummary: { key: 'AI_TIER_BLOG_SUMMARY', desc: 'Tier for blog summary generation', varSetter: (v) => { aiTierBlogSummary = v } },
+    tierGardenAdviceText: { key: 'AI_TIER_GARDEN_ADVICE_TEXT', desc: 'Tier for garden advice (text)', varSetter: (v) => { aiTierGardenAdviceText = v } },
+    tierGardenAdviceVision: { key: 'AI_TIER_GARDEN_ADVICE_VISION', desc: 'Tier for garden advice (vision)', varSetter: (v) => { aiTierGardenAdviceVision = v } },
+    tierJournalText: { key: 'AI_TIER_JOURNAL_TEXT', desc: 'Tier for journal feedback (text)', varSetter: (v) => { aiTierJournalText = v } },
+    tierJournalVision: { key: 'AI_TIER_JOURNAL_VISION', desc: 'Tier for journal feedback (vision)', varSetter: (v) => { aiTierJournalVision = v } },
+  }
+  
   try {
-    // Upsert settings
-    if (gardenAdvice !== undefined) {
+    for (const [settingKey, value] of Object.entries(settings || {})) {
+      if (value === undefined || value === null) continue
+      const mapping = keyMap[settingKey]
+      if (!mapping) continue
+      
+      const strValue = String(value).trim()
       await sql`
         INSERT INTO public.admin_secrets (key, value, description, updated_at)
-        VALUES ('AI_MODEL_GARDEN_ADVICE', ${gardenAdvice}, 'AI model used for garden advice generation', now())
+        VALUES (${mapping.key}, ${strValue}, ${mapping.desc}, now())
         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
       `
-      openaiModelGardenAdvice = gardenAdvice
-    }
-    
-    if (plantFill !== undefined) {
-      await sql`
-        INSERT INTO public.admin_secrets (key, value, description, updated_at)
-        VALUES ('AI_MODEL_PLANT_FILL', ${plantFill}, 'AI model used for plant data auto-fill', now())
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-      `
-      openaiModelPlantFill = plantFill
-    }
-    
-    if (vision !== undefined) {
-      await sql`
-        INSERT INTO public.admin_secrets (key, value, description, updated_at)
-        VALUES ('AI_MODEL_VISION', ${vision}, 'AI model used for image/vision analysis', now())
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-      `
-      openaiModelVision = vision
+      mapping.varSetter(strValue)
     }
     
     return { success: true }
@@ -856,10 +896,28 @@ async function saveAiModelSettings(gardenAdvice, plantFill, vision) {
 async function initAiModelSettings() {
   try {
     const settings = await getAiModelSettings()
-    openaiModelGardenAdvice = settings.gardenAdvice
-    openaiModelPlantFill = settings.plantFill
-    openaiModelVision = settings.vision
-    console.log('[server] AI model settings loaded:', { gardenAdvice: openaiModelGardenAdvice, plantFill: openaiModelPlantFill, vision: openaiModelVision })
+    aiModelFast = settings.modelFast
+    aiModelAvg = settings.modelAvg
+    aiModelHigh = settings.modelHigh
+    aiTierPlantFill = settings.tierPlantFill
+    aiTierPlantVerify = settings.tierPlantVerify
+    aiTierBlogSummary = settings.tierBlogSummary
+    aiTierGardenAdviceText = settings.tierGardenAdviceText
+    aiTierGardenAdviceVision = settings.tierGardenAdviceVision
+    aiTierJournalText = settings.tierJournalText
+    aiTierJournalVision = settings.tierJournalVision
+    console.log('[server] AI model settings loaded:', {
+      models: { fast: aiModelFast, avg: aiModelAvg, high: aiModelHigh },
+      tiers: {
+        plantFill: aiTierPlantFill,
+        plantVerify: aiTierPlantVerify,
+        blogSummary: aiTierBlogSummary,
+        gardenAdviceText: aiTierGardenAdviceText,
+        gardenAdviceVision: aiTierGardenAdviceVision,
+        journalText: aiTierJournalText,
+        journalVision: aiTierJournalVision,
+      }
+    })
   } catch (err) {
     console.warn('[server] Failed to initialize AI model settings:', err?.message || err)
   }
@@ -2313,7 +2371,7 @@ async function generateFieldData(options) {
 
   const response = await openaiClient.responses.create(
     {
-      model: openaiModelPlantFill,
+      model: getModelForTier(aiTierPlantFill),
       reasoning: { effort: 'low' },
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
@@ -2375,7 +2433,7 @@ async function verifyPlantNameCandidate(plantName) {
 
   const response = await openaiClient.responses.create(
     {
-      model: openaiModelPlantFill,
+      model: getModelForTier(aiTierPlantVerify),
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
@@ -3189,7 +3247,7 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
       metaObject.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
     }
 
-    res.json({ success: true, data: plantObject, model: openaiModelPlantFill })
+    res.json({ success: true, data: plantObject, model: getModelForTier(aiTierPlantFill) })
   } catch (err) {
     console.error('[server] AI plant fill failed:', err)
     if (!res.headersSent) {
@@ -3287,9 +3345,18 @@ app.get('/api/admin/ai-models', async (req, res) => {
     const settings = await getAiModelSettings()
     res.json({
       ok: true,
-      gardenAdvice: settings.gardenAdvice,
-      plantFill: settings.plantFill,
-      vision: settings.vision,
+      // Model tier names
+      modelFast: settings.modelFast,
+      modelAvg: settings.modelAvg,
+      modelHigh: settings.modelHigh,
+      // Endpoint tier selections
+      tierPlantFill: settings.tierPlantFill,
+      tierPlantVerify: settings.tierPlantVerify,
+      tierBlogSummary: settings.tierBlogSummary,
+      tierGardenAdviceText: settings.tierGardenAdviceText,
+      tierGardenAdviceVision: settings.tierGardenAdviceVision,
+      tierJournalText: settings.tierJournalText,
+      tierJournalVision: settings.tierJournalVision,
     })
   } catch (err) {
     console.error('[server] Failed to get AI model settings:', err)
@@ -3307,16 +3374,43 @@ app.post('/api/admin/ai-models', async (req, res) => {
     }
     
     const body = req.body || {}
-    const gardenAdvice = typeof body.gardenAdvice === 'string' ? body.gardenAdvice.trim() : undefined
-    const plantFill = typeof body.plantFill === 'string' ? body.plantFill.trim() : undefined
-    const vision = typeof body.vision === 'string' ? body.vision.trim() : undefined
+    const settingsToSave = {}
     
-    if (gardenAdvice === undefined && plantFill === undefined && vision === undefined) {
-      res.status(400).json({ error: 'At least one model setting is required' })
+    // Extract model names
+    if (typeof body.modelFast === 'string') settingsToSave.modelFast = body.modelFast.trim()
+    if (typeof body.modelAvg === 'string') settingsToSave.modelAvg = body.modelAvg.trim()
+    if (typeof body.modelHigh === 'string') settingsToSave.modelHigh = body.modelHigh.trim()
+    
+    // Extract tier selections (validate values)
+    const validTiers = ['fast', 'avg', 'high']
+    if (typeof body.tierPlantFill === 'string' && validTiers.includes(body.tierPlantFill)) {
+      settingsToSave.tierPlantFill = body.tierPlantFill
+    }
+    if (typeof body.tierPlantVerify === 'string' && validTiers.includes(body.tierPlantVerify)) {
+      settingsToSave.tierPlantVerify = body.tierPlantVerify
+    }
+    if (typeof body.tierBlogSummary === 'string' && validTiers.includes(body.tierBlogSummary)) {
+      settingsToSave.tierBlogSummary = body.tierBlogSummary
+    }
+    if (typeof body.tierGardenAdviceText === 'string' && validTiers.includes(body.tierGardenAdviceText)) {
+      settingsToSave.tierGardenAdviceText = body.tierGardenAdviceText
+    }
+    if (typeof body.tierGardenAdviceVision === 'string' && validTiers.includes(body.tierGardenAdviceVision)) {
+      settingsToSave.tierGardenAdviceVision = body.tierGardenAdviceVision
+    }
+    if (typeof body.tierJournalText === 'string' && validTiers.includes(body.tierJournalText)) {
+      settingsToSave.tierJournalText = body.tierJournalText
+    }
+    if (typeof body.tierJournalVision === 'string' && validTiers.includes(body.tierJournalVision)) {
+      settingsToSave.tierJournalVision = body.tierJournalVision
+    }
+    
+    if (Object.keys(settingsToSave).length === 0) {
+      res.status(400).json({ error: 'At least one valid setting is required' })
       return
     }
     
-    await saveAiModelSettings(gardenAdvice, plantFill, vision)
+    await saveAiModelSettings(settingsToSave)
     
     // Log the admin action
     try {
@@ -3324,19 +3418,19 @@ app.post('/api/admin/ai-models', async (req, res) => {
       if (sql && caller?.id) {
         await sql`
           INSERT INTO public.admin_logs (admin_id, action, target, detail)
-          VALUES (${caller.id}, 'update_ai_models', 'ai_settings', ${JSON.stringify({ gardenAdvice, plantFill, vision })})
+          VALUES (${caller.id}, 'update_ai_models', 'ai_settings', ${JSON.stringify(settingsToSave)})
         `
       }
     } catch (logErr) {
       console.warn('[server] Failed to log AI model settings update:', logErr?.message || logErr)
     }
     
+    // Return current state
+    const currentSettings = await getAiModelSettings()
     res.json({
       ok: true,
       message: 'AI model settings saved successfully',
-      gardenAdvice: gardenAdvice || openaiModelGardenAdvice,
-      plantFill: plantFill || openaiModelPlantFill,
-      vision: vision || openaiModelVision,
+      ...currentSettings,
     })
   } catch (err) {
     console.error('[server] Failed to save AI model settings:', err)
@@ -5259,7 +5353,7 @@ app.post('/api/blog/summarize', async (req, res) => {
   try {
     const response = await openaiClient.responses.create(
       {
-        model: openaiModelPlantFill,
+        model: getModelForTier(aiTierBlogSummary),
         reasoning: { effort: 'low' },
         instructions,
         input: promptSections.join('\n\n'),
@@ -13511,7 +13605,7 @@ Format your response as JSON with this structure:
 
     let parsed = null
     let tokensUsed = 0
-    let modelUsed = openaiModelGardenAdvice
+    let modelUsed = getModelForTier(aiTierGardenAdviceText)
 
     if (openaiClient) {
       try {
@@ -13541,10 +13635,10 @@ Include specific observations from the photos in your advice.`
               image_url: url,
             })
           }
-          modelUsed = openaiModelVision
+          modelUsed = getModelForTier(aiTierGardenAdviceVision)
         } else {
           inputContent = prompt
-          modelUsed = openaiModelGardenAdvice
+          modelUsed = getModelForTier(aiTierGardenAdviceText)
         }
 
         const response = await openaiClient.responses.create(
@@ -14831,10 +14925,10 @@ Be specific and reference what you actually see in the images. If you notice any
           image_url: imageUrl,
         })
       }
-      modelToUse = openaiModelVision
+      modelToUse = getModelForTier(aiTierJournalVision)
     } else {
       inputContent = textPrompt
-      modelToUse = openaiModelGardenAdvice
+      modelToUse = getModelForTier(aiTierJournalText)
     }
 
     const response = await openaiClient.responses.create(

@@ -77,6 +77,8 @@ import {
   Bot,
   Save,
   Settings2,
+  FileText,
+  MessageCircle,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -2659,9 +2661,18 @@ export const AdminPage: React.FC = () => {
 
   // AI Model Settings State
   const [aiModelSettingsExpanded, setAiModelSettingsExpanded] = React.useState<boolean>(false);
-  const [aiModelGardenAdvice, setAiModelGardenAdvice] = React.useState<string>("");
-  const [aiModelPlantFill, setAiModelPlantFill] = React.useState<string>("");
-  const [aiModelVision, setAiModelVision] = React.useState<string>("");
+  // Model tier names
+  const [aiModelFast, setAiModelFast] = React.useState<string>("");
+  const [aiModelAvg, setAiModelAvg] = React.useState<string>("");
+  const [aiModelHigh, setAiModelHigh] = React.useState<string>("");
+  // Endpoint tier selections
+  const [aiTierPlantFill, setAiTierPlantFill] = React.useState<string>("avg");
+  const [aiTierPlantVerify, setAiTierPlantVerify] = React.useState<string>("fast");
+  const [aiTierBlogSummary, setAiTierBlogSummary] = React.useState<string>("fast");
+  const [aiTierGardenAdviceText, setAiTierGardenAdviceText] = React.useState<string>("avg");
+  const [aiTierGardenAdviceVision, setAiTierGardenAdviceVision] = React.useState<string>("high");
+  const [aiTierJournalText, setAiTierJournalText] = React.useState<string>("avg");
+  const [aiTierJournalVision, setAiTierJournalVision] = React.useState<string>("high");
   const [aiModelSettingsLoading, setAiModelSettingsLoading] = React.useState<boolean>(false);
   const [aiModelSettingsSaving, setAiModelSettingsSaving] = React.useState<boolean>(false);
   const [aiModelSettingsError, setAiModelSettingsError] = React.useState<string | null>(null);
@@ -2977,9 +2988,18 @@ export const AdminPage: React.FC = () => {
       }
       
       if (isMountedRef.current) {
-        setAiModelGardenAdvice(data?.gardenAdvice || "");
-        setAiModelPlantFill(data?.plantFill || "");
-        setAiModelVision(data?.vision || "");
+        // Model tier names
+        setAiModelFast(data?.modelFast || "");
+        setAiModelAvg(data?.modelAvg || "");
+        setAiModelHigh(data?.modelHigh || "");
+        // Endpoint tier selections
+        setAiTierPlantFill(data?.tierPlantFill || "avg");
+        setAiTierPlantVerify(data?.tierPlantVerify || "fast");
+        setAiTierBlogSummary(data?.tierBlogSummary || "fast");
+        setAiTierGardenAdviceText(data?.tierGardenAdviceText || "avg");
+        setAiTierGardenAdviceVision(data?.tierGardenAdviceVision || "high");
+        setAiTierJournalText(data?.tierJournalText || "avg");
+        setAiTierJournalVision(data?.tierJournalVision || "high");
       }
     } catch (e: unknown) {
       if (isMountedRef.current) {
@@ -3012,9 +3032,18 @@ export const AdminPage: React.FC = () => {
         headers,
         credentials: "same-origin",
         body: JSON.stringify({
-          gardenAdvice: aiModelGardenAdvice.trim(),
-          plantFill: aiModelPlantFill.trim(),
-          vision: aiModelVision.trim(),
+          // Model tier names
+          modelFast: aiModelFast.trim(),
+          modelAvg: aiModelAvg.trim(),
+          modelHigh: aiModelHigh.trim(),
+          // Endpoint tier selections
+          tierPlantFill: aiTierPlantFill,
+          tierPlantVerify: aiTierPlantVerify,
+          tierBlogSummary: aiTierBlogSummary,
+          tierGardenAdviceText: aiTierGardenAdviceText,
+          tierGardenAdviceVision: aiTierGardenAdviceVision,
+          tierJournalText: aiTierJournalText,
+          tierJournalVision: aiTierJournalVision,
         }),
       });
       const data = await safeJson(resp);
@@ -3037,14 +3066,14 @@ export const AdminPage: React.FC = () => {
     } finally {
       if (isMountedRef.current) setAiModelSettingsSaving(false);
     }
-  }, [safeJson, aiModelGardenAdvice, aiModelPlantFill, aiModelVision]);
+  }, [safeJson, aiModelFast, aiModelAvg, aiModelHigh, aiTierPlantFill, aiTierPlantVerify, aiTierBlogSummary, aiTierGardenAdviceText, aiTierGardenAdviceVision, aiTierJournalText, aiTierJournalVision]);
 
   // Load AI model settings when overview tab is active
   React.useEffect(() => {
-    if (activeTab === "overview" && aiModelSettingsExpanded && !aiModelGardenAdvice && !aiModelPlantFill && !aiModelVision) {
+    if (activeTab === "overview" && aiModelSettingsExpanded && !aiModelFast && !aiModelAvg && !aiModelHigh) {
       loadAiModelSettings();
     }
-  }, [activeTab, aiModelSettingsExpanded, aiModelGardenAdvice, aiModelPlantFill, aiModelVision, loadAiModelSettings]);
+  }, [activeTab, aiModelSettingsExpanded, aiModelFast, aiModelAvg, aiModelHigh, loadAiModelSettings]);
 
   // Helper to format uptime
   const formatUptime = (seconds: number | null): string => {
@@ -6933,7 +6962,7 @@ export const AdminPage: React.FC = () => {
                             type="button"
                             onClick={() => {
                               setAiModelSettingsExpanded(!aiModelSettingsExpanded);
-                              if (!aiModelSettingsExpanded && !aiModelGardenAdvice && !aiModelPlantFill && !aiModelVision) {
+                              if (!aiModelSettingsExpanded && !aiModelFast && !aiModelAvg && !aiModelHigh) {
                                 loadAiModelSettings();
                               }
                             }}
@@ -6981,65 +7010,107 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   )}
                                   
-                                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                    {/* Garden Advice Model */}
-                                    <div className="space-y-2">
-                                      <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300">
-                                        <Leaf className="h-4 w-4 text-emerald-500" />
-                                        AI for Garden Advice
-                                      </label>
-                                      <Input
-                                        type="text"
-                                        value={aiModelGardenAdvice}
-                                        onChange={(e) => setAiModelGardenAdvice(e.target.value)}
-                                        placeholder="e.g., gpt-4o, gpt-5-nano"
-                                        className="rounded-xl"
-                                      />
-                                      <p className="text-xs text-stone-500 dark:text-stone-400">
-                                        For garden advice (text-only)
-                                      </p>
-                                    </div>
-                                    
-                                    {/* Plant Fill Model */}
-                                    <div className="space-y-2">
-                                      <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300">
-                                        <Sparkles className="h-4 w-4 text-violet-500" />
-                                        AI for Plant Fill
-                                      </label>
-                                      <Input
-                                        type="text"
-                                        value={aiModelPlantFill}
-                                        onChange={(e) => setAiModelPlantFill(e.target.value)}
-                                        placeholder="e.g., gpt-4o, gpt-5-nano"
-                                        className="rounded-xl"
-                                      />
-                                      <p className="text-xs text-stone-500 dark:text-stone-400">
-                                        For auto-filling plant info
-                                      </p>
-                                    </div>
-                                    
-                                    {/* Vision Model */}
-                                    <div className="space-y-2">
-                                      <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300">
-                                        <Eye className="h-4 w-4 text-blue-500" />
-                                        AI for Vision/Images
-                                      </label>
-                                      <Input
-                                        type="text"
-                                        value={aiModelVision}
-                                        onChange={(e) => setAiModelVision(e.target.value)}
-                                        placeholder="e.g., gpt-4o, gpt-4-vision"
-                                        className="rounded-xl"
-                                      />
-                                      <p className="text-xs text-stone-500 dark:text-stone-400">
-                                        For analyzing plant photos
-                                      </p>
+                                  {/* Model Tier Names */}
+                                  <div className="space-y-3">
+                                    <h4 className="text-sm font-semibold text-stone-700 dark:text-stone-300 flex items-center gap-2">
+                                      <Sparkles className="h-4 w-4 text-violet-500" />
+                                      Model Tiers
+                                    </h4>
+                                    <div className="grid gap-3 sm:grid-cols-3">
+                                      <div className="space-y-1">
+                                        <label className="flex items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-400">
+                                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                          Fast (Cheap)
+                                        </label>
+                                        <Input
+                                          type="text"
+                                          value={aiModelFast}
+                                          onChange={(e) => setAiModelFast(e.target.value)}
+                                          placeholder="e.g., gpt-4o-mini"
+                                          className="rounded-lg h-9 text-sm"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="flex items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-400">
+                                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                          Average (Balanced)
+                                        </label>
+                                        <Input
+                                          type="text"
+                                          value={aiModelAvg}
+                                          onChange={(e) => setAiModelAvg(e.target.value)}
+                                          placeholder="e.g., gpt-4o"
+                                          className="rounded-lg h-9 text-sm"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="flex items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-400">
+                                          <span className="w-2 h-2 rounded-full bg-violet-500"></span>
+                                          High (Quality)
+                                        </label>
+                                        <Input
+                                          type="text"
+                                          value={aiModelHigh}
+                                          onChange={(e) => setAiModelHigh(e.target.value)}
+                                          placeholder="e.g., gpt-4-turbo"
+                                          className="rounded-lg h-9 text-sm"
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                   
-                                  <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
+                                  {/* Endpoint Tier Selections */}
+                                  <div className="space-y-3 pt-3 border-t border-stone-100 dark:border-[#2a2a2d]">
+                                    <h4 className="text-sm font-semibold text-stone-700 dark:text-stone-300 flex items-center gap-2">
+                                      <Settings2 className="h-4 w-4 text-blue-500" />
+                                      Endpoint Settings
+                                    </h4>
+                                    <div className="grid gap-2">
+                                      {[
+                                        { key: "tierPlantFill", label: "Plant Fill", icon: Sparkles, color: "text-violet-500", value: aiTierPlantFill, setter: setAiTierPlantFill },
+                                        { key: "tierPlantVerify", label: "Plant Name Verify", icon: CircleCheck, color: "text-emerald-500", value: aiTierPlantVerify, setter: setAiTierPlantVerify },
+                                        { key: "tierBlogSummary", label: "Blog Summary", icon: FileText, color: "text-blue-500", value: aiTierBlogSummary, setter: setAiTierBlogSummary },
+                                        { key: "tierGardenAdviceText", label: "Garden Advice (Text)", icon: Leaf, color: "text-emerald-500", value: aiTierGardenAdviceText, setter: setAiTierGardenAdviceText },
+                                        { key: "tierGardenAdviceVision", label: "Garden Advice (Vision)", icon: Eye, color: "text-blue-500", value: aiTierGardenAdviceVision, setter: setAiTierGardenAdviceVision },
+                                        { key: "tierJournalText", label: "Journal Feedback (Text)", icon: MessageCircle, color: "text-amber-500", value: aiTierJournalText, setter: setAiTierJournalText },
+                                        { key: "tierJournalVision", label: "Journal Feedback (Vision)", icon: Eye, color: "text-violet-500", value: aiTierJournalVision, setter: setAiTierJournalVision },
+                                      ].map((endpoint) => {
+                                        const Icon = endpoint.icon;
+                                        return (
+                                          <div key={endpoint.key} className="flex items-center justify-between py-2 px-3 rounded-lg bg-stone-50 dark:bg-[#252528]">
+                                            <div className="flex items-center gap-2">
+                                              <Icon className={`h-4 w-4 ${endpoint.color}`} />
+                                              <span className="text-sm text-stone-700 dark:text-stone-300">{endpoint.label}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              {["fast", "avg", "high"].map((tier) => (
+                                                <button
+                                                  key={tier}
+                                                  type="button"
+                                                  onClick={() => endpoint.setter(tier)}
+                                                  className={`px-3 py-1 text-xs font-medium rounded-full transition-all ${
+                                                    endpoint.value === tier
+                                                      ? tier === "fast"
+                                                        ? "bg-emerald-500 text-white"
+                                                        : tier === "avg"
+                                                        ? "bg-amber-500 text-white"
+                                                        : "bg-violet-500 text-white"
+                                                      : "bg-stone-200 dark:bg-[#3a3a3d] text-stone-600 dark:text-stone-400 hover:bg-stone-300 dark:hover:bg-[#4a4a4d]"
+                                                  }`}
+                                                >
+                                                  {tier === "fast" ? "Fast" : tier === "avg" ? "Avg" : "High"}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex items-center justify-between pt-3 border-t border-stone-100 dark:border-[#2a2a2d]">
                                     <div className="text-xs text-stone-500 dark:text-stone-400">
-                                      <span className="font-medium">Tip:</span> Use the latest OpenAI models like <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-4o</code> or <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-4-turbo</code>
+                                      <span className="font-medium">Tip:</span> Use models like <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-4o-mini</code>, <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-4o</code>, or <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-5-nano</code>
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <Button
