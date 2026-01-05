@@ -74,6 +74,9 @@ import {
   CircleCheck,
   Loader2,
   Square,
+  Bot,
+  Save,
+  Settings2,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -2654,6 +2657,15 @@ export const AdminPage: React.FC = () => {
   const [systemHealthLoading, setSystemHealthLoading] = React.useState<boolean>(true);
   const [systemHealthError, setSystemHealthError] = React.useState<string | null>(null);
 
+  // AI Model Settings State
+  const [aiModelSettingsExpanded, setAiModelSettingsExpanded] = React.useState<boolean>(false);
+  const [aiModelGardenAdvice, setAiModelGardenAdvice] = React.useState<string>("");
+  const [aiModelPlantFill, setAiModelPlantFill] = React.useState<string>("");
+  const [aiModelSettingsLoading, setAiModelSettingsLoading] = React.useState<boolean>(false);
+  const [aiModelSettingsSaving, setAiModelSettingsSaving] = React.useState<boolean>(false);
+  const [aiModelSettingsError, setAiModelSettingsError] = React.useState<string | null>(null);
+  const [aiModelSettingsSuccess, setAiModelSettingsSuccess] = React.useState<string | null>(null);
+
   // Track mount state to avoid setState on unmounted component during async probes
   const isMountedRef = React.useRef(true);
   React.useEffect(() => {
@@ -2938,6 +2950,98 @@ export const AdminPage: React.FC = () => {
     }, 30000); // Every 30 seconds
     return () => clearInterval(intervalId);
   }, [loadSystemHealth]);
+
+  // AI Model Settings - Load and Save
+  const loadAiModelSettings = React.useCallback(async () => {
+    setAiModelSettingsLoading(true);
+    setAiModelSettingsError(null);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      
+      const resp = await fetch("/api/admin/ai-models", {
+        headers,
+        credentials: "same-origin",
+      });
+      const data = await safeJson(resp);
+      
+      if (!resp.ok) {
+        throw new Error(data?.error || `HTTP ${resp.status}`);
+      }
+      
+      if (isMountedRef.current) {
+        setAiModelGardenAdvice(data?.gardenAdvice || "");
+        setAiModelPlantFill(data?.plantFill || "");
+      }
+    } catch (e: unknown) {
+      if (isMountedRef.current) {
+        setAiModelSettingsError(e instanceof Error ? e.message : "Failed to load AI model settings");
+      }
+    } finally {
+      if (isMountedRef.current) setAiModelSettingsLoading(false);
+    }
+  }, [safeJson]);
+
+  const saveAiModelSettings = React.useCallback(async () => {
+    setAiModelSettingsSaving(true);
+    setAiModelSettingsError(null);
+    setAiModelSettingsSuccess(null);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { 
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      
+      const resp = await fetch("/api/admin/ai-models", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          gardenAdvice: aiModelGardenAdvice.trim(),
+          plantFill: aiModelPlantFill.trim(),
+        }),
+      });
+      const data = await safeJson(resp);
+      
+      if (!resp.ok) {
+        throw new Error(data?.error || `HTTP ${resp.status}`);
+      }
+      
+      if (isMountedRef.current) {
+        setAiModelSettingsSuccess("AI model settings saved successfully!");
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          if (isMountedRef.current) setAiModelSettingsSuccess(null);
+        }, 3000);
+      }
+    } catch (e: unknown) {
+      if (isMountedRef.current) {
+        setAiModelSettingsError(e instanceof Error ? e.message : "Failed to save AI model settings");
+      }
+    } finally {
+      if (isMountedRef.current) setAiModelSettingsSaving(false);
+    }
+  }, [safeJson, aiModelGardenAdvice, aiModelPlantFill]);
+
+  // Load AI model settings when overview tab is active
+  React.useEffect(() => {
+    if (activeTab === "overview" && aiModelSettingsExpanded && !aiModelGardenAdvice && !aiModelPlantFill) {
+      loadAiModelSettings();
+    }
+  }, [activeTab, aiModelSettingsExpanded, aiModelGardenAdvice, aiModelPlantFill, loadAiModelSettings]);
 
   // Helper to format uptime
   const formatUptime = (seconds: number | null): string => {
@@ -6818,6 +6922,134 @@ export const AdminPage: React.FC = () => {
                           </a>
                         </Button>
                       </div>
+
+                      {/* AI Model Settings - Collapsible Section */}
+                      <Card className={cn(glassCardClass, "mt-6")}>
+                        <CardContent className="p-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAiModelSettingsExpanded(!aiModelSettingsExpanded);
+                              if (!aiModelSettingsExpanded && !aiModelGardenAdvice && !aiModelPlantFill) {
+                                loadAiModelSettings();
+                              }
+                            }}
+                            className="w-full flex items-center justify-between p-4 hover:bg-stone-50 dark:hover:bg-[#252528] transition-colors rounded-2xl"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 flex items-center justify-center">
+                                <Bot className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                              </div>
+                              <div className="text-left">
+                                <div className="font-medium text-stone-900 dark:text-white">AI Model Settings</div>
+                                <div className="text-xs text-stone-500 dark:text-stone-400">Configure AI models for garden advice and plant fill</div>
+                              </div>
+                            </div>
+                            <ChevronDown className={`h-5 w-5 text-stone-400 transition-transform duration-200 ${aiModelSettingsExpanded ? "rotate-180" : ""}`} />
+                          </button>
+                          
+                          {aiModelSettingsExpanded && (
+                            <div className="px-4 pb-4 space-y-4 border-t border-stone-100 dark:border-[#2a2a2d] pt-4">
+                              {aiModelSettingsLoading ? (
+                                <div className="flex items-center justify-center py-8 gap-2 text-stone-500">
+                                  <Loader2 className="h-5 w-5 animate-spin" />
+                                  <span className="text-sm">Loading AI model settings...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  {aiModelSettingsError && (
+                                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200 flex items-center gap-2">
+                                      <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                                      <span>{aiModelSettingsError}</span>
+                                      <button
+                                        type="button"
+                                        className="ml-auto text-red-500 hover:text-red-700 dark:hover:text-red-300"
+                                        onClick={() => setAiModelSettingsError(null)}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  )}
+                                  
+                                  {aiModelSettingsSuccess && (
+                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/30 dark:text-emerald-200 flex items-center gap-2">
+                                      <Check className="h-4 w-4 flex-shrink-0" />
+                                      <span>{aiModelSettingsSuccess}</span>
+                                    </div>
+                                  )}
+                                  
+                                  <div className="grid gap-4 sm:grid-cols-2">
+                                    {/* Garden Advice Model */}
+                                    <div className="space-y-2">
+                                      <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300">
+                                        <Leaf className="h-4 w-4 text-emerald-500" />
+                                        AI for Garden Advice
+                                      </label>
+                                      <Input
+                                        type="text"
+                                        value={aiModelGardenAdvice}
+                                        onChange={(e) => setAiModelGardenAdvice(e.target.value)}
+                                        placeholder="e.g., gpt-4o, gpt-4-turbo, claude-3-opus"
+                                        className="rounded-xl"
+                                      />
+                                      <p className="text-xs text-stone-500 dark:text-stone-400">
+                                        Used for generating personalized garden advice and plant care tips
+                                      </p>
+                                    </div>
+                                    
+                                    {/* Plant Fill Model */}
+                                    <div className="space-y-2">
+                                      <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300">
+                                        <Sparkles className="h-4 w-4 text-violet-500" />
+                                        AI for Plant Fill
+                                      </label>
+                                      <Input
+                                        type="text"
+                                        value={aiModelPlantFill}
+                                        onChange={(e) => setAiModelPlantFill(e.target.value)}
+                                        placeholder="e.g., gpt-4o, gpt-4-turbo, claude-3-opus"
+                                        className="rounded-xl"
+                                      />
+                                      <p className="text-xs text-stone-500 dark:text-stone-400">
+                                        Used for auto-filling plant information in the admin panel
+                                      </p>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                                      <span className="font-medium">Tip:</span> Use the latest OpenAI models like <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-4o</code> or <code className="px-1 py-0.5 bg-stone-100 dark:bg-stone-800 rounded">gpt-4-turbo</code>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        variant="outline"
+                                        className="rounded-xl"
+                                        onClick={loadAiModelSettings}
+                                        disabled={aiModelSettingsLoading || aiModelSettingsSaving}
+                                      >
+                                        <RefreshCw className={`h-4 w-4 mr-2 ${aiModelSettingsLoading ? "animate-spin" : ""}`} />
+                                        Reload
+                                      </Button>
+                                      <Button
+                                        className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white"
+                                        onClick={saveAiModelSettings}
+                                        disabled={aiModelSettingsLoading || aiModelSettingsSaving}
+                                      >
+                                        {aiModelSettingsSaving ? (
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                          <Save className="h-4 w-4 mr-2" />
+                                        )}
+                                        Save Changes
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
                   </>
                 )}
 

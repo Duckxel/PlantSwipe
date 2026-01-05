@@ -759,7 +759,10 @@ const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
   : null
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
-const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
+let openaiModelPlantFill = process.env.OPENAI_MODEL || 'gpt-4o'
+let openaiModelGardenAdvice = process.env.OPENAI_MODEL_GARDEN_ADVICE || 'gpt-4o-mini'
+// Keep legacy reference for backward compatibility
+const openaiModel = openaiModelPlantFill
 let openaiClient = null
 let openai = null // Alias for garden advice endpoints
 if (openaiApiKey) {
@@ -773,6 +776,79 @@ if (openaiApiKey) {
   }
 } else {
   console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')
+}
+
+// Helper function to get AI model settings from admin_secrets table
+async function getAiModelSettings() {
+  const settings = {
+    gardenAdvice: openaiModelGardenAdvice,
+    plantFill: openaiModelPlantFill,
+  }
+  
+  if (!sql) return settings
+  
+  try {
+    const rows = await sql`
+      SELECT key, value FROM public.admin_secrets 
+      WHERE key IN ('AI_MODEL_GARDEN_ADVICE', 'AI_MODEL_PLANT_FILL')
+    `
+    for (const row of rows || []) {
+      if (row.key === 'AI_MODEL_GARDEN_ADVICE' && row.value) {
+        settings.gardenAdvice = row.value
+      } else if (row.key === 'AI_MODEL_PLANT_FILL' && row.value) {
+        settings.plantFill = row.value
+      }
+    }
+  } catch (err) {
+    console.warn('[server] Failed to load AI model settings from admin_secrets:', err?.message || err)
+  }
+  
+  return settings
+}
+
+// Helper function to save AI model settings to admin_secrets table
+async function saveAiModelSettings(gardenAdvice, plantFill) {
+  if (!sql) {
+    throw new Error('Database not configured')
+  }
+  
+  try {
+    // Upsert both settings
+    if (gardenAdvice !== undefined) {
+      await sql`
+        INSERT INTO public.admin_secrets (key, value, description, updated_at)
+        VALUES ('AI_MODEL_GARDEN_ADVICE', ${gardenAdvice}, 'AI model used for garden advice generation', now())
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+      `
+      openaiModelGardenAdvice = gardenAdvice
+    }
+    
+    if (plantFill !== undefined) {
+      await sql`
+        INSERT INTO public.admin_secrets (key, value, description, updated_at)
+        VALUES ('AI_MODEL_PLANT_FILL', ${plantFill}, 'AI model used for plant data auto-fill', now())
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+      `
+      openaiModelPlantFill = plantFill
+    }
+    
+    return { success: true }
+  } catch (err) {
+    console.error('[server] Failed to save AI model settings:', err)
+    throw err
+  }
+}
+
+// Load AI model settings on startup
+async function initAiModelSettings() {
+  try {
+    const settings = await getAiModelSettings()
+    openaiModelGardenAdvice = settings.gardenAdvice
+    openaiModelPlantFill = settings.plantFill
+    console.log('[server] AI model settings loaded:', { gardenAdvice: openaiModelGardenAdvice, plantFill: openaiModelPlantFill })
+  } catch (err) {
+    console.warn('[server] Failed to initialize AI model settings:', err?.message || err)
+  }
 }
 
 // Some deployments might lag behind on the latest schema additions for the
@@ -2223,7 +2299,7 @@ async function generateFieldData(options) {
 
   const response = await openaiClient.responses.create(
     {
-      model: openaiModel,
+      model: openaiModelPlantFill,
       reasoning: { effort: 'low' },
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
@@ -2285,7 +2361,7 @@ async function verifyPlantNameCandidate(plantName) {
 
   const response = await openaiClient.responses.create(
     {
-      model: openaiModel,
+      model: openaiModelPlantFill,
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
@@ -3099,7 +3175,7 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
       metaObject.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
     }
 
-    res.json({ success: true, data: plantObject, model: openaiModel })
+    res.json({ success: true, data: plantObject, model: openaiModelPlantFill })
   } catch (err) {
     console.error('[server] AI plant fill failed:', err)
     if (!res.headersSent) {
@@ -3182,6 +3258,72 @@ app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: err?.message || 'Failed to fill field' })
     }
+  }
+})
+
+// Admin: Get AI model settings
+app.get('/api/admin/ai-models', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    
+    const settings = await getAiModelSettings()
+    res.json({
+      ok: true,
+      gardenAdvice: settings.gardenAdvice,
+      plantFill: settings.plantFill,
+    })
+  } catch (err) {
+    console.error('[server] Failed to get AI model settings:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get AI model settings' })
+  }
+})
+
+// Admin: Save AI model settings
+app.post('/api/admin/ai-models', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    
+    const body = req.body || {}
+    const gardenAdvice = typeof body.gardenAdvice === 'string' ? body.gardenAdvice.trim() : undefined
+    const plantFill = typeof body.plantFill === 'string' ? body.plantFill.trim() : undefined
+    
+    if (gardenAdvice === undefined && plantFill === undefined) {
+      res.status(400).json({ error: 'At least one model setting is required' })
+      return
+    }
+    
+    await saveAiModelSettings(gardenAdvice, plantFill)
+    
+    // Log the admin action
+    try {
+      const caller = await getUserFromRequest(req)
+      if (sql && caller?.id) {
+        await sql`
+          INSERT INTO public.admin_logs (admin_id, action, target, detail)
+          VALUES (${caller.id}, 'update_ai_models', 'ai_settings', ${JSON.stringify({ gardenAdvice, plantFill })})
+        `
+      }
+    } catch (logErr) {
+      console.warn('[server] Failed to log AI model settings update:', logErr?.message || logErr)
+    }
+    
+    res.json({
+      ok: true,
+      message: 'AI model settings saved successfully',
+      gardenAdvice: gardenAdvice || openaiModelGardenAdvice,
+      plantFill: plantFill || openaiModelPlantFill,
+    })
+  } catch (err) {
+    console.error('[server] Failed to save AI model settings:', err)
+    res.status(500).json({ error: err?.message || 'Failed to save AI model settings' })
   }
 })
 
@@ -5100,7 +5242,7 @@ app.post('/api/blog/summarize', async (req, res) => {
   try {
     const response = await openaiClient.responses.create(
       {
-        model: openaiModel,
+        model: openaiModelPlantFill,
         reasoning: { effort: 'low' },
         instructions,
         input: promptSections.join('\n\n'),
@@ -13352,7 +13494,7 @@ Format your response as JSON with this structure:
 
     let parsed = null
     let tokensUsed = 0
-    let modelUsed = 'gpt-4o-mini'
+    let modelUsed = openaiModelGardenAdvice
 
     if (openai) {
       try {
@@ -13392,7 +13534,7 @@ Include specific observations from the photos in your advice.` }
         }
 
         const completionOptions = {
-          model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
+          model: useVision ? 'gpt-4o' : openaiModelGardenAdvice,
           messages,
           temperature: 0.7,
           max_tokens: useVision ? 2000 : 1500,
@@ -14687,7 +14829,7 @@ Be specific and reference what you actually see in the images. If you notice any
     }
 
     const completion = await openai.chat.completions.create({
-      model: photos.length > 0 ? 'gpt-4o' : 'gpt-4o-mini', // Use vision-capable model when we have images
+      model: photos.length > 0 ? 'gpt-4o' : openaiModelGardenAdvice, // Use vision-capable model when we have images
       messages,
       temperature: 0.7,
       max_tokens: photos.length > 0 ? 800 : 400,
@@ -19021,6 +19163,8 @@ if (shouldListen) {
     ensureBanTables().catch(() => { })
     ensureBroadcastTable().catch(() => { })
     ensureNotificationTables().catch(() => { })
+    // Load AI model settings from database
+    initAiModelSettings().catch(() => { })
     scheduleNotificationWorker()
   })
   // Store reference for system-health endpoint to count connections
