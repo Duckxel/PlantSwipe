@@ -16,11 +16,20 @@ import type {
 
 // ===== Notification CRUD =====
 
-const isMissingTableError = (error?: { message?: string; code?: string; status?: number | string }) => {
+const isMissingTableError = (error?: { message?: string; code?: string; status?: number | string; details?: string; hint?: string }) => {
   if (!error) return false
-  if (error.message?.includes('does not exist')) return true
+  // Check for various forms of "table does not exist" errors
+  const msg = error.message?.toLowerCase() || ''
+  if (msg.includes('does not exist')) return true
+  if (msg.includes('relation') && msg.includes('not found')) return true
+  if (msg.includes('404')) return true
+  // PostgreSQL error code for undefined table
   if (error.code === '42P01') return true
-  if (error.code === '404' || error.status === 404 || error.status === '404') return true
+  // HTTP 404 status (can come in various forms)
+  if (error.code === '404' || error.code === 'PGRST116') return true
+  if (error.status === 404 || error.status === '404') return true
+  // Supabase PostgREST 404 response when table doesn't exist
+  if (error.details?.includes('does not exist')) return true
   return false
 }
 

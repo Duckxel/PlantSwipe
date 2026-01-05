@@ -105,6 +105,19 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  ADMIN_STATUS_COLORS,
+  ADMIN_STATUS_BADGE_CLASSES,
+} from "@/constants/plantStatus";
+import {
+  USER_ROLES,
+  ADMIN_ASSIGNABLE_ROLES,
+  ROLE_CONFIG,
+  type UserRole,
+  checkFullAdminAccess,
+  checkEditorAccess,
+} from "@/constants/userRoles";
+import { UserRoleBadge, ProfileNameBadges } from "@/components/profile/UserRoleBadges";
 const {
   ResponsiveContainer,
   ComposedChart,
@@ -216,20 +229,6 @@ const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
   approved: "Approved",
   other: "Other",
 };
-
-import {
-  ADMIN_STATUS_COLORS,
-  ADMIN_STATUS_BADGE_CLASSES,
-} from "@/constants/plantStatus";
-import {
-  USER_ROLES,
-  ADMIN_ASSIGNABLE_ROLES,
-  ROLE_CONFIG,
-  type UserRole,
-  checkFullAdminAccess,
-  checkEditorAccess,
-} from "@/constants/userRoles";
-import { UserRoleBadge, ProfileNameBadges } from "@/components/profile/UserRoleBadges";
 
 const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_COLORS;
 
