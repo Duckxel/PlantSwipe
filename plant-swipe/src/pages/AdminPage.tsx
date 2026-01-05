@@ -10407,11 +10407,15 @@ export const AdminPage: React.FC = () => {
 };
 
 // --- Broadcast controls (Overview tab) ---
-const BroadcastControls: React.FC<{
+function BroadcastControls({
+  inline = false,
+  onExpired,
+  onActive,
+}: {
   inline?: boolean;
   onExpired?: () => void;
   onActive?: () => void;
-}> = ({ inline = false, onExpired, onActive }) => {
+}) {
   const [active, setActive] = React.useState<BroadcastRecord | null>(() =>
     loadPersistedBroadcast(),
   );
@@ -10843,7 +10847,7 @@ const BroadcastControls: React.FC<{
       <CardContent className="p-4">{content}</CardContent>
     </Card>
   );
-};
+}
 
 // parseDurationToMs removed
 
