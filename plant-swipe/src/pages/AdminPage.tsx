@@ -72,6 +72,8 @@ import {
   Image,
   ZoomIn,
   CircleCheck,
+  Loader2,
+  Square,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -84,6 +86,10 @@ import {
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
+import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill";
+import { plantSchema } from "@/lib/plantSchema";
+import { applyAiFieldToPlant } from "@/lib/applyAiField";
+import type { Plant, PlantMeta, PlantWateringSchedule } from "@/types/plant";
 import {
   Dialog,
   DialogTrigger,
@@ -1590,6 +1596,12 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
   const [createPlantName, setCreatePlantName] = React.useState<string>("");
+  // Bulk AI state
+  const [bulkAiRunning, setBulkAiRunning] = React.useState<boolean>(false);
+  const [bulkAiCurrentRequestId, setBulkAiCurrentRequestId] = React.useState<string | null>(null);
+  const [bulkAiError, setBulkAiError] = React.useState<string | null>(null);
+  const [bulkAiProcessedCount, setBulkAiProcessedCount] = React.useState<number>(0);
+  const bulkAiAbortRef = React.useRef<AbortController | null>(null);
   const requestViewMode: RequestViewMode = React.useMemo(() => {
     if (currentPath.includes("/admin/requests/plants")) return "plants";
     return "requests";
@@ -2307,6 +2319,290 @@ export const AdminPage: React.FC = () => {
     // Refresh the requests list
     await loadPlantRequests({ initial: false });
   }, [createPlantRequestId, completePlantRequest, loadPlantRequests]);
+
+  // --- Bulk AI Fill Functions ---
+  const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta']);
+  const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres';
+  
+  const generateUUIDv4 = (): string => {
+    try {
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    } catch {}
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
+  const normalizeSchedules = (entries?: PlantWateringSchedule[]): PlantWateringSchedule[] => {
+    if (!entries?.length) return [];
+    return entries
+      .map((entry) => {
+        const qty = entry.quantity;
+        const parsedQuantity = typeof qty === 'string' ? parseInt(qty, 10) : qty;
+        return {
+          ...entry,
+          quantity: Number.isFinite(parsedQuantity as number) ? Number(parsedQuantity) : undefined,
+          season: entry.season?.trim() || undefined,
+        };
+      })
+      .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod);
+  };
+
+  const normalizePlantWatering = (candidate: Plant): Plant => ({
+    ...candidate,
+    plantCare: {
+      ...(candidate.plantCare || {}),
+      watering: { ...(candidate.plantCare?.watering || {}), schedules: normalizeSchedules(candidate.plantCare?.watering?.schedules) },
+    },
+  });
+
+  const targetFields = React.useMemo(
+    () =>
+      [
+        'plantType',
+        'utility',
+        'comestiblePart',
+        'fruitType',
+        'seasons',
+        'description',
+        'identity',
+        'plantCare',
+        'growth',
+        'usage',
+        'ecology',
+        'danger',
+        'miscellaneous',
+      ].filter((key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase())),
+    [],
+  );
+
+  const basicFieldOrder = React.useMemo(
+    () => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description', 'identity'],
+    [],
+  );
+
+  const aiFieldOrder = React.useMemo(() => {
+    const prioritized = basicFieldOrder.filter((key) => targetFields.includes(key));
+    const remaining = targetFields.filter((key) => !prioritized.includes(key));
+    return [...prioritized, ...remaining];
+  }, [basicFieldOrder, targetFields]);
+
+  const savePlantToDb = React.useCallback(async (plantToSave: Plant): Promise<string | null> => {
+    const trimmedName = plantToSave.name.trim();
+    if (!trimmedName) return null;
+    
+    const plantId = plantToSave.id || generateUUIDv4();
+    const normalizedStatus = (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase();
+    const createdByValue = profile?.display_name || null;
+    const createdTimeValue = new Date().toISOString();
+    
+    try {
+      // Save base plant record
+      const basePayload = {
+        id: plantId,
+        name: trimmedName,
+        scientific_name: plantToSave.identity?.scientificName || null,
+        plant_type: plantToSave.plantType || null,
+        utility: plantToSave.utility || [],
+        comestible_part: plantToSave.comestiblePart || [],
+        fruit_type: plantToSave.fruitType || [],
+        status: normalizedStatus,
+        created_by: createdByValue,
+        created_time: createdTimeValue,
+        updated_by: createdByValue,
+        updated_time: createdTimeValue,
+      };
+      
+      const { error: insertError } = await supabase
+        .from('plants')
+        .upsert(basePayload);
+      
+      if (insertError) {
+        console.error('[savePlantToDb] Insert error:', insertError);
+        return null;
+      }
+      
+      // Save translation
+      const translationPayload = {
+        plant_id: plantId,
+        language: 'en',
+        name: trimmedName,
+        given_names: plantToSave.identity?.givenNames || [],
+        overview: plantToSave.identity?.overview || null,
+        allergens: plantToSave.identity?.allergens || [],
+        symbolism: plantToSave.identity?.symbolism || [],
+        origin: plantToSave.plantCare?.origin || [],
+        advice_soil: plantToSave.plantCare?.adviceSoil || null,
+        advice_mulching: plantToSave.plantCare?.adviceMulching || null,
+        advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
+        advice_tutoring: plantToSave.growth?.adviceTutoring || null,
+        advice_sowing: plantToSave.growth?.adviceSowing || null,
+        cut: plantToSave.growth?.cut || null,
+        advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+        nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
+        recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+        advice_infusion: plantToSave.usage?.adviceInfusion || null,
+        ground_effect: plantToSave.ecology?.groundEffect || null,
+        tags: plantToSave.miscellaneous?.tags || [],
+      };
+      
+      const { error: translationError } = await supabase
+        .from('plant_translations')
+        .upsert(translationPayload, { onConflict: 'plant_id,language' });
+      
+      if (translationError) {
+        console.error('[savePlantToDb] Translation error:', translationError);
+      }
+      
+      return plantId;
+    } catch (err) {
+      console.error('[savePlantToDb] Error:', err);
+      return null;
+    }
+  }, [profile?.display_name]);
+
+  const runBulkAiFill = React.useCallback(async () => {
+    if (bulkAiRunning || plantRequests.length === 0) return;
+    
+    // Create new abort controller
+    const abortController = new AbortController();
+    bulkAiAbortRef.current = abortController;
+    
+    setBulkAiRunning(true);
+    setBulkAiError(null);
+    setBulkAiProcessedCount(0);
+    
+    let processedCount = 0;
+    
+    // Get current list of requests to process
+    const requestsToProcess = [...plantRequests];
+    
+    for (const request of requestsToProcess) {
+      // Check if aborted
+      if (abortController.signal.aborted) {
+        console.log('[BulkAI] Processing stopped by user');
+        break;
+      }
+      
+      setBulkAiCurrentRequestId(request.id);
+      
+      const plantName = request.plant_name.trim();
+      if (!plantName) {
+        processedCount += 1;
+        setBulkAiProcessedCount(processedCount);
+        continue;
+      }
+      
+      // Create empty plant with name
+      const newPlantId = generateUUIDv4();
+      let plant: Plant = {
+        id: newPlantId,
+        name: plantName,
+        utility: [],
+        comestiblePart: [],
+        fruitType: [],
+        images: [],
+        identity: { givenNames: [], colors: [], multicolor: false, bicolor: false },
+        plantCare: { watering: { schedules: [] } },
+        growth: {},
+        usage: {},
+        ecology: {},
+        danger: {},
+        miscellaneous: { sources: [] },
+        meta: { status: IN_PROGRESS_STATUS },
+        seasons: [],
+        colors: [],
+      };
+      
+      const applyWithStatus = (candidate: Plant): Plant => ({
+        ...candidate,
+        meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
+      });
+      
+      try {
+        // Run AI fill
+        const aiData = await fetchAiPlantFill({
+          plantName,
+          schema: plantSchema,
+          existingData: plant,
+          fields: aiFieldOrder,
+          language: 'en',
+          signal: abortController.signal,
+          continueOnFieldError: true,
+          onFieldComplete: ({ field, data }) => {
+            if (field === 'complete') return;
+            plant = applyAiFieldToPlant(plant, field, data);
+            plant = normalizePlantWatering(plant);
+            plant = applyWithStatus(plant);
+          },
+        });
+        
+        // Apply any remaining AI data
+        if (aiData && typeof aiData === 'object') {
+          for (const [fieldKey, data] of Object.entries(aiData as Record<string, unknown>)) {
+            plant = applyAiFieldToPlant(plant, fieldKey, data);
+          }
+          plant = normalizePlantWatering(plant);
+          plant = applyWithStatus(plant);
+        }
+        
+        // Ensure some defaults
+        const ensuredWater = (plant.plantCare?.watering?.schedules || []).length
+          ? normalizeSchedules(plant.plantCare?.watering?.schedules)
+          : [{ season: undefined, quantity: 1, timePeriod: 'week' as const }];
+        const ensuredGrowth = {
+          sowingMonth: plant.growth?.sowingMonth?.length ? plant.growth.sowingMonth : [3],
+          floweringMonth: plant.growth?.floweringMonth?.length ? plant.growth.floweringMonth : [6],
+          fruitingMonth: plant.growth?.fruitingMonth?.length ? plant.growth.fruitingMonth : [9],
+        };
+        
+        plant = {
+          ...plant,
+          plantCare: {
+            ...(plant.plantCare || {}),
+            origin: (plant.plantCare?.origin || []).length ? plant.plantCare?.origin : ['Unknown'],
+            watering: { ...(plant.plantCare?.watering || {}), schedules: ensuredWater },
+          },
+          growth: { ...(plant.growth || {}), ...ensuredGrowth },
+          meta: { ...(plant.meta || {}), status: IN_PROGRESS_STATUS },
+        };
+        
+        // Save plant to database
+        const savedId = await savePlantToDb(plant);
+        
+        if (savedId) {
+          // Complete the request (delete it)
+          await completePlantRequest(request.id);
+        }
+        
+      } catch (err: any) {
+        if (err?.message === 'AI fill was cancelled' || abortController.signal.aborted) {
+          console.log('[BulkAI] Processing cancelled');
+          break;
+        }
+        console.error(`[BulkAI] Error processing "${plantName}":`, err);
+        setBulkAiError(`Error processing "${plantName}": ${err?.message || 'Unknown error'}`);
+      }
+      
+      processedCount += 1;
+      setBulkAiProcessedCount(processedCount);
+    }
+    
+    setBulkAiRunning(false);
+    setBulkAiCurrentRequestId(null);
+    bulkAiAbortRef.current = null;
+    
+    // Refresh requests list
+    await loadPlantRequests({ initial: false });
+  }, [bulkAiRunning, plantRequests, aiFieldOrder, savePlantToDb, completePlantRequest, loadPlantRequests]);
+
+  const stopBulkAiFill = React.useCallback(() => {
+    if (bulkAiAbortRef.current) {
+      bulkAiAbortRef.current.abort();
+    }
+  }, []);
 
   // Presence fallback removed by request: rely on DB-backed API only
 
@@ -7084,6 +7380,29 @@ export const AdminPage: React.FC = () => {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {/* Bulk AI Button */}
+                            {bulkAiRunning ? (
+                              <Button
+                                variant="destructive"
+                                className="rounded-xl"
+                                onClick={stopBulkAiFill}
+                              >
+                                <Square className="h-4 w-4 mr-2" />
+                                <span className="hidden sm:inline">Stop AI ({bulkAiProcessedCount}/{plantRequests.length + bulkAiProcessedCount})</span>
+                                <span className="sm:hidden inline">Stop</span>
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white border-0"
+                                onClick={runBulkAiFill}
+                                disabled={plantRequests.length === 0 || plantRequestsLoading}
+                              >
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                <span className="hidden sm:inline">BULK AI</span>
+                                <span className="sm:hidden inline">AI</span>
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               className="rounded-xl"
@@ -7091,7 +7410,7 @@ export const AdminPage: React.FC = () => {
                                 loadPlantRequests({ initial: false })
                               }
                               disabled={
-                                plantRequestsLoading || plantRequestsRefreshing
+                                plantRequestsLoading || plantRequestsRefreshing || bulkAiRunning
                               }
                             >
                               <RefreshCw
@@ -7105,6 +7424,7 @@ export const AdminPage: React.FC = () => {
                                 <Button
                                   className="rounded-l-xl rounded-r-none bg-emerald-600 hover:bg-emerald-700 text-white"
                                   onClick={() => navigate("/create")}
+                                  disabled={bulkAiRunning}
                                 >
                                   <Plus className="h-4 w-4 mr-1" />
                                   <span className="hidden sm:inline">Add Plant</span>
@@ -7113,6 +7433,7 @@ export const AdminPage: React.FC = () => {
                                 <Button
                                   className="rounded-l-none rounded-r-xl bg-emerald-600 hover:bg-emerald-700 text-white border-l border-emerald-500 px-2"
                                   onClick={() => setAddButtonExpanded(!addButtonExpanded)}
+                                  disabled={bulkAiRunning}
                                 >
                                   <ChevronDown className={`h-4 w-4 transition-transform ${addButtonExpanded ? "rotate-180" : ""}`} />
                                 </Button>
@@ -7156,6 +7477,51 @@ export const AdminPage: React.FC = () => {
                                 {plantRequests.length}
                               </span>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Bulk AI Progress */}
+                        {bulkAiRunning && (
+                          <div className="rounded-xl border border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-violet-500 to-purple-600 flex items-center justify-center">
+                                  <Sparkles className="h-4 w-4 text-white animate-pulse" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-violet-900 dark:text-violet-100">
+                                    Bulk AI Processing
+                                  </div>
+                                  <div className="text-xs text-violet-600 dark:text-violet-300">
+                                    Processing {bulkAiProcessedCount + 1} of {plantRequests.length + bulkAiProcessedCount} plants...
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-32 h-2 bg-violet-200 dark:bg-violet-800 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-gradient-to-r from-violet-500 to-purple-600 rounded-full transition-all duration-300"
+                                    style={{ width: `${((bulkAiProcessedCount) / (plantRequests.length + bulkAiProcessedCount)) * 100}%` }}
+                                  />
+                                </div>
+                                <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Bulk AI Error */}
+                        {bulkAiError && !bulkAiRunning && (
+                          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200 flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                            <span>{bulkAiError}</span>
+                            <button
+                              type="button"
+                              className="ml-auto text-red-500 hover:text-red-700 dark:hover:text-red-300"
+                              onClick={() => setBulkAiError(null)}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
                           </div>
                         )}
 
@@ -7218,9 +7584,22 @@ export const AdminPage: React.FC = () => {
                                       className="flex flex-col gap-3 rounded-xl border bg-white p-3 dark:bg-[#252526] dark:border-[#3e3e42] md:flex-row md:items-center md:justify-between"
                                     >
                                       <div className="flex items-start gap-2 flex-1">
+                                        {/* Loading spinner for bulk AI processing */}
+                                        {bulkAiCurrentRequestId === req.id && (
+                                          <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-violet-500/20 to-purple-600/20 animate-pulse">
+                                            <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                                          </div>
+                                        )}
                                         <div className="flex-1">
-                                          <div className="text-sm font-medium">
-                                            {req.plant_name}
+                                          <div className="flex items-center gap-2">
+                                            <span className={`text-sm font-medium ${bulkAiCurrentRequestId === req.id ? 'text-violet-600 dark:text-violet-400' : ''}`}>
+                                              {req.plant_name}
+                                            </span>
+                                            {bulkAiCurrentRequestId === req.id && (
+                                              <span className="text-xs bg-gradient-to-r from-violet-500 to-purple-600 text-white px-2 py-0.5 rounded-full">
+                                                AI Filling...
+                                              </span>
+                                            )}
                                           </div>
                                           <div
                                             className="text-xs opacity-60"
@@ -7237,6 +7616,7 @@ export const AdminPage: React.FC = () => {
                                             handleOpenInfoDialog(req)
                                           }
                                           title="View request details"
+                                          disabled={bulkAiRunning}
                                         >
                                           <Info className="h-4 w-4" />
                                         </Button>
@@ -7244,7 +7624,7 @@ export const AdminPage: React.FC = () => {
                                       <div className="flex items-center gap-3">
                                         <Badge
                                           variant="secondary"
-                                          className="rounded-xl px-2 py-1 text-xs"
+                                          className={`rounded-xl px-2 py-1 text-xs ${bulkAiCurrentRequestId === req.id ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : ''}`}
                                         >
                                           {req.request_count}{" "}
                                           {req.request_count === 1
@@ -7257,6 +7637,7 @@ export const AdminPage: React.FC = () => {
                                           onClick={() =>
                                             handleOpenCreatePlantDialog(req)
                                           }
+                                          disabled={bulkAiRunning}
                                         >
                                           <Plus className="h-4 w-4 mr-2" />
                                           Add Plant
@@ -7268,7 +7649,7 @@ export const AdminPage: React.FC = () => {
                                             completePlantRequest(req.id)
                                           }
                                           disabled={
-                                            completingRequestId === req.id
+                                            completingRequestId === req.id || bulkAiRunning
                                           }
                                         >
                                           {completingRequestId === req.id
