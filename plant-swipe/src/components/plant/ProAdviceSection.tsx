@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/context/AuthContext"
 import { useAuthActions } from "@/context/AuthActionsContext"
-import { hasAnyRole, USER_ROLES, checkEditorAccess } from "@/constants/userRoles"
+import { hasAnyRole, USER_ROLES } from "@/constants/userRoles"
 import type { UserRole } from "@/constants/userRoles"
 import { useTranslation } from "react-i18next"
 import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, ChevronDown, ChevronUp } from "lucide-react"
@@ -77,7 +77,12 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
     return roles.filter((role): role is UserRole => Object.values(USER_ROLES).includes(role as UserRole))
   }, [])
 
-  const canModerate = React.useMemo(() => checkEditorAccess(profile), [profile])
+  const canModerate = React.useMemo(() => {
+    if (!profile) return false
+    if (profile.is_admin) return true
+    const roles = normalizeRoles(profile.roles)
+    return hasAnyRole(roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR, USER_ROLES.PRO])
+  }, [normalizeRoles, profile])
   const canContribute = React.useMemo(() => {
     if (!profile) return false
     if (profile.is_admin) return true
