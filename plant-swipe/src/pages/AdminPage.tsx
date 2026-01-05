@@ -124,7 +124,7 @@ type AdminTab =
   | "overview"
   | "members"
   | "reports"
-  | "requests"
+  | "plants"
   | "stocks"
   | "upload"
   | "notifications"
@@ -200,8 +200,8 @@ type NormalizedPlantStatus =
   | "approved"
   | "other";
 const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
-  { key: "requests", label: "Requests" },
   { key: "plants", label: "Plants" },
+  { key: "requests", label: "Requests" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -1603,8 +1603,8 @@ export const AdminPage: React.FC = () => {
   const [bulkAiProcessedCount, setBulkAiProcessedCount] = React.useState<number>(0);
   const bulkAiAbortRef = React.useRef<AbortController | null>(null);
   const requestViewMode: RequestViewMode = React.useMemo(() => {
-    if (currentPath.includes("/admin/requests/plants")) return "plants";
-    return "requests";
+    if (currentPath.includes("/admin/plants/requests")) return "requests";
+    return "plants";
   }, [currentPath]);
   const [plantDashboardRows, setPlantDashboardRows] = React.useState<
     PlantDashboardRow[]
@@ -3770,7 +3770,7 @@ export const AdminPage: React.FC = () => {
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin", adminOnly: true },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
     { key: "reports", label: "Reports", Icon: AlertTriangle, path: "/admin/reports", adminOnly: true },
-    { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
+    { key: "plants", label: "Plants", Icon: Leaf, path: "/admin/plants" },
     { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
@@ -3787,7 +3787,7 @@ export const AdminPage: React.FC = () => {
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
     if (currentPath.includes("/admin/reports")) return "reports";
-    if (currentPath.includes("/admin/requests")) return "requests";
+    if (currentPath.includes("/admin/plants")) return "plants";
     if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
@@ -3801,8 +3801,8 @@ export const AdminPage: React.FC = () => {
     if (isFullAdmin) return; // Admins can access everything
     const adminOnlyTabs: AdminTab[] = ["overview", "members", "reports", "stocks", "admin_logs"];
     if (adminOnlyTabs.includes(activeTab)) {
-      // Redirect to requests tab (default for editors)
-      navigate("/admin/requests", { replace: true });
+      // Redirect to plants tab (default for editors)
+      navigate("/admin/plants", { replace: true });
     }
   }, [activeTab, isFullAdmin, navigate]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
@@ -3819,13 +3819,13 @@ export const AdminPage: React.FC = () => {
   }, [plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
-    if (activeTab !== "requests" || plantRequestsInitialized) return;
+    if (activeTab !== "plants" || plantRequestsInitialized) return;
     loadPlantRequests({ initial: true });
   }, [activeTab, plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
     if (
-      activeTab !== "requests" ||
+      activeTab !== "plants" ||
       !plantViewIsPlants ||
       plantDashboardInitialized ||
       plantDashboardLoading
@@ -6826,14 +6826,14 @@ export const AdminPage: React.FC = () => {
                   <AdminStocksPanel />
                 )}
 
-                {/* Requests Tab */}
-                  {activeTab === "requests" && (
+                {/* Plants Tab */}
+                  {activeTab === "plants" && (
                     <div className="space-y-4">
                       <div className="flex justify-center">
                         <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
                           {REQUEST_VIEW_TABS.map((tab) => {
                             const isActive = requestViewMode === tab.key;
-                            const tabPath = tab.key === "plants" ? "/admin/requests/plants" : "/admin/requests";
+                            const tabPath = tab.key === "requests" ? "/admin/plants/requests" : "/admin/plants";
                             return (
                               <Link
                                 key={tab.key}
