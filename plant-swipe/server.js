@@ -761,6 +761,7 @@ const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
 let openaiModelPlantFill = process.env.OPENAI_MODEL || 'gpt-4o'
 let openaiModelGardenAdvice = process.env.OPENAI_MODEL_GARDEN_ADVICE || 'gpt-4o-mini'
+let openaiModelVision = process.env.OPENAI_MODEL_VISION || 'gpt-4o' // For image analysis tasks
 // Keep legacy reference for backward compatibility
 const openaiModel = openaiModelPlantFill
 let openaiClient = null
@@ -783,6 +784,7 @@ async function getAiModelSettings() {
   const settings = {
     gardenAdvice: openaiModelGardenAdvice,
     plantFill: openaiModelPlantFill,
+    vision: openaiModelVision,
   }
   
   if (!sql) return settings
@@ -790,13 +792,15 @@ async function getAiModelSettings() {
   try {
     const rows = await sql`
       SELECT key, value FROM public.admin_secrets 
-      WHERE key IN ('AI_MODEL_GARDEN_ADVICE', 'AI_MODEL_PLANT_FILL')
+      WHERE key IN ('AI_MODEL_GARDEN_ADVICE', 'AI_MODEL_PLANT_FILL', 'AI_MODEL_VISION')
     `
     for (const row of rows || []) {
       if (row.key === 'AI_MODEL_GARDEN_ADVICE' && row.value) {
         settings.gardenAdvice = row.value
       } else if (row.key === 'AI_MODEL_PLANT_FILL' && row.value) {
         settings.plantFill = row.value
+      } else if (row.key === 'AI_MODEL_VISION' && row.value) {
+        settings.vision = row.value
       }
     }
   } catch (err) {
@@ -807,13 +811,13 @@ async function getAiModelSettings() {
 }
 
 // Helper function to save AI model settings to admin_secrets table
-async function saveAiModelSettings(gardenAdvice, plantFill) {
+async function saveAiModelSettings(gardenAdvice, plantFill, vision) {
   if (!sql) {
     throw new Error('Database not configured')
   }
   
   try {
-    // Upsert both settings
+    // Upsert settings
     if (gardenAdvice !== undefined) {
       await sql`
         INSERT INTO public.admin_secrets (key, value, description, updated_at)
@@ -832,6 +836,15 @@ async function saveAiModelSettings(gardenAdvice, plantFill) {
       openaiModelPlantFill = plantFill
     }
     
+    if (vision !== undefined) {
+      await sql`
+        INSERT INTO public.admin_secrets (key, value, description, updated_at)
+        VALUES ('AI_MODEL_VISION', ${vision}, 'AI model used for image/vision analysis', now())
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+      `
+      openaiModelVision = vision
+    }
+    
     return { success: true }
   } catch (err) {
     console.error('[server] Failed to save AI model settings:', err)
@@ -845,7 +858,8 @@ async function initAiModelSettings() {
     const settings = await getAiModelSettings()
     openaiModelGardenAdvice = settings.gardenAdvice
     openaiModelPlantFill = settings.plantFill
-    console.log('[server] AI model settings loaded:', { gardenAdvice: openaiModelGardenAdvice, plantFill: openaiModelPlantFill })
+    openaiModelVision = settings.vision
+    console.log('[server] AI model settings loaded:', { gardenAdvice: openaiModelGardenAdvice, plantFill: openaiModelPlantFill, vision: openaiModelVision })
   } catch (err) {
     console.warn('[server] Failed to initialize AI model settings:', err?.message || err)
   }
@@ -3275,6 +3289,7 @@ app.get('/api/admin/ai-models', async (req, res) => {
       ok: true,
       gardenAdvice: settings.gardenAdvice,
       plantFill: settings.plantFill,
+      vision: settings.vision,
     })
   } catch (err) {
     console.error('[server] Failed to get AI model settings:', err)
@@ -3294,13 +3309,14 @@ app.post('/api/admin/ai-models', async (req, res) => {
     const body = req.body || {}
     const gardenAdvice = typeof body.gardenAdvice === 'string' ? body.gardenAdvice.trim() : undefined
     const plantFill = typeof body.plantFill === 'string' ? body.plantFill.trim() : undefined
+    const vision = typeof body.vision === 'string' ? body.vision.trim() : undefined
     
-    if (gardenAdvice === undefined && plantFill === undefined) {
+    if (gardenAdvice === undefined && plantFill === undefined && vision === undefined) {
       res.status(400).json({ error: 'At least one model setting is required' })
       return
     }
     
-    await saveAiModelSettings(gardenAdvice, plantFill)
+    await saveAiModelSettings(gardenAdvice, plantFill, vision)
     
     // Log the admin action
     try {
@@ -3308,7 +3324,7 @@ app.post('/api/admin/ai-models', async (req, res) => {
       if (sql && caller?.id) {
         await sql`
           INSERT INTO public.admin_logs (admin_id, action, target, detail)
-          VALUES (${caller.id}, 'update_ai_models', 'ai_settings', ${JSON.stringify({ gardenAdvice, plantFill })})
+          VALUES (${caller.id}, 'update_ai_models', 'ai_settings', ${JSON.stringify({ gardenAdvice, plantFill, vision })})
         `
       }
     } catch (logErr) {
@@ -3320,6 +3336,7 @@ app.post('/api/admin/ai-models', async (req, res) => {
       message: 'AI model settings saved successfully',
       gardenAdvice: gardenAdvice || openaiModelGardenAdvice,
       plantFill: plantFill || openaiModelPlantFill,
+      vision: vision || openaiModelVision,
     })
   } catch (err) {
     console.error('[server] Failed to save AI model settings:', err)
@@ -13496,57 +13513,51 @@ Format your response as JSON with this structure:
     let tokensUsed = 0
     let modelUsed = openaiModelGardenAdvice
 
-    if (openai) {
+    if (openaiClient) {
       try {
-        // Build messages with optional images for vision analysis
+        // Build input with optional images for vision analysis
         const useVision = journalPhotoUrls.length > 0
-        let messages = [
-          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
-        ]
+        const systemInstructions = 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.'
 
+        let inputContent
         if (useVision) {
           // Include up to 4 most recent journal photos for analysis
           const imageUrls = journalPhotoUrls.slice(0, 4)
-          const content = [
-            {
-              type: 'text', text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
+          const visionPrompt = prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
 - Overall plant health and vigor
 - Signs of disease, pests, or stress
 - Watering issues (overwatering/underwatering)
 - Nutrient deficiencies
 - Growth progress
-Include specific observations from the photos in your advice.` }
-          ]
+Include specific observations from the photos in your advice.`
 
+          // Build multimodal input array
+          inputContent = [
+            { type: 'input_text', text: visionPrompt }
+          ]
           for (const url of imageUrls) {
-            content.push({
-              type: 'image_url',
-              image_url: {
-                url: url,
-                detail: 'high'
-              }
+            inputContent.push({
+              type: 'input_image',
+              image_url: url,
             })
           }
-
-          messages.push({ role: 'user', content })
+          modelUsed = openaiModelVision
         } else {
-          messages.push({ role: 'user', content: prompt })
+          inputContent = prompt
+          modelUsed = openaiModelGardenAdvice
         }
 
-        const completionOptions = {
-          model: useVision ? 'gpt-4o' : openaiModelGardenAdvice,
-          messages,
-          temperature: 0.7,
-          max_tokens: useVision ? 2000 : 1500,
-        }
-        // Only use json_object response format when not using vision (compatibility)
-        if (!useVision) {
-          completionOptions.response_format = { type: 'json_object' }
-        }
-        const completion = await openai.chat.completions.create(completionOptions)
+        const response = await openaiClient.responses.create(
+          {
+            model: modelUsed,
+            instructions: systemInstructions,
+            input: inputContent,
+          },
+          { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) }
+        )
 
-        const aiResponse = completion.choices[0]?.message?.content
-        tokensUsed = completion.usage?.total_tokens || 0
+        const aiResponse = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+        tokensUsed = response?.usage?.total_tokens || 0
 
         try {
           parsed = JSON.parse(aiResponse || '{}')
@@ -14800,43 +14811,43 @@ Please provide detailed, warm, helpful feedback that:
 
 Be specific and reference what you actually see in the images. If you notice any concerning signs, explain what they might be and how to address them.`
 
-    // Build messages array with images for OpenAI Vision
-    const messages = [
-      { role: 'system', content: 'You are a friendly, expert gardener who can analyze plant photos and provide detailed, helpful feedback. When analyzing images, be specific about what you observe.' },
-    ]
+    // Build input for OpenAI Responses API
+    const systemInstructions = 'You are a friendly, expert gardener who can analyze plant photos and provide detailed, helpful feedback. When analyzing images, be specific about what you observe.'
+
+    let inputContent
+    let modelToUse
 
     // If we have photos, use vision model with images
     if (photos.length > 0) {
-      const content = [
-        { type: 'text', text: textPrompt }
+      inputContent = [
+        { type: 'input_text', text: textPrompt }
       ]
 
       // Add images - transform URLs to media proxy format for optimization
       for (const photo of photos) {
         const imageUrl = supabaseStorageToMediaProxy(photo.image_url) || photo.image_url
-        content.push({
-          type: 'image_url',
-          image_url: {
-            url: imageUrl,
-            detail: 'high' // Use high detail for plant analysis
-          }
+        inputContent.push({
+          type: 'input_image',
+          image_url: imageUrl,
         })
       }
-
-      messages.push({ role: 'user', content })
+      modelToUse = openaiModelVision
     } else {
-      messages.push({ role: 'user', content: textPrompt })
+      inputContent = textPrompt
+      modelToUse = openaiModelGardenAdvice
     }
 
-    const completion = await openai.chat.completions.create({
-      model: photos.length > 0 ? 'gpt-4o' : openaiModelGardenAdvice, // Use vision-capable model when we have images
-      messages,
-      temperature: 0.7,
-      max_tokens: photos.length > 0 ? 800 : 400,
-    })
+    const response = await openaiClient.responses.create(
+      {
+        model: modelToUse,
+        instructions: systemInstructions,
+        input: inputContent,
+      },
+      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 120000) }
+    )
 
-    const feedback = completion.choices[0]?.message?.content
-    const tokensUsed = completion.usage?.total_tokens || 0
+    const feedback = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+    const tokensUsed = response?.usage?.total_tokens || 0
 
     await sql`
       update public.garden_journal_entries

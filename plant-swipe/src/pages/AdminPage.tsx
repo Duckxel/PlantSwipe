@@ -2661,6 +2661,7 @@ export const AdminPage: React.FC = () => {
   const [aiModelSettingsExpanded, setAiModelSettingsExpanded] = React.useState<boolean>(false);
   const [aiModelGardenAdvice, setAiModelGardenAdvice] = React.useState<string>("");
   const [aiModelPlantFill, setAiModelPlantFill] = React.useState<string>("");
+  const [aiModelVision, setAiModelVision] = React.useState<string>("");
   const [aiModelSettingsLoading, setAiModelSettingsLoading] = React.useState<boolean>(false);
   const [aiModelSettingsSaving, setAiModelSettingsSaving] = React.useState<boolean>(false);
   const [aiModelSettingsError, setAiModelSettingsError] = React.useState<string | null>(null);
@@ -2978,6 +2979,7 @@ export const AdminPage: React.FC = () => {
       if (isMountedRef.current) {
         setAiModelGardenAdvice(data?.gardenAdvice || "");
         setAiModelPlantFill(data?.plantFill || "");
+        setAiModelVision(data?.vision || "");
       }
     } catch (e: unknown) {
       if (isMountedRef.current) {
@@ -3012,6 +3014,7 @@ export const AdminPage: React.FC = () => {
         body: JSON.stringify({
           gardenAdvice: aiModelGardenAdvice.trim(),
           plantFill: aiModelPlantFill.trim(),
+          vision: aiModelVision.trim(),
         }),
       });
       const data = await safeJson(resp);
@@ -3034,14 +3037,14 @@ export const AdminPage: React.FC = () => {
     } finally {
       if (isMountedRef.current) setAiModelSettingsSaving(false);
     }
-  }, [safeJson, aiModelGardenAdvice, aiModelPlantFill]);
+  }, [safeJson, aiModelGardenAdvice, aiModelPlantFill, aiModelVision]);
 
   // Load AI model settings when overview tab is active
   React.useEffect(() => {
-    if (activeTab === "overview" && aiModelSettingsExpanded && !aiModelGardenAdvice && !aiModelPlantFill) {
+    if (activeTab === "overview" && aiModelSettingsExpanded && !aiModelGardenAdvice && !aiModelPlantFill && !aiModelVision) {
       loadAiModelSettings();
     }
-  }, [activeTab, aiModelSettingsExpanded, aiModelGardenAdvice, aiModelPlantFill, loadAiModelSettings]);
+  }, [activeTab, aiModelSettingsExpanded, aiModelGardenAdvice, aiModelPlantFill, aiModelVision, loadAiModelSettings]);
 
   // Helper to format uptime
   const formatUptime = (seconds: number | null): string => {
@@ -6930,7 +6933,7 @@ export const AdminPage: React.FC = () => {
                             type="button"
                             onClick={() => {
                               setAiModelSettingsExpanded(!aiModelSettingsExpanded);
-                              if (!aiModelSettingsExpanded && !aiModelGardenAdvice && !aiModelPlantFill) {
+                              if (!aiModelSettingsExpanded && !aiModelGardenAdvice && !aiModelPlantFill && !aiModelVision) {
                                 loadAiModelSettings();
                               }
                             }}
@@ -6978,7 +6981,7 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   )}
                                   
-                                  <div className="grid gap-4 sm:grid-cols-2">
+                                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                     {/* Garden Advice Model */}
                                     <div className="space-y-2">
                                       <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300">
@@ -6989,11 +6992,11 @@ export const AdminPage: React.FC = () => {
                                         type="text"
                                         value={aiModelGardenAdvice}
                                         onChange={(e) => setAiModelGardenAdvice(e.target.value)}
-                                        placeholder="e.g., gpt-4o, gpt-4-turbo, claude-3-opus"
+                                        placeholder="e.g., gpt-4o, gpt-5-nano"
                                         className="rounded-xl"
                                       />
                                       <p className="text-xs text-stone-500 dark:text-stone-400">
-                                        Used for generating personalized garden advice and plant care tips
+                                        For garden advice (text-only)
                                       </p>
                                     </div>
                                     
@@ -7007,11 +7010,29 @@ export const AdminPage: React.FC = () => {
                                         type="text"
                                         value={aiModelPlantFill}
                                         onChange={(e) => setAiModelPlantFill(e.target.value)}
-                                        placeholder="e.g., gpt-4o, gpt-4-turbo, claude-3-opus"
+                                        placeholder="e.g., gpt-4o, gpt-5-nano"
                                         className="rounded-xl"
                                       />
                                       <p className="text-xs text-stone-500 dark:text-stone-400">
-                                        Used for auto-filling plant information in the admin panel
+                                        For auto-filling plant info
+                                      </p>
+                                    </div>
+                                    
+                                    {/* Vision Model */}
+                                    <div className="space-y-2">
+                                      <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300">
+                                        <Eye className="h-4 w-4 text-blue-500" />
+                                        AI for Vision/Images
+                                      </label>
+                                      <Input
+                                        type="text"
+                                        value={aiModelVision}
+                                        onChange={(e) => setAiModelVision(e.target.value)}
+                                        placeholder="e.g., gpt-4o, gpt-4-vision"
+                                        className="rounded-xl"
+                                      />
+                                      <p className="text-xs text-stone-500 dark:text-stone-400">
+                                        For analyzing plant photos
                                       </p>
                                     </div>
                                   </div>
