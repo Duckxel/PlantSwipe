@@ -32,7 +32,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from '@/components/i18n/Link'
+import { useLocation } from 'react-router-dom'
 import { translateNotificationToAllLanguages } from '@/lib/deepl'
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from '@/lib/i18n'
 
