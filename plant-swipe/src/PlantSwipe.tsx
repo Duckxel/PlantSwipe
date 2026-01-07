@@ -574,6 +574,17 @@ export default function PlantSwipe() {
     // shuffleEpoch is used to trigger a reshuffle when user completes a cycle
     void shuffleEpoch
     if (filtered.length === 0) return []
+    
+    // Filter out plants without images for Discovery page
+    const plantsWithImages = filtered.filter((p) => {
+      // Check for image in multiple locations
+      const hasLegacyImage = Boolean(p.image)
+      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
+      return hasLegacyImage || hasImagesArray
+    })
+    
+    if (plantsWithImages.length === 0) return []
+    
     const shuffleList = (list: Plant[]) => {
       const arr = list.slice()
       for (let i = arr.length - 1; i > 0; i--) {
@@ -585,7 +596,7 @@ export default function PlantSwipe() {
     const now = new Date()
     const promoted: Plant[] = []
     const regular: Plant[] = []
-    filtered.forEach((plant) => {
+    plantsWithImages.forEach((plant) => {
       if (isPlantOfTheMonth(plant, now)) {
         promoted.push(plant)
       } else {
@@ -593,7 +604,7 @@ export default function PlantSwipe() {
       }
     })
     if (promoted.length === 0) {
-      return shuffleList(filtered)
+      return shuffleList(plantsWithImages)
     }
     return [...shuffleList(promoted), ...shuffleList(regular)]
   }, [filtered, shuffleEpoch])

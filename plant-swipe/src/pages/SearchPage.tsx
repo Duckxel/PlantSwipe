@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Flame, PartyPopper, Sparkles, Loader2 } from "lucide-react";
+import { Flame, PartyPopper, Sparkles, Loader2, Sprout } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 
@@ -129,7 +129,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                       decoding="async"
                       className="absolute inset-0 h-full w-full object-cover object-center select-none transition-transform duration-300 group-hover:scale-105"
                     />
-                  ) : null}
+                  ) : (
+                    <div className="absolute inset-0 w-full h-full flex items-center justify-center">
+                      <Sprout className="h-12 w-12 text-emerald-400/50 dark:text-emerald-500/40" />
+                    </div>
+                  )}
                   {highlightBadges.length > 0 && (
                     <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
                       {highlightBadges.map((badge) => (
