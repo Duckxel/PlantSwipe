@@ -282,16 +282,21 @@ export async function processPlantRequest(
     // The plant name might be in any language, so we first ask AI for the English common name
     onProgress?.({ stage: 'translating_name', plantName })
     
-    let englishPlantName = plantName
+    let englishPlantName = String(plantName || '').trim()
     try {
       const nameResult = await getEnglishPlantName(plantName, signal)
-      englishPlantName = nameResult.englishName
+      englishPlantName = String(nameResult.englishName || plantName || '').trim()
       if (nameResult.wasTranslated) {
         console.log(`[aiPrefillService] Translated plant name: "${plantName}" -> "${englishPlantName}"`)
       }
     } catch (err) {
       console.warn(`[aiPrefillService] Failed to get English name for "${plantName}", using original:`, err)
       // Continue with original name if translation fails
+    }
+    
+    // Ensure we have a valid plant name
+    if (!englishPlantName) {
+      throw new Error('Plant name is required')
     }
     
     if (signal?.aborted) {
@@ -354,6 +359,9 @@ export async function processPlantRequest(
       }
     }
     
+    // Ensure plant name is always the English name (AI might overwrite or corrupt it)
+    plant.name = englishPlantName
+    
     // Ensure required fields have defaults
     plant = {
       ...plant,
@@ -381,10 +389,15 @@ export async function processPlantRequest(
     }
     
     // Stage 2: Save Plant
-    onProgress?.({ stage: 'saving', plantName })
+    onProgress?.({ stage: 'saving', plantName: englishPlantName })
     
     const plantId = plant.id
-    const trimmedName = plant.name.trim()
+    // Ensure name is a string (AI might return non-string values)
+    const trimmedName = String(plant.name || englishPlantName || '').trim()
+    
+    if (!trimmedName) {
+      throw new Error('Plant name is required for saving')
+    }
     const normalizedSchedules = normalizeSchedules(plant.plantCare?.watering?.schedules)
     const sources = plant.miscellaneous?.sources || []
     const primarySource = sources[0]
@@ -540,11 +553,15 @@ export async function processPlantRequest(
         throw new Error('Operation cancelled')
       }
       
-      const translatedName = await translateText(plant.name || '', target, 'en')
+      const translatedName = await translateText(String(plant.name || trimmedName || ''), target, 'en')
       const translatedGivenNames = await translateArray(plant.identity?.givenNames || [], target, 'en')
-      const translateArraySafe = (arr?: string[]) => translateArray(arr || [], target, 'en')
+      const translateArraySafe = (arr?: string[]) => translateArray((arr || []).map(s => String(s || '')), target, 'en')
+      const translateStringSafe = async (s?: string | null) => {
+        if (!s || typeof s !== 'string') return null
+        return translateText(s, target, 'en')
+      }
       const translatedSourceName = primarySource?.name
-        ? await translateText(primarySource.name, target, 'en')
+        ? await translateText(String(primarySource.name), target, 'en')
         : undefined
       
       translatedRows.push({
@@ -552,43 +569,23 @@ export async function processPlantRequest(
         language: target,
         name: translatedName,
         given_names: translatedGivenNames,
-        overview: plant.identity?.overview
-          ? await translateText(plant.identity.overview, target, 'en')
-          : plant.identity?.overview || null,
+        overview: await translateStringSafe(plant.identity?.overview),
         allergens: await translateArraySafe(plant.identity?.allergens),
         symbolism: await translateArraySafe(plant.identity?.symbolism),
         origin: await translateArraySafe(plant.plantCare?.origin),
-        advice_soil: plant.plantCare?.adviceSoil
-          ? await translateText(plant.plantCare.adviceSoil, target, 'en')
-          : plant.plantCare?.adviceSoil || null,
-        advice_mulching: plant.plantCare?.adviceMulching
-          ? await translateText(plant.plantCare.adviceMulching, target, 'en')
-          : plant.plantCare?.adviceMulching || null,
-        advice_fertilizer: plant.plantCare?.adviceFertilizer
-          ? await translateText(plant.plantCare.adviceFertilizer, target, 'en')
-          : plant.plantCare?.adviceFertilizer || null,
-        advice_tutoring: plant.growth?.adviceTutoring
-          ? await translateText(plant.growth.adviceTutoring, target, 'en')
-          : plant.growth?.adviceTutoring || null,
-        advice_sowing: plant.growth?.adviceSowing
-          ? await translateText(plant.growth.adviceSowing, target, 'en')
-          : plant.growth?.adviceSowing || null,
-        cut: plant.growth?.cut
-          ? await translateText(plant.growth.cut, target, 'en')
-          : plant.growth?.cut || null,
-        advice_medicinal: plant.usage?.adviceMedicinal
-          ? await translateText(plant.usage.adviceMedicinal, target, 'en')
-          : plant.usage?.adviceMedicinal || null,
+        advice_soil: await translateStringSafe(plant.plantCare?.adviceSoil),
+        advice_mulching: await translateStringSafe(plant.plantCare?.adviceMulching),
+        advice_fertilizer: await translateStringSafe(plant.plantCare?.adviceFertilizer),
+        advice_tutoring: await translateStringSafe(plant.growth?.adviceTutoring),
+        advice_sowing: await translateStringSafe(plant.growth?.adviceSowing),
+        cut: await translateStringSafe(plant.growth?.cut),
+        advice_medicinal: await translateStringSafe(plant.usage?.adviceMedicinal),
         nutritional_intake: await translateArraySafe(plant.usage?.nutritionalIntake),
         recipes_ideas: await translateArraySafe(plant.usage?.recipesIdeas),
-        advice_infusion: plant.usage?.adviceInfusion
-          ? await translateText(plant.usage.adviceInfusion, target, 'en')
-          : plant.usage?.adviceInfusion || null,
-        ground_effect: plant.ecology?.groundEffect
-          ? await translateText(plant.ecology.groundEffect, target, 'en')
-          : plant.ecology?.groundEffect || null,
+        advice_infusion: await translateStringSafe(plant.usage?.adviceInfusion),
+        ground_effect: await translateStringSafe(plant.ecology?.groundEffect),
         source_name: translatedSourceName || null,
-        source_url: primarySource?.url || null,
+        source_url: primarySource?.url ? String(primarySource.url) : null,
         tags: await translateArraySafe(plant.miscellaneous?.tags),
       })
     }
