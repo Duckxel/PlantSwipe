@@ -272,6 +272,9 @@ export async function processPlantRequest(
   const totalFields = aiFieldOrder.length
   let fieldsCompleted = 0
   
+  // Keep the original plant name for progress tracking (UI consistency)
+  const displayName = String(plantName || '').trim()
+  
   try {
     // Check if aborted
     if (signal?.aborted) {
@@ -280,9 +283,9 @@ export async function processPlantRequest(
     
     // Stage 0: Get English plant name
     // The plant name might be in any language, so we first ask AI for the English common name
-    onProgress?.({ stage: 'translating_name', plantName })
+    onProgress?.({ stage: 'translating_name', plantName: displayName })
     
-    let englishPlantName = String(plantName || '').trim()
+    let englishPlantName = displayName
     try {
       const nameResult = await getEnglishPlantName(plantName, signal)
       englishPlantName = String(nameResult.englishName || plantName || '').trim()
@@ -303,8 +306,8 @@ export async function processPlantRequest(
       throw new Error('Operation cancelled')
     }
     
-    // Stage 1: AI Fill (using English name)
-    onProgress?.({ stage: 'filling', plantName: englishPlantName })
+    // Stage 1: AI Fill (using English name internally, but display original name)
+    onProgress?.({ stage: 'filling', plantName: displayName })
     
     const emptyPlant: Plant = {
       id: generateUUIDv4(),
@@ -389,7 +392,7 @@ export async function processPlantRequest(
     }
     
     // Stage 2: Save Plant
-    onProgress?.({ stage: 'saving', plantName: englishPlantName })
+    onProgress?.({ stage: 'saving', plantName: displayName })
     
     const plantId = plant.id
     // Ensure name is a string (AI might return non-string values)
@@ -540,7 +543,7 @@ export async function processPlantRequest(
     }
     
     // Stage 3: Translate to other languages
-    onProgress?.({ stage: 'translating', plantName })
+    onProgress?.({ stage: 'translating', plantName: displayName })
     
     const targetLanguages = SUPPORTED_LANGUAGES.filter((lang) => lang !== 'en')
     const translatedRows = []
