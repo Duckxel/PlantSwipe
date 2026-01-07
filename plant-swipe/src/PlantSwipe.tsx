@@ -122,11 +122,16 @@ export default function PlantSwipe() {
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [usageFilters, setUsageFilters] = useState<string[]>([])
+  const [habitatFilters, setHabitatFilters] = useState<string[]>([])
+  const [toxicityFilter, setToxicityFilter] = useState<string | null>(null)
+  const [livingSpaceFilters, setLivingSpaceFilters] = useState<string[]>([])
   const [seasonSectionOpen, setSeasonSectionOpen] = useState(false)
   const [colorSectionOpen, setColorSectionOpen] = useState(false)
   const [advancedColorsOpen, setAdvancedColorsOpen] = useState(false)
   const [typeSectionOpen, setTypeSectionOpen] = useState(false)
   const [usageSectionOpen, setUsageSectionOpen] = useState(false)
+  const [habitatSectionOpen, setHabitatSectionOpen] = useState(false)
+  const [toxicitySectionOpen, setToxicitySectionOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -538,6 +543,12 @@ export default function PlantSwipe() {
       return tokens.includes(normalizedColorFilter)
     }
 
+    // Normalize habitat filters
+    const normalizedHabitatFilters = habitatFilters.map((h) => h.toLowerCase())
+    
+    // Normalize toxicity filter
+    const normalizedToxicityFilter = toxicityFilter?.toLowerCase() ?? null
+
     return plants.filter((p: Plant) => {
       // Extract colors from both legacy format (p.colors) and new format (p.identity?.colors)
       const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
@@ -564,9 +575,44 @@ export default function PlantSwipe() {
       const matchesUsage = normalizedUsage.length
         ? normalizedUsage.every((usage) => plantUsageLabels.includes(usage))
         : true
-      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage
+      
+      // Habitat filter - match if plant has ANY of the selected habitats (OR logic)
+      const plantHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+      const matchesHabitat = normalizedHabitatFilters.length === 0 
+        ? true 
+        : normalizedHabitatFilters.some((h) => plantHabitats.includes(h))
+      
+      // Toxicity filter - match if plant has the selected toxicity level (either human or pet)
+      const plantToxicityHuman = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '')
+      const plantToxicityPets = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '')
+      const matchesToxicity = !normalizedToxicityFilter 
+        ? true 
+        : plantToxicityHuman === normalizedToxicityFilter.replace(/[\s-]/g, '') || 
+          plantToxicityPets === normalizedToxicityFilter.replace(/[\s-]/g, '')
+      
+      // Living space filter with special logic:
+      // - Nothing selected = show all plants
+      // - Indoor only = show plants with livingSpace "Indoor" or "Both"
+      // - Outdoor only = show plants with livingSpace "Outdoor" or "Both"
+      // - Both selected = show ONLY plants that have livingSpace "Both" (can be both indoor AND outdoor)
+      const plantLivingSpace = (p.identity?.livingSpace || '').toLowerCase()
+      let matchesLivingSpace = true
+      if (livingSpaceFilters.length === 2) {
+        // Both Indoor and Outdoor selected - show only plants that can be BOTH
+        matchesLivingSpace = plantLivingSpace === 'both'
+      } else if (livingSpaceFilters.length === 1) {
+        const selectedSpace = livingSpaceFilters[0].toLowerCase()
+        if (selectedSpace === 'indoor') {
+          matchesLivingSpace = plantLivingSpace === 'indoor' || plantLivingSpace === 'both'
+        } else if (selectedSpace === 'outdoor') {
+          matchesLivingSpace = plantLivingSpace === 'outdoor' || plantLivingSpace === 'both'
+        }
+      }
+      // If no filters selected, show all plants
+      
+      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage && matchesHabitat && matchesToxicity && matchesLivingSpace
     })
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, likedSet, colorOptions])
+  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, habitatFilters, toxicityFilter, livingSpaceFilters, likedSet, colorOptions])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
@@ -937,6 +983,9 @@ export default function PlantSwipe() {
         colorFilter.length > 0 || 
         typeFilter !== null || 
         usageFilters.length > 0 || 
+        habitatFilters.length > 0 ||
+        toxicityFilter !== null ||
+        livingSpaceFilters.length > 0 ||
         onlySeeds || 
         onlyFavorites
 
@@ -946,9 +995,26 @@ export default function PlantSwipe() {
         setColorFilter([])
         setTypeFilter(null)
         setUsageFilters([])
+        setHabitatFilters([])
+        setToxicityFilter(null)
+        setLivingSpaceFilters([])
         setOnlySeeds(false)
         setOnlyFavorites(false)
       }
+      
+      // Habitat options
+      const habitatOptions = [
+        "Aquatic", "Semi-Aquatic", "Wetland", "Tropical", "Temperate", 
+        "Arid", "Mediterranean", "Mountain", "Grassland", "Forest", "Coastal", "Urban"
+      ] as const
+      
+      // Toxicity options
+      const toxicityOptions = [
+        "Non-Toxic", "Midly Irritating", "Highly Toxic", "Lethally Toxic"
+      ] as const
+      
+      // Living space options  
+      const livingSpaceOptions = ["Indoor", "Outdoor"] as const
 
       const renderColorOption = (color: ColorOption) => {
         const isActive = colorFilter.includes(color.name)
@@ -1160,6 +1226,111 @@ export default function PlantSwipe() {
             )}
           </div>
 
+          {/* Habitat */}
+          <div>
+            <FilterSectionHeader
+              label={t("moreInfo.labels.habitat", { defaultValue: "Habitat" })}
+              isOpen={habitatSectionOpen}
+              onToggle={() => setHabitatSectionOpen((prev) => !prev)}
+            />
+            {habitatSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {habitatOptions.map((habitat) => {
+                  const isSelected = habitatFilters.includes(habitat)
+                  const habitatKey = habitat.toLowerCase().replace(/[\s-]/g, '')
+                  return (
+                    <button
+                      key={habitat}
+                      type="button"
+                      onClick={() =>
+                        setHabitatFilters((current) =>
+                          isSelected ? current.filter((h) => h !== habitat) : [...current, habitat]
+                        )
+                      }
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        isSelected
+                          ? "bg-teal-600 dark:bg-teal-500 text-white"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={isSelected}
+                    >
+                      {t(`moreInfo.enums.habitat.${habitatKey}`, { defaultValue: habitat })}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Toxicity */}
+          <div>
+            <FilterSectionHeader
+              label={t("moreInfo.labels.toxicityHuman", { defaultValue: "Toxicity" })}
+              isOpen={toxicitySectionOpen}
+              onToggle={() => setToxicitySectionOpen((prev) => !prev)}
+            />
+            {toxicitySectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {toxicityOptions.map((toxicity) => {
+                  const isSelected = toxicityFilter === toxicity
+                  const toxicityKey = toxicity.toLowerCase().replace(/[\s-]/g, '')
+                  return (
+                    <button
+                      key={toxicity}
+                      type="button"
+                      onClick={() => setToxicityFilter((current) => (current === toxicity ? null : toxicity))}
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        isSelected
+                          ? "bg-amber-600 dark:bg-amber-500 text-white"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={isSelected}
+                    >
+                      {t(`moreInfo.enums.toxicity.${toxicityKey}`, { defaultValue: toxicity })}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Indoor / Outdoor - Not collapsible */}
+          <div>
+            <div className="text-xs font-medium mb-3 uppercase tracking-wide text-stone-500 dark:text-stone-300">
+              {t("moreInfo.labels.livingSpace", { defaultValue: "Living Space" })}
+            </div>
+            <div className="flex gap-2">
+              {livingSpaceOptions.map((space) => {
+                const isSelected = livingSpaceFilters.includes(space)
+                const spaceKey = space.toLowerCase()
+                return (
+                  <button
+                    key={space}
+                    type="button"
+                    onClick={() =>
+                      setLivingSpaceFilters((current) =>
+                        isSelected ? current.filter((s) => s !== space) : [...current, space]
+                      )
+                    }
+                    className={`flex-1 px-4 py-2 rounded-2xl text-sm shadow-sm border transition ${
+                      isSelected
+                        ? "bg-indigo-600 dark:bg-indigo-500 text-white"
+                        : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                    }`}
+                    aria-pressed={isSelected}
+                  >
+                    {t(`moreInfo.enums.livingSpace.${spaceKey}`, { defaultValue: space })}
+                  </button>
+                )
+              })}
+            </div>
+            {livingSpaceFilters.length === 2 && (
+              <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                {t("plant.livingSpaceBothHint", { defaultValue: "Showing plants suitable for both indoor AND outdoor" })}
+              </p>
+            )}
+          </div>
+
           {/* Toggles */}
           <div className="pt-2 space-y-2">
             <button
@@ -1196,9 +1367,16 @@ export default function PlantSwipe() {
               {usageFilters.map((usage) => (
                 <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
               ))}
+              {habitatFilters.map((habitat) => (
+                <Badge key={habitat} variant="secondary" className="rounded-xl">{t(`moreInfo.enums.habitat.${habitat.toLowerCase().replace(/[\s-]/g, '')}`, { defaultValue: habitat })}</Badge>
+              ))}
+              {toxicityFilter && <Badge variant="secondary" className="rounded-xl">{t(`moreInfo.enums.toxicity.${toxicityFilter.toLowerCase().replace(/[\s-]/g, '')}`, { defaultValue: toxicityFilter })}</Badge>}
+              {livingSpaceFilters.map((space) => (
+                <Badge key={space} variant="secondary" className="rounded-xl">{t(`moreInfo.enums.livingSpace.${space.toLowerCase()}`, { defaultValue: space })}</Badge>
+              ))}
               {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
               {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
-              {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
+              {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && habitatFilters.length === 0 && !toxicityFilter && livingSpaceFilters.length === 0 && !onlySeeds && !onlyFavorites && (
                 <span className="opacity-50">{t("plant.none")}</span>
               )}
             </div>

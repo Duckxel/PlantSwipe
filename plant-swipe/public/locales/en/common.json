@@ -597,6 +597,7 @@
       "seedsOnly": "Seeds only",
       "favoritesOnly": "Favorites only",
       "favoritesFirst": "Favorites first",
+      "livingSpaceBothHint": "Showing plants suitable for both indoor AND outdoor",
       "sortLabel": "Sort by",
       "sortDefault": "Default order",
       "sortNewest": "Newest",
