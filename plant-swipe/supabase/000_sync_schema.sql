@@ -2173,6 +2173,29 @@ create policy gp_delete on public.garden_plants for delete to authenticated
     exists (select 1 from public.garden_members gm where gm.garden_id = garden_plants.garden_id and gm.user_id = (select auth.uid()))
     or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
   );
+
+-- ========== PUBLIC GARDEN ACCESS FOR ANONYMOUS USERS ==========
+-- Helper function to check if a garden is public (SECURITY DEFINER to bypass RLS)
+-- Defined early so it can be used by anon policies below
+create or replace function public.is_public_garden(_garden_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.gardens
+    where id = _garden_id and privacy = 'public'
+  );
+$$;
+grant execute on function public.is_public_garden(uuid) to anon, authenticated;
+
+-- Allow anon users to read garden_plants for public gardens
+drop policy if exists gp_select_anon_public on public.garden_plants;
+create policy gp_select_anon_public on public.garden_plants for select to anon
+  using (public.is_public_garden(garden_id));
+
 alter table public.garden_plant_events enable row level security;
 alter table public.garden_inventory enable row level security;
 alter table public.garden_instance_inventory enable row level security;
@@ -2276,6 +2299,15 @@ do $$ begin
   end if;
 end $$;
 
+-- Allow anon users to read public gardens
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_select_anon_public') then
+    drop policy gardens_select_anon_public on public.gardens;
+  end if;
+  create policy gardens_select_anon_public on public.gardens for select to anon
+    using (privacy = 'public');
+end $$;
+
 alter table public.garden_members disable row level security;
 
 do $$
@@ -2356,6 +2388,11 @@ drop policy if exists gm_delete on public.garden_members;
         where p.id = (select auth.uid()) and p.is_admin = true
       )
     );
+
+-- Allow anon users to read garden_members for public gardens
+drop policy if exists gm_select_anon_public on public.garden_members;
+create policy gm_select_anon_public on public.garden_members for select to anon
+  using (public.is_public_garden(garden_id));
 
 -- Garden tasks policies
 do $$ begin
@@ -2749,6 +2786,11 @@ create policy gpt_delete on public.garden_plant_tasks for delete to authenticate
     or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
   );
 
+-- Allow anon users to read garden_plant_tasks for public gardens
+drop policy if exists gpt_select_anon_public on public.garden_plant_tasks;
+create policy gpt_select_anon_public on public.garden_plant_tasks for select to anon
+  using (public.is_public_garden(garden_id));
+
 -- garden_plant_task_occurrences policies
 drop policy if exists gpto_iud on public.garden_plant_task_occurrences;
 drop policy if exists gpto_select on public.garden_plant_task_occurrences;
@@ -2801,6 +2843,17 @@ create policy gpto_delete on public.garden_plant_task_occurrences for delete to 
       where gp.id = garden_plant_task_occurrences.garden_plant_id and gm.user_id = (select auth.uid())
     )
     or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+-- Allow anon users to read garden_plant_task_occurrences for public gardens
+drop policy if exists gpto_select_anon_public on public.garden_plant_task_occurrences;
+create policy gpto_select_anon_public on public.garden_plant_task_occurrences for select to anon
+  using (
+    exists (
+      select 1 from public.garden_plants gp
+      where gp.id = garden_plant_task_occurrences.garden_plant_id
+      and public.is_public_garden(gp.garden_id)
+    )
   );
 
 -- ========== RPCs used by the app ==========
@@ -4601,6 +4654,15 @@ do $$ begin
       exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
       or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
     );
+end $$;
+
+-- Allow anon users to read garden_activity_logs for public gardens
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_activity_logs' and policyname='gal_select_anon_public') then
+    drop policy gal_select_anon_public on public.garden_activity_logs;
+  end if;
+  create policy gal_select_anon_public on public.garden_activity_logs for select to anon
+    using (public.is_public_garden(garden_id));
 end $$;
 
 -- Helper RPC to write an activity log with best-effort actor name

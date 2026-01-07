@@ -474,6 +474,25 @@ export const GardenDashboardPage: React.FC = () => {
                   });
                 }
               }
+              // Use pre-calculated task counts per plant from server (for guests viewing public gardens)
+              if (data.taskCountsByPlant && typeof data.taskCountsByPlant === 'object') {
+                // Convert server format to number of tasks per plant
+                const countsMap: Record<string, number> = {};
+                for (const [plantId, counts] of Object.entries(data.taskCountsByPlant)) {
+                  const c = counts as { totalTasks?: number; dueToday?: number };
+                  countsMap[plantId] = c.totalTasks || 0;
+                }
+                setTaskCountsByPlant(countsMap);
+                // Also update taskOccDueToday from server data
+                const dueMap: Record<string, number> = {};
+                for (const [plantId, counts] of Object.entries(data.taskCountsByPlant)) {
+                  const c = counts as { totalTasks?: number; dueToday?: number };
+                  if (c.dueToday && c.dueToday > 0) {
+                    dueMap[plantId] = c.dueToday;
+                  }
+                }
+                setTaskOccDueToday(dueMap);
+              }
               // totalOnHand and speciesOnHand are now derived via useMemo from plants state
               // Mark as fully hydrated if we got all data
               hydrated = hydratedGarden && hydratedMembers && hydratedPlants !== null && hydratedPlants.length > 0;
@@ -2716,6 +2735,8 @@ export const GardenDashboardPage: React.FC = () => {
                     baseStreak={garden.streak || 0}
                     handleShare={handleShare}
                     todayTaskOccurrences={todayTaskOccurrences}
+                    taskCountsByPlant={taskCountsByPlant}
+                    taskOccDueToday={taskOccDueToday}
                     onProgressOccurrence={progressOccurrenceHandler}
                     progressingOccIds={progressingOccIds}
                     completingPlantIds={completingPlantIds}
@@ -3859,6 +3880,8 @@ function OverviewSection({
   handleShare,
   shareStatus,
   todayTaskOccurrences,
+  taskCountsByPlant = {},
+  taskOccDueToday = {},
   onProgressOccurrence,
   progressingOccIds,
   completingPlantIds,
@@ -3901,6 +3924,8 @@ function OverviewSection({
     taskType?: "water" | "fertilize" | "harvest" | "cut" | "custom";
     taskEmoji?: string;
   }>;
+  taskCountsByPlant?: Record<string, number>;
+  taskOccDueToday?: Record<string, number>;
   onProgressOccurrence: (id: string, inc: number) => Promise<void>;
   progressingOccIds: Set<string>;
   completingPlantIds: Set<string>;
@@ -4027,22 +4052,56 @@ function OverviewSection({
     return s;
   })();
 
-  // Get plants with images for the gallery
-  const plantsWithImages = React.useMemo(() => {
-    return plants
-      .map((gp) => {
-        const primaryImageUrl = gp.plant?.photos
-          ? getPrimaryPhotoUrl(gp.plant.photos)
-          : gp.plant?.image || null;
-        return {
-          id: gp.id,
-          name: gp.nickname || gp.plant?.name || "Plant",
-          imageUrl: primaryImageUrl,
-          plantId: gp.plant?.id,
+  // Calculate task counts per plant - use server data or compute from todayTaskOccurrences
+  const taskCountsPerPlant = React.useMemo(() => {
+    const counts: Record<string, { total: number; dueToday: number }> = {};
+    
+    // First, try to use server-provided task counts (available for guests viewing public gardens)
+    if (taskCountsByPlant && Object.keys(taskCountsByPlant).length > 0) {
+      for (const [gpId, totalCount] of Object.entries(taskCountsByPlant)) {
+        counts[gpId] = {
+          total: totalCount,
+          dueToday: taskOccDueToday[gpId] || 0,
         };
-      })
-      .filter((p) => p.imageUrl);
-  }, [plants]);
+      }
+    }
+    
+    // Also compute from todayTaskOccurrences if available (for logged-in members)
+    for (const occ of todayTaskOccurrences) {
+      const gpId = occ.gardenPlantId;
+      if (!counts[gpId]) counts[gpId] = { total: 0, dueToday: 0 };
+      // Only count unique tasks, not occurrences
+      counts[gpId].total = Math.max(counts[gpId].total, 1);
+      const remaining = Math.max(0, (occ.requiredCount || 1) - (occ.completedCount || 0));
+      if (remaining > 0) counts[gpId].dueToday = Math.max(counts[gpId].dueToday, remaining);
+    }
+    return counts;
+  }, [todayTaskOccurrences, taskCountsByPlant, taskOccDueToday]);
+
+  // Get ALL plants for display (with or without images)
+  const allPlantsDisplay = React.useMemo(() => {
+    return plants.map((gp) => {
+      const primaryImageUrl = gp.plant?.photos
+        ? getPrimaryPhotoUrl(gp.plant.photos)
+        : gp.plant?.image || null;
+      const taskInfo = taskCountsPerPlant[gp.id] || { total: 0, dueToday: 0 };
+      return {
+        id: gp.id,
+        name: gp.nickname || gp.plant?.name || "Plant",
+        imageUrl: primaryImageUrl,
+        plantId: gp.plant?.id,
+        plantsOnHand: Number(gp.plantsOnHand || 0),
+        healthStatus: gp.healthStatus || null,
+        taskCount: taskInfo.total,
+        tasksDueToday: taskInfo.dueToday,
+      };
+    });
+  }, [plants, taskCountsPerPlant]);
+
+  // Get plants with images for the gallery (legacy - kept for compatibility)
+  const plantsWithImages = React.useMemo(() => {
+    return allPlantsDisplay.filter((p) => p.imageUrl);
+  }, [allPlantsDisplay]);
 
   // Get initials for avatar fallback
   const getInitials = (name?: string | null) => {
@@ -4125,6 +4184,13 @@ function OverviewSection({
                       <span className="font-medium">{totalOnHand}</span>
                       <span className="text-sm opacity-80">
                         {t("gardenDashboard.overviewSection.plants")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                      <span className="text-lg">🌿</span>
+                      <span className="font-medium">{speciesOnHand}</span>
+                      <span className="text-sm opacity-80">
+                        {t("gardenDashboard.overviewSection.species")}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
@@ -4335,8 +4401,8 @@ function OverviewSection({
         </Card>
       )}
 
-      {/* Plants Gallery */}
-      {plantsWithImages.length > 0 && (
+      {/* Plants Gallery - show all plants with task info on image cards */}
+      {allPlantsDisplay.length > 0 && (
         <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-lg flex items-center gap-2">
@@ -4359,40 +4425,80 @@ function OverviewSection({
               </Button>
             )}
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
-            {plantsWithImages.slice(0, 12).map((plant, idx) => (
+          {/* Plant cards with info overlaid on images */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {allPlantsDisplay.slice(0, 15).map((plant, idx) => (
               <div
                 key={plant.id}
-                className="group relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
+                className="group relative aspect-[4/5] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
                 onClick={() => {
                   if (plant.plantId) navigate(`/plants/${plant.plantId}`);
                 }}
                 style={{
-                  animationDelay: `${idx * 50}ms`,
+                  animationDelay: `${idx * 40}ms`,
                 }}
               >
-                <img
-                  src={plant.imageUrl!}
-                  alt={plant.name}
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-                <div className="absolute bottom-0 left-0 right-0 p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
-                  <div className="text-white text-xs font-medium truncate drop-shadow-lg">
+                {/* Plant Image or Placeholder */}
+                {plant.imageUrl ? (
+                  <img
+                    src={plant.imageUrl}
+                    alt={plant.name}
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-4xl opacity-50">🌱</span>
+                  </div>
+                )}
+                {/* Gradient overlay for text readability */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                
+                {/* Top badges: quantity and tasks due */}
+                <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
+                  {/* Plant quantity badge */}
+                  {plant.plantsOnHand > 1 && (
+                    <span className="px-2 py-0.5 rounded-full bg-white/90 dark:bg-black/70 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-sm backdrop-blur-sm">
+                      ×{plant.plantsOnHand}
+                    </span>
+                  )}
+                  {plant.plantsOnHand <= 1 && <span />}
+                  {/* Tasks due today badge */}
+                  {plant.tasksDueToday > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500 text-xs font-semibold text-white shadow-sm">
+                      {plant.tasksDueToday} 📋
+                    </span>
+                  )}
+                </div>
+                
+                {/* Bottom info: name and task count */}
+                <div className="absolute bottom-0 left-0 right-0 p-3">
+                  <div className="text-white text-sm font-semibold truncate drop-shadow-lg mb-1">
                     {plant.name}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {plant.taskCount > 0 && (
+                      <span className="text-white/80 text-xs">
+                        {plant.taskCount} {plant.taskCount === 1 ? t("gardenDashboard.plantsSection.task", "task") : t("gardenDashboard.plantsSection.tasks")}
+                      </span>
+                    )}
+                    {plant.taskCount === 0 && (
+                      <span className="text-white/60 text-xs">
+                        {t("gardenDashboard.overviewSection.noTasks", "No tasks")}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
-            {/* Only show +X more card for members */}
-            {isMember && plants.length > 12 && (
+            {/* Show more card */}
+            {allPlantsDisplay.length > 15 && (
               <div
-                className="aspect-square rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all border-2 border-dashed border-emerald-300 dark:border-emerald-700"
-                onClick={() => navigate(`/garden/${gardenId}/plants`)}
+                className="aspect-[4/5] rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all border-2 border-dashed border-emerald-300 dark:border-emerald-700"
+                onClick={() => isMember && navigate(`/garden/${gardenId}/plants`)}
               >
-                <span className="text-2xl mb-1">+{plants.length - 12}</span>
-                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="text-3xl mb-2">+{allPlantsDisplay.length - 15}</span>
+                <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
                   {t("gardenDashboard.overviewSection.morePlants")}
                 </span>
               </div>
@@ -4462,97 +4568,95 @@ function OverviewSection({
         />
       )}
 
-      {/* Activity Feed - Only for members */}
-      {isMember && (
-        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-lg flex items-center gap-2">
-              <span>⚡</span>
-              {t("gardenDashboard.overviewSection.activityToday")}
-            </h3>
+      {/* Activity Feed - visible to all viewers */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
+            <span>⚡</span>
+            {t("gardenDashboard.overviewSection.activityToday")}
+          </h3>
+        </div>
+        {loadingAct && (
+          <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {t("gardenDashboard.overviewSection.loadingActivity")}
           </div>
-          {loadingAct && (
-            <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {t("gardenDashboard.overviewSection.loadingActivity")}
+        )}
+        {errAct && (
+          <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
+            {errAct}
+          </div>
+        )}
+        {!loadingAct && activity.length === 0 && (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-3">🌱</div>
+            <div className="text-sm text-stone-500 dark:text-stone-400">
+              {t("gardenDashboard.overviewSection.noActivity")}
             </div>
-          )}
-          {errAct && (
-            <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
-              {errAct}
+            <div className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+              {t("gardenDashboard.overviewSection.startCaring")}
             </div>
-          )}
-          {!loadingAct && activity.length === 0 && (
-            <div className="text-center py-8">
-              <div className="text-4xl mb-3">🌱</div>
-              <div className="text-sm text-stone-500 dark:text-stone-400">
-                {t("gardenDashboard.overviewSection.noActivity")}
-              </div>
-              <div className="text-xs text-stone-400 dark:text-stone-500 mt-1">
-                {t("gardenDashboard.overviewSection.startCaring")}
-              </div>
-            </div>
-          )}
-          {!loadingAct && activity.length > 0 && (
-            <div className="space-y-3">
-              {activity.slice(0, 10).map((a, idx) => {
-                const color = a.actorColor || null;
-                const ts = (() => {
-                  try {
-                    return new Date(a.occurredAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: false,
-                    });
-                  } catch {
-                    return "";
-                  }
-                })();
-                const kindEmoji =
-                  a.kind === "task_completed"
-                    ? "✅"
-                    : a.kind === "task_progressed"
-                      ? "🔄"
-                      : a.kind === "plant_added"
-                        ? "🌱"
-                        : a.kind === "member_joined"
-                          ? "👋"
-                          : "📝";
-                return (
-                  <div
-                    key={a.id}
-                    className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-                    style={{ animationDelay: `${idx * 30}ms` }}
-                  >
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-stone-700 flex items-center justify-center shadow-sm">
-                      <span className="text-sm">{kindEmoji}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span
-                          className="font-semibold text-sm"
-                          style={color ? { color } : undefined}
-                        >
-                          {a.actorName ||
-                            t("gardenDashboard.settingsSection.unknown")}
-                        </span>
-                        <span className="text-sm text-stone-600 dark:text-stone-300">
-                          {a.message}
-                        </span>
-                      </div>
-                      {ts && (
-                        <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5 tabular-nums">
-                          {ts}
-                        </div>
-                      )}
-                    </div>
+          </div>
+        )}
+        {!loadingAct && activity.length > 0 && (
+          <div className="space-y-3">
+            {activity.slice(0, 10).map((a, idx) => {
+              const color = a.actorColor || null;
+              const ts = (() => {
+                try {
+                  return new Date(a.occurredAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  });
+                } catch {
+                  return "";
+                }
+              })();
+              const kindEmoji =
+                a.kind === "task_completed"
+                  ? "✅"
+                  : a.kind === "task_progressed"
+                    ? "🔄"
+                    : a.kind === "plant_added"
+                      ? "🌱"
+                      : a.kind === "member_joined"
+                        ? "👋"
+                        : "📝";
+              return (
+                <div
+                  key={a.id}
+                  className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                  style={{ animationDelay: `${idx * 30}ms` }}
+                >
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-stone-700 flex items-center justify-center shadow-sm">
+                    <span className="text-sm">{kindEmoji}</span>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-      )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className="font-semibold text-sm"
+                        style={color ? { color } : undefined}
+                      >
+                        {a.actorName ||
+                          t("gardenDashboard.settingsSection.unknown")}
+                      </span>
+                      <span className="text-sm text-stone-600 dark:text-stone-300">
+                        {a.message}
+                      </span>
+                    </div>
+                    {ts && (
+                      <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5 tabular-nums">
+                        {ts}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       {/* Public Garden Notice for non-members */}
       {!isMember && (
