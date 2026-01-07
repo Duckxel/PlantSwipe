@@ -3,7 +3,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import {
   Dialog,
   DialogContent,
@@ -12,16 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import {
   useTeamMembers,
   createTeamMember,
@@ -498,19 +487,19 @@ export const AdminTeamPanel: React.FC = () => {
               </div>
             )}
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="is_active"
-                  checked={editingMember.is_active}
-                  onCheckedChange={(checked) =>
-                    setEditingMember((prev) => ({ ...prev, is_active: checked }))
-                  }
-                />
-                <Label htmlFor="is_active" className="cursor-pointer">
-                  Visible on About page
-                </Label>
-              </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="is_active"
+                checked={editingMember.is_active}
+                onChange={(e) =>
+                  setEditingMember((prev) => ({ ...prev, is_active: e.target.checked }))
+                }
+                className="h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <Label htmlFor="is_active" className="cursor-pointer">
+                Visible on About page
+              </Label>
             </div>
 
             {submitError && (
@@ -538,27 +527,33 @@ export const AdminTeamPanel: React.FC = () => {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Team Member</AlertDialogTitle>
-            <AlertDialogDescription>
+      <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Delete Team Member</DialogTitle>
+            <DialogDescription>
               Are you sure you want to delete this team member? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmId(null)}
+              className="rounded-xl"
+            >
+              Cancel
+            </Button>
+            <Button
               onClick={handleDelete}
               disabled={isDeleting}
-              className="bg-red-600 hover:bg-red-700"
+              className="rounded-xl bg-red-600 hover:bg-red-700"
             >
               {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
