@@ -101,6 +101,7 @@ do $$ declare
     'admin_campaign_sends',
     'admin_email_triggers',
     'admin_automatic_email_sends',
+    'team_members',
     -- Gardens
     'gardens',
     'garden_members',
@@ -1583,6 +1584,71 @@ create table if not exists public.admin_media_uploads (
 create index if not exists admin_media_uploads_created_idx on public.admin_media_uploads (created_at desc);
 create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
 create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
+
+-- ========== Team Members (About page) ==========
+create table if not exists public.team_members (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  display_name text not null,
+  role text not null,
+  tag text,
+  image_url text,
+  position integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_team_members_position on public.team_members(position);
+create index if not exists idx_team_members_active on public.team_members(is_active) where is_active = true;
+
+alter table public.team_members enable row level security;
+
+-- Policies: anyone can read active team members, only admins can modify
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename = 'team_members' and policyname = 'team_members_select_public') then
+    create policy team_members_select_public on public.team_members 
+      for select to authenticated, anon 
+      using (is_active = true);
+  end if;
+  
+  if not exists (select 1 from pg_policies where tablename = 'team_members' and policyname = 'team_members_admin_all') then
+    create policy team_members_admin_all on public.team_members 
+      for all to authenticated 
+      using (
+        exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin = true)
+      )
+      with check (
+        exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin = true)
+      );
+  end if;
+end $$;
+
+-- Trigger to update updated_at timestamp
+create or replace function public.update_team_members_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists team_members_updated_at on public.team_members;
+create trigger team_members_updated_at
+  before update on public.team_members
+  for each row
+  execute function public.update_team_members_updated_at();
+
+-- Insert initial team members (only if table is empty)
+insert into public.team_members (name, display_name, role, tag, image_url, position, is_active)
+select * from (values 
+  ('lauryne', 'Lauryne Gaignard', 'CEO', null::text, null::text, 0, true),
+  ('xavier', 'Xavier Sabar', 'Co-Founder', 'Psychokwak', 'https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0151-ab46ee91-19d9-4c9f-9694-8c975c084cf1.webp', 1, true),
+  ('five', 'Chan AH-HONG', 'Co-Founder', 'Five', 'https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0414-2-low-0a499a50-08a7-4615-834d-288b179e628e.webp', 2, true)
+) as t(name, display_name, role, tag, image_url, position, is_active)
+where not exists (select 1 from public.team_members limit 1);
+
+comment on table public.team_members is 'Team members displayed on the About page, managed via Admin panel';
 
 -- Indexes for requested plant lookups
 create index if not exists requested_plants_plant_name_normalized_idx on public.requested_plants(plant_name_normalized);
