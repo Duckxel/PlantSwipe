@@ -4128,6 +4128,13 @@ function OverviewSection({
                       </span>
                     </div>
                     <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                      <span className="text-lg">🌿</span>
+                      <span className="font-medium">{speciesOnHand}</span>
+                      <span className="text-sm opacity-80">
+                        {t("gardenDashboard.overviewSection.species")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
                       <span className="text-lg">🔥</span>
                       <span className="font-medium">{streak}</span>
                       <span className="text-sm opacity-80">
@@ -4462,97 +4469,95 @@ function OverviewSection({
         />
       )}
 
-      {/* Activity Feed - Only for members */}
-      {isMember && (
-        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-lg flex items-center gap-2">
-              <span>⚡</span>
-              {t("gardenDashboard.overviewSection.activityToday")}
-            </h3>
+      {/* Activity Feed - visible to all viewers */}
+      <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
+            <span>⚡</span>
+            {t("gardenDashboard.overviewSection.activityToday")}
+          </h3>
+        </div>
+        {loadingAct && (
+          <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {t("gardenDashboard.overviewSection.loadingActivity")}
           </div>
-          {loadingAct && (
-            <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {t("gardenDashboard.overviewSection.loadingActivity")}
+        )}
+        {errAct && (
+          <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
+            {errAct}
+          </div>
+        )}
+        {!loadingAct && activity.length === 0 && (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-3">🌱</div>
+            <div className="text-sm text-stone-500 dark:text-stone-400">
+              {t("gardenDashboard.overviewSection.noActivity")}
             </div>
-          )}
-          {errAct && (
-            <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
-              {errAct}
+            <div className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+              {t("gardenDashboard.overviewSection.startCaring")}
             </div>
-          )}
-          {!loadingAct && activity.length === 0 && (
-            <div className="text-center py-8">
-              <div className="text-4xl mb-3">🌱</div>
-              <div className="text-sm text-stone-500 dark:text-stone-400">
-                {t("gardenDashboard.overviewSection.noActivity")}
-              </div>
-              <div className="text-xs text-stone-400 dark:text-stone-500 mt-1">
-                {t("gardenDashboard.overviewSection.startCaring")}
-              </div>
-            </div>
-          )}
-          {!loadingAct && activity.length > 0 && (
-            <div className="space-y-3">
-              {activity.slice(0, 10).map((a, idx) => {
-                const color = a.actorColor || null;
-                const ts = (() => {
-                  try {
-                    return new Date(a.occurredAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: false,
-                    });
-                  } catch {
-                    return "";
-                  }
-                })();
-                const kindEmoji =
-                  a.kind === "task_completed"
-                    ? "✅"
-                    : a.kind === "task_progressed"
-                      ? "🔄"
-                      : a.kind === "plant_added"
-                        ? "🌱"
-                        : a.kind === "member_joined"
-                          ? "👋"
-                          : "📝";
-                return (
-                  <div
-                    key={a.id}
-                    className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-                    style={{ animationDelay: `${idx * 30}ms` }}
-                  >
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-stone-700 flex items-center justify-center shadow-sm">
-                      <span className="text-sm">{kindEmoji}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span
-                          className="font-semibold text-sm"
-                          style={color ? { color } : undefined}
-                        >
-                          {a.actorName ||
-                            t("gardenDashboard.settingsSection.unknown")}
-                        </span>
-                        <span className="text-sm text-stone-600 dark:text-stone-300">
-                          {a.message}
-                        </span>
-                      </div>
-                      {ts && (
-                        <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5 tabular-nums">
-                          {ts}
-                        </div>
-                      )}
-                    </div>
+          </div>
+        )}
+        {!loadingAct && activity.length > 0 && (
+          <div className="space-y-3">
+            {activity.slice(0, 10).map((a, idx) => {
+              const color = a.actorColor || null;
+              const ts = (() => {
+                try {
+                  return new Date(a.occurredAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  });
+                } catch {
+                  return "";
+                }
+              })();
+              const kindEmoji =
+                a.kind === "task_completed"
+                  ? "✅"
+                  : a.kind === "task_progressed"
+                    ? "🔄"
+                    : a.kind === "plant_added"
+                      ? "🌱"
+                      : a.kind === "member_joined"
+                        ? "👋"
+                        : "📝";
+              return (
+                <div
+                  key={a.id}
+                  className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                  style={{ animationDelay: `${idx * 30}ms` }}
+                >
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-stone-700 flex items-center justify-center shadow-sm">
+                    <span className="text-sm">{kindEmoji}</span>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-      )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className="font-semibold text-sm"
+                        style={color ? { color } : undefined}
+                      >
+                        {a.actorName ||
+                          t("gardenDashboard.settingsSection.unknown")}
+                      </span>
+                      <span className="text-sm text-stone-600 dark:text-stone-300">
+                        {a.message}
+                      </span>
+                    </div>
+                    {ts && (
+                      <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5 tabular-nums">
+                        {ts}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       {/* Public Garden Notice for non-members */}
       {!isMember && (
