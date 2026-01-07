@@ -1,47 +1,54 @@
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
-import { Sparkles, PartyPopper, Leaf, HeartHandshake, MapPin, BookOpenCheck, CalendarDays } from "lucide-react"
+import { Sparkles, PartyPopper, Leaf, HeartHandshake, MapPin, BookOpenCheck, CalendarDays, Loader2 } from "lucide-react"
 import { Link } from "@/components/i18n/Link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers"
 
 type PillarCard = { eyebrow: string; title: string; description: string | string[] }
-type MemberCard = {
-  name: string
-  role: string
-  adjectives: string[]
-  description: string
-  ritual: string
-  placeholder: string
-  placeholderCta: string
-}
 
-const memberProfiles: Record<
-  string,
-  { fullName: string; role: string; tag: string; imageUrl?: string }
-> = {
-  lauryne: {
-    fullName: "Lauryne Gaignard",
+// Fallback team members in case DB is not available
+const fallbackTeamMembers: TeamMember[] = [
+  {
+    id: "fallback-lauryne",
+    name: "lauryne",
+    display_name: "Lauryne Gaignard",
     role: "CEO",
-    tag: "",
+    tag: null,
+    image_url: null,
+    position: 0,
+    is_active: true,
+    created_at: "",
+    updated_at: "",
   },
-  xavier: {
-    fullName: "Xavier Sabar",
+  {
+    id: "fallback-xavier",
+    name: "xavier",
+    display_name: "Xavier Sabar",
     role: "Co-Founder",
     tag: "Psychokwak",
-    imageUrl:
-      "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0151-ab46ee91-19d9-4c9f-9694-8c975c084cf1.webp",
+    image_url: "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0151-ab46ee91-19d9-4c9f-9694-8c975c084cf1.webp",
+    position: 1,
+    is_active: true,
+    created_at: "",
+    updated_at: "",
   },
-  five: {
-    fullName: "Chan AH-HONG",
+  {
+    id: "fallback-five",
+    name: "five",
+    display_name: "Chan AH-HONG",
     role: "Co-Founder",
     tag: "Five",
-    imageUrl:
-      "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0414-2-low-0a499a50-08a7-4615-834d-288b179e628e.webp",
+    image_url: "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0414-2-low-0a499a50-08a7-4615-834d-288b179e628e.webp",
+    position: 2,
+    is_active: true,
+    created_at: "",
+    updated_at: "",
   },
-}
+]
 
 export default function AboutPage() {
   const { t } = useTranslation("About")
@@ -51,6 +58,13 @@ export default function AboutPage() {
     defaultValue: "Meet the founders, rituals, and creative ambition behind Aphylia's augmented plant lab.",
   })
   usePageMetadata({ title: seoTitle, description: seoDescription })
+  
+  // Fetch team members from database
+  const { teamMembers: dbTeamMembers, loading: teamLoading, error: teamError } = useTeamMembers()
+  
+  // Use DB team members or fallback
+  const teamMembers = dbTeamMembers.length > 0 ? dbTeamMembers : (teamError ? fallbackTeamMembers : [])
+  
   const featureItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
   const pillars = t("pillars", { returnObjects: true }) as {
     title: string
@@ -63,9 +77,6 @@ export default function AboutPage() {
   }
   const pillarCards = Object.values(pillars?.cards ?? {}) as PillarCard[]
   const nameOrigin = pillars?.nameOrigin
-  const meetMembers = (t("meet.members", { returnObjects: true }) as Record<string, MemberCard>) ?? {}
-  const meetOrder =
-    (t("meet.order", { returnObjects: true }) as string[]) ?? Object.keys(meetMembers)
   const meetBadge = t("meet.badge")
 
   return (
@@ -270,76 +281,75 @@ export default function AboutPage() {
         </Card>
       </section>
 
-        {meetOrder.length > 0 && (
-          <section className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-semibold">{t("meet.title")}</h2>
-                <p className="text-sm text-stone-600 dark:text-stone-400 max-w-2xl">
-                  {t("meet.subtitle")}
-                </p>
-              </div>
-              <Badge variant="secondary" className="rounded-2xl bg-white dark:bg-[#252526]">
-                {meetBadge}
-              </Badge>
+        {/* Team Section */}
+        <section className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold">{t("meet.title")}</h2>
+              <p className="text-sm text-stone-600 dark:text-stone-400 max-w-2xl">
+                {t("meet.subtitle")}
+              </p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-2 max-w-[600px] mx-auto justify-items-center">
-              {meetOrder
-                .map((key) => ({ key, member: meetMembers[key] }))
-                .filter((entry): entry is { key: string; member: MemberCard } => Boolean(entry.member))
-                .map(({ key, member }, index) => {
-                  const profile = memberProfiles[key]
-                  const displayName = profile ? profile.fullName : member.name
-                  const roleLabel = profile?.role ?? member.role
-                  const tagLabel = profile?.tag
-                  const imageUrl = profile?.imageUrl
-
-                  return (
-                    <Card
-                      key={`${member.name}-${index}`}
-                      className="rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden text-sm w-fit"
-                    >
-                      <div className="p-3 pb-0 flex justify-center">
-                        <div className="relative w-[260px] max-w-full">
-                          {imageUrl ? (
-                            <div className="w-full aspect-square rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-stone-100 dark:bg-[#1f1f1f]/60">
-                              <img
-                                src={imageUrl}
-                                alt={`${profile?.fullName ?? member.name} portrait`}
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                                decoding="async"
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-full aspect-square rounded-xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex items-center justify-center text-center px-4">
-                              <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                                {member.placeholder}
-                              </span>
-                            </div>
-                          )}
-                          {tagLabel ? (
-                            <div className="absolute inset-x-3 bottom-3 flex justify-center pointer-events-none">
-                              <Badge
-                                variant="secondary"
-                                className="rounded-full px-3 py-0.5 text-[11px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
-                              >
-                                {tagLabel}
-                              </Badge>
-                            </div>
-                          ) : null}
+            <Badge variant="secondary" className="rounded-2xl bg-white dark:bg-[#252526]">
+              {meetBadge}
+            </Badge>
+          </div>
+          
+          {teamLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+            </div>
+          ) : teamMembers.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-[900px] mx-auto justify-items-center">
+              {teamMembers.map((member) => (
+                <Card
+                  key={member.id}
+                  className="rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden text-sm w-fit"
+                >
+                  <div className="p-3 pb-0 flex justify-center">
+                    <div className="relative w-[260px] max-w-full">
+                      {member.image_url ? (
+                        <div className="w-full aspect-square rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-stone-100 dark:bg-[#1f1f1f]/60">
+                          <img
+                            src={member.image_url}
+                            alt={`${member.display_name} portrait`}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
                         </div>
-                      </div>
-                      <CardHeader className="px-4 pb-4 pt-3 space-y-1 text-center">
-                        <CardTitle className="text-base">{displayName}</CardTitle>
-                        <CardDescription className="text-xs">{roleLabel}</CardDescription>
-                      </CardHeader>
-                    </Card>
-                  )
-                })}
+                      ) : (
+                        <div className="w-full aspect-square rounded-xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex items-center justify-center text-center px-4">
+                          <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                            Photo coming soon
+                          </span>
+                        </div>
+                      )}
+                      {member.tag ? (
+                        <div className="absolute inset-x-3 bottom-3 flex justify-center pointer-events-none">
+                          <Badge
+                            variant="secondary"
+                            className="rounded-full px-3 py-0.5 text-[11px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
+                          >
+                            {member.tag}
+                          </Badge>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <CardHeader className="px-4 pb-4 pt-3 space-y-1 text-center">
+                    <CardTitle className="text-base">{member.display_name}</CardTitle>
+                    <CardDescription className="text-xs">{member.role}</CardDescription>
+                  </CardHeader>
+                </Card>
+              ))}
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="text-center py-8 text-stone-500 dark:text-stone-400">
+              <p className="text-sm">Team information coming soon...</p>
+            </div>
+          )}
+        </section>
 
       <section className="relative overflow-hidden rounded-[28px] border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1f1f1f] px-8 py-10 md:px-12 md:py-12">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
