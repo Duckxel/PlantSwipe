@@ -6,7 +6,7 @@
  */
 
 import { supabase } from "@/lib/supabaseClient"
-import { fetchAiPlantFill } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, getEnglishPlantName } from "@/lib/aiPlantFill"
 import { translateText, translateArray } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
@@ -274,12 +274,32 @@ export async function processPlantRequest(
       throw new Error('Operation cancelled')
     }
     
-    // Stage 1: AI Fill
+    // Stage 0: Get English plant name
+    // The plant name might be in any language, so we first ask AI for the English common name
     onProgress?.({ stage: 'filling', plantName })
+    
+    let englishPlantName = plantName
+    try {
+      const nameResult = await getEnglishPlantName(plantName, signal)
+      englishPlantName = nameResult.englishName
+      if (nameResult.wasTranslated) {
+        console.log(`[aiPrefillService] Translated plant name: "${plantName}" -> "${englishPlantName}"`)
+      }
+    } catch (err) {
+      console.warn(`[aiPrefillService] Failed to get English name for "${plantName}", using original:`, err)
+      // Continue with original name if translation fails
+    }
+    
+    if (signal?.aborted) {
+      throw new Error('Operation cancelled')
+    }
+    
+    // Stage 1: AI Fill (using English name)
+    onProgress?.({ stage: 'filling', plantName: englishPlantName })
     
     const emptyPlant: Plant = {
       id: generateUUIDv4(),
-      name: plantName,
+      name: englishPlantName,
       utility: [],
       comestiblePart: [],
       fruitType: [],
@@ -298,9 +318,9 @@ export async function processPlantRequest(
     
     let plant: Plant = { ...emptyPlant }
     
-    // Run AI Fill
+    // Run AI Fill (using English name for better AI results)
     const aiData = await fetchAiPlantFill({
-      plantName,
+      plantName: englishPlantName,
       schema: plantSchema,
       existingData: plant,
       fields: aiFieldOrder,

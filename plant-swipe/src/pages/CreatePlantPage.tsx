@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, Loader2, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
-import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
@@ -1452,7 +1452,24 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     let finalPlant: Plant | null = null
     // Capture current images at the start to preserve them throughout AI fill
     const currentImages = plant.images || []
-    const plantNameForAi = trimmedName
+    
+    // First, get the English name of the plant (it might be in any language)
+    let plantNameForAi = trimmedName
+    try {
+      const nameResult = await getEnglishPlantName(trimmedName)
+      plantNameForAi = nameResult.englishName
+      if (nameResult.wasTranslated) {
+        console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"`)
+        // Update the plant name to the English version
+        setPlant((prev) => ({
+          ...prev,
+          name: plantNameForAi,
+        }))
+      }
+    } catch (err) {
+      console.warn(`[CreatePlantPage] Failed to get English name for "${trimmedName}", using original:`, err)
+      // Continue with original name if translation fails
+    }
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
       // Always preserve images from the current state
