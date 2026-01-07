@@ -76,7 +76,7 @@ import {
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils";
-import { setUserThreatLevel } from "@/lib/moderation";
+import { setUserThreatLevel, getReportCounts } from "@/lib/moderation";
 import { type ThreatLevel } from "@/types/moderation";
 import {
   loadPersistedBroadcast,
@@ -117,7 +117,6 @@ const {
 type AdminTab =
   | "overview"
   | "members"
-  | "reports"
   | "plants"
   | "stocks"
   | "upload"
@@ -3473,7 +3472,6 @@ export const AdminPage: React.FC = () => {
   }> = [
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin", adminOnly: true },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
-    { key: "reports", label: "Reports", Icon: AlertTriangle, path: "/admin/reports", adminOnly: true },
     { key: "plants", label: "Plants", Icon: Leaf, path: "/admin/plants" },
     { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
@@ -3490,7 +3488,6 @@ export const AdminPage: React.FC = () => {
 
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
-    if (currentPath.includes("/admin/reports")) return "reports";
     if (currentPath.includes("/admin/plants")) return "plants";
     if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
@@ -3503,7 +3500,7 @@ export const AdminPage: React.FC = () => {
   // Redirect editors away from admin-only tabs
   React.useEffect(() => {
     if (isFullAdmin) return; // Admins can access everything
-    const adminOnlyTabs: AdminTab[] = ["overview", "members", "reports", "stocks", "admin_logs"];
+    const adminOnlyTabs: AdminTab[] = ["overview", "members", "stocks", "admin_logs"];
     if (adminOnlyTabs.includes(activeTab)) {
       // Redirect to plants tab (default for editors)
       navigate("/admin/plants", { replace: true });
@@ -3544,10 +3541,29 @@ export const AdminPage: React.FC = () => {
     plantDashboardLoading,
     loadPlantDashboard,
   ]);
-  const membersView: "search" | "list" = React.useMemo(() => {
+  const membersView: "search" | "list" | "reports" = React.useMemo(() => {
+    if (currentPath.includes("/admin/members/reports")) return "reports";
     if (currentPath.includes("/admin/members/list")) return "list";
     return "search";
   }, [currentPath]);
+  
+  // Active reports count for showing danger indicator on Members nav
+  const [activeReportsCount, setActiveReportsCount] = React.useState(0);
+  
+  // Load active reports count on mount (for full admins only)
+  React.useEffect(() => {
+    if (!isFullAdmin) return;
+    const loadReportCounts = async () => {
+      try {
+        const counts = await getReportCounts();
+        setActiveReportsCount(counts.review);
+      } catch (e) {
+        console.warn('[AdminPage] Failed to load report counts:', e);
+      }
+    };
+    loadReportCounts();
+  }, [isFullAdmin]);
+  
   const [memberList, setMemberList] = React.useState<ListedMember[]>([]);
   const [memberListLoading, setMemberListLoading] = React.useState(false);
   const [memberListError, setMemberListError] = React.useState<string | null>(
@@ -4668,6 +4684,9 @@ export const AdminPage: React.FC = () => {
                     >
                       <Icon className="h-4 w-4" />
                       <span>{label}</span>
+                      {key === "members" && activeReportsCount > 0 && (
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" title={`${activeReportsCount} active reports`} />
+                      )}
                       {key === "plants" && uniqueRequestedPlantsCount > 0 && (
                         <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
                           {uniqueRequestedPlantsCount}
@@ -4746,6 +4765,12 @@ export const AdminPage: React.FC = () => {
                           className={`h-5 w-5 ${isActive ? "text-emerald-600 dark:text-emerald-400" : "opacity-80"}`}
                         />
                         {!sidebarCollapsed && <span className="font-medium">{label}</span>}
+                        {key === "members" && activeReportsCount > 0 && (
+                          <AlertTriangle 
+                            className={`${sidebarCollapsed ? "h-3 w-3" : "h-4 w-4 ml-auto"} text-red-500`}
+                            title={`${activeReportsCount} active reports`}
+                          />
+                        )}
                         {key === "plants" && uniqueRequestedPlantsCount > 0 && (
                           <span
                             className={`${
@@ -7398,9 +7423,6 @@ export const AdminPage: React.FC = () => {
                   {/* Advanced Tab */}
                   {activeTab === "admin_logs" && <AdminAdvancedPanel />}
 
-                {/* Reports Tab */}
-                {activeTab === "reports" && <AdminReportsPanel />}
-
                 {/* Members Tab */}
                 {activeTab === "members" && (
                   <div className="space-y-4" ref={membersContainerRef}>
@@ -7418,6 +7440,18 @@ export const AdminPage: React.FC = () => {
                           className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "list" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
                         >
                           List
+                        </Link>
+                        <span className="text-xs opacity-50">|</span>
+                        <Link
+                          to="/admin/members/reports"
+                          className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1.5 ${membersView === "reports" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                        >
+                          Reports
+                          {activeReportsCount > 0 && (
+                            <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${membersView === "reports" ? "bg-white/20 text-white" : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"}`}>
+                              {activeReportsCount}
+                            </span>
+                          )}
                         </Link>
                       </div>
                       {membersView === "list" && (
@@ -9480,6 +9514,10 @@ export const AdminPage: React.FC = () => {
                       </Card>
                   </div>
                 )}
+
+                    {membersView === "reports" && (
+                      <AdminReportsPanel />
+                    )}
                   </div>
                 )}
 
