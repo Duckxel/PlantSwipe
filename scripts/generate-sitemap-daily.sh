@@ -2,7 +2,47 @@
 set -euo pipefail
 
 umask 022
-PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+
+# Build PATH with common Node.js installation locations
+# Priority: existing PATH > NVM > fnm > volta > n > system locations
+NODE_PATHS=""
+
+# NVM installations (check common locations)
+for nvm_base in "$HOME" "/home/www-data" "/root" "/var/www"; do
+  for node_dir in "$nvm_base/.nvm/versions/node"/*/bin; do
+    [[ -d "$node_dir" ]] && NODE_PATHS="$NODE_PATHS:$node_dir"
+  done
+done
+
+# fnm installations
+for fnm_base in "$HOME/.local/share/fnm" "/usr/local/fnm"; do
+  for node_dir in "$fnm_base/node-versions"/*/installation/bin; do
+    [[ -d "$node_dir" ]] && NODE_PATHS="$NODE_PATHS:$node_dir"
+  done
+done
+
+# Volta installations
+[[ -d "$HOME/.volta/bin" ]] && NODE_PATHS="$NODE_PATHS:$HOME/.volta/bin"
+[[ -d "/usr/local/volta/bin" ]] && NODE_PATHS="$NODE_PATHS:/usr/local/volta/bin"
+
+# n installations
+[[ -d "/usr/local/n/versions/node" ]] && {
+  for node_dir in /usr/local/n/versions/node/*/bin; do
+    [[ -d "$node_dir" ]] && NODE_PATHS="$NODE_PATHS:$node_dir"
+  done
+}
+
+# System-wide Node.js locations
+NODE_PATHS="$NODE_PATHS:/usr/local/bin:/usr/bin:/bin"
+
+# Allow explicit NODE_BIN_DIR override
+if [[ -n "${NODE_BIN_DIR:-}" && -d "$NODE_BIN_DIR" ]]; then
+  NODE_PATHS="$NODE_BIN_DIR:$NODE_PATHS"
+fi
+
+# Set final PATH (remove leading colon if present)
+PATH="${NODE_PATHS#:}:$PATH"
+export PATH
 
 log() {
   printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
@@ -77,6 +117,19 @@ ensure_command() {
   fi
 }
 
+check_npm_deps() {
+  local node_dir="$1"
+  local node_modules="$node_dir/node_modules"
+  
+  if [[ ! -d "$node_modules" ]]; then
+    log "[INFO] node_modules not found, running npm ci..."
+    (cd "$node_dir" && npm ci --omit=dev 2>&1) || {
+      log "[WARN] npm ci failed, trying npm install..."
+      (cd "$node_dir" && npm install --omit=dev 2>&1) || fail "Failed to install npm dependencies"
+    }
+  fi
+}
+
 copy_sitemap_into_dist() {
   local node_dir="$1"
   local public_path="$node_dir/public/sitemap.xml"
@@ -126,6 +179,9 @@ main() {
 
   local generator="$node_dir/scripts/generate-sitemap.js"
   [[ -f "$generator" ]] || fail "Generator not found at $generator"
+
+  # Ensure npm dependencies are installed
+  check_npm_deps "$node_dir"
 
   local started_at
   started_at="$(date +%s)"

@@ -1,0 +1,40 @@
+[Unit]
+Description=PlantSwipe Sitemap Generator
+After=network.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+
+# Environment file for Supabase credentials and configuration
+EnvironmentFile=-/etc/plant-swipe/service.env
+
+# Set HOME for NVM detection (www-data typically has no home)
+Environment="HOME=/var/www"
+
+# Working directory should be the plant-swipe app directory
+WorkingDirectory=/var/www/PlantSwipe/plant-swipe
+
+# Execute the sitemap generation script
+ExecStart=/bin/bash /var/www/PlantSwipe/scripts/generate-sitemap-daily.sh
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=plantswipe-sitemap
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Allow write access to the dist and public directories for sitemap output
+ReadWritePaths=/var/www/PlantSwipe/plant-swipe/public /var/www/PlantSwipe/plant-swipe/dist /tmp
+
+# Resource limits
+TimeoutStartSec=300
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

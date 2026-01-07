@@ -1,0 +1,19 @@
+[Unit]
+Description=Daily PlantSwipe Sitemap Regeneration
+Requires=plantswipe-sitemap.service
+
+[Timer]
+# Run daily at 3:00 AM UTC (low-traffic time)
+OnCalendar=*-*-* 03:00:00
+
+# Add some randomness (0-15 minutes) to avoid thundering herd
+RandomizedDelaySec=900
+
+# Run immediately if the last scheduled time was missed (e.g., server was down)
+Persistent=true
+
+# Accuracy window for waking from sleep
+AccuracySec=60
+
+[Install]
+WantedBy=timers.target
