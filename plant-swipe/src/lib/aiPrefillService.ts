@@ -639,7 +639,7 @@ export async function processAllPlantRequests(
   createdBy: string | undefined,
   callbacks?: AiPrefillCallbacks & {
     onPlantProgress?: (info: { current: number; total: number; plantName: string }) => void
-    onPlantComplete?: (info: { plantName: string; success: boolean; error?: string }) => void
+    onPlantComplete?: (info: { plantName: string; requestId: string; success: boolean; error?: string }) => void
   }
 ): Promise<{ processed: number; failed: number; cancelled: boolean }> {
   const { onPlantProgress, onPlantComplete, signal } = callbacks || {}
@@ -670,6 +670,7 @@ export async function processAllPlantRequests(
     
     onPlantComplete?.({
       plantName: request.plant_name,
+      requestId: request.id,
       success: result.success,
       error: result.error,
     })

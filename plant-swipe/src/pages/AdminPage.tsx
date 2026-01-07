@@ -2411,9 +2411,12 @@ export const AdminPage: React.FC = () => {
             setAiPrefillProgress({ current, total });
             setAiPrefillCurrentPlant(plantName);
           },
-          onPlantComplete: ({ plantName, success, error }) => {
+          onPlantComplete: ({ plantName, requestId, success, error }) => {
             setAiPrefillCompletedPlants((prev) => [...prev.slice(-4), { name: plantName, success, error }]);
-            if (!success && error) {
+            if (success) {
+              // Remove completed plant from the local list immediately for visual feedback
+              setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
+            } else if (error) {
               console.error(`Failed to process ${plantName}:`, error);
             }
           },
