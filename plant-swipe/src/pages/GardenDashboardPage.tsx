@@ -4401,7 +4401,7 @@ function OverviewSection({
         </Card>
       )}
 
-      {/* Plants Gallery - show all plants with task info */}
+      {/* Plants Gallery - show all plants with task info on image cards */}
       {allPlantsDisplay.length > 0 && (
         <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between mb-4">
@@ -4425,100 +4425,81 @@ function OverviewSection({
               </Button>
             )}
           </div>
-          {/* Image Gallery for plants with images */}
-          {plantsWithImages.length > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 mb-4">
-              {plantsWithImages.slice(0, 12).map((plant, idx) => (
-                <div
-                  key={plant.id}
-                  className="group relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
-                  onClick={() => {
-                    if (plant.plantId) navigate(`/plants/${plant.plantId}`);
-                  }}
-                  style={{
-                    animationDelay: `${idx * 50}ms`,
-                  }}
-                >
+          {/* Plant cards with info overlaid on images */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {allPlantsDisplay.slice(0, 15).map((plant, idx) => (
+              <div
+                key={plant.id}
+                className="group relative aspect-[4/5] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
+                onClick={() => {
+                  if (plant.plantId) navigate(`/plants/${plant.plantId}`);
+                }}
+                style={{
+                  animationDelay: `${idx * 40}ms`,
+                }}
+              >
+                {/* Plant Image or Placeholder */}
+                {plant.imageUrl ? (
                   <img
-                    src={plant.imageUrl!}
+                    src={plant.imageUrl}
                     alt={plant.name}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-                  <div className="absolute bottom-0 left-0 right-0 p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
-                    <div className="text-white text-xs font-medium truncate drop-shadow-lg">
-                      {plant.name}
-                    </div>
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-4xl opacity-50">🌱</span>
                   </div>
-                </div>
-              ))}
-              {/* Only show +X more card for members */}
-              {isMember && plantsWithImages.length > 12 && (
-                <div
-                  className="aspect-square rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all border-2 border-dashed border-emerald-300 dark:border-emerald-700"
-                  onClick={() => navigate(`/garden/${gardenId}/plants`)}
-                >
-                  <span className="text-2xl mb-1">+{plantsWithImages.length - 12}</span>
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                    {t("gardenDashboard.overviewSection.morePlants")}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-          {/* Plant List with task counts */}
-          <div className="space-y-2">
-            {allPlantsDisplay.slice(0, 8).map((plant, idx) => (
-              <div
-                key={plant.id}
-                className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
-                onClick={() => {
-                  if (plant.plantId) navigate(`/plants/${plant.plantId}`);
-                }}
-                style={{ animationDelay: `${idx * 30}ms` }}
-              >
-                {/* Plant Image or Placeholder */}
-                <div className="flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
-                  {plant.imageUrl ? (
-                    <img
-                      src={plant.imageUrl}
-                      alt={plant.name}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="text-xl">🌱</span>
+                )}
+                {/* Gradient overlay for text readability */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                
+                {/* Top badges: quantity and tasks due */}
+                <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
+                  {/* Plant quantity badge */}
+                  {plant.plantsOnHand > 1 && (
+                    <span className="px-2 py-0.5 rounded-full bg-white/90 dark:bg-black/70 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-sm backdrop-blur-sm">
+                      ×{plant.plantsOnHand}
+                    </span>
+                  )}
+                  {plant.plantsOnHand <= 1 && <span />}
+                  {/* Tasks due today badge */}
+                  {plant.tasksDueToday > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500 text-xs font-semibold text-white shadow-sm">
+                      {plant.tasksDueToday} 📋
+                    </span>
                   )}
                 </div>
-                {/* Plant Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{plant.name}</div>
-                  <div className="flex items-center gap-2 flex-wrap mt-1">
-                    {plant.plantsOnHand > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
-                        ×{plant.plantsOnHand}
-                      </span>
-                    )}
+                
+                {/* Bottom info: name and task count */}
+                <div className="absolute bottom-0 left-0 right-0 p-3">
+                  <div className="text-white text-sm font-semibold truncate drop-shadow-lg mb-1">
+                    {plant.name}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
                     {plant.taskCount > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
-                        {plant.taskCount} {t("gardenDashboard.plantsSection.tasks")}
+                      <span className="text-white/80 text-xs">
+                        {plant.taskCount} {plant.taskCount === 1 ? t("gardenDashboard.plantsSection.task", "task") : t("gardenDashboard.plantsSection.tasks")}
                       </span>
                     )}
-                    {plant.tasksDueToday > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium">
-                        {plant.tasksDueToday} {t("gardenDashboard.plantsSection.dueToday")}
+                    {plant.taskCount === 0 && (
+                      <span className="text-white/60 text-xs">
+                        {t("gardenDashboard.overviewSection.noTasks", "No tasks")}
                       </span>
                     )}
                   </div>
                 </div>
-                <ArrowUpRight className="w-4 h-4 text-stone-400 flex-shrink-0" />
               </div>
             ))}
-            {allPlantsDisplay.length > 8 && (
-              <div className="text-center pt-2">
-                <span className="text-sm text-stone-500 dark:text-stone-400">
-                  {t("gardenDashboard.overviewSection.andMore", { count: allPlantsDisplay.length - 8 }) || `+${allPlantsDisplay.length - 8} more`}
+            {/* Show more card */}
+            {allPlantsDisplay.length > 15 && (
+              <div
+                className="aspect-[4/5] rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all border-2 border-dashed border-emerald-300 dark:border-emerald-700"
+                onClick={() => isMember && navigate(`/garden/${gardenId}/plants`)}
+              >
+                <span className="text-3xl mb-2">+{allPlantsDisplay.length - 15}</span>
+                <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                  {t("gardenDashboard.overviewSection.morePlants")}
                 </span>
               </div>
             )}
