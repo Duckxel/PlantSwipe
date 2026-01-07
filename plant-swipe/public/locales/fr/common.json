@@ -1394,6 +1394,10 @@
       "description": "Ce jardin n'est visible que par ses membres. Vous devez être invité pour voir son contenu.",
       "membersOnly": "Réservé aux membres"
     },
+    "publicView": {
+      "welcomeTitle": "Bienvenue dans ce jardin",
+      "welcomeDescription": "Vous consultez ce jardin en tant qu'invité. Seules les informations de base sont affichées. Rejoignez le jardin pour voir plus de détails et participer aux tâches."
+    },
     "overviewSection": {
       "plants": "plantes",
       "species": "espèces",
