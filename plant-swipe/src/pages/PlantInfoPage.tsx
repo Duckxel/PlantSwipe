@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Pencil,
   MapPin,
   Compass,
@@ -1653,17 +1654,33 @@ const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: st
   </div>
 )
 
-const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
-  <Card className="rounded-2xl sm:rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
-    <CardHeader className="space-y-2 sm:space-y-3 p-4 sm:p-6">
-      <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-        <div className="h-3.5 w-3.5 sm:h-4 sm:w-4">{icon}</div>
-        <span className="text-[10px] sm:text-xs uppercase tracking-wide">{title}</span>
+const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; defaultExpanded?: boolean }> = ({ title, icon, children, defaultExpanded = false }) => {
+  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded)
+  
+  return (
+    <Card className="rounded-2xl sm:rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
+      <CardHeader 
+        className="p-4 sm:p-6 cursor-pointer select-none"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+            <div className="h-3.5 w-3.5 sm:h-4 sm:w-4">{icon}</div>
+            <span className="text-[10px] sm:text-xs uppercase tracking-wide">{title}</span>
+          </div>
+          <ChevronDown 
+            className={`h-4 w-4 sm:h-5 sm:w-5 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+          />
+        </div>
+      </CardHeader>
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}
+      >
+        <CardContent className="space-y-1.5 sm:space-y-2 p-4 sm:p-6 pt-0">{children}</CardContent>
       </div>
-    </CardHeader>
-    <CardContent className="space-y-1.5 sm:space-y-2 p-4 sm:p-6 pt-0">{children}</CardContent>
-  </Card>
-)
+    </Card>
+  )
+}
 
 const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.ReactNode; variant?: 'note' }> = ({
   label,
