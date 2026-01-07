@@ -1,10 +1,10 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, Loader2, Sparkles } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, Loader2, Sparkles, Leaf } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
-import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
@@ -817,6 +817,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [translating, setTranslating] = React.useState(false)
   const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
   const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
+  const [aiCurrentField, setAiCurrentField] = React.useState<string | null>(null)
+  const [aiFieldProgress, setAiFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 })
+  const [aiStatus, setAiStatus] = React.useState<'idle' | 'translating_name' | 'filling' | 'saving'>('idle')
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
@@ -1447,12 +1450,36 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     setAiWorking(true)
     setColorSuggestions([])
     setError(null)
+    setAiCurrentField(null)
+    setAiFieldProgress({ completed: 0, total: targetFields.length })
+    setAiStatus('translating_name')
 
     let aiSucceeded = false
     let finalPlant: Plant | null = null
+    let fieldsCompleted = 0
     // Capture current images at the start to preserve them throughout AI fill
     const currentImages = plant.images || []
-    const plantNameForAi = trimmedName
+    
+    // First, get the English name of the plant (it might be in any language)
+    let plantNameForAi = trimmedName
+    try {
+      const nameResult = await getEnglishPlantName(trimmedName)
+      plantNameForAi = nameResult.englishName
+      if (nameResult.wasTranslated) {
+        console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"`)
+        // Update the plant name to the English version
+        setPlant((prev) => ({
+          ...prev,
+          name: plantNameForAi,
+        }))
+      }
+    } catch (err) {
+      console.warn(`[CreatePlantPage] Failed to get English name for "${trimmedName}", using original:`, err)
+      // Continue with original name if translation fails
+    }
+    
+    setAiStatus('filling')
+    
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
       // Always preserve images from the current state
@@ -1468,6 +1495,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     }
 
     const fillFieldWithRetries = async (fieldKey: string, existingField?: unknown) => {
+      setAiCurrentField(fieldKey)
       let lastError: Error | null = null
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
@@ -1492,6 +1520,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             markFieldComplete(fieldKey)
             return withImages
           })
+          fieldsCompleted++
+          setAiFieldProgress({ completed: fieldsCompleted, total: targetFields.length })
           return true
         } catch (err: any) {
             lastError = err instanceof Error ? err : new Error(String(err || 'AI field fill failed'))
@@ -1526,6 +1556,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             fields: aiFieldOrder,
             // AI always uses English regardless of current editing language
             language: 'en',
+            onProgress: ({ field, completed, total }) => {
+              if (field !== 'init' && field !== 'complete') {
+                setAiCurrentField(field)
+                setAiFieldProgress({ completed, total })
+              }
+            },
             onFieldComplete: ({ field, data }) => {
               if (field === 'complete') return
               if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
@@ -1544,6 +1580,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 return withImages
               })
               markFieldComplete(field)
+              fieldsCompleted++
+              setAiFieldProgress({ completed: fieldsCompleted, total: targetFields.length })
             },
           })
           lastError = null
@@ -1620,6 +1658,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         setError(e?.message || t('plantAdmin.errors.aiFill', 'AI fill failed'))
     } finally {
       setAiWorking(false)
+      setAiCurrentField(null)
+      setAiStatus('idle')
       if (aiSucceeded) {
         setAiCompleted(true)
         setAiProgress(createEmptyCategoryProgress())
@@ -1877,75 +1917,136 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           )}
         </div>
           {showAiProgressCard && (
-          <Card>
-            <CardContent className="space-y-4 pt-4">
-              <div className="flex items-center justify-between text-sm font-medium">
-                <span>
+          <div className="rounded-xl border border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30 p-4 space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {aiWorking ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-purple-600 dark:text-purple-400" />
+                ) : aiCompleted ? (
+                  <Check className="h-4 w-4 text-emerald-500" />
+                ) : null}
+                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
                   {aiWorking
-                    ? t('plantAdmin.categoryProgressTitle', 'Category fill progress')
-                    : t('plantAdmin.categoryProgressSummary', 'Latest AI fill summary')}
+                    ? t('plantAdmin.categoryProgressTitle', 'AI Fill in Progress')
+                    : aiCompleted
+                      ? t('plantAdmin.categoryProgressComplete', 'AI Fill Complete')
+                      : t('plantAdmin.categoryProgressSummary', 'AI Fill Summary')}
                 </span>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  {aiWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="h-4 w-4 text-emerald-500" /> : null}
-                </div>
               </div>
-              <div className="grid gap-2">
-                {plantFormCategoryOrder.map((cat) => {
-                  const info = aiProgress[cat]
-                  if (!info?.total) return null
-                  const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0
-                  return (
-                    <div key={cat} className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <span>{categoryLabels[cat]}</span>
-                          <span
-                            className={`text-xs font-medium ${
-                              info.status === 'done' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300'
-                            }`}
-                          >
-                            {info.status === 'done'
-                              ? t('plantAdmin.sectionFilled', 'Filled')
-                              : t('plantAdmin.sectionInProgress', 'Filling')}
-                          </span>
-                        </div>
-                        <span className="text-muted-foreground">{info.completed}/{info.total}</span>
-                      </div>
-                      <div className="h-2 w-full rounded bg-muted overflow-hidden">
-                        <div
-                          className={`h-2 transition-all ${info.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'}`}
-                          style={{ width: `${Math.min(100, Math.max(percent, info.status === 'done' ? 100 : percent))}%` }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-              {recentSectionLog.length > 0 && (
-                <div className="border-t border-dashed pt-3 space-y-2">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {t('plantAdmin.sectionLogTitle', 'Sections completed')}
-                  </div>
-                  <div className="space-y-1.5">
-                    {recentSectionLog.map((entry) => (
-                      <div
-                        key={`${entry.category}-${entry.timestamp}`}
-                        className="flex items-center justify-between rounded-xl bg-emerald-50/80 dark:bg-emerald-500/10 px-3 py-2 text-sm"
-                      >
-                        <span className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-200">
-                          <Check className="h-4 w-4" />
-                          {entry.label}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {aiWorking && aiFieldProgress.total > 0 && (
+                <span className="text-sm text-purple-600 dark:text-purple-400">
+                  {Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%
+                </span>
               )}
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Current plant info when filling */}
+            {aiWorking && (
+              <div className="rounded-lg bg-white/50 dark:bg-black/20 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="font-medium text-sm">{plant.name || 'Plant'}</span>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300">
+                    {aiStatus === 'translating_name' ? 'Getting English Name...' : 
+                     aiStatus === 'filling' ? 'AI Filling...' : 
+                     aiStatus === 'saving' ? 'Saving...' : 'Processing...'}
+                  </span>
+                </div>
+
+                {/* Current field being filled */}
+                {aiStatus === 'filling' && aiCurrentField && (
+                  <div className="text-xs text-muted-foreground">
+                    <span>Filling: </span>
+                    <span className="font-medium text-purple-700 dark:text-purple-300">{aiCurrentField}</span>
+                    <span className="ml-2 opacity-70">
+                      ({aiFieldProgress.completed}/{aiFieldProgress.total} fields)
+                    </span>
+                  </div>
+                )}
+
+                {/* Field progress bar */}
+                {aiStatus === 'filling' && aiFieldProgress.total > 0 && (
+                  <div className="h-1.5 w-full rounded-full bg-emerald-200 dark:bg-emerald-900/50 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-300"
+                      style={{
+                        width: `${Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%`
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Category progress grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
+                const info = aiProgress[cat]
+                if (!info?.total) return null
+                const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0
+                const isDone = info.status === 'done'
+                const isFilling = info.status === 'filling'
+                return (
+                  <div 
+                    key={cat} 
+                    className={`rounded-lg p-2.5 transition-all ${
+                      isDone 
+                        ? 'bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800' 
+                        : isFilling
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+                          : 'bg-white/50 dark:bg-black/20 border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`text-xs font-medium truncate ${
+                        isDone ? 'text-emerald-700 dark:text-emerald-300' : 
+                        isFilling ? 'text-blue-700 dark:text-blue-300' : 
+                        'text-muted-foreground'
+                      }`}>
+                        {categoryLabels[cat]}
+                      </span>
+                      {isDone && <Check className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />}
+                      {isFilling && <Loader2 className="h-3 w-3 animate-spin text-blue-500 flex-shrink-0" />}
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          isDone ? 'bg-emerald-500' : isFilling ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'
+                        }`}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1 text-right">
+                      {info.completed}/{info.total}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Sections completed log */}
+            {recentSectionLog.length > 0 && (
+              <div className="border-t border-purple-200 dark:border-purple-800 pt-3 space-y-2">
+                <div className="text-xs uppercase tracking-wide text-purple-600 dark:text-purple-400 opacity-70">
+                  {t('plantAdmin.sectionLogTitle', 'Recently Completed')}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {recentSectionLog.map((entry) => (
+                    <span
+                      key={`${entry.category}-${entry.timestamp}`}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs"
+                    >
+                      <Check className="h-3 w-3" />
+                      {entry.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
       {loading ? (

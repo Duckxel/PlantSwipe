@@ -3011,6 +3011,73 @@ app.options('/api/admin/ai/plant-fill/verify-name', (_req, res) => {
   res.status(204).end()
 })
 
+// Admin/Editor: Get English plant name from any language
+app.post('/api/admin/ai/plant-fill/english-name', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    
+    // Ask AI to identify the English common name of the plant
+    const instructions = `You are a botanist expert. Your task is to identify plants and provide their common English name.
+Given a plant name in ANY language (scientific name, common name in French, Spanish, German, etc.), 
+return the most common ENGLISH name for that plant.
+
+Rules:
+1. If the input is already a common English name, return it as-is (possibly corrected for spelling)
+2. If the input is a scientific/Latin name, return the most common English name
+3. If the input is a name in another language, translate/identify the English equivalent
+4. Always return a single, commonly used English name (not scientific name)
+5. If you cannot identify the plant, return the original name
+6. Return ONLY the plant name, nothing else - no explanations, no quotes, no JSON`
+
+    const prompt = `What is the common English name for this plant: "${plantName}"?`
+    
+    const response = await openaiClient.responses.create({
+      model: openaiModel,
+      reasoning: { effort: 'low' },
+      instructions,
+      input: prompt,
+    })
+    
+    const englishName = (response.output_text || plantName).trim()
+    
+    // Clean up the response - remove quotes, periods, etc.
+    const cleanedName = englishName
+      .replace(/^["']|["']$/g, '')  // Remove surrounding quotes
+      .replace(/\.$/, '')           // Remove trailing period
+      .trim()
+    
+    console.log(`[server] English name lookup: "${plantName}" -> "${cleanedName}"`)
+    
+    res.json({ 
+      success: true, 
+      originalName: plantName,
+      englishName: cleanedName,
+      wasTranslated: plantName.toLowerCase() !== cleanedName.toLowerCase()
+    })
+  } catch (err) {
+    console.error('[server] AI English name lookup failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to get English plant name' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-fill/english-name', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
 // Admin/Editor: AI-assisted plant data fill
 app.post('/api/admin/ai/plant-fill', async (req, res) => {
   try {
