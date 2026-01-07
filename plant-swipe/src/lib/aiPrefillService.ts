@@ -69,6 +69,23 @@ function generateUUIDv4(): string {
   })
 }
 
+/**
+ * Format plant name to Title Case
+ * Examples:
+ *   "basil" -> "Basil"
+ *   "ARROWHEAD PLANT" -> "Arrowhead Plant"
+ *   "spider plant" -> "Spider Plant"
+ */
+function formatPlantName(name: string): string {
+  if (!name) return name
+  return name
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+    .trim()
+}
+
 function coerceBoolean(value: unknown, fallback: boolean | null = false): boolean | null {
   if (value === null || value === undefined) return fallback
   if (typeof value === 'boolean') return value
@@ -285,10 +302,11 @@ export async function processPlantRequest(
     // The plant name might be in any language, so we first ask AI for the English common name
     onProgress?.({ stage: 'translating_name', plantName: displayName })
     
-    let englishPlantName = displayName
+    let englishPlantName = formatPlantName(displayName)
     try {
       const nameResult = await getEnglishPlantName(plantName, signal)
-      englishPlantName = String(nameResult.englishName || plantName || '').trim()
+      const rawEnglishName = String(nameResult.englishName || plantName || '').trim()
+      englishPlantName = formatPlantName(rawEnglishName)
       if (nameResult.wasTranslated) {
         console.log(`[aiPrefillService] Translated plant name: "${plantName}" -> "${englishPlantName}"`)
       }
