@@ -3028,7 +3028,7 @@ app.post('/api/admin/ai/plant-fill/english-name', async (req, res) => {
     }
     
     // Ask AI to identify the English common name of the plant
-    const systemPrompt = `You are a botanist expert. Your task is to identify plants and provide their common English name.
+    const instructions = `You are a botanist expert. Your task is to identify plants and provide their common English name.
 Given a plant name in ANY language (scientific name, common name in French, Spanish, German, etc.), 
 return the most common ENGLISH name for that plant.
 
@@ -3038,21 +3038,18 @@ Rules:
 3. If the input is a name in another language, translate/identify the English equivalent
 4. Always return a single, commonly used English name (not scientific name)
 5. If you cannot identify the plant, return the original name
-6. Return ONLY the plant name, nothing else - no explanations, no quotes`
+6. Return ONLY the plant name, nothing else - no explanations, no quotes, no JSON`
 
-    const userPrompt = `What is the common English name for this plant: "${plantName}"?`
+    const prompt = `What is the common English name for this plant: "${plantName}"?`
     
-    const completion = await openaiClient.chat.completions.create({
-      model: AI_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.1,
-      max_tokens: 100,
+    const response = await openaiClient.responses.create({
+      model: openaiModel,
+      reasoning: { effort: 'low' },
+      instructions,
+      input: prompt,
     })
     
-    const englishName = (completion.choices?.[0]?.message?.content || plantName).trim()
+    const englishName = (response.output_text || plantName).trim()
     
     // Clean up the response - remove quotes, periods, etc.
     const cleanedName = englishName
