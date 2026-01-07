@@ -109,10 +109,11 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
     .map((entry) => {
       const qty = entry.quantity
       const parsedQuantity = typeof qty === 'string' ? parseInt(qty, 10) : qty
+      const season = entry.season && typeof entry.season === 'string' ? entry.season.trim() : undefined
       return {
         ...entry,
         quantity: Number.isFinite(parsedQuantity as number) ? Number(parsedQuantity) : undefined,
-        season: entry.season?.trim() || undefined,
+        season,
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
@@ -128,9 +129,9 @@ async function upsertColors(colors: PlantColor[]) {
   if (!colors?.length) return [] as string[]
   const normalized = colors
     .map((c) => {
-      const name = c.name?.trim()
+      const name = c.name && typeof c.name === 'string' ? c.name.trim() : null
       if (!name) return null
-      const hex = c.hexCode?.trim()
+      const hex = c.hexCode && typeof c.hexCode === 'string' ? c.hexCode.trim() : null
       return {
         name,
         hex_code: hex && hex.length ? (hex.startsWith("#") ? hex : `#${hex}`) : null,
@@ -240,8 +241,12 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   await supabase.from('plant_sources').delete().eq('plant_id', plantId)
   if (!sources?.length) return
   const rows = sources
-    .filter((s) => s.name?.trim())
-    .map((s) => ({ plant_id: plantId, name: s.name.trim(), url: s.url?.trim() || null }))
+    .filter((s) => s.name && typeof s.name === 'string' && s.name.trim())
+    .map((s) => ({ 
+      plant_id: plantId, 
+      name: String(s.name || '').trim(), 
+      url: s.url && typeof s.url === 'string' ? s.url.trim() : null 
+    }))
   if (!rows.length) return
   const { error } = await supabase.from('plant_sources').insert(rows)
   if (error) throw new Error(error.message)
@@ -252,9 +257,9 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
   if (!infusionMix) return
   const rows = Object.entries(infusionMix)
     .map(([mix, benefit]) => {
-      const trimmedName = mix?.trim()
+      const trimmedName = mix && typeof mix === 'string' ? mix.trim() : null
       if (!trimmedName) return null
-      const trimmedBenefit = benefit?.trim()
+      const trimmedBenefit = benefit && typeof benefit === 'string' ? benefit.trim() : null
       return {
         plant_id: plantId,
         mix_name: trimmedName,
@@ -322,6 +327,29 @@ export async function processPlantRequest(
     
     if (signal?.aborted) {
       throw new Error('Operation cancelled')
+    }
+    
+    // Check if a plant with this English name already exists in the database
+    const { data: existingPlant } = await supabase
+      .from('plants')
+      .select('id, name')
+      .ilike('name', englishPlantName)
+      .maybeSingle()
+    
+    if (existingPlant) {
+      console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists (id: ${existingPlant.id}), skipping and marking request as complete`)
+      
+      // Delete the request since the plant already exists
+      const { error: deleteError } = await supabase
+        .from('requested_plants')
+        .delete()
+        .eq('id', requestId)
+      
+      if (deleteError) {
+        console.error('Failed to delete plant request:', deleteError)
+      }
+      
+      return { success: true, plantId: existingPlant.id }
     }
     
     // Stage 1: AI Fill (using English name internally, but display original name)
