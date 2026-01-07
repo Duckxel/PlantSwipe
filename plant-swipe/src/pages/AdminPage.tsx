@@ -72,6 +72,8 @@ import {
   Image,
   ZoomIn,
   CircleCheck,
+  Loader2,
+  Square,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -84,6 +86,7 @@ import {
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
+import { processAllPlantRequests } from "@/lib/aiPrefillService";
 import {
   Dialog,
   DialogTrigger,
@@ -1628,6 +1631,14 @@ export const AdminPage: React.FC = () => {
   const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
   const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
 
+  // AI Prefill All state
+  const [aiPrefillRunning, setAiPrefillRunning] = React.useState<boolean>(false);
+  const [aiPrefillAbortController, setAiPrefillAbortController] = React.useState<AbortController | null>(null);
+  const [aiPrefillCurrentPlant, setAiPrefillCurrentPlant] = React.useState<string | null>(null);
+  const [aiPrefillProgress, setAiPrefillProgress] = React.useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const [aiPrefillError, setAiPrefillError] = React.useState<string | null>(null);
+  const [aiPrefillStatus, setAiPrefillStatus] = React.useState<'idle' | 'filling' | 'saving' | 'translating'>('idle');
+
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
       setPlantRequestsError(null);
@@ -2307,6 +2318,68 @@ export const AdminPage: React.FC = () => {
     // Refresh the requests list
     await loadPlantRequests({ initial: false });
   }, [createPlantRequestId, completePlantRequest, loadPlantRequests]);
+
+  // AI Prefill All functionality
+  const runAiPrefillAll = React.useCallback(async () => {
+    if (aiPrefillRunning || plantRequests.length === 0) return;
+    
+    const abortController = new AbortController();
+    setAiPrefillAbortController(abortController);
+    setAiPrefillRunning(true);
+    setAiPrefillError(null);
+    setAiPrefillProgress({ current: 0, total: plantRequests.length });
+    setAiPrefillStatus('idle');
+    
+    try {
+      await processAllPlantRequests(
+        plantRequests.map((req) => ({ id: req.id, plant_name: req.plant_name })),
+        profile?.display_name || undefined,
+        {
+          signal: abortController.signal,
+          onProgress: ({ stage, plantName }) => {
+            setAiPrefillCurrentPlant(plantName);
+            setAiPrefillStatus(stage);
+          },
+          onPlantProgress: ({ current, total, plantName }) => {
+            setAiPrefillProgress({ current, total });
+            setAiPrefillCurrentPlant(plantName);
+          },
+          onPlantComplete: ({ plantName, success, error }) => {
+            if (!success && error) {
+              console.error(`Failed to process ${plantName}:`, error);
+            }
+          },
+          onError: (error) => {
+            if (!abortController.signal.aborted) {
+              setAiPrefillError(error);
+            }
+          },
+        }
+      );
+      
+      // Refresh the requests list after completion
+      await loadPlantRequests({ initial: false });
+      
+    } catch (err) {
+      if (!abortController.signal.aborted) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setAiPrefillError(msg);
+      }
+    } finally {
+      setAiPrefillRunning(false);
+      setAiPrefillAbortController(null);
+      setAiPrefillCurrentPlant(null);
+      setAiPrefillProgress({ current: 0, total: 0 });
+      setAiPrefillStatus('idle');
+    }
+  }, [aiPrefillRunning, plantRequests, profile?.display_name, loadPlantRequests]);
+
+  const stopAiPrefill = React.useCallback(() => {
+    if (aiPrefillAbortController) {
+      aiPrefillAbortController.abort();
+      setAiPrefillError('AI Prefill was cancelled by user');
+    }
+  }, [aiPrefillAbortController]);
 
   // Presence fallback removed by request: rely on DB-backed API only
 
@@ -7091,7 +7164,7 @@ export const AdminPage: React.FC = () => {
                                 loadPlantRequests({ initial: false })
                               }
                               disabled={
-                                plantRequestsLoading || plantRequestsRefreshing
+                                plantRequestsLoading || plantRequestsRefreshing || aiPrefillRunning
                               }
                             >
                               <RefreshCw
@@ -7100,6 +7173,32 @@ export const AdminPage: React.FC = () => {
                               <span className="hidden sm:inline">Refresh</span>
                               <span className="sm:hidden inline">Reload</span>
                             </Button>
+                            {/* AI Prefill Button */}
+                            {aiPrefillRunning ? (
+                              <Button
+                                variant="destructive"
+                                className="rounded-xl"
+                                onClick={stopAiPrefill}
+                              >
+                                <Square className="h-4 w-4 mr-2" />
+                                <span className="hidden sm:inline">Stop AI Prefill</span>
+                                <span className="sm:hidden inline">Stop</span>
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                className="rounded-xl border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-300 dark:hover:bg-purple-950/30"
+                                onClick={runAiPrefillAll}
+                                disabled={
+                                  plantRequestsLoading || plantRequests.length === 0
+                                }
+                                title="Automatically AI fill, save, and translate all plant requests"
+                              >
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                <span className="hidden sm:inline">AI Prefill All</span>
+                                <span className="sm:hidden inline">AI Fill</span>
+                              </Button>
+                            )}
                             <div className="relative">
                               <div className="flex">
                                 <Button
@@ -7156,6 +7255,58 @@ export const AdminPage: React.FC = () => {
                                 {plantRequests.length}
                               </span>
                             </div>
+                          </div>
+                        )}
+
+                        {/* AI Prefill Progress */}
+                        {aiPrefillRunning && (
+                          <div className="rounded-xl border border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin text-purple-600 dark:text-purple-400" />
+                                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                                  AI Prefill in Progress
+                                </span>
+                              </div>
+                              <span className="text-sm text-purple-600 dark:text-purple-400">
+                                {aiPrefillProgress.current} / {aiPrefillProgress.total}
+                              </span>
+                            </div>
+                            {aiPrefillCurrentPlant && (
+                              <div className="text-sm text-purple-600 dark:text-purple-400">
+                                <span className="opacity-70">Current: </span>
+                                <span className="font-medium">{aiPrefillCurrentPlant}</span>
+                                {aiPrefillStatus !== 'idle' && (
+                                  <span className="ml-2 text-xs opacity-70">
+                                    ({aiPrefillStatus === 'filling' ? 'AI Filling...' : aiPrefillStatus === 'saving' ? 'Saving...' : aiPrefillStatus === 'translating' ? 'Translating...' : ''})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            <div className="h-2 w-full rounded-full bg-purple-200 dark:bg-purple-900/50 overflow-hidden">
+                              <div
+                                className="h-full bg-purple-500 transition-all duration-300"
+                                style={{
+                                  width: aiPrefillProgress.total > 0
+                                    ? `${Math.round((aiPrefillProgress.current / aiPrefillProgress.total) * 100)}%`
+                                    : '0%'
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* AI Prefill Error */}
+                        {aiPrefillError && !aiPrefillRunning && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/30 dark:text-amber-200 flex items-center justify-between">
+                            <span>{aiPrefillError}</span>
+                            <button
+                              type="button"
+                              className="ml-2 opacity-60 hover:opacity-100"
+                              onClick={() => setAiPrefillError(null)}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
                           </div>
                         )}
 
