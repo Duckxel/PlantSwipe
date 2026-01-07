@@ -9,12 +9,10 @@ import {
   RefreshCw,
   ScrollText,
   Map,
-  AlertTriangle,
   ChevronRight,
   ExternalLink,
   Loader2,
   XCircle,
-  CheckCircle2,
   Clock,
   Copy,
   Palette,
@@ -1005,236 +1003,15 @@ const SitemapTab: React.FC = () => {
 }
 
 // ========================
-// ERROR LOGS TAB
-// ========================
-type ErrorLogEntry = {
-  id: string
-  timestamp: string
-  source: "api" | "admin_api" | "frontend"
-  level: "error" | "warn" | "info"
-  message: string
-  stack?: string
-  endpoint?: string
-  statusCode?: number
-  userId?: string
-}
-
-const ErrorLogsTab: React.FC = () => {
-  const [logs, setLogs] = React.useState<ErrorLogEntry[]>([])
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [sourceFilter, setSourceFilter] = React.useState<"all" | "api" | "admin_api">("all")
-  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
-
-  const loadErrorLogs = React.useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const session = (await supabase.auth.getSession()).data.session
-      const token = session?.access_token
-      const headers: Record<string, string> = { Accept: "application/json" }
-      if (token) headers["Authorization"] = `Bearer ${token}`
-      try {
-        const globalEnv = globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } }
-        const adminToken = globalEnv.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-        if (adminToken) headers["X-Admin-Token"] = String(adminToken)
-      } catch {
-        // Ignore env access errors
-      }
-      
-      const r = await fetch("/api/admin/error-logs?days=7", {
-        headers,
-        credentials: "same-origin",
-      })
-      const data = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`)
-      const list = Array.isArray(data?.logs) ? data.logs : []
-      setLogs(list)
-    } catch (e: unknown) {
-      const err = e as { message?: string }
-      setError(err?.message || "Failed to load error logs")
-      // Show placeholder data if API doesn't exist yet
-      setLogs([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  React.useEffect(() => {
-    loadErrorLogs()
-  }, [loadErrorLogs])
-
-  const filteredLogs = React.useMemo(() => {
-    if (sourceFilter === "all") return logs
-    return logs.filter((l) => l.source === sourceFilter)
-  }, [logs, sourceFilter])
-
-  const toggleExpand = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const getLevelColor = (level: string) => {
-    switch (level) {
-      case "error":
-        return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-      case "warn":
-        return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-      default:
-        return "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400"
-    }
-  }
-
-  const getSourceColor = (source: string) => {
-    switch (source) {
-      case "api":
-        return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-      case "admin_api":
-        return "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
-      default:
-        return "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400"
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <Card className="rounded-2xl">
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-sm font-medium">Error Logs</h3>
-              <p className="text-xs text-stone-500 dark:text-stone-400">
-                API and Python Admin API errors - last 7 days
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={sourceFilter}
-                onChange={(e) => setSourceFilter(e.target.value as "all" | "api" | "admin_api")}
-                className="h-9 px-3 text-sm rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              >
-                <option value="all">All Sources</option>
-                <option value="api">Node API</option>
-                <option value="admin_api">Python Admin API</option>
-              </select>
-              <Button
-                size="icon"
-                variant="outline"
-                className="rounded-xl"
-                onClick={loadErrorLogs}
-                disabled={loading}
-                aria-label="Refresh error logs"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
-          </div>
-
-          {error && (
-            <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 mb-4">
-              <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                <AlertTriangle className="h-4 w-4" />
-                {error}
-              </div>
-              <p className="text-xs text-amber-500 dark:text-amber-500 mt-1">
-                The error logs API endpoint may not be implemented yet. Add <code>/api/admin/error-logs</code> to start collecting errors.
-              </p>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
-            </div>
-          ) : filteredLogs.length === 0 ? (
-            <div className="text-center py-12">
-              <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
-              <p className="text-sm font-medium text-stone-900 dark:text-white">No errors found</p>
-              <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                {error ? "Error logs endpoint not configured" : "Everything is running smoothly!"}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filteredLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden"
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleExpand(log.id)}
-                    className="w-full px-4 py-3 flex items-start gap-3 hover:bg-stone-50 dark:hover:bg-[#1a1a1d] transition-colors text-left"
-                  >
-                    <AlertTriangle className={cn(
-                      "h-4 w-4 mt-0.5 flex-shrink-0",
-                      log.level === "error" ? "text-red-500" : "text-amber-500"
-                    )} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", getLevelColor(log.level))}>
-                          {log.level.toUpperCase()}
-                        </span>
-                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", getSourceColor(log.source))}>
-                          {log.source === "admin_api" ? "Python API" : "Node API"}
-                        </span>
-                        {log.endpoint && (
-                          <span className="text-[10px] text-stone-500 dark:text-stone-400 font-mono">
-                            {log.endpoint}
-                          </span>
-                        )}
-                        {log.statusCode && (
-                          <span className="text-[10px] text-stone-500 dark:text-stone-400">
-                            HTTP {log.statusCode}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-stone-900 dark:text-white truncate">
-                        {log.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-stone-500 dark:text-stone-400">
-                        <Clock className="h-3 w-3" />
-                        {new Date(log.timestamp).toLocaleString()}
-                      </div>
-                    </div>
-                    <ChevronRight className={cn(
-                      "h-4 w-4 text-stone-400 transition-transform flex-shrink-0",
-                      expandedIds.has(log.id) && "rotate-90"
-                    )} />
-                  </button>
-                  
-                  {expandedIds.has(log.id) && log.stack && (
-                    <div className="px-4 py-3 bg-stone-900 dark:bg-black border-t border-stone-200 dark:border-[#3e3e42]">
-                      <pre className="text-[11px] text-green-400 font-mono whitespace-pre-wrap break-words overflow-x-auto">
-                        {log.stack}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-// ========================
 // MAIN PANEL COMPONENT
 // ========================
-type AdvancedView = "logs" | "sitemap" | "errors" | "colors" | "team"
+type AdvancedView = "logs" | "sitemap" | "colors" | "team"
 
 export const AdminAdvancedPanel: React.FC = () => {
   const location = useLocation()
   
   const activeView: AdvancedView = React.useMemo(() => {
     if (location.pathname.includes("/advanced/sitemap")) return "sitemap"
-    if (location.pathname.includes("/advanced/errors")) return "errors"
     if (location.pathname.includes("/advanced/colors")) return "colors"
     if (location.pathname.includes("/advanced/team")) return "team"
     return "logs"
@@ -1247,7 +1024,7 @@ export const AdminAdvancedPanel: React.FC = () => {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">Advanced</h1>
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
-            Logs, sitemap visualization, and error debugging tools
+            Logs, sitemap visualization, colors, and team management
           </p>
         </div>
 
@@ -1276,18 +1053,6 @@ export const AdminAdvancedPanel: React.FC = () => {
           >
             <Map className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Sitemap
-          </Link>
-          <Link
-            to="/admin/advanced/errors"
-            className={cn(
-              "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
-              activeView === "errors"
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
-                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
-            )}
-          >
-            <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Error Logs
           </Link>
           <Link
             to="/admin/advanced/colors"
@@ -1319,7 +1084,6 @@ export const AdminAdvancedPanel: React.FC = () => {
       {/* Content */}
       {activeView === "logs" && <LogsTab />}
       {activeView === "sitemap" && <SitemapTab />}
-      {activeView === "errors" && <ErrorLogsTab />}
       {activeView === "colors" && <AdminColorsPanel />}
       {activeView === "team" && <AdminTeamPanel />}
     </div>
