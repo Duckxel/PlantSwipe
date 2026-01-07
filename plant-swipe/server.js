@@ -12489,7 +12489,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
     }
     speciesCount = seenSpecies.size
 
-    // Calculate today's task progress
+    // Calculate today's task progress and task counts per plant
+    let taskCountsByPlant = {}
     if (sql && gardenId) {
       try {
         const progressRows = await sql`
@@ -12511,6 +12512,35 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       } catch (progressErr) {
         console.warn('[overview] Progress query failed:', progressErr?.message || progressErr)
       }
+
+      // Fetch task counts per plant (total tasks and due today)
+      try {
+        const taskCountRows = await sql`
+          SELECT 
+            t.garden_plant_id::text as garden_plant_id,
+            COUNT(DISTINCT t.id)::int as total_tasks,
+            COALESCE(SUM(CASE 
+              WHEN o.due_at >= ${startIso}::timestamptz AND o.due_at <= ${endIso}::timestamptz 
+                   AND GREATEST(1, o.required_count) - o.completed_count > 0
+              THEN GREATEST(1, o.required_count) - o.completed_count
+              ELSE 0
+            END), 0)::int as due_today
+          FROM garden_plant_tasks t
+          LEFT JOIN garden_plant_task_occurrences o ON o.task_id = t.id
+          WHERE t.garden_id = ${gardenId}
+          GROUP BY t.garden_plant_id
+        `
+        if (taskCountRows && taskCountRows.length > 0) {
+          for (const row of taskCountRows) {
+            taskCountsByPlant[row.garden_plant_id] = {
+              totalTasks: Number(row.total_tasks || 0),
+              dueToday: Number(row.due_today || 0),
+            }
+          }
+        }
+      } catch (taskCountErr) {
+        console.warn('[overview] Task counts query failed:', taskCountErr?.message || taskCountErr)
+      }
     }
 
     res.json({
@@ -12522,6 +12552,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       todayProgress,
       totalOnHand,
       speciesCount,
+      taskCountsByPlant,
     })
   } catch (e) {
     console.error('[overview] Error for garden', req.params.id, ':', e?.message || e)
