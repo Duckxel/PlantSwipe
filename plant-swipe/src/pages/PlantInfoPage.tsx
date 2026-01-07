@@ -47,6 +47,7 @@ import {
   ShieldCheck,
   User,
   PawPrint,
+  HardHat,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -595,14 +596,46 @@ const PlantInfoPage: React.FC = () => {
           )}
         </div>
       </div>
-      <PlantDetails 
-        plant={plant} 
-        liked={likedIds.includes(plant.id)} 
-        onToggleLike={toggleLiked} 
-        onBookmark={handleBookmark}
-        isBookmarked={isBookmarked}
-      />
-      <MoreInformationSection plant={plant} />
+      {/* Check if plant is "In Progress" - show construction message instead of detailed info */}
+      {(plant.meta?.status?.toLowerCase() === 'in progres' || plant.meta?.status?.toLowerCase() === 'in progress') ? (
+        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
+          <div className="flex justify-center">
+            <div className="p-4 rounded-full bg-amber-100 dark:bg-amber-900/40">
+              <HardHat className="h-12 w-12 text-amber-600 dark:text-amber-400" />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-2xl sm:text-3xl font-bold text-amber-900 dark:text-amber-100">
+              {t('plantInfo.inConstruction.title', { defaultValue: 'Plant Info in Construction' })}
+            </h2>
+            <p className="text-amber-700 dark:text-amber-300 max-w-lg mx-auto">
+              {t('plantInfo.inConstruction.description', { 
+                defaultValue: 'We are currently verifying and completing the information for this plant. Check back soon for the full details!' 
+              })}
+            </p>
+          </div>
+          {/* Show basic info that we have */}
+          <div className="pt-4 space-y-4 max-w-md mx-auto">
+            <div className="text-left p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-amber-200/50 dark:border-amber-500/20">
+              <h3 className="font-semibold text-lg text-stone-900 dark:text-white">{plant.name}</h3>
+              {plant.identity?.scientificName && (
+                <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.identity.scientificName}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <PlantDetails 
+            plant={plant} 
+            liked={likedIds.includes(plant.id)} 
+            onToggleLike={toggleLiked} 
+            onBookmark={handleBookmark}
+            isBookmarked={isBookmarked}
+          />
+          <MoreInformationSection plant={plant} />
+        </>
+      )}
       
       {user?.id && plant && (
         <AddToBookmarkDialog 
