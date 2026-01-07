@@ -251,8 +251,9 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
 }
 
 export interface AiPrefillCallbacks {
-  onProgress?: (info: { stage: 'filling' | 'saving' | 'translating'; plantName: string }) => void
-  onFieldComplete?: (info: { field: string }) => void
+  onProgress?: (info: { stage: 'filling' | 'saving' | 'translating' | 'translating_name'; plantName: string }) => void
+  onFieldComplete?: (info: { field: string; fieldsCompleted: number; totalFields: number }) => void
+  onFieldStart?: (info: { field: string; fieldsCompleted: number; totalFields: number }) => void
   onError?: (error: string) => void
   signal?: AbortSignal
 }
@@ -266,7 +267,10 @@ export async function processPlantRequest(
   createdBy: string | undefined,
   callbacks?: AiPrefillCallbacks
 ): Promise<{ success: boolean; plantId?: string; error?: string }> {
-  const { onProgress, onFieldComplete, onError, signal } = callbacks || {}
+  const { onProgress, onFieldComplete, onFieldStart, onError, signal } = callbacks || {}
+  
+  const totalFields = aiFieldOrder.length
+  let fieldsCompleted = 0
   
   try {
     // Check if aborted
@@ -276,7 +280,7 @@ export async function processPlantRequest(
     
     // Stage 0: Get English plant name
     // The plant name might be in any language, so we first ask AI for the English common name
-    onProgress?.({ stage: 'filling', plantName })
+    onProgress?.({ stage: 'translating_name', plantName })
     
     let englishPlantName = plantName
     try {
@@ -326,8 +330,16 @@ export async function processPlantRequest(
       fields: aiFieldOrder,
       language: 'en',
       signal,
+      onProgress: ({ field, completed, total }) => {
+        if (field !== 'init' && field !== 'complete') {
+          onFieldStart?.({ field, fieldsCompleted: completed, totalFields: total })
+        }
+      },
       onFieldComplete: ({ field }) => {
-        onFieldComplete?.({ field })
+        if (field !== 'complete') {
+          fieldsCompleted++
+          onFieldComplete?.({ field, fieldsCompleted, totalFields })
+        }
       },
     })
     

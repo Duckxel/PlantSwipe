@@ -87,6 +87,14 @@ import {
 } from "@/lib/broadcastStorage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { processAllPlantRequests } from "@/lib/aiPrefillService";
+import { 
+  buildCategoryProgress, 
+  createEmptyCategoryProgress, 
+  plantFormCategoryOrder, 
+  mapFieldToCategory,
+  type CategoryProgress, 
+  type PlantFormCategory 
+} from "@/lib/plantFormCategories";
 import {
   Dialog,
   DialogTrigger,
@@ -1637,7 +1645,24 @@ export const AdminPage: React.FC = () => {
   const [aiPrefillCurrentPlant, setAiPrefillCurrentPlant] = React.useState<string | null>(null);
   const [aiPrefillProgress, setAiPrefillProgress] = React.useState<{ current: number; total: number }>({ current: 0, total: 0 });
   const [aiPrefillError, setAiPrefillError] = React.useState<string | null>(null);
-  const [aiPrefillStatus, setAiPrefillStatus] = React.useState<'idle' | 'filling' | 'saving' | 'translating'>('idle');
+  const [aiPrefillStatus, setAiPrefillStatus] = React.useState<'idle' | 'filling' | 'saving' | 'translating' | 'translating_name'>('idle');
+  const [aiPrefillCurrentField, setAiPrefillCurrentField] = React.useState<string | null>(null);
+  const [aiPrefillFieldProgress, setAiPrefillFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 });
+  const [aiPrefillCategoryProgress, setAiPrefillCategoryProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress());
+  const [aiPrefillCompletedPlants, setAiPrefillCompletedPlants] = React.useState<Array<{ name: string; success: boolean; error?: string }>>([]);
+
+  // Category labels for display
+  const aiPrefillCategoryLabels: Record<PlantFormCategory, string> = {
+    basics: 'Basics',
+    identity: 'Identity',
+    plantCare: 'Plant Care',
+    growth: 'Growth',
+    usage: 'Usage',
+    ecology: 'Ecology',
+    danger: 'Danger',
+    miscellaneous: 'Miscellaneous',
+    meta: 'Meta',
+  };
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -2320,6 +2345,30 @@ export const AdminPage: React.FC = () => {
   }, [createPlantRequestId, completePlantRequest, loadPlantRequests]);
 
   // AI Prefill All functionality
+  const aiFieldOrder = React.useMemo(() => [
+    'plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description',
+    'identity', 'plantCare', 'growth', 'usage', 'ecology', 'danger', 'miscellaneous'
+  ], []);
+
+  const initAiPrefillCategoryProgress = React.useCallback(() => {
+    const progress = buildCategoryProgress(aiFieldOrder);
+    setAiPrefillCategoryProgress(progress);
+  }, [aiFieldOrder]);
+
+  const markAiPrefillFieldComplete = React.useCallback((fieldKey: string) => {
+    const category = mapFieldToCategory(fieldKey);
+    setAiPrefillCategoryProgress((prev) => {
+      const current = prev[category] || { total: 0, completed: 0, status: 'idle' };
+      const total = current.total || 1;
+      const completed = Math.min((current.completed || 0) + 1, total);
+      const nextStatus = completed >= total ? 'done' : 'filling';
+      return {
+        ...prev,
+        [category]: { total, completed, status: nextStatus },
+      };
+    });
+  }, []);
+
   const runAiPrefillAll = React.useCallback(async () => {
     if (aiPrefillRunning || plantRequests.length === 0) return;
     
@@ -2329,6 +2378,10 @@ export const AdminPage: React.FC = () => {
     setAiPrefillError(null);
     setAiPrefillProgress({ current: 0, total: plantRequests.length });
     setAiPrefillStatus('idle');
+    setAiPrefillCurrentField(null);
+    setAiPrefillFieldProgress({ completed: 0, total: 0 });
+    setAiPrefillCompletedPlants([]);
+    initAiPrefillCategoryProgress();
     
     try {
       await processAllPlantRequests(
@@ -2339,12 +2392,27 @@ export const AdminPage: React.FC = () => {
           onProgress: ({ stage, plantName }) => {
             setAiPrefillCurrentPlant(plantName);
             setAiPrefillStatus(stage);
+            // Reset category progress for new plant
+            if (stage === 'filling' || stage === 'translating_name') {
+              initAiPrefillCategoryProgress();
+              setAiPrefillCurrentField(null);
+              setAiPrefillFieldProgress({ completed: 0, total: 0 });
+            }
+          },
+          onFieldStart: ({ field, fieldsCompleted, totalFields }) => {
+            setAiPrefillCurrentField(field);
+            setAiPrefillFieldProgress({ completed: fieldsCompleted, total: totalFields });
+          },
+          onFieldComplete: ({ field, fieldsCompleted, totalFields }) => {
+            markAiPrefillFieldComplete(field);
+            setAiPrefillFieldProgress({ completed: fieldsCompleted, total: totalFields });
           },
           onPlantProgress: ({ current, total, plantName }) => {
             setAiPrefillProgress({ current, total });
             setAiPrefillCurrentPlant(plantName);
           },
           onPlantComplete: ({ plantName, success, error }) => {
+            setAiPrefillCompletedPlants((prev) => [...prev.slice(-4), { name: plantName, success, error }]);
             if (!success && error) {
               console.error(`Failed to process ${plantName}:`, error);
             }
@@ -2371,8 +2439,10 @@ export const AdminPage: React.FC = () => {
       setAiPrefillCurrentPlant(null);
       setAiPrefillProgress({ current: 0, total: 0 });
       setAiPrefillStatus('idle');
+      setAiPrefillCurrentField(null);
+      setAiPrefillFieldProgress({ completed: 0, total: 0 });
     }
-  }, [aiPrefillRunning, plantRequests, profile?.display_name, loadPlantRequests]);
+  }, [aiPrefillRunning, plantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
 
   const stopAiPrefill = React.useCallback(() => {
     if (aiPrefillAbortController) {
@@ -7260,7 +7330,8 @@ export const AdminPage: React.FC = () => {
 
                         {/* AI Prefill Progress */}
                         {aiPrefillRunning && (
-                          <div className="rounded-xl border border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30 p-4 space-y-3">
+                          <div className="rounded-xl border border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30 p-4 space-y-4">
+                            {/* Header with overall progress */}
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <Loader2 className="h-4 w-4 animate-spin text-purple-600 dark:text-purple-400" />
@@ -7268,31 +7339,128 @@ export const AdminPage: React.FC = () => {
                                   AI Prefill in Progress
                                 </span>
                               </div>
-                              <span className="text-sm text-purple-600 dark:text-purple-400">
-                                {aiPrefillProgress.current} / {aiPrefillProgress.total}
+                              <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                                Plant {aiPrefillProgress.current + 1} of {aiPrefillProgress.total}
                               </span>
                             </div>
+
+                            {/* Overall progress bar */}
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-xs text-purple-600 dark:text-purple-400">
+                                <span>Overall Progress</span>
+                                <span>{aiPrefillProgress.total > 0 ? Math.round((aiPrefillProgress.current / aiPrefillProgress.total) * 100) : 0}%</span>
+                              </div>
+                              <div className="h-2 w-full rounded-full bg-purple-200 dark:bg-purple-900/50 overflow-hidden">
+                                <div
+                                  className="h-full bg-purple-500 transition-all duration-300"
+                                  style={{
+                                    width: aiPrefillProgress.total > 0
+                                      ? `${Math.round((aiPrefillProgress.current / aiPrefillProgress.total) * 100)}%`
+                                      : '0%'
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Current plant info */}
                             {aiPrefillCurrentPlant && (
-                              <div className="text-sm text-purple-600 dark:text-purple-400">
-                                <span className="opacity-70">Current: </span>
-                                <span className="font-medium">{aiPrefillCurrentPlant}</span>
-                                {aiPrefillStatus !== 'idle' && (
-                                  <span className="ml-2 text-xs opacity-70">
-                                    ({aiPrefillStatus === 'filling' ? 'AI Filling...' : aiPrefillStatus === 'saving' ? 'Saving...' : aiPrefillStatus === 'translating' ? 'Translating...' : ''})
-                                  </span>
+                              <div className="rounded-lg bg-white/50 dark:bg-black/20 p-3 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                    <span className="font-medium text-sm">{aiPrefillCurrentPlant}</span>
+                                  </div>
+                                  <Badge variant="outline" className="text-xs">
+                                    {aiPrefillStatus === 'translating_name' ? 'Getting English Name...' : 
+                                     aiPrefillStatus === 'filling' ? 'AI Filling...' : 
+                                     aiPrefillStatus === 'saving' ? 'Saving...' : 
+                                     aiPrefillStatus === 'translating' ? 'Translating...' : 'Processing...'}
+                                  </Badge>
+                                </div>
+
+                                {/* Current field being filled */}
+                                {aiPrefillStatus === 'filling' && aiPrefillCurrentField && (
+                                  <div className="text-xs text-muted-foreground">
+                                    <span>Filling: </span>
+                                    <span className="font-medium text-purple-700 dark:text-purple-300">{aiPrefillCurrentField}</span>
+                                    <span className="ml-2 opacity-70">
+                                      ({aiPrefillFieldProgress.completed}/{aiPrefillFieldProgress.total} fields)
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Field progress bar */}
+                                {aiPrefillStatus === 'filling' && aiPrefillFieldProgress.total > 0 && (
+                                  <div className="h-1.5 w-full rounded-full bg-emerald-200 dark:bg-emerald-900/50 overflow-hidden">
+                                    <div
+                                      className="h-full bg-emerald-500 transition-all duration-300"
+                                      style={{
+                                        width: `${Math.round((aiPrefillFieldProgress.completed / aiPrefillFieldProgress.total) * 100)}%`
+                                      }}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Category progress */}
+                                {aiPrefillStatus === 'filling' && (
+                                  <div className="grid grid-cols-3 gap-2 mt-2">
+                                    {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
+                                      const info = aiPrefillCategoryProgress[cat];
+                                      if (!info?.total) return null;
+                                      const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0;
+                                      const isDone = info.status === 'done';
+                                      return (
+                                        <div key={cat} className="text-xs">
+                                          <div className="flex items-center justify-between mb-0.5">
+                                            <span className={`truncate ${isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                                              {aiPrefillCategoryLabels[cat]}
+                                            </span>
+                                            {isDone && <Check className="h-3 w-3 text-emerald-500" />}
+                                          </div>
+                                          <div className="h-1 w-full rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">
+                                            <div
+                                              className={`h-full transition-all ${isDone ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                                              style={{ width: `${percent}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 )}
                               </div>
                             )}
-                            <div className="h-2 w-full rounded-full bg-purple-200 dark:bg-purple-900/50 overflow-hidden">
-                              <div
-                                className="h-full bg-purple-500 transition-all duration-300"
-                                style={{
-                                  width: aiPrefillProgress.total > 0
-                                    ? `${Math.round((aiPrefillProgress.current / aiPrefillProgress.total) * 100)}%`
-                                    : '0%'
-                                }}
-                              />
-                            </div>
+
+                            {/* Recently completed plants */}
+                            {aiPrefillCompletedPlants.length > 0 && (
+                              <div className="border-t border-purple-200 dark:border-purple-800 pt-3 space-y-1.5">
+                                <div className="text-xs uppercase tracking-wide text-purple-600 dark:text-purple-400 opacity-70">
+                                  Recently Completed
+                                </div>
+                                <div className="space-y-1">
+                                  {aiPrefillCompletedPlants.slice().reverse().map((plant, idx) => (
+                                    <div
+                                      key={`${plant.name}-${idx}`}
+                                      className={`flex items-center gap-2 text-xs rounded px-2 py-1 ${
+                                        plant.success 
+                                          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                      }`}
+                                    >
+                                      {plant.success ? (
+                                        <Check className="h-3 w-3 flex-shrink-0" />
+                                      ) : (
+                                        <X className="h-3 w-3 flex-shrink-0" />
+                                      )}
+                                      <span className="truncate">{plant.name}</span>
+                                      {!plant.success && plant.error && (
+                                        <span className="truncate opacity-70 ml-auto text-[10px]">{plant.error}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
