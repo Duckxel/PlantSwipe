@@ -15763,6 +15763,31 @@ Your role is to provide expert, personalized gardening advice based on the user'
 - Task planning and garden management
 - Plant identification from photos
 - Growing tips based on local climate
+- **UPDATE plant health status** when you diagnose issues or improvements
+- **CREATE and MODIFY tasks** for plant care routines
+- **ADD journal entries** to record observations
+- **UPDATE plant notes** with care instructions or observations
+
+## ACTION CAPABILITIES - You Can Modify Garden Data!
+You have the ability to take actions in the user's garden. When appropriate, USE THESE TOOLS:
+
+1. **update_plant_health** - Update a plant's health status (thriving, healthy, okay, struggling, critical)
+   - Use after diagnosing plant issues
+   - Use when user reports improvements
+   
+2. **update_plant_notes** - Add or update notes on a plant
+   - Use to record care instructions, observations, or diagnoses
+   
+3. **create_task** - Create a new care task for a plant
+   - Use to set up watering schedules, fertilizing reminders, etc.
+   
+4. **complete_task** - Mark a task as complete
+   - Use when user confirms they've done a task
+   
+5. **add_journal_entry** - Add a journal entry to the garden
+   - Use to record significant observations, diagnoses, or milestones
+
+IMPORTANT: When you recommend changes (like updating health status or creating tasks), ACTUALLY DO IT using the tools. Don't just suggest - take action!
 
 ## Communication Style:
 - Warm, encouraging, and supportive
@@ -15770,20 +15795,362 @@ Your role is to provide expert, personalized gardening advice based on the user'
 - Provide practical, actionable advice
 - Break down complex topics into simple steps
 - Celebrate gardening successes with the user
+- When you take actions, confirm what you did ("I've updated the health status to..." or "I've created a watering task for...")
 
 ## Important Guidelines:
 - Base recommendations on the user's specific garden context (location, climate zone, existing plants)
 - Consider seasonal timing when giving advice
 - If you're unsure about something, say so and suggest how they might find more info
 - When analyzing plant photos, be thorough but honest about uncertainty
-- Suggest using the app's features (tasks, journal, etc.) when relevant
+- TAKE ACTION when appropriate - update statuses, create tasks, add notes
 
 ## When Helping with Tasks:
 - Be specific about timing and frequency
 - Consider the user's existing task load
 - Prioritize based on plant health needs
+- CREATE the tasks directly, don't just suggest them
 
 Always aim to help the user become a more confident and successful gardener!`
+
+// Define tools that the AI can use to modify garden data
+const APHYLIA_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'update_plant_health',
+      description: 'Update the health status of a plant in the garden. Use this after diagnosing plant issues or when the user reports changes in plant health.',
+      parameters: {
+        type: 'object',
+        properties: {
+          garden_plant_id: {
+            type: 'string',
+            description: 'The ID of the garden plant to update (from the context provided)'
+          },
+          health_status: {
+            type: 'string',
+            enum: ['thriving', 'healthy', 'okay', 'struggling', 'critical'],
+            description: 'The new health status for the plant'
+          },
+          reason: {
+            type: 'string',
+            description: 'Brief explanation for the health status change'
+          }
+        },
+        required: ['garden_plant_id', 'health_status']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_plant_notes',
+      description: 'Update or append notes for a plant. Use this to record observations, care instructions, or diagnoses.',
+      parameters: {
+        type: 'object',
+        properties: {
+          garden_plant_id: {
+            type: 'string',
+            description: 'The ID of the garden plant to update'
+          },
+          notes: {
+            type: 'string',
+            description: 'The notes to add or update for this plant'
+          },
+          append: {
+            type: 'boolean',
+            description: 'If true, append to existing notes. If false, replace notes.',
+            default: true
+          }
+        },
+        required: ['garden_plant_id', 'notes']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_task',
+      description: 'Create a new care task for a plant. Use this to set up watering schedules, fertilizing reminders, pruning tasks, etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          garden_plant_id: {
+            type: 'string',
+            description: 'The ID of the garden plant this task is for'
+          },
+          task_type: {
+            type: 'string',
+            enum: ['water', 'fertilize', 'harvest', 'cut', 'custom'],
+            description: 'The type of task'
+          },
+          custom_name: {
+            type: 'string',
+            description: 'Custom name for the task (required if task_type is custom)'
+          },
+          schedule_type: {
+            type: 'string',
+            enum: ['once', 'daily', 'weekly', 'biweekly', 'monthly'],
+            description: 'How often this task should repeat'
+          },
+          due_date: {
+            type: 'string',
+            description: 'When the task is first due (ISO date string)'
+          }
+        },
+        required: ['garden_plant_id', 'task_type', 'schedule_type']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'complete_task',
+      description: 'Mark a task occurrence as complete. Use when user confirms they have completed a task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'The ID of the task to complete'
+          },
+          notes: {
+            type: 'string',
+            description: 'Optional notes about completing this task'
+          }
+        },
+        required: ['task_id']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_journal_entry',
+      description: 'Add a journal entry to the garden. Use to record significant observations, diagnoses, milestones, or summaries.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Title for the journal entry'
+          },
+          content: {
+            type: 'string',
+            description: 'The content/body of the journal entry'
+          },
+          mood: {
+            type: 'string',
+            enum: ['blooming', 'thriving', 'sprouting', 'resting', 'wilting'],
+            description: 'The mood/sentiment for this entry'
+          },
+          plants_mentioned: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of garden_plant_ids mentioned in this entry'
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags for this journal entry (e.g., diagnosis, milestone, observation)'
+          }
+        },
+        required: ['title', 'content']
+      }
+    }
+  }
+]
+
+// Execute a tool call from the AI
+async function executeAphyliaTool(toolName, args, gardenId, userId) {
+  if (!sql) return { success: false, error: 'Database not available' }
+  
+  try {
+    switch (toolName) {
+      case 'update_plant_health': {
+        const { garden_plant_id, health_status, reason } = args
+        
+        // Verify the plant belongs to this garden and user has access
+        const checkRows = await sql`
+          select gp.id from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        // Update the health status
+        await sql`
+          update public.garden_plants
+          set health_status = ${health_status},
+              last_health_update = now()
+          where id = ${garden_plant_id}
+        `
+        
+        // Log the activity
+        const logMsg = 'Health status updated to ' + health_status + (reason ? ': ' + reason : '')
+        await sql`
+          insert into public.garden_activity_logs (garden_id, actor_id, kind, message, plant_name)
+          select ${gardenId}, ${userId}, 'plant_updated', 
+                 ${logMsg},
+                 coalesce(gp.nickname, p.name)
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.id = ${garden_plant_id}
+        `
+        
+        return { success: true, message: 'Updated plant health to ' + health_status }
+      }
+      
+      case 'update_plant_notes': {
+        const { garden_plant_id, notes, append = true } = args
+        
+        // Verify access
+        const checkRows = await sql`
+          select gp.id, gp.notes as existing_notes from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        const existingNotes = checkRows[0].existing_notes || ''
+        const newNotes = append && existingNotes 
+          ? existingNotes + '\n\n' + notes 
+          : notes
+        
+        await sql`
+          update public.garden_plants
+          set notes = ${newNotes}
+          where id = ${garden_plant_id}
+        `
+        
+        return { success: true, message: 'Plant notes updated' }
+      }
+      
+      case 'create_task': {
+        const { garden_plant_id, task_type, custom_name, schedule_type, due_date } = args
+        
+        // Verify access
+        const checkRows = await sql`
+          select gp.id from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        // Map schedule type to interval
+        const intervalMap = {
+          'once': { kind: 'one_time_date', amount: null, unit: null },
+          'daily': { kind: 'repeat_duration', amount: 1, unit: 'day' },
+          'weekly': { kind: 'repeat_duration', amount: 1, unit: 'week' },
+          'biweekly': { kind: 'repeat_duration', amount: 2, unit: 'week' },
+          'monthly': { kind: 'repeat_duration', amount: 1, unit: 'month' }
+        }
+        const schedule = intervalMap[schedule_type] || intervalMap['weekly']
+        
+        const dueAt = due_date ? new Date(due_date) : new Date()
+        
+        // Create the task
+        const taskRows = await sql`
+          insert into public.garden_plant_tasks 
+            (garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit)
+          values 
+            (${gardenId}, ${garden_plant_id}, ${task_type}, ${custom_name || null}, 
+             ${schedule.kind}, ${dueAt}, ${schedule.amount}, ${schedule.unit})
+          returning id
+        `
+        
+        // Create first occurrence
+        await sql`
+          insert into public.garden_plant_task_occurrences (task_id, garden_plant_id, due_at)
+          values (${taskRows[0].id}, ${garden_plant_id}, ${dueAt})
+        `
+        
+        return { success: true, message: 'Created ' + task_type + ' task', taskId: taskRows[0].id }
+      }
+      
+      case 'complete_task': {
+        const { task_id } = args
+        
+        // Find the latest uncompleted occurrence for this task
+        const occRows = await sql`
+          select o.id, o.completed_count, o.required_count
+          from public.garden_plant_task_occurrences o
+          join public.garden_plant_tasks t on t.id = o.task_id
+          join public.garden_members gm on gm.garden_id = t.garden_id
+          where t.id = ${task_id}
+            and t.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+            and o.completed_at is null
+          order by o.due_at asc
+          limit 1
+        `
+        
+        if (occRows.length === 0) {
+          return { success: false, error: 'No pending occurrence found for this task' }
+        }
+        
+        const occ = occRows[0]
+        const newCount = (occ.completed_count || 0) + 1
+        const isComplete = newCount >= (occ.required_count || 1)
+        
+        await sql`
+          update public.garden_plant_task_occurrences
+          set completed_count = ${newCount},
+              completed_at = ${isComplete ? new Date() : null}
+          where id = ${occ.id}
+        `
+        
+        // Record who completed it
+        await sql`
+          insert into public.garden_task_user_completions (occurrence_id, user_id, increment)
+          values (${occ.id}, ${userId}, 1)
+        `
+        
+        return { success: true, message: isComplete ? 'Task completed!' : 'Task progress: ' + newCount + '/' + (occ.required_count || 1) }
+      }
+      
+      case 'add_journal_entry': {
+        const { title, content, mood, plants_mentioned, tags } = args
+        
+        // Verify user has access to this garden
+        const checkRows = await sql`
+          select 1 from public.garden_members
+          where garden_id = ${gardenId} and user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Access denied' }
+        }
+        
+        await sql`
+          insert into public.garden_journal_entries 
+            (garden_id, user_id, entry_date, title, content, mood, plants_mentioned, tags)
+          values 
+            (${gardenId}, ${userId}, current_date, ${title}, ${content}, 
+             ${mood || null}, ${plants_mentioned || []}, ${tags || []})
+        `
+        
+        return { success: true, message: 'Journal entry added' }
+      }
+      
+      default:
+        return { success: false, error: 'Unknown tool: ' + toolName }
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Tool execution error (' + toolName + '):', err)
+    return { success: false, error: err.message || 'Tool execution failed' }
+  }
+}
 
 // Build COMPREHENSIVE context string for the AI from ALL garden data
 async function buildGardenContextString(context) {
@@ -16726,6 +17093,9 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       })
     }
     
+    // Get garden ID for tool execution
+    const gardenIdForTools = gardenContext?.gardenId || context.garden?.gardenId
+    
     if (stream) {
       // Streaming response using SSE
       res.setHeader('Content-Type', 'text/event-stream')
@@ -16737,9 +17107,75 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`)
       
       try {
+        // First, make a non-streaming call with tools to check if AI wants to use any
+        let messagesWithTools = [...openaiMessages]
+        let toolResults = []
+        let toolCallsExecuted = []
+        
+        if (gardenIdForTools) {
+          // Only enable tools if we have a garden context
+          const initialResponse = await openai.chat.completions.create({
+            model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+            messages: messagesWithTools,
+            tools: APHYLIA_TOOLS,
+            tool_choice: 'auto',
+            max_tokens: 2048,
+            temperature: 0.7
+          })
+          
+          const initialMessage = initialResponse.choices?.[0]?.message
+          
+          // Check if AI wants to use tools
+          if (initialMessage?.tool_calls && initialMessage.tool_calls.length > 0) {
+            // Notify client that tools are being executed
+            res.write(`data: ${JSON.stringify({ type: 'tool_start', tools: initialMessage.tool_calls.map(t => t.function.name) })}\n\n`)
+            
+            // Add assistant message with tool calls to conversation
+            messagesWithTools.push({
+              role: 'assistant',
+              content: initialMessage.content || null,
+              tool_calls: initialMessage.tool_calls
+            })
+            
+            // Execute each tool call
+            for (const toolCall of initialMessage.tool_calls) {
+              const toolName = toolCall.function.name
+              let toolArgs = {}
+              try {
+                toolArgs = JSON.parse(toolCall.function.arguments || '{}')
+              } catch (e) {
+                console.warn('[aphylia-chat] Failed to parse tool arguments:', e)
+              }
+              
+              console.log(`[aphylia-chat] Executing tool: ${toolName}`, toolArgs)
+              
+              const result = await executeAphyliaTool(toolName, toolArgs, gardenIdForTools, user.id)
+              
+              toolCallsExecuted.push({
+                tool: toolName,
+                args: toolArgs,
+                result: result
+              })
+              
+              // Add tool result to conversation
+              messagesWithTools.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(result)
+              })
+              
+              toolResults.push(result)
+            }
+            
+            // Notify client that tools are done
+            res.write(`data: ${JSON.stringify({ type: 'tool_end', results: toolCallsExecuted })}\n\n`)
+          }
+        }
+        
+        // Now stream the final response (with tool results if any)
         const streamResponse = await openai.chat.completions.create({
           model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
-          messages: openaiMessages,
+          messages: messagesWithTools,
           stream: true,
           max_tokens: 2048,
           temperature: 0.7
@@ -16769,7 +17205,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
             id: messageId,
             role: 'assistant',
             content: fullContent,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            toolCalls: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined
           },
           usage: {
             totalTokens
@@ -16783,10 +17220,57 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       
       res.end()
     } else {
-      // Non-streaming response
+      // Non-streaming response with tools
+      let messagesWithTools = [...openaiMessages]
+      let toolCallsExecuted = []
+      
+      if (gardenIdForTools) {
+        const initialResponse = await openai.chat.completions.create({
+          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          messages: messagesWithTools,
+          tools: APHYLIA_TOOLS,
+          tool_choice: 'auto',
+          max_tokens: 2048,
+          temperature: 0.7
+        })
+        
+        const initialMessage = initialResponse.choices?.[0]?.message
+        
+        if (initialMessage?.tool_calls && initialMessage.tool_calls.length > 0) {
+          messagesWithTools.push({
+            role: 'assistant',
+            content: initialMessage.content || null,
+            tool_calls: initialMessage.tool_calls
+          })
+          
+          for (const toolCall of initialMessage.tool_calls) {
+            const toolName = toolCall.function.name
+            let toolArgs = {}
+            try {
+              toolArgs = JSON.parse(toolCall.function.arguments || '{}')
+            } catch (e) { }
+            
+            const result = await executeAphyliaTool(toolName, toolArgs, gardenIdForTools, user.id)
+            
+            toolCallsExecuted.push({
+              tool: toolName,
+              args: toolArgs,
+              result: result
+            })
+            
+            messagesWithTools.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result)
+            })
+          }
+        }
+      }
+      
+      // Final response
       const response = await openai.chat.completions.create({
         model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
-        messages: openaiMessages,
+        messages: messagesWithTools,
         max_tokens: 2048,
         temperature: 0.7
       })
@@ -16799,7 +17283,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           id: messageId,
           role: 'assistant',
           content: assistantMessage?.content || '',
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          toolCalls: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined
         },
         usage: {
           promptTokens: response.usage?.prompt_tokens || 0,
