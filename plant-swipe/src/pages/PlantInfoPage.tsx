@@ -1080,7 +1080,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const fertilizerAdvice = formatTextValue(plantCare.adviceFertilizer)
       const medicinalNotes = formatTextValue(usage.adviceMedicinal)
       const infusionNotes = formatTextValue(usage.adviceInfusion)
-      const adminCommentary = formatTextValue(meta.adminCommentary)
+      // adminCommentary hidden from public view
       const createdTimestamp = formatTimestampDetailed(meta.createdAt ?? meta.createdTime)
       const updatedTimestamp = formatTimestampDetailed(meta.updatedAt ?? meta.updatedTime)
       const createdByLabel = formatTextValue(meta.createdBy)
@@ -1258,7 +1258,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: t('moreInfo.labels.pests'), value: pestLabel },
         { label: t('moreInfo.labels.diseases'), value: diseaseLabel },
       ])
-      const recordItems = filterInfoItems([{ label: t('moreInfo.labels.adminCommentary'), value: adminCommentary, variant: 'note' }])
+      const recordItems: ReturnType<typeof filterInfoItems> = [] // Admin commentary hidden from public view
       const sourcesValue = formatSourcesList(misc.sources)
       const infoSections = [
         { title: t('moreInfo.sections.careHighlights'), icon: <Droplets className="h-4 w-4" />, items: careHighlights },
@@ -1478,27 +1478,27 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       {/* Info Cards Section - Dynamic grid based on content */}
         {infoSections.length > 0 && (
         <div className="space-y-3 sm:space-y-4">
-          <div className={`grid gap-3 sm:gap-4 items-start ${
+          <div className={`${
             infoSections.length === 1 
-              ? 'grid-cols-1 max-w-xl mx-auto' 
+              ? 'max-w-xl mx-auto' 
               : infoSections.length === 2 
-                ? 'grid-cols-1 sm:grid-cols-2 max-w-3xl mx-auto' 
-                : infoSections.length === 3 
-                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' 
-                  : 'grid-cols-1 sm:grid-cols-2'
-          }`}>
+                ? 'columns-1 sm:columns-2 max-w-3xl mx-auto gap-3 sm:gap-4' 
+                : 'columns-1 sm:columns-2 gap-3 sm:gap-4'
+          }`} style={{ columnFill: 'balance' }}>
             {infoSections.map((section) => (
-              <InfoCard key={section.title} title={section.title} icon={section.icon}>
-                {section.items.map((item) => (
-                  <InfoItem
-                    key={`${section.title}-${item.label}`}
-                    label={item.label}
-                    value={item.value || '—'}
-                    icon={item.icon}
-                    variant={item.variant}
-                  />
-                ))}
-              </InfoCard>
+              <div key={section.title} className="break-inside-avoid mb-3 sm:mb-4">
+                <InfoCard title={section.title} icon={section.icon}>
+                  {section.items.map((item) => (
+                    <InfoItem
+                      key={`${section.title}-${item.label}`}
+                      label={item.label}
+                      value={item.value || '—'}
+                      icon={item.icon}
+                      variant={item.variant}
+                    />
+                  ))}
+                </InfoCard>
+              </div>
             ))}
           </div>
           
