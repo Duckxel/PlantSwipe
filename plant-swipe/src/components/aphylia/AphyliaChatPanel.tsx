@@ -34,6 +34,7 @@ import type {
 } from '@/types/aphyliaChat'
 import { QUICK_ACTIONS, SLASH_COMMANDS } from '@/types/aphyliaChat'
 import { useTranslation } from 'react-i18next'
+import { AphyliaThinkingIndicator } from './AphyliaTypingAnimation'
 
 interface AphyliaChatPanelProps {
   isOpen: boolean
@@ -130,12 +131,9 @@ const ChatMessageBubble: React.FC<{ message: ChatMessage; isLatest?: boolean }> 
             : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm',
           message.error && 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800'
         )}>
-          {/* Streaming indicator */}
+          {/* 3D Streaming/Thinking indicator */}
           {isStreaming && !message.content && (
-            <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Thinking...</span>
-            </div>
+            <AphyliaThinkingIndicator compact />
           )}
           
           {/* Message content */}

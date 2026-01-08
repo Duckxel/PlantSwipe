@@ -80,6 +80,7 @@ import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLang
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
+import { AphyliaChat } from "@/components/aphylia";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
 
@@ -3503,6 +3504,19 @@ export const GardenDashboardPage: React.FC = () => {
             </DialogContent>
           </Dialog>
         </>
+      )}
+      
+      {/* Aphylia AI Chat - Only visible inside garden pages */}
+      {garden && user && (
+        <AphyliaChat 
+          showBubble={true} 
+          gardenContext={{
+            gardenId: garden.id,
+            gardenName: garden.name,
+            plantCount: plants.length,
+            privacy: garden.privacy || 'private',
+          }}
+        />
       )}
     </div>
   );
