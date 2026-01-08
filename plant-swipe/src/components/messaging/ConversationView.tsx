@@ -16,7 +16,8 @@ import {
   Link as LinkIcon,
   X,
   Image as ImageIcon,
-  Plus
+  Plus,
+  Camera
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { 
@@ -35,6 +36,7 @@ import { supabase } from '@/lib/supabaseClient'
 import type { Message, LinkType, LinkPreview } from '@/types/messaging'
 import { MessageBubble } from './MessageBubble'
 import { LinkShareDialog } from './LinkShareDialog'
+import { CameraCapture } from './CameraCapture'
 
 interface ConversationViewProps {
   conversationId: string
@@ -67,6 +69,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const [linkShareOpen, setLinkShareOpen] = React.useState(false)
   const [showAttachMenu, setShowAttachMenu] = React.useState(false)
   const [uploadingImage, setUploadingImage] = React.useState(false)
+  const [cameraOpen, setCameraOpen] = React.useState(false)
   const [pendingLink, setPendingLink] = React.useState<{
     type: LinkType
     id: string
@@ -242,11 +245,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   }
   
-  // Handle image upload
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    
+  // Handle image upload (shared logic for file picker and camera)
+  const uploadAndSendImage = async (file: File) => {
     setUploadingImage(true)
     setShowAttachMenu(false)
     setError(null)
@@ -269,10 +269,24 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       setError(e?.message || 'Failed to upload image')
     } finally {
       setUploadingImage(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
     }
+  }
+  
+  // Handle image selection from file picker
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    await uploadAndSendImage(file)
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+  
+  // Handle camera capture
+  const handleCameraCapture = async (file: File) => {
+    await uploadAndSendImage(file)
   }
   
   // Handle keyboard shortcuts
@@ -565,13 +579,25 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             {showAttachMenu && (
               <div className="absolute bottom-full left-0 mb-2 p-2 bg-white dark:bg-[#2a2a2d] rounded-2xl shadow-xl border border-stone-200 dark:border-[#3a3a3d] flex gap-2">
                 <button
+                  onClick={() => {
+                    setShowAttachMenu(false)
+                    setCameraOpen(true)
+                  }}
+                  className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-[#3a3a3d] transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <Camera className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <span className="text-xs text-stone-600 dark:text-stone-300">{t('messages.camera', { defaultValue: 'Camera' })}</span>
+                </button>
+                <button
                   onClick={() => fileInputRef.current?.click()}
                   className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-[#3a3a3d] transition-colors"
                 >
                   <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
                     <ImageIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                   </div>
-                  <span className="text-xs text-stone-600 dark:text-stone-300">{t('messages.photo', { defaultValue: 'Photo' })}</span>
+                  <span className="text-xs text-stone-600 dark:text-stone-300">{t('messages.gallery', { defaultValue: 'Gallery' })}</span>
                 </button>
                 <button
                   onClick={() => {
@@ -643,6 +669,13 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         open={linkShareOpen}
         onOpenChange={setLinkShareOpen}
         onShare={handleLinkShare}
+      />
+      
+      {/* Camera Capture Dialog */}
+      <CameraCapture
+        open={cameraOpen}
+        onOpenChange={setCameraOpen}
+        onCapture={handleCameraCapture}
       />
     </div>
   )
