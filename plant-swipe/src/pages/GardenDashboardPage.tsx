@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React from "react";
+import ReactDOM from "react-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useParams, Routes, Route, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
@@ -3506,36 +3507,38 @@ export const GardenDashboardPage: React.FC = () => {
         </>
       )}
       
-      {/* Aphylia AI Chat - Only visible for garden members */}
+      {/* Aphylia AI Chat - Only visible for garden members, rendered via Portal */}
       {garden && user && isMember && (
-        <AphyliaChatWrapper 
-          garden={garden}
-          plantCount={plants.length}
-        />
+        <AphyliaChatPortal gardenId={garden.id} gardenName={garden.name} />
       )}
     </div>
   );
 };
 
-// Wrapper to memoize gardenContext and prevent infinite re-renders
-function AphyliaChatWrapper({ 
-  garden, 
-  plantCount 
-}: { 
-  garden: Garden
-  plantCount: number 
-}) {
-  const gardenContext = React.useMemo(() => ({
-    gardenId: garden.id,
-    gardenName: garden.name,
-    plantCount,
-  }), [garden.id, garden.name, plantCount])
+// Portal wrapper to render chat outside the main component tree
+// This prevents the chat from interfering with React Router rendering
+function AphyliaChatPortal({ gardenId, gardenName }: { gardenId: string; gardenName: string }) {
+  const [mounted, setMounted] = React.useState(false)
   
-  return (
+  React.useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+  
+  const gardenContext = React.useMemo(() => ({
+    gardenId,
+    gardenName,
+  }), [gardenId, gardenName])
+  
+  if (!mounted) return null
+  
+  // Use portal to render outside the main component tree
+  return ReactDOM.createPortal(
     <AphyliaChat 
       showBubble={true} 
       gardenContext={gardenContext}
-    />
+    />,
+    document.body
   )
 }
 
