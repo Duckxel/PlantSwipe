@@ -3508,19 +3508,36 @@ export const GardenDashboardPage: React.FC = () => {
       
       {/* Aphylia AI Chat - Only visible for garden members */}
       {garden && user && isMember && (
-        <AphyliaChat 
-          showBubble={true} 
-          gardenContext={{
-            gardenId: garden.id,
-            gardenName: garden.name,
-            plantCount: plants.length,
-            privacy: garden.privacy || 'private',
-          }}
+        <AphyliaChatWrapper 
+          garden={garden}
+          plantCount={plants.length}
         />
       )}
     </div>
   );
 };
+
+// Wrapper to memoize gardenContext and prevent infinite re-renders
+function AphyliaChatWrapper({ 
+  garden, 
+  plantCount 
+}: { 
+  garden: Garden
+  plantCount: number 
+}) {
+  const gardenContext = React.useMemo(() => ({
+    gardenId: garden.id,
+    gardenName: garden.name,
+    plantCount,
+  }), [garden.id, garden.name, plantCount])
+  
+  return (
+    <AphyliaChat 
+      showBubble={true} 
+      gardenContext={gardenContext}
+    />
+  )
+}
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RoutineSection({

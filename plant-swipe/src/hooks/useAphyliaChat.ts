@@ -93,18 +93,28 @@ export function useAphyliaChat(options?: UseAphyliaChatOptions): UseAphyliaChatR
   // Track streaming state for external consumers
   const [isStreaming, setIsStreaming] = useState(false)
   
-  // Update context when options change
-  useEffect(() => {
-    if (options?.gardenContext !== undefined) {
-      setState(prev => ({ ...prev, currentGarden: options.gardenContext || null }))
-    }
-  }, [options?.gardenContext])
+  // Update context when options change - use JSON serialization to avoid infinite loops
+  // from object reference changes
+  const gardenContextJson = options?.gardenContext ? JSON.stringify(options.gardenContext) : null
+  const plantContextJson = options?.plantContext ? JSON.stringify(options.plantContext) : null
   
   useEffect(() => {
-    if (options?.plantContext !== undefined) {
-      setState(prev => ({ ...prev, currentPlant: options.plantContext || null }))
-    }
-  }, [options?.plantContext])
+    const ctx = gardenContextJson ? JSON.parse(gardenContextJson) : null
+    setState(prev => {
+      // Only update if actually different
+      if (JSON.stringify(prev.currentGarden) === gardenContextJson) return prev
+      return { ...prev, currentGarden: ctx }
+    })
+  }, [gardenContextJson])
+  
+  useEffect(() => {
+    const ctx = plantContextJson ? JSON.parse(plantContextJson) : null
+    setState(prev => {
+      // Only update if actually different
+      if (JSON.stringify(prev.currentPlant) === plantContextJson) return prev
+      return { ...prev, currentPlant: ctx }
+    })
+  }, [plantContextJson])
   
   // Open chat panel
   const openChat = useCallback(() => {
