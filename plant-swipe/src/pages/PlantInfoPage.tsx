@@ -1097,8 +1097,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         t('moreInfo.values.feedsNeighbors'),
         t('moreInfo.values.neutralGroundEffect'),
       )
-      const supportDescriptor = formatBooleanDescriptor(growth.tutoring, t('moreInfo.values.needsSupport'), t('moreInfo.values.selfSupporting'))
-      const transplantDescriptor = formatBooleanDescriptor(growth.transplanting, t('moreInfo.values.transplantRecommended'), t('moreInfo.values.noTransplantNeeded'))
+      const supportDescriptor = formatBooleanDescriptor(growth.tutoring, t('moreInfo.values.needsSupport'), t('moreInfo.values.selfSupporting'), true)
+      const transplantDescriptor = formatBooleanDescriptor(growth.transplanting, t('moreInfo.values.transplantRecommended'), t('moreInfo.values.noTransplantNeeded'), true)
       const fragranceDescriptor = formatBooleanDescriptor(identity.scent, t('moreInfo.values.fragrant'), t('moreInfo.values.neutralScent'))
       const spikedDescriptor = formatBooleanDescriptor(identity.spiked, t('moreInfo.values.hasThorns'), t('moreInfo.values.smoothStems'))
       const recipesIdeasList = compactStrings(usage.recipesIdeas)
@@ -2090,9 +2090,10 @@ const compactStrings = (values?: (string | null | undefined)[]) => {
     .filter((value) => Boolean(value) && isMeaningfulString(value))
 }
 
-const formatBooleanDescriptor = (value: boolean | null | undefined, positive: string, negative: string) => {
+const formatBooleanDescriptor = (value: boolean | null | undefined, positive: string, negative: string, showNegative = false) => {
   if (value === undefined || value === null) return null
-  return value ? positive : negative
+  if (value) return positive
+  return showNegative ? negative : null
 }
 
 const formatTemperatureRange = (min?: number | null, ideal?: number | null, max?: number | null) => {
