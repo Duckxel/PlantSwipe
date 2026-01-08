@@ -245,11 +245,32 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   }
   
+  // Allowed image types for upload
+  const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
+  
   // Handle image upload (shared logic for file picker and camera)
   const uploadAndSendImage = async (file: File) => {
-    setUploadingImage(true)
     setShowAttachMenu(false)
     setError(null)
+    
+    // Validate file type before upload
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setError(t('messages.invalidImageType', { 
+        defaultValue: 'Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.' 
+      }))
+      return
+    }
+    
+    // Validate file size before upload
+    if (file.size > MAX_IMAGE_SIZE) {
+      setError(t('messages.imageTooLarge', { 
+        defaultValue: 'Image too large. Maximum size is 10MB.' 
+      }))
+      return
+    }
+    
+    setUploadingImage(true)
     
     try {
       const { url } = await uploadMessageImage(file)
@@ -264,9 +285,10 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         '📷 ' + t('messages.sentImage', { defaultValue: 'Sent an image' }),
         conversationId
       ).catch(() => {})
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[conversation] Failed to upload image:', e)
-      setError(e?.message || 'Failed to upload image')
+      const error = e as { message?: string }
+      setError(error?.message || t('messages.uploadFailed', { defaultValue: 'Failed to upload image' }))
     } finally {
       setUploadingImage(false)
     }
