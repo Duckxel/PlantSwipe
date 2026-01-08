@@ -222,7 +222,7 @@ const ContextChipBadge: React.FC<{
   )
 }
 
-// Quick action button
+// Quick action button - larger on mobile for better touch targets
 const QuickActionButton: React.FC<{
   action: typeof QUICK_ACTIONS[0]
   onClick: () => void
@@ -235,17 +235,18 @@ const QuickActionButton: React.FC<{
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex items-center gap-2 px-3 py-2 rounded-xl',
+        'flex items-center gap-3 md:gap-2 px-4 md:px-3 py-3 md:py-2 rounded-xl',
         'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700',
         'hover:border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20',
-        'transition-all duration-200 text-sm',
+        'active:bg-emerald-100 dark:active:bg-emerald-900/30',
+        'transition-all duration-200 text-base md:text-sm',
         'disabled:opacity-50 disabled:cursor-not-allowed'
       )}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
     >
-      <span className="text-lg">{action.icon}</span>
-      <span className="text-gray-700 dark:text-gray-300">
+      <span className="text-xl md:text-lg">{action.icon}</span>
+      <span className="text-gray-700 dark:text-gray-300 text-left">
         {t(action.labelKey, action.id)}
       </span>
     </motion.button>
@@ -370,25 +371,42 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
           className={cn(
-            'fixed bottom-24 right-6 z-50',
-            'w-[400px] max-w-[calc(100vw-48px)]',
+            // Mobile: full screen with safe areas
+            'fixed z-50',
+            'inset-0 md:inset-auto',
+            // Desktop: positioned panel
+            'md:bottom-24 md:right-6',
+            'md:w-[400px] md:max-w-[calc(100vw-48px)]',
             'bg-white dark:bg-gray-900',
-            'rounded-2xl shadow-2xl',
-            'border border-gray-200 dark:border-gray-800',
+            'md:rounded-2xl shadow-2xl',
+            'md:border md:border-gray-200 md:dark:border-gray-800',
             'flex flex-col',
             'overflow-hidden',
-            isMinimized ? 'h-14' : 'h-[600px] max-h-[calc(100vh-140px)]',
+            // Height handling
+            isMinimized 
+              ? 'h-14' 
+              : 'h-full md:h-[600px] md:max-h-[calc(100vh-140px)]',
             className
           )}
         >
-          {/* Header */}
-          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-emerald-500 to-emerald-600">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
+          {/* Header - taller on mobile with safe area */}
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 md:py-3 pt-[max(env(safe-area-inset-top),12px)] border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-emerald-500 to-emerald-600">
+            <div className="flex items-center gap-3">
+              {/* Close button on mobile (acts as back) */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                className="w-9 h-9 md:hidden text-white/90 hover:text-white hover:bg-white/20 -ml-1"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+              
+              <div className="w-9 h-9 md:w-8 md:h-8 rounded-full bg-white/20 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 md:w-4 md:h-4 text-white" />
               </div>
               <div>
-                <h3 className="text-white font-semibold text-sm">Aphylia</h3>
+                <h3 className="text-white font-semibold text-base md:text-sm">Aphylia</h3>
                 <p className="text-emerald-100 text-xs">
                   {gardenName ? `Helping with ${gardenName}` : 'Your gardening assistant'}
                 </p>
@@ -401,25 +419,27 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                   variant="ghost"
                   size="icon"
                   onClick={onClearMessages}
-                  className="w-8 h-8 text-white/70 hover:text-white hover:bg-white/20"
+                  className="w-9 h-9 md:w-8 md:h-8 text-white/70 hover:text-white hover:bg-white/20"
                   title="Clear chat"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-5 h-5 md:w-4 md:h-4" />
                 </Button>
               )}
+              {/* Minimize only on desktop */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={onToggleMinimize}
-                className="w-8 h-8 text-white/70 hover:text-white hover:bg-white/20"
+                className="hidden md:flex w-8 h-8 text-white/70 hover:text-white hover:bg-white/20"
               >
                 {isMinimized ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </Button>
+              {/* Close on desktop only (mobile has it on left) */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="w-8 h-8 text-white/70 hover:text-white hover:bg-white/20"
+                className="hidden md:flex w-8 h-8 text-white/70 hover:text-white hover:bg-white/20"
               >
                 <X className="w-4 h-4" />
               </Button>
@@ -432,25 +452,25 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
               <div className="flex-1 overflow-y-auto">
                 {messages.length === 0 ? (
                   /* Welcome screen with quick actions */
-                  <div className="p-4 space-y-4">
-                    <div className="text-center py-6">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
-                        <Leaf className="w-8 h-8 text-white" />
+                  <div className="p-4 md:p-4 space-y-5 md:space-y-4">
+                    <div className="text-center py-4 md:py-6">
+                      <div className="w-20 h-20 md:w-16 md:h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                        <Leaf className="w-10 h-10 md:w-8 md:h-8 text-white" />
                       </div>
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                      <h4 className="text-xl md:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 md:mb-1">
                         {t('aphylia.welcome', 'Hi! I\'m Aphylia 🌱')}
                       </h4>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                      <p className="text-base md:text-sm text-gray-500 dark:text-gray-400 px-4 md:px-0">
                         {t('aphylia.welcomeDesc', 'Your AI gardening assistant. Ask me anything about your plants!')}
                       </p>
                     </div>
                     
-                    {/* Quick actions */}
+                    {/* Quick actions - single column on mobile, 2 columns on desktop */}
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide px-1">
                         {t('aphylia.quickActions.title', 'Quick Actions')}
                       </p>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {QUICK_ACTIONS.slice(0, 6).map(action => (
                           <QuickActionButton
                             key={action.id}
@@ -581,8 +601,8 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                 )}
               </AnimatePresence>
               
-              {/* Input area */}
-              <div className="flex-shrink-0 p-3 border-t border-gray-200 dark:border-gray-800">
+              {/* Input area - with safe area padding on mobile */}
+              <div className="flex-shrink-0 p-3 pb-[max(env(safe-area-inset-bottom),12px)] md:pb-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
                 <div className="flex items-end gap-2">
                   {/* File upload button */}
                   <input
@@ -598,7 +618,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                     size="icon"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isSending}
-                    className="flex-shrink-0 w-9 h-9 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    className="flex-shrink-0 w-10 h-10 md:w-9 md:h-9 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   >
                     <ImageIcon className="w-5 h-5" />
                   </Button>
@@ -614,17 +634,17 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       disabled={isSending}
                       rows={1}
                       className={cn(
-                        'w-full px-4 py-2.5 rounded-xl resize-none',
+                        'w-full px-4 py-3 md:py-2.5 rounded-xl resize-none',
                         'bg-gray-100 dark:bg-gray-800',
                         'border border-transparent focus:border-emerald-300 dark:focus:border-emerald-700',
                         'focus:outline-none focus:ring-0',
-                        'text-sm text-gray-900 dark:text-gray-100',
+                        'text-base md:text-sm text-gray-900 dark:text-gray-100',
                         'placeholder:text-gray-400 dark:placeholder:text-gray-500',
                         'disabled:opacity-50',
                         'max-h-32'
                       )}
                       style={{
-                        minHeight: '42px',
+                        minHeight: '46px',
                         height: 'auto'
                       }}
                     />
@@ -636,7 +656,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       variant="ghost"
                       size="icon"
                       onClick={onAbortStream}
-                      className="flex-shrink-0 w-9 h-9 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="flex-shrink-0 w-10 h-10 md:w-9 md:h-9 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                     >
                       <StopCircle className="w-5 h-5" />
                     </Button>
@@ -647,8 +667,8 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       onClick={() => onSendMessage()}
                       disabled={isSending || (!input.trim() && pendingAttachments.length === 0)}
                       className={cn(
-                        'flex-shrink-0 w-9 h-9',
-                        'bg-emerald-500 hover:bg-emerald-600 text-white',
+                        'flex-shrink-0 w-10 h-10 md:w-9 md:h-9',
+                        'bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl',
                         'disabled:opacity-50 disabled:hover:bg-emerald-500'
                       )}
                     >
@@ -661,8 +681,8 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                   )}
                 </div>
                 
-                {/* Hint */}
-                <div className="mt-2 text-xs text-gray-400 text-center">
+                {/* Hint - hidden on mobile for cleaner UI */}
+                <div className="hidden md:block mt-2 text-xs text-gray-400 text-center">
                   {t('aphylia.hint', 'Type / for commands • Shift+Enter for new line')}
                 </div>
               </div>

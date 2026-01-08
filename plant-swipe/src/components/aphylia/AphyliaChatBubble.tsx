@@ -3,6 +3,7 @@
  * 
  * A floating action button that opens the AI chat panel.
  * Positioned in the bottom-right corner of the screen.
+ * On mobile, positioned above the navigation bar.
  */
 
 import React from 'react'
@@ -27,8 +28,14 @@ export const AphyliaChatBubble: React.FC<AphyliaChatBubbleProps> = ({
     <motion.button
       onClick={onClick}
       className={cn(
-        'fixed bottom-6 right-6 z-50',
-        'w-14 h-14 rounded-full',
+        // Position: above mobile nav on mobile, normal position on desktop
+        'fixed z-50',
+        // Mobile: above the nav bar (which is ~60px + safe area)
+        'bottom-[calc(70px+env(safe-area-inset-bottom))] right-4',
+        // Desktop: normal bottom-right position
+        'md:bottom-6 md:right-6',
+        // Size: slightly smaller on mobile
+        'w-12 h-12 md:w-14 md:h-14 rounded-full',
         'bg-gradient-to-br from-emerald-500 to-emerald-600',
         'hover:from-emerald-400 hover:to-emerald-500',
         'shadow-lg shadow-emerald-500/30',
