@@ -72,7 +72,7 @@ export const AphyliaChat: React.FC<AphyliaChatProps> = ({
         type: 'garden',
         id: gardenContext.gardenId,
         label: gardenContext.gardenName,
-        data: gardenContext
+        data: { ...gardenContext }
       })
     }
     
@@ -81,7 +81,7 @@ export const AphyliaChat: React.FC<AphyliaChatProps> = ({
         type: 'plant',
         id: plantContext.gardenPlantId,
         label: plantContext.nickname || plantContext.plantName,
-        data: plantContext
+        data: { ...plantContext }
       })
     }
     
