@@ -105,7 +105,7 @@ export type QuickActionId =
   | 'diagnose'
   | 'watering-schedule'
   | 'weekly-plan'
-  | 'summarize-notes'
+  | 'summarize-journal'
   | 'plant-care'
   | 'pest-help'
   | 'seasonal-tips'
@@ -249,11 +249,11 @@ export const QUICK_ACTIONS: QuickAction[] = [
     slashCommand: '/weekly-plan'
   },
   {
-    id: 'summarize-notes',
+    id: 'summarize-journal',
     icon: '📝',
-    labelKey: 'aphylia.quickActions.summarizeNotes',
+    labelKey: 'aphylia.quickActions.summarizeJournal',
     requiresGarden: true,
-    slashCommand: '/summarize-notes'
+    slashCommand: '/summarize-journal'
   },
   {
     id: 'plant-care',

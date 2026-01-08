@@ -483,7 +483,7 @@ export function useAphyliaChat(options?: UseAphyliaChatOptions): UseAphyliaChatR
       'diagnose': "Help me diagnose what's wrong with my plant. I'll share a photo.",
       'watering-schedule': "Help me create an optimal watering schedule for my garden.",
       'weekly-plan': "Create a weekly gardening plan for my garden based on current tasks and plants.",
-      'summarize-notes': "Summarize the key observations and patterns from my garden notes.",
+      'summarize-journal': "Summarize the key observations and patterns from my garden journal entries.",
       'plant-care': "Give me a comprehensive care guide for my plant.",
       'pest-help': "Help me identify and deal with a pest or disease problem.",
       'seasonal-tips': "What should I be doing in my garden this season?",

@@ -3506,8 +3506,8 @@ export const GardenDashboardPage: React.FC = () => {
         </>
       )}
       
-      {/* Aphylia AI Chat - Only visible inside garden pages */}
-      {garden && user && (
+      {/* Aphylia AI Chat - Only visible for garden members */}
+      {garden && user && isMember && (
         <AphyliaChat 
           showBubble={true} 
           gardenContext={{
