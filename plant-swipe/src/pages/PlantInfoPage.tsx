@@ -1196,7 +1196,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const usageFlavor = filterInfoItems([
         {
           label: t('moreInfo.labels.utility'),
-          value: utilityLabel || t('moreInfo.values.ornamental'),
+          value: utilityLabel,
           icon: <Palette className="h-3.5 w-3.5" />,
         },
         { label: t('moreInfo.labels.comestibleParts'), value: comestiblePartsLabel, icon: <Leaf className="h-3.5 w-3.5" /> },
@@ -1210,8 +1210,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: t('moreInfo.labels.spiceMixes'), value: spiceMixesLabel },
       ])
       const ecologyItems = filterInfoItems([
-        { label: t('moreInfo.labels.habitat'), value: habitatLabel || t('moreInfo.values.gardenAdaptable'), icon: <MapPin className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.pollinators'), value: pollenizerLabel || t('moreInfo.values.beeFriendly'), icon: <Wind className="h-3.5 w-3.5" /> },
+        { label: t('moreInfo.labels.habitat'), value: habitatLabel, icon: <MapPin className="h-3.5 w-3.5" /> },
+        { label: t('moreInfo.labels.pollinators'), value: pollenizerLabel, icon: <Wind className="h-3.5 w-3.5" /> },
         { label: t('moreInfo.labels.groundEffect'), value: groundEffectLabel, icon: <Sprout className="h-3.5 w-3.5" /> },
         { label: t('moreInfo.labels.melliferous'), value: melliferousDescriptor },
         { label: t('moreInfo.labels.greenManure'), value: manureDescriptor },
@@ -1242,17 +1242,17 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const riskItems = filterInfoItems([
         {
           label: t('moreInfo.labels.toxicityHuman'),
-          value: plant.identity?.toxicityHuman ? translateEnum(plant.identity.toxicityHuman) : t('moreInfo.values.low'),
+          value: plant.identity?.toxicityHuman ? translateEnum(plant.identity.toxicityHuman) : undefined,
           icon: <Flame className="h-3.5 w-3.5" />,
         },
         {
           label: t('moreInfo.labels.toxicityPets'),
-          value: plant.identity?.toxicityPets ? translateEnum(plant.identity.toxicityPets) : t('moreInfo.values.low'),
+          value: plant.identity?.toxicityPets ? translateEnum(plant.identity.toxicityPets) : undefined,
           icon: <Leaf className="h-3.5 w-3.5" />,
         },
         {
           label: t('moreInfo.labels.conservation'),
-          value: conservationLabel || t('moreInfo.values.stable'),
+          value: conservationLabel,
           icon: <Compass className="h-3.5 w-3.5" />,
         },
         { label: t('moreInfo.labels.pests'), value: pestLabel },
