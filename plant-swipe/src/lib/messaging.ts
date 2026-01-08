@@ -532,68 +532,77 @@ export function parseLinkUrl(url: string): { type: LinkType; id: string } | null
 
 // ===== Image Upload =====
 
+/** Allowed image types for message uploads */
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
+
+/** Result from optimized image upload */
+export type MessageImageUploadResult = {
+  ok?: boolean
+  url?: string | null
+  bucket?: string
+  path?: string
+  mimeType?: string
+  size?: number
+  originalMimeType?: string
+  originalSize?: number
+  compressionPercent?: number | null
+  optimized?: boolean
+}
+
 /**
- * Upload an image for messaging.
- * Returns the public URL of the uploaded image.
+ * Upload an image for messaging with server-side optimization.
+ * Uses the same optimization pipeline as garden covers and admin uploads.
+ * Returns the public URL of the optimized image.
  */
-export async function uploadMessageImage(file: File): Promise<{ url: string; thumbnailUrl?: string }> {
+export async function uploadMessageImage(file: File): Promise<{ url: string }> {
   const session = (await supabase.auth.getSession()).data.session
-  if (!session?.user?.id) {
+  if (!session?.access_token) {
     throw new Error('Not authenticated')
   }
   
-  // Validate file type
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  if (!allowedTypes.includes(file.type)) {
+  // Validate file type before upload
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Only image files are supported.')
+  }
+  
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
     throw new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.')
   }
   
   // Validate file size (max 10MB)
-  const maxSize = 10 * 1024 * 1024
-  if (file.size > maxSize) {
+  if (file.size > MAX_IMAGE_SIZE) {
     throw new Error('File too large. Maximum size is 10MB.')
   }
   
-  // Generate unique filename
-  const ext = file.name.split('.').pop() || 'jpg'
-  const timestamp = Date.now()
-  const randomId = Math.random().toString(36).substring(2, 10)
-  const filename = `${session.user.id}/${timestamp}-${randomId}.${ext}`
+  // Upload via server API for optimization
+  const formData = new FormData()
+  formData.append('file', file)
   
-  // Upload to Supabase storage
-  const { error } = await supabase.storage
-    .from('message-images')
-    .upload(filename, file, {
-      cacheControl: '31536000', // 1 year cache
-      upsert: false
-    })
+  const response = await fetch('/api/messages/upload-image', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`
+    },
+    body: formData,
+    credentials: 'same-origin'
+  })
   
-  if (error) {
-    // If bucket doesn't exist, try uploads bucket as fallback
-    const { error: fallbackError } = await supabase.storage
-      .from('uploads')
-      .upload(`messages/${filename}`, file, {
-        cacheControl: '31536000',
-        upsert: false
-      })
-    
-    if (fallbackError) {
-      console.error('[messaging] Failed to upload image:', fallbackError)
-      throw new Error('Failed to upload image')
-    }
-    
-    const { data: urlData } = supabase.storage
-      .from('uploads')
-      .getPublicUrl(`messages/${filename}`)
-    
-    return { url: urlData.publicUrl }
+  const data = await response.json().catch(() => null) as MessageImageUploadResult | { error?: string } | null
+  
+  if (!response.ok) {
+    const errorMsg = (data as { error?: string })?.error || 'Failed to upload image'
+    throw new Error(errorMsg)
   }
   
-  const { data: urlData } = supabase.storage
-    .from('message-images')
-    .getPublicUrl(filename)
+  const result = data as MessageImageUploadResult
+  const url = result?.url
   
-  return { url: urlData.publicUrl }
+  if (!url) {
+    throw new Error('Upload succeeded but no public URL was returned.')
+  }
+  
+  return { url }
 }
 
 /**
