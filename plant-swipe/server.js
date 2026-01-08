@@ -16008,6 +16008,75 @@ async function buildGardenContextString(context) {
     }
   }
   
+  // Completed tasks with attribution (who did what)
+  if (context.completedTasks && context.completedTasks.length > 0) {
+    parts.push(`\n## Recently Completed Tasks (last 30 days)`)
+    
+    // Group by date
+    const tasksByDate = {}
+    for (const task of context.completedTasks) {
+      const dateStr = new Date(task.completedAt).toLocaleDateString()
+      if (!tasksByDate[dateStr]) tasksByDate[dateStr] = []
+      tasksByDate[dateStr].push(task)
+    }
+    
+    for (const [date, tasks] of Object.entries(tasksByDate).slice(0, 7)) {
+      parts.push(`\n### ${date}`)
+      for (const task of tasks.slice(0, 10)) {
+        let taskInfo = `- ✅ ${task.customName || task.taskType}`
+        if (task.plantName) taskInfo += ` for "${task.plantName}"`
+        
+        // Who completed it
+        if (task.completedBy && task.completedBy.length > 0) {
+          const names = task.completedBy.map(c => c.userName).filter(Boolean)
+          if (names.length > 0) {
+            taskInfo += ` (by ${names.join(', ')})`
+          }
+        }
+        parts.push(taskInfo)
+      }
+    }
+  }
+  
+  // Weekly AI gardening advice history
+  if (context.weeklyAdvice && context.weeklyAdvice.length > 0) {
+    parts.push(`\n## Weekly Gardening Advice History`)
+    
+    for (const advice of context.weeklyAdvice.slice(0, 4)) {
+      const weekDate = new Date(advice.weekStart)
+      parts.push(`\n### Week of ${weekDate.toLocaleDateString()}`)
+      
+      if (advice.summary) {
+        parts.push(`**Summary:** ${advice.summary}`)
+      }
+      
+      if (advice.focusAreas && advice.focusAreas.length > 0) {
+        parts.push(`**Focus areas:** ${advice.focusAreas.join(', ')}`)
+      }
+      
+      if (advice.improvementScore !== null && advice.improvementScore !== undefined) {
+        parts.push(`**Improvement score:** ${advice.improvementScore}/100`)
+      }
+      
+      if (advice.adviceText) {
+        // Truncate very long advice
+        const text = advice.adviceText.length > 600 
+          ? advice.adviceText.substring(0, 600) + '...'
+          : advice.adviceText
+        parts.push(`**Advice:** ${text}`)
+      }
+      
+      if (advice.plantTips && advice.plantTips.length > 0) {
+        parts.push(`**Plant-specific tips:**`)
+        for (const tip of advice.plantTips.slice(0, 5)) {
+          if (tip.plantName && tip.tip) {
+            parts.push(`  - ${tip.plantName}: ${tip.tip}`)
+          }
+        }
+      }
+    }
+  }
+  
   // Current date/time context
   const now = new Date()
   const month = now.toLocaleString('en', { month: 'long' })
@@ -16271,7 +16340,7 @@ async function fetchTasksContext(gardenId) {
   }
 }
 
-// Fetch ALL journal entries for a garden
+// Fetch ALL journal entries for a garden (using correct table name)
 async function fetchJournalContext(gardenId) {
   if (!sql || !gardenId) return []
   
@@ -16282,41 +16351,145 @@ async function fetchJournalContext(gardenId) {
         j.title,
         j.content,
         j.mood,
-        j.weather,
-        j.temperature,
+        j.weather_snapshot,
+        j.entry_date,
+        j.tags,
+        j.ai_feedback,
         j.created_at,
         j.updated_at,
-        p.display_name as author_name,
-        (
-          select json_agg(json_build_object(
-            'plantName', coalesce(gp.nickname, pl.name),
-            'plantId', jp.garden_plant_id
-          ))
-          from public.journal_plants jp
-          left join public.garden_plants gp on gp.id = jp.garden_plant_id
-          left join public.plants pl on pl.id = gp.plant_id
-          where jp.journal_entry_id = j.id
-        ) as plants_mentioned
-      from public.journal_entries j
+        j.plants_mentioned,
+        p.display_name as author_name
+      from public.garden_journal_entries j
       left join public.profiles p on p.id = j.user_id
       where j.garden_id = ${gardenId}
-      order by j.created_at desc
+        and j.is_private = false
+      order by j.entry_date desc, j.created_at desc
+      limit 50
+    `
+    
+    // Fetch plant names for mentioned plants
+    const allPlantIds = rows.flatMap(r => r.plants_mentioned || []).filter(Boolean)
+    let plantNameMap = {}
+    if (allPlantIds.length > 0) {
+      try {
+        const plantRows = await sql`
+          select gp.id, coalesce(gp.nickname, p.name) as name
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.id = any(${allPlantIds}::uuid[])
+        `
+        for (const pr of plantRows) {
+          plantNameMap[pr.id] = pr.name
+        }
+      } catch { }
+    }
+    
+    return rows.map(row => {
+      const weather = row.weather_snapshot || {}
+      return {
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        mood: row.mood,
+        weather: weather.description || weather.main,
+        temperature: weather.temp_c ? `${weather.temp_c}°C` : null,
+        entryDate: row.entry_date,
+        tags: row.tags || [],
+        aiFeedback: row.ai_feedback,
+        authorName: row.author_name,
+        createdAt: row.created_at,
+        plantsMentioned: (row.plants_mentioned || []).map(id => ({
+          plantId: id,
+          plantName: plantNameMap[id] || 'Unknown plant'
+        }))
+      }
+    })
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching journal context:', err)
+    return []
+  }
+}
+
+// Fetch weekly AI advice history for a garden
+async function fetchWeeklyAdviceContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    const rows = await sql`
+      select 
+        week_start,
+        advice_text,
+        advice_summary,
+        focus_areas,
+        plant_specific_tips,
+        improvement_score,
+        generated_at
+      from public.garden_ai_advice
+      where garden_id = ${gardenId}
+      order by week_start desc
+      limit 8
+    `
+    
+    return rows.map(row => ({
+      weekStart: row.week_start,
+      adviceText: row.advice_text,
+      summary: row.advice_summary,
+      focusAreas: row.focus_areas || [],
+      plantTips: row.plant_specific_tips || [],
+      improvementScore: row.improvement_score,
+      generatedAt: row.generated_at
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching weekly advice:', err)
+    return []
+  }
+}
+
+// Fetch completed tasks with who completed them
+async function fetchCompletedTasksContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    const rows = await sql`
+      select 
+        t.type as task_type,
+        t.custom_name,
+        o.completed_at,
+        o.completed_count,
+        o.required_count,
+        coalesce(gp.nickname, p.name) as plant_name,
+        (
+          select json_agg(json_build_object(
+            'userName', pr.display_name,
+            'increment', c.increment,
+            'occurredAt', c.occurred_at
+          ) order by c.occurred_at desc)
+          from public.garden_task_user_completions c
+          left join public.profiles pr on pr.id = c.user_id
+          where c.occurrence_id = o.id
+        ) as completions
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      left join public.garden_plants gp on gp.id = t.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where t.garden_id = ${gardenId}
+        and o.completed_at is not null
+        and o.completed_at > now() - interval '30 days'
+      order by o.completed_at desc
       limit 50
     `
     
     return rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      content: row.content,
-      mood: row.mood,
-      weather: row.weather,
-      temperature: row.temperature,
-      authorName: row.author_name,
-      createdAt: row.created_at,
-      plantsMentioned: row.plants_mentioned || []
+      taskType: row.task_type,
+      customName: row.custom_name,
+      plantName: row.plant_name,
+      completedAt: row.completed_at,
+      completedCount: row.completed_count,
+      requiredCount: row.required_count,
+      completedBy: row.completions || []
     }))
   } catch (err) {
-    console.error('[aphylia-chat] Error fetching journal context:', err)
+    console.error('[aphylia-chat] Error fetching completed tasks:', err)
     return []
   }
 }
@@ -16428,6 +16601,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
     let tasksContext = []
     let journalContext = []
     let analyticsContext = null
+    let weeklyAdviceContext = []
+    let completedTasksContext = []
     
     if (context.garden?.gardenId) {
       // Fetch ALL data in parallel for performance
@@ -16438,13 +16613,17 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         fetchedPlants,
         fetchedTasks,
         fetchedJournal,
-        fetchedAnalytics
+        fetchedAnalytics,
+        fetchedWeeklyAdvice,
+        fetchedCompletedTasks
       ] = await Promise.all([
         fetchGardenContext(gardenId, user.id),
         fetchPlantsContext(gardenId),
         fetchTasksContext(gardenId),
         fetchJournalContext(gardenId),
-        fetchAnalyticsContext(gardenId)
+        fetchAnalyticsContext(gardenId),
+        fetchWeeklyAdviceContext(gardenId),
+        fetchCompletedTasksContext(gardenId)
       ])
       
       gardenContext = fetchedGarden || gardenContext
@@ -16452,8 +16631,10 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       tasksContext = fetchedTasks
       journalContext = fetchedJournal
       analyticsContext = fetchedAnalytics
+      weeklyAdviceContext = fetchedWeeklyAdvice
+      completedTasksContext = fetchedCompletedTasks
       
-      console.log(`[aphylia-chat] Loaded context for garden ${gardenId}: ${plantsContext.length} plants, ${tasksContext.length} tasks, ${journalContext.length} journal entries`)
+      console.log(`[aphylia-chat] Loaded context for garden ${gardenId}: ${plantsContext.length} plants, ${tasksContext.length} tasks, ${journalContext.length} journal entries, ${weeklyAdviceContext.length} weekly advices, ${completedTasksContext.length} completed tasks, ${gardenContext?.members?.length || 0} members`)
     }
     
     // Build full context with ALL data
@@ -16463,7 +16644,9 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       plants: plantsContext,
       tasks: tasksContext,
       journal: journalContext,
-      analytics: analyticsContext
+      analytics: analyticsContext,
+      weeklyAdvice: weeklyAdviceContext,
+      completedTasks: completedTasksContext
     }
     
     // Build context string for AI
