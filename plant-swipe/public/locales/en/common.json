@@ -1199,6 +1199,7 @@
       }
     },
     "meta": {
+      "recordHistory": "Record History",
       "created": "Created",
       "updated": "Updated",
       "by": "By",
