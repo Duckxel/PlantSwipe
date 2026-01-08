@@ -1478,7 +1478,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       {/* Info Cards Section - Dynamic grid based on content */}
         {infoSections.length > 0 && (
         <div className="space-y-3 sm:space-y-4">
-          <div className={`grid gap-3 sm:gap-4 ${
+          <div className={`grid gap-3 sm:gap-4 items-start ${
             infoSections.length === 1 
               ? 'grid-cols-1 max-w-xl mx-auto' 
               : infoSections.length === 2 
@@ -1673,7 +1673,7 @@ const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React
   const [isExpanded, setIsExpanded] = React.useState(defaultExpanded)
   
   return (
-    <Card className="rounded-2xl sm:rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
+    <Card className="rounded-2xl sm:rounded-3xl border-stone-200/70 dark:border-[#3e3e42]/70">
       <CardHeader 
         className="p-4 sm:p-6 cursor-pointer select-none"
         onClick={() => setIsExpanded(!isExpanded)}
