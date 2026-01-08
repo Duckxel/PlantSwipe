@@ -15619,6 +15619,608 @@ app.post('/api/push/instant', async (req, res) => {
   }
 })
 
+// ========== Aphylia Garden Chat AI ==========
+// Streaming AI chat endpoint for in-app gardening assistant
+
+// Ensure to_delete folder exists for ephemeral image uploads
+const chatUploadDir = path.join(__dirname, 'uploads', 'to_delete')
+try {
+  if (!fsSync.existsSync(chatUploadDir)) {
+    fsSync.mkdirSync(chatUploadDir, { recursive: true })
+    console.log('[aphylia-chat] Created to_delete upload directory')
+  }
+} catch (err) {
+  console.warn('[aphylia-chat] Failed to create to_delete directory:', err?.message)
+}
+
+// Multer storage for chat image uploads
+const chatImageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, chatUploadDir)
+  },
+  filename: (_req, file, cb) => {
+    const timestamp = Date.now()
+    const randomId = crypto.randomBytes(8).toString('hex')
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg'
+    cb(null, `chat_${timestamp}_${randomId}${ext}`)
+  }
+})
+
+const chatImageUpload = multer({
+  storage: chatImageStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.'))
+    }
+  }
+})
+
+// Hourly cleanup of to_delete folder
+cron.schedule('0 * * * *', async () => {
+  try {
+    const files = await fs.readdir(chatUploadDir)
+    const now = Date.now()
+    const oneHourMs = 60 * 60 * 1000
+    let deletedCount = 0
+    
+    for (const file of files) {
+      const filePath = path.join(chatUploadDir, file)
+      try {
+        const stats = await fs.stat(filePath)
+        if (now - stats.mtimeMs > oneHourMs) {
+          await fs.unlink(filePath)
+          deletedCount++
+        }
+      } catch { }
+    }
+    
+    if (deletedCount > 0) {
+      console.log(`[aphylia-chat] Cleanup: deleted ${deletedCount} old file(s) from to_delete`)
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Cleanup error:', err?.message)
+  }
+})
+
+// Upload image for chat (ephemeral, stored in to_delete folder)
+app.post('/api/ai/garden-chat/upload', chatImageUpload.single('image'), async (req, res) => {
+  try {
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    if (!req.file) {
+      res.status(400).json({ error: 'No image uploaded' })
+      return
+    }
+    
+    // Build URL for the uploaded file
+    const baseUrl = process.env.WEBSITE_URL || `http://localhost:${process.env.PORT || 3000}`
+    const imageUrl = `${baseUrl}/api/ai/garden-chat/image/${req.file.filename}`
+    
+    res.json({
+      success: true,
+      url: imageUrl,
+      filename: req.file.filename
+    })
+  } catch (err) {
+    console.error('[aphylia-chat] Upload error:', err)
+    res.status(500).json({ error: err?.message || 'Upload failed' })
+  }
+})
+
+// Serve uploaded chat images
+app.get('/api/ai/garden-chat/image/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename
+    // Sanitize filename to prevent path traversal
+    if (!filename || filename.includes('..') || filename.includes('/')) {
+      res.status(400).json({ error: 'Invalid filename' })
+      return
+    }
+    
+    const filePath = path.join(chatUploadDir, filename)
+    if (!fsSync.existsSync(filePath)) {
+      res.status(404).json({ error: 'Image not found' })
+      return
+    }
+    
+    // Determine content type
+    const ext = path.extname(filename).toLowerCase()
+    const contentTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    }
+    
+    res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream')
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    res.sendFile(filePath)
+  } catch (err) {
+    console.error('[aphylia-chat] Image serve error:', err)
+    res.status(500).json({ error: 'Failed to serve image' })
+  }
+})
+
+// System prompt for Aphylia gardening assistant
+const APHYLIA_SYSTEM_PROMPT = `You are Aphylia, a friendly and knowledgeable AI gardening assistant built into the Aphylia plant care app.
+
+Your role is to provide expert, personalized gardening advice based on the user's specific garden, plants, and growing conditions.
+
+## Key Capabilities:
+- Plant diagnosis (pests, diseases, nutrient deficiencies)
+- Watering and care schedules
+- Seasonal gardening tips
+- Companion planting advice
+- Task planning and garden management
+- Plant identification from photos
+- Growing tips based on local climate
+
+## Communication Style:
+- Warm, encouraging, and supportive
+- Use emojis sparingly to add personality (🌱 🪴 💧 🌸 etc.)
+- Provide practical, actionable advice
+- Break down complex topics into simple steps
+- Celebrate gardening successes with the user
+
+## Important Guidelines:
+- Base recommendations on the user's specific garden context (location, climate zone, existing plants)
+- Consider seasonal timing when giving advice
+- If you're unsure about something, say so and suggest how they might find more info
+- When analyzing plant photos, be thorough but honest about uncertainty
+- Suggest using the app's features (tasks, journal, etc.) when relevant
+
+## When Helping with Tasks:
+- Be specific about timing and frequency
+- Consider the user's existing task load
+- Prioritize based on plant health needs
+
+Always aim to help the user become a more confident and successful gardener!`
+
+// Build context string for the AI from garden data
+async function buildGardenContextString(context) {
+  const parts = []
+  
+  // User context
+  if (context.user) {
+    parts.push(`## User Information`)
+    if (context.user.displayName) parts.push(`- Name: ${context.user.displayName}`)
+    if (context.user.language) parts.push(`- Language: ${context.user.language}`)
+    if (context.user.timezone) parts.push(`- Timezone: ${context.user.timezone}`)
+    if (context.user.experienceYears) parts.push(`- Gardening experience: ${context.user.experienceYears} years`)
+  }
+  
+  // Garden context
+  if (context.garden) {
+    parts.push(`\n## Current Garden: "${context.garden.gardenName}"`)
+    if (context.garden.locationCity) {
+      let location = context.garden.locationCity
+      if (context.garden.locationCountry) location += `, ${context.garden.locationCountry}`
+      parts.push(`- Location: ${location}`)
+    }
+    if (context.garden.locationTimezone) parts.push(`- Timezone: ${context.garden.locationTimezone}`)
+    if (context.garden.plantCount !== undefined) parts.push(`- Plants in garden: ${context.garden.plantCount}`)
+    if (context.garden.memberCount !== undefined) parts.push(`- Garden members: ${context.garden.memberCount}`)
+  }
+  
+  // Plants context
+  if (context.plants && context.plants.length > 0) {
+    parts.push(`\n## Plants in Context`)
+    for (const plant of context.plants.slice(0, 10)) { // Limit to 10 plants
+      let plantInfo = `- **${plant.plantName}**`
+      if (plant.nickname) plantInfo += ` (nicknamed "${plant.nickname}")`
+      if (plant.scientificName) plantInfo += ` - _${plant.scientificName}_`
+      if (plant.healthStatus) plantInfo += ` [Health: ${plant.healthStatus}]`
+      parts.push(plantInfo)
+      if (plant.notes) parts.push(`  Notes: ${plant.notes}`)
+    }
+  }
+  
+  // Tasks context
+  if (context.tasks && context.tasks.length > 0) {
+    parts.push(`\n## Upcoming Tasks`)
+    for (const task of context.tasks.slice(0, 10)) { // Limit to 10 tasks
+      let taskInfo = `- ${task.customName || task.taskType}`
+      if (task.plantName) taskInfo += ` for ${task.plantName}`
+      if (task.dueAt) {
+        const dueDate = new Date(task.dueAt)
+        taskInfo += ` (due: ${dueDate.toLocaleDateString()})`
+      }
+      parts.push(taskInfo)
+    }
+  }
+  
+  // Current date/time context
+  const now = new Date()
+  const month = now.toLocaleString('en', { month: 'long' })
+  const season = getSeasonForMonth(now.getMonth())
+  parts.push(`\n## Current Time`)
+  parts.push(`- Date: ${now.toLocaleDateString()}`)
+  parts.push(`- Month: ${month}`)
+  parts.push(`- Season: ${season}`)
+  
+  return parts.join('\n')
+}
+
+function getSeasonForMonth(month) {
+  // Northern hemisphere seasons
+  if (month >= 2 && month <= 4) return 'Spring'
+  if (month >= 5 && month <= 7) return 'Summer'
+  if (month >= 8 && month <= 10) return 'Autumn/Fall'
+  return 'Winter'
+}
+
+// Fetch additional garden context from database
+async function fetchGardenContext(gardenId, userId) {
+  if (!sql || !gardenId) return null
+  
+  try {
+    // Fetch garden details
+    const gardenRows = await sql`
+      select 
+        g.id, g.name, g.location_city, g.location_country, 
+        g.location_timezone, g.location_lat, g.location_lon
+      from public.gardens g
+      join public.garden_members gm on gm.garden_id = g.id
+      where g.id = ${gardenId} and gm.user_id = ${userId}
+    `
+    
+    if (!gardenRows || gardenRows.length === 0) return null
+    
+    const garden = gardenRows[0]
+    
+    // Count plants
+    const plantCountRows = await sql`
+      select count(*)::int as count from public.garden_plants where garden_id = ${gardenId}
+    `
+    const plantCount = plantCountRows[0]?.count || 0
+    
+    // Count members
+    const memberCountRows = await sql`
+      select count(*)::int as count from public.garden_members where garden_id = ${gardenId}
+    `
+    const memberCount = memberCountRows[0]?.count || 0
+    
+    return {
+      gardenId: garden.id,
+      gardenName: garden.name,
+      locationCity: garden.location_city,
+      locationCountry: garden.location_country,
+      locationTimezone: garden.location_timezone,
+      locationLat: garden.location_lat,
+      locationLon: garden.location_lon,
+      plantCount,
+      memberCount
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching garden context:', err)
+    return null
+  }
+}
+
+// Fetch plants for a garden
+async function fetchPlantsContext(gardenId, plantIds = null) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    let rows
+    if (plantIds && plantIds.length > 0) {
+      rows = await sql`
+        select 
+          gp.id as garden_plant_id, gp.plant_id, gp.nickname, gp.health_status, gp.notes,
+          p.name as plant_name
+        from public.garden_plants gp
+        left join public.plants p on p.id = gp.plant_id
+        where gp.garden_id = ${gardenId} and gp.id = any(${plantIds}::uuid[])
+        limit 20
+      `
+    } else {
+      rows = await sql`
+        select 
+          gp.id as garden_plant_id, gp.plant_id, gp.nickname, gp.health_status, gp.notes,
+          p.name as plant_name
+        from public.garden_plants gp
+        left join public.plants p on p.id = gp.plant_id
+        where gp.garden_id = ${gardenId}
+        limit 20
+      `
+    }
+    
+    return rows.map(row => ({
+      gardenPlantId: row.garden_plant_id,
+      plantId: row.plant_id,
+      plantName: row.plant_name || 'Unknown plant',
+      nickname: row.nickname,
+      healthStatus: row.health_status,
+      notes: row.notes
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching plants context:', err)
+    return []
+  }
+}
+
+// Fetch upcoming tasks for a garden
+async function fetchTasksContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    const rows = await sql`
+      select 
+        t.id, t.type, t.custom_name, t.garden_plant_id,
+        o.due_at, o.completed_at,
+        p.name as plant_name
+      from public.garden_plant_tasks t
+      join public.garden_plant_task_occurrences o on o.task_id = t.id
+      left join public.garden_plants gp on gp.id = t.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where t.garden_id = ${gardenId}
+        and o.completed_at is null
+        and o.due_at <= now() + interval '7 days'
+      order by o.due_at asc
+      limit 15
+    `
+    
+    return rows.map(row => ({
+      taskId: row.id,
+      taskType: row.type,
+      customName: row.custom_name,
+      plantName: row.plant_name,
+      dueAt: row.due_at,
+      completedAt: row.completed_at
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching tasks context:', err)
+    return []
+  }
+}
+
+// Main streaming chat endpoint
+app.post('/api/ai/garden-chat', async (req, res) => {
+  try {
+    // Authenticate user
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    // Check if OpenAI is configured
+    if (!openai) {
+      res.status(503).json({ error: 'AI service not configured' })
+      return
+    }
+    
+    const body = req.body || {}
+    const { messages = [], context = {}, quickAction, stream = true } = body
+    
+    if (!messages || messages.length === 0) {
+      res.status(400).json({ error: 'Messages are required' })
+      return
+    }
+    
+    // Get user profile for context
+    let userProfile = null
+    if (sql) {
+      try {
+        const profileRows = await sql`
+          select display_name, language, timezone, experience_years
+          from public.profiles where id = ${user.id}
+        `
+        userProfile = profileRows[0] || null
+      } catch { }
+    }
+    
+    // Build user context
+    const userContext = {
+      userId: user.id,
+      displayName: userProfile?.display_name || 'Gardener',
+      language: context.user?.language || userProfile?.language || 'en',
+      timezone: context.user?.timezone || userProfile?.timezone,
+      experienceYears: context.user?.experienceYears || userProfile?.experience_years
+    }
+    
+    // Fetch garden context if provided
+    let gardenContext = context.garden || null
+    if (context.garden?.gardenId && !gardenContext.plantCount) {
+      gardenContext = await fetchGardenContext(context.garden.gardenId, user.id) || gardenContext
+    }
+    
+    // Fetch plants context if we have a garden
+    let plantsContext = context.plants || []
+    if (gardenContext?.gardenId && plantsContext.length === 0) {
+      plantsContext = await fetchPlantsContext(gardenContext.gardenId)
+    }
+    
+    // Fetch tasks context if we have a garden
+    let tasksContext = context.tasks || []
+    if (gardenContext?.gardenId && tasksContext.length === 0) {
+      tasksContext = await fetchTasksContext(gardenContext.gardenId)
+    }
+    
+    // Build full context
+    const fullContext = {
+      user: userContext,
+      garden: gardenContext,
+      plants: plantsContext,
+      tasks: tasksContext
+    }
+    
+    // Build context string for AI
+    const contextString = await buildGardenContextString(fullContext)
+    
+    // Build system prompt with context
+    let systemPrompt = APHYLIA_SYSTEM_PROMPT
+    if (contextString) {
+      systemPrompt += `\n\n# Current Garden Context\n${contextString}`
+    }
+    
+    // Add quick action specific instructions
+    if (quickAction) {
+      const quickActionPrompts = {
+        'diagnose': '\n\n## Quick Action: Plant Diagnosis\nThe user wants help diagnosing a plant issue. Look carefully at any provided images and ask clarifying questions if needed. Focus on identifying the problem and providing treatment options.',
+        'watering-schedule': '\n\n## Quick Action: Watering Schedule\nThe user wants help creating or optimizing a watering schedule. Consider the plants in their garden, local climate, and seasonal factors.',
+        'weekly-plan': '\n\n## Quick Action: Weekly Garden Plan\nThe user wants a weekly plan for their garden tasks. Prioritize tasks by urgency and create a practical schedule.',
+        'summarize-notes': '\n\n## Quick Action: Summarize Notes\nThe user wants a summary of their garden notes and journal entries. Highlight key observations and any patterns.',
+        'plant-care': '\n\n## Quick Action: Plant Care Guide\nThe user wants comprehensive care advice for a specific plant. Cover watering, light, feeding, and seasonal care.',
+        'pest-help': '\n\n## Quick Action: Pest & Disease Help\nThe user needs help with pest or disease issues. Help identify the problem and provide organic/natural solutions when possible.',
+        'seasonal-tips': '\n\n## Quick Action: Seasonal Tips\nThe user wants seasonal gardening advice. Focus on what to plant, what tasks to prioritize, and how to prepare for the next season.',
+        'companion-plants': '\n\n## Quick Action: Companion Planting\nThe user wants companion planting suggestions. Recommend plants that grow well together and explain the benefits.'
+      }
+      if (quickActionPrompts[quickAction]) {
+        systemPrompt += quickActionPrompts[quickAction]
+      }
+    }
+    
+    // Format messages for OpenAI
+    const openaiMessages = [
+      { role: 'system', content: systemPrompt }
+    ]
+    
+    for (const msg of messages) {
+      const content = []
+      
+      // Add text content
+      if (msg.content) {
+        content.push({ type: 'text', text: msg.content })
+      }
+      
+      // Add images if present
+      if (msg.imageUrls && msg.imageUrls.length > 0) {
+        for (const imageUrl of msg.imageUrls) {
+          // For local images, we need to read and base64 encode them
+          if (imageUrl.includes('/api/ai/garden-chat/image/')) {
+            const filename = imageUrl.split('/').pop()
+            const imagePath = path.join(chatUploadDir, filename)
+            if (fsSync.existsSync(imagePath)) {
+              try {
+                const imageBuffer = await fs.readFile(imagePath)
+                const base64 = imageBuffer.toString('base64')
+                const ext = path.extname(filename).toLowerCase()
+                const mimeTypes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }
+                const mimeType = mimeTypes[ext] || 'image/jpeg'
+                content.push({
+                  type: 'image_url',
+                  image_url: { url: `data:${mimeType};base64,${base64}` }
+                })
+              } catch (imgErr) {
+                console.warn('[aphylia-chat] Failed to read image:', imgErr?.message)
+              }
+            }
+          } else {
+            // External URL
+            content.push({
+              type: 'image_url',
+              image_url: { url: imageUrl }
+            })
+          }
+        }
+      }
+      
+      openaiMessages.push({
+        role: msg.role,
+        content: content.length === 1 && content[0].type === 'text' ? content[0].text : content
+      })
+    }
+    
+    if (stream) {
+      // Streaming response using SSE
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.setHeader('X-Accel-Buffering', 'no')
+      
+      // Send start event
+      res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`)
+      
+      try {
+        const streamResponse = await openai.chat.completions.create({
+          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          messages: openaiMessages,
+          stream: true,
+          max_tokens: 2048,
+          temperature: 0.7
+        })
+        
+        let fullContent = ''
+        let totalTokens = 0
+        
+        for await (const chunk of streamResponse) {
+          const delta = chunk.choices?.[0]?.delta
+          if (delta?.content) {
+            fullContent += delta.content
+            res.write(`data: ${JSON.stringify({ type: 'token', token: delta.content })}\n\n`)
+          }
+          
+          // Track usage if available
+          if (chunk.usage) {
+            totalTokens = chunk.usage.total_tokens || 0
+          }
+        }
+        
+        // Send done event with complete message
+        const messageId = crypto.randomUUID()
+        res.write(`data: ${JSON.stringify({
+          type: 'done',
+          message: {
+            id: messageId,
+            role: 'assistant',
+            content: fullContent,
+            createdAt: new Date().toISOString()
+          },
+          usage: {
+            totalTokens
+          }
+        })}\n\n`)
+        
+      } catch (streamErr) {
+        console.error('[aphylia-chat] Stream error:', streamErr)
+        res.write(`data: ${JSON.stringify({ type: 'error', error: streamErr?.message || 'Stream failed' })}\n\n`)
+      }
+      
+      res.end()
+    } else {
+      // Non-streaming response
+      const response = await openai.chat.completions.create({
+        model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+        messages: openaiMessages,
+        max_tokens: 2048,
+        temperature: 0.7
+      })
+      
+      const assistantMessage = response.choices?.[0]?.message
+      const messageId = crypto.randomUUID()
+      
+      res.json({
+        message: {
+          id: messageId,
+          role: 'assistant',
+          content: assistantMessage?.content || '',
+          createdAt: new Date().toISOString()
+        },
+        usage: {
+          promptTokens: response.usage?.prompt_tokens || 0,
+          completionTokens: response.usage?.completion_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0
+        }
+      })
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Error:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Chat failed' })
+    }
+  }
+})
+
 const notificationWorkerIntervalMs = Math.max(15000, Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS || 60000))
 const notificationDeliveryBatchSize = Math.min(
   Math.max(Number(process.env.NOTIFICATION_DELIVERY_BATCH_SIZE || 200), 25),

@@ -18,6 +18,7 @@ import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
+import { AphyliaChat } from "@/components/aphylia";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant, PlantSeason } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -2060,6 +2061,9 @@ export default function PlantSwipe() {
           navigate(`/messages?conversation=${conversationId}`)
         }}
       />
+      
+      {/* Aphylia AI Chat Assistant - floating chat bubble */}
+      {user && <AphyliaChat showBubble={true} />}
     </div>
     </AuthActionsProvider>
   )

@@ -2718,6 +2718,39 @@
       "unbanSuccess": "L'utilisateur a été débanni",
       "allFilesForUser": "Tous les signalements pour l'utilisateur",
       "totalReports": "Total des signalements"
+    },
+    "aphylia": {
+      "welcome": "Salut ! Je suis Aphylia 🌱",
+      "welcomeDesc": "Votre assistante IA de jardinage. Posez-moi toutes vos questions sur vos plantes !",
+      "placeholder": "Parlez-moi de votre jardin...",
+      "hint": "Tapez / pour les commandes • Maj+Entrée pour une nouvelle ligne",
+      "context": {
+        "title": "Ajouter du contexte"
+      },
+      "quickActions": {
+        "title": "Actions rapides",
+        "diagnose": "Diagnostiquer cette plante",
+        "wateringSchedule": "Suggérer un calendrier d'arrosage",
+        "weeklyPlan": "Planifier ma semaine au jardin",
+        "summarizeNotes": "Résumer mes notes de jardin",
+        "plantCare": "Guide d'entretien des plantes",
+        "pestHelp": "Aide nuisibles et maladies",
+        "seasonalTips": "Conseils de jardinage saisonniers",
+        "companionPlants": "Suggestions de plantes compagnes"
+      },
+      "errors": {
+        "notAuthenticated": "Veuillez vous connecter pour discuter avec Aphylia",
+        "notConfigured": "Le chat IA n'est pas disponible pour le moment",
+        "uploadFailed": "Échec du téléchargement de l'image",
+        "chatFailed": "Une erreur s'est produite. Veuillez réessayer."
+      },
+      "actions": {
+        "send": "Envoyer le message",
+        "stop": "Arrêter la génération",
+        "clear": "Effacer le chat",
+        "attachImage": "Joindre une image",
+        "removeAttachment": "Supprimer la pièce jointe"
+      }
     }
   }
 }

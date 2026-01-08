@@ -1,0 +1,124 @@
+/**
+ * Aphylia Chat Bubble
+ * 
+ * A floating action button that opens the AI chat panel.
+ * Positioned in the bottom-right corner of the screen.
+ */
+
+import React from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { MessageCircle, X, Sparkles } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+interface AphyliaChatBubbleProps {
+  isOpen: boolean
+  onClick: () => void
+  hasUnreadMessage?: boolean
+  className?: string
+}
+
+export const AphyliaChatBubble: React.FC<AphyliaChatBubbleProps> = ({
+  isOpen,
+  onClick,
+  hasUnreadMessage = false,
+  className
+}) => {
+  return (
+    <motion.button
+      onClick={onClick}
+      className={cn(
+        'fixed bottom-6 right-6 z-50',
+        'w-14 h-14 rounded-full',
+        'bg-gradient-to-br from-emerald-500 to-emerald-600',
+        'hover:from-emerald-400 hover:to-emerald-500',
+        'shadow-lg shadow-emerald-500/30',
+        'flex items-center justify-center',
+        'transition-all duration-300 ease-out',
+        'focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2',
+        'group',
+        className
+      )}
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0, opacity: 0 }}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      aria-label={isOpen ? 'Close Aphylia chat' : 'Open Aphylia chat'}
+    >
+      <AnimatePresence mode="wait">
+        {isOpen ? (
+          <motion.div
+            key="close"
+            initial={{ rotate: -90, opacity: 0 }}
+            animate={{ rotate: 0, opacity: 1 }}
+            exit={{ rotate: 90, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <X className="w-6 h-6 text-white" />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="open"
+            initial={{ rotate: 90, opacity: 0 }}
+            animate={{ rotate: 0, opacity: 1 }}
+            exit={{ rotate: -90, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="relative"
+          >
+            <MessageCircle className="w-6 h-6 text-white" />
+            {/* Sparkle decoration */}
+            <motion.div
+              className="absolute -top-1 -right-1"
+              animate={{
+                scale: [1, 1.2, 1],
+                opacity: [0.7, 1, 0.7]
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                ease: 'easeInOut'
+              }}
+            >
+              <Sparkles className="w-3 h-3 text-yellow-300" />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Unread indicator */}
+      {hasUnreadMessage && !isOpen && (
+        <motion.div
+          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white"
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+        />
+      )}
+      
+      {/* Hover tooltip */}
+      <div className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900/90 text-white text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+        {isOpen ? 'Close chat' : 'Ask Aphylia'}
+        <div className="absolute top-1/2 -right-1 -translate-y-1/2 border-4 border-transparent border-l-gray-900/90" />
+      </div>
+      
+      {/* Pulse animation when closed */}
+      {!isOpen && (
+        <motion.div
+          className="absolute inset-0 rounded-full bg-emerald-400"
+          initial={{ scale: 1, opacity: 0.5 }}
+          animate={{
+            scale: [1, 1.5],
+            opacity: [0.5, 0]
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: 'easeOut'
+          }}
+        />
+      )}
+    </motion.button>
+  )
+}
+
+export default AphyliaChatBubble

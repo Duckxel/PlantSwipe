@@ -69,6 +69,12 @@ select cron.schedule(
   $$select public.invoke_edge_function('email-campaign-runner')$$
 );
 
+-- Aphylia Chat Image Cleanup (hourly)
+-- NOTE: The actual file cleanup for chat images stored in uploads/to_delete folder
+-- is handled by the Node.js server cron job (server.js) since files are stored on disk.
+-- Files older than 1 hour are automatically deleted.
+-- This comment serves as documentation for the cleanup mechanism.
+
 -- ========== Public schema hard cleanup (drops rogue tables) ==========
 -- IMPORTANT: All tables created in this schema MUST be listed here to avoid data loss!
 -- When adding a new table, add it to this list immediately.

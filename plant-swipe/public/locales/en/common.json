@@ -2718,6 +2718,39 @@
       "unbanSuccess": "User has been unbanned",
       "allFilesForUser": "All Reports for User",
       "totalReports": "Total Reports"
+    },
+    "aphylia": {
+      "welcome": "Hi! I'm Aphylia 🌱",
+      "welcomeDesc": "Your AI gardening assistant. Ask me anything about your plants!",
+      "placeholder": "Ask me about your garden...",
+      "hint": "Type / for commands • Shift+Enter for new line",
+      "context": {
+        "title": "Add Context"
+      },
+      "quickActions": {
+        "title": "Quick Actions",
+        "diagnose": "Diagnose this plant",
+        "wateringSchedule": "Suggest watering schedule",
+        "weeklyPlan": "Plan my week in the garden",
+        "summarizeNotes": "Summarize my garden notes",
+        "plantCare": "Plant care guide",
+        "pestHelp": "Pest & disease help",
+        "seasonalTips": "Seasonal gardening tips",
+        "companionPlants": "Companion plant suggestions"
+      },
+      "errors": {
+        "notAuthenticated": "Please sign in to chat with Aphylia",
+        "notConfigured": "AI chat is not available at the moment",
+        "uploadFailed": "Failed to upload image",
+        "chatFailed": "Something went wrong. Please try again."
+      },
+      "actions": {
+        "send": "Send message",
+        "stop": "Stop generating",
+        "clear": "Clear chat",
+        "attachImage": "Attach image",
+        "removeAttachment": "Remove attachment"
+      }
     }
   }
 }
