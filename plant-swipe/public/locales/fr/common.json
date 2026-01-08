@@ -1195,6 +1195,7 @@
       }
     },
     "meta": {
+      "recordHistory": "Historique des modifications",
       "created": "Créé",
       "updated": "Mis à jour",
       "by": "Par",

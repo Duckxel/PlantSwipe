@@ -49,6 +49,9 @@ import {
   User,
   PawPrint,
   HardHat,
+  Clock,
+  CalendarDays,
+  FileText,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -1472,9 +1475,18 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           t={t}
         />
 
-      {/* Info Cards Section - Full width for better mobile experience */}
+      {/* Info Cards Section - Dynamic grid based on content */}
+        {infoSections.length > 0 && (
         <div className="space-y-3 sm:space-y-4">
-          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+          <div className={`grid gap-3 sm:gap-4 ${
+            infoSections.length === 1 
+              ? 'grid-cols-1 max-w-xl mx-auto' 
+              : infoSections.length === 2 
+                ? 'grid-cols-1 sm:grid-cols-2 max-w-3xl mx-auto' 
+                : infoSections.length === 3 
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' 
+                  : 'grid-cols-1 sm:grid-cols-2'
+          }`}>
             {infoSections.map((section) => (
               <InfoCard key={section.title} title={section.title} icon={section.icon}>
                 {section.items.map((item) => (
@@ -1529,32 +1541,76 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </section>
           )}
           
-          {(createdTimestamp || updatedTimestamp || createdByLabel || updatedByLabel || sourcesValue) && (
-            <div className="rounded-2xl border border-stone-200/70 bg-white/90 p-4 sm:p-5 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]">
-              <div className="flex flex-col gap-3 text-xs sm:text-sm text-stone-600 dark:text-stone-300">
-                <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
-                  <span className="font-semibold text-stone-800 dark:text-stone-100">{t('moreInfo.meta.created')}</span>
-                  <span className="text-stone-700 dark:text-stone-200">{createdTimestamp || t('moreInfo.meta.notRecorded')}</span>
-                  <span className="text-stone-400">•</span>
-                  <span className="text-stone-700 dark:text-stone-200">{t('moreInfo.meta.by')} {createdByLabel || t('moreInfo.meta.unknown')}</span>
+          {(createdTimestamp || updatedTimestamp) && (
+            <div className="rounded-2xl sm:rounded-3xl border border-stone-200/50 bg-gradient-to-br from-stone-50/80 via-white to-stone-50/50 dark:border-[#3e3e42]/50 dark:from-[#1a1a1a] dark:via-[#1f1f1f] dark:to-[#1a1a1a] p-6 sm:p-8">
+              <div className="flex flex-col items-center text-center space-y-4 sm:space-y-5">
+                {/* Header */}
+                <div className="flex items-center gap-2 text-stone-400 dark:text-stone-500">
+                  <Clock className="h-4 w-4" />
+                  <span className="text-[10px] sm:text-xs uppercase tracking-[0.2em]">{t('moreInfo.meta.recordHistory', 'Record History')}</span>
                 </div>
-                <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
-                  <span className="font-semibold text-stone-800 dark:text-stone-100">{t('moreInfo.meta.updated')}</span>
-                  <span className="text-stone-700 dark:text-stone-200">{updatedTimestamp || t('moreInfo.meta.notRecorded')}</span>
-                  <span className="text-stone-400">•</span>
-                  <span className="text-stone-700 dark:text-stone-200">{t('moreInfo.meta.by')} {updatedByLabel || t('moreInfo.meta.unknown')}</span>
+                
+                {/* Timeline Cards */}
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 w-full max-w-2xl">
+                  {/* Created */}
+                  {(createdTimestamp || createdByLabel) && (
+                    <div className="flex-1 w-full sm:w-auto rounded-xl border border-emerald-200/60 bg-emerald-50/50 dark:border-emerald-800/40 dark:bg-emerald-950/20 p-4 sm:p-5">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <CalendarDays className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{t('moreInfo.meta.created')}</span>
+                      </div>
+                      <p className="text-sm sm:text-base font-medium text-stone-800 dark:text-stone-100">
+                        {createdTimestamp || t('moreInfo.meta.notRecorded')}
+                      </p>
+                      {createdByLabel && (
+                        <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                          {t('moreInfo.meta.by')} {createdByLabel}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Divider */}
+                  {(createdTimestamp || createdByLabel) && (updatedTimestamp || updatedByLabel) && (
+                    <div className="hidden sm:block w-px h-12 bg-gradient-to-b from-transparent via-stone-300 to-transparent dark:via-stone-600" />
+                  )}
+                  
+                  {/* Updated */}
+                  {(updatedTimestamp || updatedByLabel) && (
+                    <div className="flex-1 w-full sm:w-auto rounded-xl border border-sky-200/60 bg-sky-50/50 dark:border-sky-800/40 dark:bg-sky-950/20 p-4 sm:p-5">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <Clock className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">{t('moreInfo.meta.updated')}</span>
+                      </div>
+                      <p className="text-sm sm:text-base font-medium text-stone-800 dark:text-stone-100">
+                        {updatedTimestamp || t('moreInfo.meta.notRecorded')}
+                      </p>
+                      {updatedByLabel && (
+                        <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                          {t('moreInfo.meta.by')} {updatedByLabel}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
+                
+                {/* Sources */}
                 {sourcesValue && (
-                  <div className="flex flex-wrap gap-2 sm:gap-3 items-center text-stone-700 dark:text-stone-200">
-                    <span className="font-semibold text-stone-800 dark:text-stone-100">{t('moreInfo.meta.sources')}</span>
-                    <span className="text-stone-400">•</span>
-                    <span className="flex-1 min-w-0">{sourcesValue}</span>
+                  <div className="w-full max-w-xl pt-3 border-t border-stone-200/50 dark:border-stone-700/30">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <FileText className="h-3.5 w-3.5 text-stone-400 dark:text-stone-500" />
+                      <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-stone-500">{t('moreInfo.meta.sources')}</span>
+                    </div>
+                    <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
+                      {sourcesValue}
+                    </p>
                   </div>
                 )}
               </div>
             </div>
           )}
         </div>
+        )}
     </section>
   )
 }
