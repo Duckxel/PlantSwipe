@@ -3,9 +3,12 @@
  * 
  * Main wrapper component that combines the floating bubble and chat panel.
  * This is the component that should be added to the app layout.
+ * 
+ * IMPORTANT: This component is designed to NOT interfere with React Router navigation.
+ * Context is passed directly to the hook via refs, not state, to avoid re-render loops.
  */
 
-import React, { useEffect } from 'react'
+import React, { useMemo } from 'react'
 import { useAphyliaChat } from '@/hooks/useAphyliaChat'
 import { AphyliaChatBubble } from './AphyliaChatBubble'
 import { AphyliaChatPanel } from './AphyliaChatPanel'
@@ -31,6 +34,7 @@ export const AphyliaChat: React.FC<AphyliaChatProps> = ({
   showBubble = true,
   className
 }) => {
+  // Pass context directly to hook - it uses refs internally to avoid re-render issues
   const {
     state,
     closeChat,
@@ -44,9 +48,6 @@ export const AphyliaChat: React.FC<AphyliaChatProps> = ({
     addContextChip,
     removeContextChip,
     clearMessages,
-    setGardenContext,
-    setPlantContext,
-    setAvailableChips,
     abortStream,
     isStreaming
   } = useAphyliaChat({
@@ -54,17 +55,8 @@ export const AphyliaChat: React.FC<AphyliaChatProps> = ({
     plantContext
   })
   
-  // Update context when props change
-  useEffect(() => {
-    setGardenContext(gardenContext || null)
-  }, [gardenContext, setGardenContext])
-  
-  useEffect(() => {
-    setPlantContext(plantContext || null)
-  }, [plantContext, setPlantContext])
-  
-  useEffect(() => {
-    // Build available chips from context
+  // Build available chips from context - memoized to avoid unnecessary re-renders
+  const computedAvailableChips = useMemo(() => {
     const chips: ContextChip[] = [...availableChips]
     
     if (gardenContext) {
@@ -85,8 +77,8 @@ export const AphyliaChat: React.FC<AphyliaChatProps> = ({
       })
     }
     
-    setAvailableChips(chips)
-  }, [gardenContext, plantContext, availableChips, setAvailableChips])
+    return chips
+  }, [gardenContext?.gardenId, gardenContext?.gardenName, plantContext?.gardenPlantId, plantContext?.nickname, plantContext?.plantName, availableChips])
   
   // Handle image upload
   const handleUploadImage = async (file: File) => {
@@ -116,7 +108,7 @@ export const AphyliaChat: React.FC<AphyliaChatProps> = ({
         input={state.input}
         pendingAttachments={state.pendingAttachments}
         selectedChips={state.selectedChips}
-        availableChips={state.availableChips}
+        availableChips={computedAvailableChips}
         isSending={state.isSending}
         isStreaming={isStreaming}
         onClose={closeChat}

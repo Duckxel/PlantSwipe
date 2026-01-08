@@ -5,7 +5,7 @@
  * Messages are ephemeral (session-only) and not persisted to database.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import type {
   ChatMessage,
@@ -93,28 +93,14 @@ export function useAphyliaChat(options?: UseAphyliaChatOptions): UseAphyliaChatR
   // Track streaming state for external consumers
   const [isStreaming, setIsStreaming] = useState(false)
   
-  // Update context when options change - use JSON serialization to avoid infinite loops
-  // from object reference changes
-  const gardenContextJson = options?.gardenContext ? JSON.stringify(options.gardenContext) : null
-  const plantContextJson = options?.plantContext ? JSON.stringify(options.plantContext) : null
+  // Use refs for context to avoid triggering re-renders that interfere with navigation
+  // Context is read directly from options when needed (in sendMessage)
+  const gardenContextRef = useRef(options?.gardenContext || null)
+  const plantContextRef = useRef(options?.plantContext || null)
   
-  useEffect(() => {
-    const ctx = gardenContextJson ? JSON.parse(gardenContextJson) : null
-    setState(prev => {
-      // Only update if actually different
-      if (JSON.stringify(prev.currentGarden) === gardenContextJson) return prev
-      return { ...prev, currentGarden: ctx }
-    })
-  }, [gardenContextJson])
-  
-  useEffect(() => {
-    const ctx = plantContextJson ? JSON.parse(plantContextJson) : null
-    setState(prev => {
-      // Only update if actually different
-      if (JSON.stringify(prev.currentPlant) === plantContextJson) return prev
-      return { ...prev, currentPlant: ctx }
-    })
-  }, [plantContextJson])
+  // Update refs when options change (no re-render triggered)
+  gardenContextRef.current = options?.gardenContext || null
+  plantContextRef.current = options?.plantContext || null
   
   // Open chat panel
   const openChat = useCallback(() => {
@@ -278,14 +264,14 @@ export function useAphyliaChat(options?: UseAphyliaChatOptions): UseAphyliaChatR
     }))
   }, [abortStream])
   
-  // Set garden context
+  // Set garden context (updates ref, no re-render)
   const setGardenContext = useCallback((context: GardenContext | null) => {
-    setState(prev => ({ ...prev, currentGarden: context }))
+    gardenContextRef.current = context
   }, [])
   
-  // Set plant context
+  // Set plant context (updates ref, no re-render)
   const setPlantContext = useCallback((context: PlantContext | null) => {
-    setState(prev => ({ ...prev, currentPlant: context }))
+    plantContextRef.current = context
   }, [])
   
   // Set available chips
@@ -337,14 +323,14 @@ export function useAphyliaChat(options?: UseAphyliaChatOptions): UseAphyliaChatR
         throw new Error('Not authenticated')
       }
       
-      // Build context
+      // Build context - use refs to get current context without causing re-renders
       const context: ChatContext = {
         user: {
           userId: session.user.id,
           language: 'en' // Will be enriched by the server
         },
-        garden: state.currentGarden,
-        plants: state.currentPlant ? [state.currentPlant] : undefined,
+        garden: gardenContextRef.current,
+        plants: plantContextRef.current ? [plantContextRef.current] : undefined,
         selectedChips: state.selectedChips.length > 0 ? state.selectedChips : undefined
       }
       
@@ -485,7 +471,7 @@ export function useAphyliaChat(options?: UseAphyliaChatOptions): UseAphyliaChatR
       isStreamingRef.current = false
       setIsStreaming(false)
     }
-  }, [state.input, state.pendingAttachments, state.messages, state.currentGarden, state.currentPlant, state.selectedChips, abortStream])
+  }, [state.input, state.pendingAttachments, state.messages, state.selectedChips, abortStream])
   
   // Execute quick action
   const executeQuickAction = useCallback(async (actionId: QuickActionId) => {
