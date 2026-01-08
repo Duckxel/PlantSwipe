@@ -842,6 +842,8 @@ const blogUploadPrefixRaw = (process.env.BLOG_UPLOAD_PREFIX || 'blog').trim()
 const blogUploadPrefix = blogUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'blog'
 const proAdviceUploadPrefixRaw = (process.env.PRO_ADVICE_UPLOAD_PREFIX || 'pro-advice').trim()
 const proAdviceUploadPrefix = proAdviceUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'pro-advice'
+const messagesUploadPrefixRaw = (process.env.MESSAGES_UPLOAD_PREFIX || 'messages').trim()
+const messagesUploadPrefix = messagesUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'messages'
 const adminUploadMaxBytes = (() => {
   const raw = Number(process.env.ADMIN_UPLOAD_MAX_BYTES)
   if (Number.isFinite(raw) && raw > 0) return raw
@@ -5128,6 +5130,49 @@ app.post('/api/pro-advice/upload-image', async (req, res) => {
     prefixBuilder: ({ req }) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [proAdviceUploadPrefix, folder].filter(Boolean).join('/')
+    },
+  })
+})
+
+// Messages image upload - for chat images
+app.post('/api/messages/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  
+  // Require authenticated user
+  let uploader = null
+  try {
+    uploader = await getUserFromRequest(req)
+  } catch { }
+  
+  if (!uploader?.id) {
+    res.status(401).json({ error: 'You must be signed in to upload images' })
+    return
+  }
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  let uploaderDisplayName = null
+  try {
+    uploaderDisplayName = await getAdminProfileName(uploader.id)
+  } catch { }
+
+  await handleScopedImageUpload(req, res, {
+    actorId: uploader.id,
+    auditLabel: 'messages',
+    uploaderInfo: {
+      id: uploader.id,
+      email: uploader.email || null,
+      name: uploaderDisplayName || null,
+    },
+    prefixBuilder: ({ req }) => {
+      // Organize by user ID for easier management
+      const userId = uploader?.id || 'anonymous'
+      return `${messagesUploadPrefix}/${userId}`
     },
   })
 })
