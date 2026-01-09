@@ -67,13 +67,19 @@ import {
   Store,
   ShieldAlert,
   Ban,
-  Eye,
   X,
   Image,
-  ZoomIn,
   CircleCheck,
   Loader2,
   Square,
+  FolderOpen,
+  HardDrive,
+  ArrowRight,
+  FileImage,
+  MessageSquare as MessageSquareIcon,
+  MessageSquareText,
+  BookOpen,
+  Flower2,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -3763,6 +3769,30 @@ export const AdminPage: React.FC = () => {
       plantName: string | null;
       adminCommentary: string | null;
     }>;
+    mediaUploads?: Array<{
+      id: string;
+      url: string | null;
+      bucket: string | null;
+      path: string | null;
+      mimeType: string | null;
+      sizeBytes: number | null;
+      uploadSource: string;
+      createdAt: string | null;
+    }>;
+    mediaTotalCount?: number;
+    mediaTotalSize?: number;
+    userReports?: Array<{
+      id: string;
+      reason: string | null;
+      status: string;
+      createdAt: string | null;
+      classifiedAt: string | null;
+      reporterName: string;
+      classifierName: string | null;
+      type: string;
+    }>;
+    reportsAgainstCount?: number;
+    reportsByCount?: number;
   } | null>(null);
   const [banReason, setBanReason] = React.useState("");
   const [banSubmitting, setBanSubmitting] = React.useState(false);
@@ -3776,9 +3806,6 @@ export const AdminPage: React.FC = () => {
   const [threatLevelConfirmOpen, setThreatLevelConfirmOpen] = React.useState(false);
   const [pendingThreatLevel, setPendingThreatLevel] = React.useState<number | null>(null);
   
-  // Files viewer state
-  const [filesExpanded, setFilesExpanded] = React.useState(false);
-  const [selectedFileIndex, setSelectedFileIndex] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     if (typeof memberData?.threatLevel === "number") {
@@ -3787,6 +3814,9 @@ export const AdminPage: React.FC = () => {
       setThreatLevelSelection(0);
     }
   }, [memberData?.threatLevel]);
+
+  // Threat level panel visibility
+  const [threatLevelOpen, setThreatLevelOpen] = React.useState(false);
 
   // Roles management state
   const [memberRoles, setMemberRoles] = React.useState<UserRole[]>([]);
@@ -4164,6 +4194,34 @@ export const AdminPage: React.FC = () => {
                 adminCommentary: file?.adminCommentary || file?.admin_commentary || null,
               }))
             : [],
+          mediaUploads: Array.isArray(data?.mediaUploads)
+            ? data.mediaUploads.map((media: any) => ({
+                id: String(media.id),
+                url: media?.url || media?.public_url || null,
+                bucket: media?.bucket || null,
+                path: media?.path || null,
+                mimeType: media?.mimeType || media?.mime_type || null,
+                sizeBytes: typeof media?.sizeBytes === "number" ? media.sizeBytes : (typeof media?.size_bytes === "number" ? media.size_bytes : null),
+                uploadSource: media?.uploadSource || media?.upload_source || "unknown",
+                createdAt: media?.createdAt || media?.created_at || null,
+              }))
+            : [],
+          mediaTotalCount: typeof data?.mediaTotalCount === "number" ? data.mediaTotalCount : 0,
+          mediaTotalSize: typeof data?.mediaTotalSize === "number" ? data.mediaTotalSize : 0,
+          userReports: Array.isArray(data?.userReports)
+            ? data.userReports.map((report: any) => ({
+                id: String(report.id),
+                reason: report?.reason || null,
+                status: report?.status || "review",
+                createdAt: report?.createdAt || report?.created_at || null,
+                classifiedAt: report?.classifiedAt || report?.classified_at || null,
+                reporterName: report?.reporterName || "Unknown",
+                classifierName: report?.classifierName || null,
+                type: report?.type || "against",
+              }))
+            : [],
+          reportsAgainstCount: typeof data?.reportsAgainstCount === "number" ? data.reportsAgainstCount : 0,
+          reportsByCount: typeof data?.reportsByCount === "number" ? data.reportsByCount : 0,
         });
         // Extract and set member roles
         const profileRoles = Array.isArray(data?.profile?.roles) ? data.profile.roles : [];
@@ -7980,7 +8038,7 @@ export const AdminPage: React.FC = () => {
                                           </span>
                                         ) : null}
                                       </div>
-                                      <div className="flex flex-wrap gap-1 mt-1">
+                                      <div className="flex flex-wrap gap-1 mt-1 items-center">
                                         {/* Role Badges */}
                                       {memberRoles.map((role) => (
                                         <UserRoleBadge
@@ -7990,6 +8048,20 @@ export const AdminPage: React.FC = () => {
                                           showLabel
                                         />
                                       ))}
+                                      {/* Add/Manage Roles Button */}
+                                      <button
+                                        type="button"
+                                        onClick={() => setRolesOpen(!rolesOpen)}
+                                        className={cn(
+                                          "inline-flex items-center justify-center h-5 w-5 rounded-full border-2 border-dashed transition-all",
+                                          rolesOpen 
+                                            ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" 
+                                            : "border-stone-300 dark:border-stone-600 text-stone-400 dark:text-stone-500 hover:border-stone-400 dark:hover:border-stone-500 hover:text-stone-500 dark:hover:text-stone-400"
+                                        )}
+                                        title={rolesOpen ? "Close role management" : "Manage roles"}
+                                      >
+                                        <Plus className={cn("h-3 w-3 transition-transform", rolesOpen && "rotate-45")} />
+                                      </button>
                                       {(() => {
                                         const level =
                                           typeof memberData.threatLevel ===
@@ -8000,15 +8072,19 @@ export const AdminPage: React.FC = () => {
                                           THREAT_LEVEL_META[level] ||
                                           THREAT_LEVEL_META[0];
                                         return (
-                                          <span
+                                          <button
+                                            type="button"
+                                            onClick={() => setThreatLevelOpen(!threatLevelOpen)}
                                             className={cn(
-                                              "rounded-full px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1",
+                                              "rounded-full px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer hover:ring-2 hover:ring-offset-1 transition-all",
                                               meta.badge,
+                                              threatLevelOpen && "ring-2 ring-offset-1"
                                             )}
+                                            title="Click to modify threat level"
                                           >
                                             <Shield className="h-3 w-3" />
                                             Lvl {level} - {meta.label}
-                                          </span>
+                                          </button>
                                         );
                                       })()}
                                       {memberData.isBannedEmail && (
@@ -8247,147 +8323,155 @@ export const AdminPage: React.FC = () => {
                               );
                             })()}
 
-                            {/* Threat Level Section - Improved UI */}
-                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden">
-                              {/* Header */}
-                              <div className="px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] border-b border-stone-200 dark:border-[#3e3e42]">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <Shield className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                                    <span className="text-sm font-semibold">Threat Level</span>
+                            {/* Threat Level Section - Collapsible, opens on badge click */}
+                            {threatLevelOpen && (
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                {/* Header */}
+                                <div 
+                                  className="px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] border-b border-stone-200 dark:border-[#3e3e42] cursor-pointer"
+                                  onClick={() => setThreatLevelOpen(false)}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Shield className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                      <span className="text-sm font-semibold">Change Threat Level</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {(() => {
+                                        const currentLevel = typeof memberData.threatLevel === "number" ? memberData.threatLevel : 0;
+                                        const meta = THREAT_LEVEL_META[currentLevel] || THREAT_LEVEL_META[0];
+                                        return (
+                                          <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", meta.badge)}>
+                                            Level {currentLevel} – {meta.label}
+                                          </span>
+                                        );
+                                      })()}
+                                      <ChevronDown className="h-4 w-4 text-stone-500 rotate-180" />
+                                    </div>
                                   </div>
-                                  {(() => {
-                                    const currentLevel = typeof memberData.threatLevel === "number" ? memberData.threatLevel : 0;
-                                    const meta = THREAT_LEVEL_META[currentLevel] || THREAT_LEVEL_META[0];
-                                    return (
-                                      <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", meta.badge)}>
-                                        Level {currentLevel} – {meta.label}
-                                      </span>
-                                    );
-                                  })()}
-                                </div>
-                                {memberData.threatLevel === 3 && (memberData.bannedByName || memberData.bannedAt) && (
-                                  <div className="mt-2 text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1.5">
-                                    <Ban className="h-3 w-3" />
-                                    Banned by {memberData.bannedByName || "admin"}
-                                    {memberData.bannedAt ? ` on ${new Date(memberData.bannedAt).toLocaleString()}` : ""}
-                                  </div>
-                                )}
-                              </div>
-                              
-                              {/* Threat Level Cards */}
-                              <div className="p-4 space-y-3">
-                                <div className="grid grid-cols-2 gap-2">
-                                  {([0, 1, 2, 3] as const).map((level) => {
-                                    const meta = THREAT_LEVEL_META[level];
-                                    const isSelected = threatLevelSelection === level;
-                                    const isCurrent = memberData.threatLevel === level;
-                                    const ThreatIcon = level === 0 ? CircleCheck : level === 1 ? AlertTriangle : level === 2 ? ShieldAlert : Ban;
-                                    
-                                    return (
-                                      <button
-                                        key={level}
-                                        type="button"
-                                        onClick={() => {
-                                          if (level === 3 && level !== threatLevelSelection) {
-                                            setPendingThreatLevel(3);
-                                            setThreatLevelConfirmOpen(true);
-                                          } else {
-                                            setThreatLevelSelection(level);
-                                          }
-                                        }}
-                                        className={cn(
-                                          "relative p-3 rounded-xl border-2 text-left transition-all",
-                                          isSelected 
-                                            ? `${meta.cardBg} ${meta.cardBorder} ring-2 ring-offset-1 ring-offset-white dark:ring-offset-[#1e1e20]`
-                                            : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52] bg-white dark:bg-[#252526]",
-                                          isSelected && level === 0 && "ring-emerald-400",
-                                          isSelected && level === 1 && "ring-amber-400",
-                                          isSelected && level === 2 && "ring-red-400",
-                                          isSelected && level === 3 && "ring-stone-600"
-                                        )}
-                                      >
-                                        {isCurrent && (
-                                          <div className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">
-                                            Current
-                                          </div>
-                                        )}
-                                        <div className="flex items-start gap-2">
-                                          <div className={cn(
-                                            "p-1.5 rounded-lg",
-                                            isSelected ? meta.cardBg : "bg-stone-100 dark:bg-[#2d2d30]"
-                                          )}>
-                                            <ThreatIcon className={cn("h-4 w-4", isSelected ? meta.iconColor : "text-stone-500 dark:text-stone-400")} />
-                                          </div>
-                                          <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-1.5">
-                                              <span className={cn(
-                                                "text-sm font-semibold",
-                                                level === 3 && isSelected && "text-white"
-                                              )}>
-                                                {meta.label}
-                                              </span>
-                                              <span className={cn(
-                                                "text-[10px] opacity-60 font-medium",
-                                                level === 3 && isSelected && "text-white/70"
-                                              )}>
-                                                Lvl {level}
-                                              </span>
-                                            </div>
-                                            <p className={cn(
-                                              "text-[11px] leading-tight mt-0.5 line-clamp-2",
-                                              level === 3 && isSelected ? "text-white/80" : "text-stone-500 dark:text-stone-400"
-                                            )}>
-                                              {meta.text}
-                                            </p>
-                                          </div>
-                                        </div>
-                                        {isSelected && (
-                                          <div className="absolute bottom-2 right-2">
-                                            <Check className={cn("h-4 w-4", level === 3 ? "text-white" : meta.iconColor)} />
-                                          </div>
-                                        )}
-                                      </button>
-                                    );
-                                  })}
+                                  {memberData.threatLevel === 3 && (memberData.bannedByName || memberData.bannedAt) && (
+                                    <div className="mt-2 text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1.5">
+                                      <Ban className="h-3 w-3" />
+                                      Banned by {memberData.bannedByName || "admin"}
+                                      {memberData.bannedAt ? ` on ${new Date(memberData.bannedAt).toLocaleString()}` : ""}
+                                    </div>
+                                  )}
                                 </div>
                                 
-                                {/* Update Button */}
-                                <div className="flex items-center gap-2 pt-2 border-t border-stone-100 dark:border-[#3e3e42]">
-                                  <Button
-                                    onClick={handleSetThreatLevel}
-                                    disabled={threatLevelUpdating || !memberData?.user?.id || threatLevelSelection === memberData.threatLevel}
-                                    className={cn(
-                                      "flex-1 rounded-xl transition-all",
-                                      threatLevelSelection === 3 
-                                        ? "bg-red-600 hover:bg-red-700 text-white" 
-                                        : threatLevelSelection === memberData.threatLevel 
-                                          ? "bg-stone-200 text-stone-500 dark:bg-stone-700 dark:text-stone-400"
-                                          : ""
-                                    )}
-                                  >
-                                    {threatLevelUpdating ? (
-                                      <>
-                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                        Updating...
-                                      </>
-                                    ) : threatLevelSelection === memberData.threatLevel ? (
-                                      "No changes"
-                                    ) : threatLevelSelection === 3 ? (
-                                      <>
-                                        <Ban className="h-4 w-4 mr-2" />
-                                        Set to Banned
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Shield className="h-4 w-4 mr-2" />
-                                        Update Threat Level
-                                      </>
-                                    )}
-                                  </Button>
+                                {/* Threat Level Cards */}
+                                <div className="p-4 space-y-3">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {([0, 1, 2, 3] as const).map((level) => {
+                                      const meta = THREAT_LEVEL_META[level];
+                                      const isSelected = threatLevelSelection === level;
+                                      const isCurrent = memberData.threatLevel === level;
+                                      const ThreatIcon = level === 0 ? CircleCheck : level === 1 ? AlertTriangle : level === 2 ? ShieldAlert : Ban;
+                                      
+                                      return (
+                                        <button
+                                          key={level}
+                                          type="button"
+                                          onClick={() => {
+                                            if (level === 3 && level !== threatLevelSelection) {
+                                              setPendingThreatLevel(3);
+                                              setThreatLevelConfirmOpen(true);
+                                            } else {
+                                              setThreatLevelSelection(level);
+                                            }
+                                          }}
+                                          className={cn(
+                                            "relative p-3 rounded-xl border-2 text-left transition-all",
+                                            isSelected 
+                                              ? `${meta.cardBg} ${meta.cardBorder} ring-2 ring-offset-1 ring-offset-white dark:ring-offset-[#1e1e20]`
+                                              : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52] bg-white dark:bg-[#252526]",
+                                            isSelected && level === 0 && "ring-emerald-400",
+                                            isSelected && level === 1 && "ring-amber-400",
+                                            isSelected && level === 2 && "ring-red-400",
+                                            isSelected && level === 3 && "ring-stone-600"
+                                          )}
+                                        >
+                                          {isCurrent && (
+                                            <div className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                                              Current
+                                            </div>
+                                          )}
+                                          <div className="flex items-start gap-2">
+                                            <div className={cn(
+                                              "p-1.5 rounded-lg",
+                                              isSelected ? meta.cardBg : "bg-stone-100 dark:bg-[#2d2d30]"
+                                            )}>
+                                              <ThreatIcon className={cn("h-4 w-4", isSelected ? meta.iconColor : "text-stone-500 dark:text-stone-400")} />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className={cn(
+                                                  "text-sm font-semibold",
+                                                  level === 3 && isSelected && "text-white"
+                                                )}>
+                                                  {meta.label}
+                                                </span>
+                                                <span className={cn(
+                                                  "text-[10px] opacity-60 font-medium",
+                                                  level === 3 && isSelected && "text-white/70"
+                                                )}>
+                                                  Lvl {level}
+                                                </span>
+                                              </div>
+                                              <p className={cn(
+                                                "text-[11px] leading-tight mt-0.5 line-clamp-2",
+                                                level === 3 && isSelected ? "text-white/80" : "text-stone-500 dark:text-stone-400"
+                                              )}>
+                                                {meta.text}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          {isSelected && (
+                                            <div className="absolute bottom-2 right-2">
+                                              <Check className={cn("h-4 w-4", level === 3 ? "text-white" : meta.iconColor)} />
+                                            </div>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {/* Update Button */}
+                                  <div className="flex items-center gap-2 pt-2 border-t border-stone-100 dark:border-[#3e3e42]">
+                                    <Button
+                                      onClick={handleSetThreatLevel}
+                                      disabled={threatLevelUpdating || !memberData?.user?.id || threatLevelSelection === memberData.threatLevel}
+                                      className={cn(
+                                        "flex-1 rounded-xl transition-all",
+                                        threatLevelSelection === 3 
+                                          ? "bg-red-600 hover:bg-red-700 text-white" 
+                                          : threatLevelSelection === memberData.threatLevel 
+                                            ? "bg-stone-200 text-stone-500 dark:bg-stone-700 dark:text-stone-400"
+                                            : ""
+                                      )}
+                                    >
+                                      {threatLevelUpdating ? (
+                                        <>
+                                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                          Updating...
+                                        </>
+                                      ) : threatLevelSelection === memberData.threatLevel ? (
+                                        "No changes"
+                                      ) : threatLevelSelection === 3 ? (
+                                        <>
+                                          <Ban className="h-4 w-4 mr-2" />
+                                          Set to Banned
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Shield className="h-4 w-4 mr-2" />
+                                          Update Threat Level
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            )}
                             
                             {/* Ban Confirmation Dialog */}
                             <Dialog open={threatLevelConfirmOpen} onOpenChange={setThreatLevelConfirmOpen}>
@@ -8443,25 +8527,25 @@ export const AdminPage: React.FC = () => {
                               </DialogContent>
                             </Dialog>
 
-                            {/* Roles Management Section - Redesigned */}
-                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e]">
-                              {/* Header */}
-                              <div 
-                                className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
-                                onClick={() => setRolesOpen(!rolesOpen)}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                                  <span className="text-sm font-medium">User Roles</span>
-                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
-                                    {memberRoles.length} active
-                                  </span>
+                            {/* Roles Management Section - Only shown when rolesOpen is true */}
+                            {rolesOpen && (
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e] animate-in fade-in slide-in-from-top-2 duration-200">
+                                {/* Header */}
+                                <div 
+                                  className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
+                                  onClick={() => setRolesOpen(false)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                    <span className="text-sm font-medium">Manage User Roles</span>
+                                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                                      {memberRoles.length} active
+                                    </span>
+                                  </div>
+                                  <ChevronDown className="h-4 w-4 text-stone-500 rotate-180" />
                                 </div>
-                                <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${rolesOpen ? "rotate-180" : ""}`} />
-                              </div>
-                              
-                              {/* Role Cards Grid */}
-                              {rolesOpen && (
+                                
+                                {/* Role Cards Grid */}
                                 <div className="p-4 space-y-3">
                                   {/* Active Roles Summary */}
                                   {memberRoles.length > 0 && (
@@ -8544,8 +8628,8 @@ export const AdminPage: React.FC = () => {
                                     </span>
                                   </div>
                                 </div>
-                              )}
-                            </div>
+                              </div>
+                            )}
                             
                             {/* Confirm Admin Role Dialog */}
                             <Dialog open={confirmAdminOpen} onOpenChange={setConfirmAdminOpen}>
@@ -9029,300 +9113,248 @@ export const AdminPage: React.FC = () => {
                             </CardContent>
                           </Card>
 
-                            {/* User Files Section - Improved UI */}
+                            {/* Uploaded Media Files Section - Global Image Database */}
                             <Card className="rounded-2xl overflow-hidden">
                               <CardContent className="p-0">
                                 {/* Header */}
-                                <div className="px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] border-b border-stone-200 dark:border-[#3e3e42]">
+                                <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-b border-emerald-200 dark:border-emerald-800/50">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <Image className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                                      <span className="text-sm font-semibold">User Files</span>
-                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
-                                        {(memberData.files || []).length}
+                                      <FolderOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                      <span className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Uploaded Media Files</span>
+                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-200">
+                                        {memberData.mediaTotalCount || 0}
                                       </span>
                                     </div>
-                                    {memberData.files && memberData.files.length > 6 && (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setFilesExpanded(!filesExpanded)}
-                                        className="rounded-lg text-xs h-7 px-2"
-                                      >
-                                        {filesExpanded ? "Show less" : `Show all (${memberData.files.length})`}
-                                        <ChevronDown className={cn("h-3 w-3 ml-1 transition-transform", filesExpanded && "rotate-180")} />
-                                      </Button>
-                                    )}
+                                    <div className="flex items-center gap-3">
+                                      {(memberData.mediaTotalSize || 0) > 0 && (
+                                        <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+                                          <HardDrive className="h-3 w-3" />
+                                          <span className="font-medium">
+                                            {memberData.mediaTotalSize && memberData.mediaTotalSize > 1024 * 1024 * 1024 
+                                              ? `${(memberData.mediaTotalSize / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                                              : memberData.mediaTotalSize && memberData.mediaTotalSize > 1024 * 1024
+                                                ? `${(memberData.mediaTotalSize / (1024 * 1024)).toFixed(2)} MB`
+                                                : memberData.mediaTotalSize && memberData.mediaTotalSize > 1024
+                                                  ? `${(memberData.mediaTotalSize / 1024).toFixed(1)} KB`
+                                                  : `${memberData.mediaTotalSize || 0} B`
+                                            }
+                                          </span>
+                                          <span className="text-emerald-600 dark:text-emerald-400">total</span>
+                                        </div>
+                                      )}
+                                      {memberData.user?.id && (
+                                        <Link
+                                          to={`/admin/upload/library?userId=${memberData.user.id}`}
+                                          className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:underline"
+                                        >
+                                          View all
+                                          <ArrowRight className="h-3 w-3" />
+                                        </Link>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                                 
-                                {/* Files Content */}
+                                {/* Media Files Content */}
                                 <div className="p-4">
-                                  {(!memberData.files || memberData.files.length === 0) ? (
+                                  {(!memberData.mediaUploads || memberData.mediaUploads.length === 0) ? (
                                     <div className="flex flex-col items-center justify-center py-8 text-center">
-                                      <div className="w-12 h-12 rounded-full bg-stone-100 dark:bg-[#2d2d30] flex items-center justify-center mb-3">
-                                        <Image className="h-6 w-6 text-stone-400" />
+                                      <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3">
+                                        <FileImage className="h-6 w-6 text-emerald-400" />
                                       </div>
-                                      <p className="text-sm text-stone-500 dark:text-stone-400">No files uploaded by this user yet</p>
+                                      <p className="text-sm text-stone-500 dark:text-stone-400">No media files uploaded by this user</p>
+                                      <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+                                        Media includes: blog images, messages, garden covers, etc.
+                                      </p>
                                     </div>
                                   ) : (
                                     <>
-                                      {/* Files Grid with Thumbnails */}
-                                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                        {(filesExpanded ? memberData.files : memberData.files.slice(0, 6)).map((file, index) => {
-                                          const uploaded = file.uploadedAt
-                                            ? new Date(file.uploadedAt).toLocaleDateString()
-                                            : null;
-                                          const hasImage = !!file.imageUrl;
+                                      {/* Media Grid */}
+                                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                                        {memberData.mediaUploads.slice(0, 5).map((media) => {
+                                          const isImage = (media.mimeType || "").startsWith("image/");
+                                          // Source badge config
+                                          const sourceConfig: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
+                                            admin: { label: "Admin", color: "bg-purple-500", icon: Shield },
+                                            blog: { label: "Blog", color: "bg-blue-500", icon: BookOpen },
+                                            messages: { label: "Chat", color: "bg-green-500", icon: MessageSquareIcon },
+                                            garden_cover: { label: "Garden", color: "bg-emerald-500", icon: Flower2 },
+                                            garden_journal: { label: "Journal", color: "bg-teal-500", icon: BookOpen },
+                                            garden_photo: { label: "Photo", color: "bg-lime-500", icon: Image },
+                                            pro_advice: { label: "Pro", color: "bg-amber-500", icon: Sparkles },
+                                            "pro-advice": { label: "Pro", color: "bg-amber-500", icon: Sparkles },
+                                            contact_screenshot: { label: "Contact", color: "bg-indigo-500", icon: MessageSquareIcon },
+                                          };
+                                          const config = sourceConfig[media.uploadSource] || { label: media.uploadSource, color: "bg-stone-500", icon: FileImage };
+                                          const SourceIcon = config.icon;
                                           
                                           return (
                                             <div
-                                              key={file.id}
-                                              className={cn(
-                                                "group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-stone-50 dark:bg-[#1b1b1d] transition-all hover:shadow-lg hover:border-stone-300 dark:hover:border-[#4e4e52]",
-                                                file.adminCommentary && "ring-2 ring-amber-300 dark:ring-amber-600"
-                                              )}
+                                              key={media.id}
+                                              className="group relative aspect-square rounded-xl overflow-hidden bg-stone-100 dark:bg-[#252526] border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-700 transition-all"
                                             >
-                                              {/* Thumbnail / Preview */}
-                                              <div 
-                                                className="aspect-square bg-stone-100 dark:bg-[#252526] relative cursor-pointer"
-                                                onClick={() => hasImage && setSelectedFileIndex(index)}
-                                              >
-                                                {hasImage ? (
-                                                  <>
-                                                    <img
-                                                      src={file.imageUrl!}
-                                                      alt={file.plantName || "File"}
-                                                      className="w-full h-full object-cover"
-                                                      loading="lazy"
-                                                    />
-                                                    {/* Hover Overlay */}
-                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                      <div className="bg-white/90 dark:bg-black/80 rounded-full p-2">
-                                                        <ZoomIn className="h-5 w-5 text-stone-700 dark:text-stone-200" />
-                                                      </div>
-                                                    </div>
-                                                  </>
-                                                ) : (
-                                                  <div className="w-full h-full flex items-center justify-center">
-                                                    <Image className="h-8 w-8 text-stone-300 dark:text-stone-600" />
-                                                  </div>
-                                                )}
-                                                
-                                                {/* Admin Comment Badge */}
-                                                {file.adminCommentary && (
-                                                  <div className="absolute top-2 right-2">
-                                                    <div className="bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                                                      <AlertTriangle className="h-2.5 w-2.5" />
-                                                      Note
+                                              {isImage && media.url ? (
+                                                <a href={media.url} target="_blank" rel="noreferrer" className="block w-full h-full">
+                                                  <img
+                                                    src={media.url}
+                                                    alt="Upload"
+                                                    className="w-full h-full object-cover"
+                                                    loading="lazy"
+                                                    onError={(e) => {
+                                                      // Replace with fallback icon if image fails to load
+                                                      const target = e.currentTarget;
+                                                      target.style.display = 'none';
+                                                      const parent = target.parentElement;
+                                                      if (parent) {
+                                                        const fallback = document.createElement('div');
+                                                        fallback.className = 'w-full h-full flex items-center justify-center bg-stone-100 dark:bg-[#252526]';
+                                                        fallback.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-stone-300 dark:text-stone-600"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+                                                        parent.insertBefore(fallback, target);
+                                                      }
+                                                    }}
+                                                  />
+                                                  {/* Hover overlay */}
+                                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                    <div className="bg-white/90 dark:bg-black/80 rounded-full p-2">
+                                                      <ExternalLink className="h-4 w-4 text-stone-700 dark:text-stone-200" />
                                                     </div>
                                                   </div>
-                                                )}
-                                              </div>
-                                              
-                                              {/* File Info */}
-                                              <div className="p-2.5 space-y-1">
-                                                <div className="text-xs font-semibold truncate" title={file.plantName || "File"}>
-                                                  {file.plantName || "File"}
-                                                </div>
-                                                {file.caption && (
-                                                  <p className="text-[11px] text-stone-500 dark:text-stone-400 line-clamp-1" title={file.caption}>
-                                                    {file.caption}
-                                                  </p>
-                                                )}
-                                                <div className="flex items-center justify-between pt-1">
-                                                  <span className="text-[10px] text-stone-400">
-                                                    {uploaded || "-"}
-                                                  </span>
-                                                  {hasImage && (
-                                                    <a
-                                                      href={file.imageUrl!}
-                                                      target="_blank"
-                                                      rel="noreferrer"
-                                                      onClick={(e) => e.stopPropagation()}
-                                                      className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
-                                                    >
-                                                      <ExternalLink className="h-3 w-3" />
-                                                      Open
-                                                    </a>
-                                                  )}
-                                                </div>
+                                                </a>
+                                              ) : (
+                                                <a href={media.url || "#"} target="_blank" rel="noreferrer" className="w-full h-full flex items-center justify-center">
+                                                  <FileImage className="h-8 w-8 text-stone-300 dark:text-stone-600" />
+                                                </a>
+                                              )}
+                                              {/* Source Badge */}
+                                              <div className={cn("absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-bold text-white flex items-center gap-0.5", config.color)}>
+                                                <SourceIcon className="h-2.5 w-2.5" />
+                                                {config.label}
                                               </div>
                                             </div>
                                           );
                                         })}
                                       </div>
                                       
-                                      {/* Show More Button (for mobile) */}
-                                      {!filesExpanded && memberData.files.length > 6 && (
-                                        <Button
-                                          variant="ghost"
-                                          className="w-full mt-3 rounded-xl text-xs"
-                                          onClick={() => setFilesExpanded(true)}
+                                      {/* View All Link */}
+                                      {(memberData.mediaTotalCount || 0) > 5 && memberData.user?.id && (
+                                        <Link
+                                          to={`/admin/upload/library?userId=${memberData.user.id}`}
+                                          className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
                                         >
-                                          Show {memberData.files.length - 6} more files
-                                          <ChevronDown className="h-3 w-3 ml-1" />
-                                        </Button>
+                                          View all {memberData.mediaTotalCount} media files
+                                          <ArrowRight className="h-4 w-4" />
+                                        </Link>
                                       )}
                                     </>
                                   )}
                                 </div>
                               </CardContent>
                             </Card>
-                            
-                            {/* File Viewer Modal/Lightbox */}
-                            {selectedFileIndex !== null && memberData.files && memberData.files[selectedFileIndex] && (
-                              <Dialog open={selectedFileIndex !== null} onOpenChange={() => setSelectedFileIndex(null)}>
-                                <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-2xl">
-                                  {(() => {
-                                    const file = memberData.files![selectedFileIndex!];
-                                    const uploaded = file.uploadedAt
-                                      ? new Date(file.uploadedAt).toLocaleString()
-                                      : null;
-                                    const totalFiles = memberData.files!.length;
-                                    const hasPrev = selectedFileIndex > 0;
-                                    const hasNext = selectedFileIndex < totalFiles - 1;
-                                    
-                                    return (
-                                      <>
-                                        {/* Close Button */}
-                                        <button
-                                          onClick={() => setSelectedFileIndex(null)}
-                                          className="absolute top-4 right-4 z-10 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-                                        >
-                                          <X className="h-5 w-5" />
-                                        </button>
-                                        
-                                        {/* Image */}
-                                        <div className="relative bg-stone-900 flex items-center justify-center min-h-[300px] max-h-[70vh]">
-                                          {file.imageUrl ? (
-                                            <img
-                                              src={file.imageUrl}
-                                              alt={file.plantName || "File"}
-                                              className="max-w-full max-h-[70vh] object-contain"
-                                            />
-                                          ) : (
-                                            <div className="flex items-center justify-center py-20">
-                                              <Image className="h-20 w-20 text-stone-600" />
-                                            </div>
-                                          )}
-                                          
-                                          {/* Navigation Arrows */}
-                                          {hasPrev && (
-                                            <button
-                                              onClick={() => setSelectedFileIndex(selectedFileIndex - 1)}
-                                              className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-3 transition-colors"
-                                            >
-                                              <ChevronLeft className="h-6 w-6" />
-                                            </button>
-                                          )}
-                                          {hasNext && (
-                                            <button
-                                              onClick={() => setSelectedFileIndex(selectedFileIndex + 1)}
-                                              className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-3 transition-colors"
-                                            >
-                                              <ChevronRight className="h-6 w-6" />
-                                            </button>
-                                          )}
-                                          
-                                          {/* Counter */}
-                                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-sm px-3 py-1 rounded-full">
-                                            {selectedFileIndex + 1} / {totalFiles}
-                                          </div>
-                                        </div>
-                                        
-                                        {/* File Details */}
-                                        <div className="p-4 bg-white dark:bg-[#1e1e20] space-y-3">
-                                          <div className="flex items-start justify-between gap-4">
-                                            <div className="min-w-0">
-                                              <h3 className="font-semibold text-lg truncate">
-                                                {file.plantName || "Untitled File"}
-                                              </h3>
-                                              {file.caption && (
-                                                <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
-                                                  {file.caption}
-                                                </p>
-                                              )}
-                                            </div>
-                                            {file.imageUrl && (
-                                              <a
-                                                href={file.imageUrl}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="shrink-0"
-                                              >
-                                                <Button variant="outline" size="sm" className="rounded-lg">
-                                                  <ExternalLink className="h-4 w-4 mr-2" />
-                                                  Open Original
-                                                </Button>
-                                              </a>
-                                            )}
-                                          </div>
-                                          
-                                          <div className="flex items-center gap-4 text-xs text-stone-500">
-                                            {uploaded && (
-                                              <span className="flex items-center gap-1">
-                                                <Clock className="h-3 w-3" />
-                                                {uploaded}
-                                              </span>
-                                            )}
-                                            {file.gardenPlantId && (
-                                              <span className="flex items-center gap-1">
-                                                <Leaf className="h-3 w-3" />
-                                                {file.gardenPlantId}
-                                              </span>
-                                            )}
-                                          </div>
-                                          
-                                          {/* Admin Commentary */}
-                                          {file.adminCommentary && (
-                                            <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
-                                              <div className="flex items-start gap-2">
-                                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                                                <div>
-                                                  <div className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">
-                                                    Admin Note
-                                                  </div>
-                                                  <p className="text-sm text-amber-700 dark:text-amber-300">
-                                                    {file.adminCommentary}
-                                                  </p>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                </DialogContent>
-                              </Dialog>
-                            )}
 
-                            <Card className="rounded-2xl">
-                              <CardContent className="p-4 space-y-2">
-                                <div className="flex items-start justify-between">
-                                  <div className="text-sm font-medium">
-                                    Admin notes
+                            {/* Report Cases Section */}
+                            <Card className="rounded-2xl overflow-hidden">
+                              <CardContent className="p-0">
+                                {/* Header */}
+                                <div className="px-4 py-3 bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 border-b border-red-200 dark:border-red-800/50">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                      <span className="text-sm font-semibold text-red-900 dark:text-red-100">Report Cases</span>
+                                      <div className="flex items-center gap-1.5">
+                                        {(memberData.reportsAgainstCount || 0) > 0 && (
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-200">
+                                            {memberData.reportsAgainstCount} against
+                                          </span>
+                                        )}
+                                        {(memberData.reportsByCount || 0) > 0 && (
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
+                                            {memberData.reportsByCount} filed
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <Link
+                                      to="/admin/members/reports"
+                                      className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:underline flex items-center gap-1"
+                                    >
+                                      View all reports
+                                      <ArrowRight className="h-3 w-3" />
+                                    </Link>
                                   </div>
-                                  <AddAdminNote
-                                    profileId={memberData.user?.id || ""}
-                                    onAdded={() => lookupMember()}
-                                  />
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                                    Reports filed against this user for review
+                                  </p>
                                 </div>
-                                <div className="space-y-2">
-                                  {(memberData.adminNotes || []).length ===
-                                  0 ? (
-                                    <div className="text-sm opacity-60">
-                                      No notes yet.
+                                
+                                {/* Reports Content */}
+                                <div className="p-4">
+                                  {(!memberData.userReports || memberData.userReports.length === 0) ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                      <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-3">
+                                        <CircleCheck className="h-6 w-6 text-green-500" />
+                                      </div>
+                                      <p className="text-sm font-medium text-green-700 dark:text-green-400">No reports against this user</p>
+                                      <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+                                        This user has a clean record
+                                      </p>
                                     </div>
                                   ) : (
-                                    (memberData.adminNotes || []).map((n) => (
-                                      <NoteRow
-                                        key={n.id}
-                                        note={n}
-                                        onRemoved={() => lookupMember()}
-                                      />
-                                    ))
+                                    <div className="space-y-3">
+                                      {memberData.userReports.slice(0, 5).map((report) => (
+                                        <div
+                                          key={report.id}
+                                          className={cn(
+                                            "p-3 rounded-xl border",
+                                            report.status === 'review'
+                                              ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
+                                              : "bg-stone-50 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700"
+                                          )}
+                                        >
+                                          <div className="flex items-start justify-between gap-2">
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <Badge
+                                                  variant={report.status === 'review' ? 'default' : 'secondary'}
+                                                  className={cn(
+                                                    "text-xs",
+                                                    report.status === 'review' 
+                                                      ? "bg-amber-500" 
+                                                      : "bg-emerald-500"
+                                                  )}
+                                                >
+                                                  {report.status === 'review' ? (
+                                                    <><Clock className="h-3 w-3 mr-1" /> Open</>
+                                                  ) : (
+                                                    <><Check className="h-3 w-3 mr-1" /> Closed</>
+                                                  )}
+                                                </Badge>
+                                                <span className="text-xs text-stone-500">
+                                                  {report.createdAt ? new Date(report.createdAt).toLocaleDateString() : '-'}
+                                                </span>
+                                              </div>
+                                              <p className="text-sm mt-2 line-clamp-2">{report.reason || 'No reason provided'}</p>
+                                              <div className="flex items-center gap-3 mt-2 text-xs text-stone-500">
+                                                <span>Reported by: <span className="font-medium">{report.reporterName}</span></span>
+                                                {report.classifierName && (
+                                                  <span>Handled by: <span className="font-medium">{report.classifierName}</span></span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                      
+                                      {(memberData.reportsAgainstCount || 0) > 5 && (
+                                        <Link
+                                          to="/admin/members/reports"
+                                          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                                        >
+                                          View all {memberData.reportsAgainstCount} reports
+                                          <ArrowRight className="h-4 w-4" />
+                                        </Link>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </CardContent>
@@ -9385,6 +9417,38 @@ export const AdminPage: React.FC = () => {
                                   )}
                               </div>
                             )}
+
+                            {/* Admin Commentary - Last Element */}
+                            <Card className="rounded-2xl">
+                              <CardContent className="p-4 space-y-2">
+                                <div className="flex items-start justify-between">
+                                  <div className="text-sm font-medium flex items-center gap-2">
+                                    <MessageSquareText className="h-4 w-4 text-stone-500" />
+                                    Admin Commentary
+                                  </div>
+                                  <AddAdminNote
+                                    profileId={memberData.user?.id || ""}
+                                    onAdded={() => lookupMember()}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  {(memberData.adminNotes || []).length ===
+                                  0 ? (
+                                    <div className="text-sm opacity-60">
+                                      No notes yet.
+                                    </div>
+                                  ) : (
+                                    (memberData.adminNotes || []).map((n) => (
+                                      <NoteRow
+                                        key={n.id}
+                                        note={n}
+                                        onRemoved={() => lookupMember()}
+                                      />
+                                    ))
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
                           </div>
                         )}
                       </CardContent>

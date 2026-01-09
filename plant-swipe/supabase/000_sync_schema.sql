@@ -1569,27 +1569,60 @@ do $$ begin
     end if;
 end $$;
 
--- ========== Admin media uploads ==========
+-- ========== Global Image Database (admin_media_uploads) ==========
+-- Tracks ALL images uploaded across the platform: admin uploads, blog images, 
+-- garden covers, message attachments, pro advice images, email images, etc.
 create table if not exists public.admin_media_uploads (
   id uuid primary key default gen_random_uuid(),
-  admin_id uuid,
-  admin_email text,
-  admin_name text,
-  bucket text not null,
-  path text not null,
-  public_url text,
-  mime_type text,
-  original_mime_type text,
-  size_bytes integer,
-  original_size_bytes integer,
-  quality integer,
-  compression_percent integer,
-  metadata jsonb,
+  admin_id uuid,                    -- User ID who uploaded (despite the name, can be any user)
+  admin_email text,                 -- Email of uploader
+  admin_name text,                  -- Display name of uploader
+  bucket text not null,             -- Storage bucket name
+  path text not null,               -- Path within the bucket
+  public_url text,                  -- Public URL to access the image
+  mime_type text,                   -- Final MIME type after optimization
+  original_mime_type text,          -- Original MIME type before optimization
+  size_bytes integer,               -- Final size in bytes
+  original_size_bytes integer,      -- Original size before optimization
+  quality integer,                  -- Quality setting used for optimization
+  compression_percent integer,      -- Percentage of space saved
+  metadata jsonb,                   -- Additional metadata (original name, garden info, etc.)
+  upload_source text,               -- Function/purpose: admin, blog, garden_cover, messages, pro_advice, email
   created_at timestamptz not null default now()
 );
 create index if not exists admin_media_uploads_created_idx on public.admin_media_uploads (created_at desc);
 create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
 create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
+create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
+
+-- Add upload_source column to existing installations (safe to run multiple times)
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'admin_media_uploads' 
+    and column_name = 'upload_source'
+  ) then
+    alter table public.admin_media_uploads add column upload_source text;
+  end if;
+end $$;
+
+-- Backfill upload_source from metadata for existing records
+update public.admin_media_uploads
+set upload_source = coalesce(
+  metadata->>'scope',
+  metadata->>'source',
+  case 
+    when path like '%garden%cover%' then 'garden_cover'
+    when path like '%blog%' then 'blog'
+    when path like '%messages%' then 'messages'
+    when path like '%pro-advice%' or path like '%pro_advice%' then 'pro_advice'
+    when path like '%contact%' then 'contact_screenshot'
+    when path like '%journal%' then 'garden_journal'
+    else 'admin'
+  end
+)
+where upload_source is null;
 
 -- ========== Team Members (About page) ==========
 create table if not exists public.team_members (

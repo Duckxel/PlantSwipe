@@ -2478,14 +2478,22 @@ async function ensureAdminMediaUploadsTable() {
       quality integer,
       compression_percent integer,
       metadata jsonb,
+      upload_source text,
       created_at timestamptz not null default now()
     );
     create index if not exists admin_media_uploads_created_idx on public.admin_media_uploads (created_at desc);
     create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
     create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
+    create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
+  `
+  // Add column if it doesn't exist (for existing installations)
+  const addColumnDdl = `
+    alter table public.admin_media_uploads add column if not exists upload_source text;
+    create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
   `
   try {
     await sql.unsafe(ddl, [], { simple: true })
+    await sql.unsafe(addColumnDdl, [], { simple: true })
     adminMediaUploadsEnsured = true
   } catch (err) {
     console.error('[schema] failed to ensure admin_media_uploads table', err)
@@ -2530,6 +2538,13 @@ function normalizeAdminMediaRow(row) {
   // Transform any Supabase URLs to proxy URLs for backward compatibility
   const rawUrl = row.public_url || row.publicUrl || null
   const url = rawUrl ? supabaseStorageToMediaProxy(rawUrl) : null
+  // Derive upload source from column, metadata.scope, or metadata.source
+  const uploadSource = 
+    row.upload_source || 
+    row.uploadSource || 
+    row.metadata?.scope || 
+    row.metadata?.source || 
+    'admin'
   return {
     id: row.id || null,
     adminId: row.admin_id || row.adminId || null,
@@ -2552,6 +2567,7 @@ function normalizeAdminMediaRow(row) {
         ? row.compression_percent
         : row.compressionPercent ?? null,
     metadata: row.metadata || null,
+    uploadSource,
     createdAt: row.created_at || row.createdAt || null,
   }
 }
@@ -2586,13 +2602,15 @@ async function recordAdminMediaUpload(row) {
       }
       return base
     })()
+    // Derive upload_source from metadata.scope, metadata.source, or row.uploadSource
+    const uploadSource = row.uploadSource || row.metadata?.scope || row.metadata?.source || 'admin'
 
     if (sql) {
       const inserted = await sql`
         insert into public.admin_media_uploads
-          (admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at)
+          (admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at)
         values
-          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(metadataPayload || null)}, ${createdAtValue})
+          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(metadataPayload || null)}, ${uploadSource}, ${createdAtValue})
         on conflict (bucket, path) do update set
           admin_id = excluded.admin_id,
           admin_email = excluded.admin_email,
@@ -2604,9 +2622,10 @@ async function recordAdminMediaUpload(row) {
           original_size_bytes = excluded.original_size_bytes,
           quality = excluded.quality,
           compression_percent = excluded.compression_percent,
-            metadata = excluded.metadata,
+          metadata = excluded.metadata,
+          upload_source = excluded.upload_source,
           created_at = excluded.created_at
-        returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at
+        returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at
       `
       return Array.isArray(inserted) && inserted.length > 0
         ? normalizeAdminMediaRow(inserted[0])
@@ -2630,12 +2649,13 @@ async function recordAdminMediaUpload(row) {
             quality: row.quality,
             compression_percent: row.compressionPercent,
             metadata: metadataPayload || null,
+            upload_source: uploadSource,
             created_at: createdAtValue,
           },
           { onConflict: 'bucket,path' }
         )
         .select(
-          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at'
+          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at'
         )
         .maybeSingle()
       if (error) throw error
@@ -2731,6 +2751,7 @@ async function syncGardenCoverMedia(existingKeys, limit = 200) {
       originalSizeBytes: null,
       quality: gardenCoverWebpQuality,
       compressionPercent: null,
+      uploadSource: 'garden_cover',
       metadata: {
         source: 'garden_cover',
         gardenId: row.id || null,
@@ -3405,6 +3426,38 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
 
           // Use media proxy
           const proxyUrl = supabaseStorageToMediaProxy(publicData.publicUrl)
+
+          // Record to global image database
+          let uploaderDisplayName = null
+          try {
+            uploaderDisplayName = await getAdminProfileName(user.id)
+          } catch { }
+          
+          try {
+            await recordAdminMediaUpload({
+              adminId: user.id,
+              adminEmail: user.email || null,
+              adminName: uploaderDisplayName,
+              bucket: adminUploadBucket,
+              path: path,
+              publicUrl: proxyUrl,
+              mimeType: 'image/webp',
+              originalMimeType: file.mimetype || 'image/unknown',
+              sizeBytes: buffer.length,
+              originalSizeBytes: file.size,
+              quality: 80,
+              compressionPercent: file.size > 0 ? Math.max(0, Math.round(100 - (buffer.length / file.size) * 100)) : 0,
+              uploadSource: 'contact_screenshot',
+              metadata: {
+                source: 'contact_screenshot',
+                originalName: file.originalname,
+                userId: user.id,
+              },
+              createdAt: new Date().toISOString(),
+            })
+          } catch (recordErr) {
+            console.error('[contact-upload] failed to record media upload', recordErr)
+          }
 
           res.json({ url: proxyUrl })
         } catch (e) {
@@ -5261,11 +5314,24 @@ app.get('/api/admin/media', async (req, res) => {
   const admin = await ensureEditor(req, res)
   if (!admin) return
 
+  // Ensure table schema is up to date (adds upload_source column if missing)
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
   const limitParam = Number.parseInt(String(req.query?.limit || ''), 10)
-  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 50
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 100
   const bucketParamRaw =
     typeof req.query?.bucket === 'string'
       ? String(req.query.bucket).trim().toLowerCase()
+      : null
+  const sourceParam =
+    typeof req.query?.source === 'string'
+      ? String(req.query.source).trim().toLowerCase()
+      : null
+  const userIdParam =
+    typeof req.query?.userId === 'string'
+      ? String(req.query.userId).trim()
       : null
   const gardenBucketName = gardenCoverUploadBucket
     ? gardenCoverUploadBucket.toLowerCase()
@@ -5277,15 +5343,15 @@ app.get('/api/admin/media', async (req, res) => {
     let rows = []
     if (sql) {
       rows =
-        await sql`select id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at from public.admin_media_uploads order by created_at desc limit ${limit}`
+        await sql`select id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at from public.admin_media_uploads order by created_at desc limit ${limit * 2}`
     } else if (supabaseServiceClient) {
       const { data, error } = await supabaseServiceClient
         .from('admin_media_uploads')
         .select(
-          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at',
+          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at',
         )
         .order('created_at', { ascending: false })
-        .limit(limit)
+        .limit(limit * 2)
       if (error) throw error
       rows = data || []
     } else {
@@ -5296,9 +5362,25 @@ app.get('/api/admin/media', async (req, res) => {
     let media = (rows || [])
       .map((row) => normalizeAdminMediaRow(row))
       .filter(Boolean)
+    
+    // Filter by bucket if specified
     if (bucketParamRaw) {
       media = media.filter(
         (item) => (item?.bucket || '').toLowerCase() === bucketParamRaw,
+      )
+    }
+    
+    // Filter by source/function if specified
+    if (sourceParam) {
+      media = media.filter(
+        (item) => (item?.uploadSource || '').toLowerCase() === sourceParam,
+      )
+    }
+    
+    // Filter by user ID if specified
+    if (userIdParam) {
+      media = media.filter(
+        (item) => item?.adminId === userIdParam,
       )
     }
 
@@ -5309,7 +5391,7 @@ app.get('/api/admin/media', async (req, res) => {
     )
 
     let combined = [...media]
-    if (includeGardenCovers) {
+    if (includeGardenCovers && !sourceParam) {
       try {
         const gardenMedia = await syncGardenCoverMedia(seenKeys, limit)
         combined = combined.concat(gardenMedia.filter(Boolean))
@@ -5326,7 +5408,30 @@ app.get('/api/admin/media', async (req, res) => {
       return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0)
     })
 
-    res.json({ ok: true, media: combined.slice(0, limit) })
+    // Collect unique sources for filter dropdown
+    const availableSources = [...new Set(combined.map(item => item?.uploadSource).filter(Boolean))].sort()
+    
+    // Collect stats
+    const totalSize = combined.reduce((sum, item) => sum + (item?.sizeBytes || 0), 0)
+    const stats = {
+      totalCount: combined.length,
+      totalSize,
+      bySource: availableSources.reduce((acc, src) => {
+        const items = combined.filter(item => item?.uploadSource === src)
+        acc[src] = {
+          count: items.length,
+          size: items.reduce((sum, item) => sum + (item?.sizeBytes || 0), 0),
+        }
+        return acc
+      }, {}),
+    }
+
+    res.json({ 
+      ok: true, 
+      media: combined.slice(0, limit),
+      availableSources,
+      stats,
+    })
   } catch (err) {
     console.error('[media] failed to load admin media uploads', err)
     res.status(500).json({ error: 'Failed to load media uploads' })
@@ -8210,6 +8315,83 @@ app.get('/api/admin/member', async (req, res) => {
         const adminName = null
         if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
       } catch { }
+
+      // Fetch media uploads from global image database (REST fallback)
+      let mediaUploads = []
+      let mediaTotalSize = 0
+      let mediaTotalCount = 0
+      try {
+        const mr = await fetch(`${supabaseUrlEnv}/rest/v1/admin_media_uploads?admin_id=eq.${encodeURIComponent(targetId)}&select=id,bucket,path,public_url,mime_type,size_bytes,upload_source,metadata,created_at&order=created_at.desc&limit=12`, {
+          headers: baseHeaders,
+        })
+        if (mr.ok) {
+          const arr = await mr.json().catch(() => [])
+          mediaUploads = Array.isArray(arr) ? arr.map(r => ({
+            id: String(r.id),
+            url: r.public_url || null,
+            bucket: r.bucket || null,
+            path: r.path || null,
+            mimeType: r.mime_type || null,
+            sizeBytes: typeof r.size_bytes === 'number' ? r.size_bytes : null,
+            uploadSource: r.upload_source || r.metadata?.scope || r.metadata?.source || 'unknown',
+            createdAt: r.created_at || null,
+          })) : []
+        }
+        // Get totals via count header
+        const countR = await fetch(`${supabaseUrlEnv}/rest/v1/admin_media_uploads?admin_id=eq.${encodeURIComponent(targetId)}&select=size_bytes`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact' },
+        })
+        if (countR.ok) {
+          const cr = countR.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) mediaTotalCount = Number(m[1])
+          const sizeArr = await countR.json().catch(() => [])
+          if (Array.isArray(sizeArr)) {
+            mediaTotalSize = sizeArr.reduce((sum, r) => sum + (r.size_bytes || 0), 0)
+          }
+        }
+      } catch { }
+
+      // Fetch user reports (REST fallback)
+      let userReports = []
+      let reportsAgainstCount = 0
+      let reportsByCount = 0
+      try {
+        const reportsResp = await fetch(`${supabaseUrlEnv}/rest/v1/user_reports?reported_user_id=eq.${encodeURIComponent(targetId)}&select=id,reason,status,created_at,classified_at,reporter:profiles!user_reports_reporter_id_fkey(display_name),classifier:profiles!user_reports_classified_by_fkey(display_name)&order=created_at.desc&limit=20`, {
+          headers: baseHeaders,
+        })
+        if (reportsResp.ok) {
+          const arr = await reportsResp.json().catch(() => [])
+          userReports = Array.isArray(arr) ? arr.map(r => ({
+            id: String(r.id),
+            reason: r.reason || null,
+            status: r.status || 'review',
+            createdAt: r.created_at || null,
+            classifiedAt: r.classified_at || null,
+            reporterName: r.reporter?.display_name || 'Unknown',
+            classifierName: r.classifier?.display_name || null,
+            type: 'against'
+          })) : []
+        }
+        // Get counts
+        const againstCountResp = await fetch(`${supabaseUrlEnv}/rest/v1/user_reports?reported_user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+        })
+        if (againstCountResp.ok) {
+          const cr = againstCountResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) reportsAgainstCount = Number(m[1])
+        }
+        const byCountResp = await fetch(`${supabaseUrlEnv}/rest/v1/user_reports?reporter_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+        })
+        if (byCountResp.ok) {
+          const cr = byCountResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) reportsByCount = Number(m[1])
+        }
+      } catch { }
+
       const threatLevel = typeof profile?.threat_level === 'number' ? profile.threat_level : null
       res.json({
         ok: true,
@@ -8231,6 +8413,12 @@ app.get('/api/admin/member', async (req, res) => {
         bannedIps,
         threatLevel,
         files: userFiles,
+        mediaUploads,
+        mediaTotalCount,
+        mediaTotalSize,
+        userReports,
+        reportsAgainstCount,
+        reportsByCount,
         topReferrers: memberTopReferrers.slice(0, 5),
         topCountries: memberTopCountries.slice(0, 5),
         topDevices: memberTopDevices.slice(0, 5),
@@ -8477,6 +8665,158 @@ app.get('/api/admin/member', async (req, res) => {
       const adminName = null
       if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || qLower || null}, ${sql.json({ via: 'db' })})`
     } catch { }
+
+    // Fetch media uploads from global image database for this user
+    let mediaUploads = []
+    let mediaTotalSize = 0
+    let mediaTotalCount = 0
+    try {
+      // Ensure table schema is up to date (adds upload_source column if missing)
+      await ensureAdminMediaUploadsTable()
+    } catch { }
+    try {
+      if (sql) {
+        const mediaRows = await sql`
+          select id, bucket, path, public_url, mime_type, size_bytes, upload_source, metadata, created_at
+          from public.admin_media_uploads
+          where admin_id = ${user.id}
+          order by created_at desc
+          limit 12
+        `
+        mediaUploads = Array.isArray(mediaRows) ? mediaRows.map(r => ({
+          id: String(r.id),
+          url: r.public_url || null,
+          bucket: r.bucket || null,
+          path: r.path || null,
+          mimeType: r.mime_type || null,
+          sizeBytes: typeof r.size_bytes === 'number' ? r.size_bytes : null,
+          uploadSource: r.upload_source || r.metadata?.scope || r.metadata?.source || 'unknown',
+          createdAt: r.created_at || null,
+        })) : []
+        
+        // Get total count and size
+        const statsRows = await sql`
+          select count(*)::int as total_count, coalesce(sum(size_bytes), 0)::bigint as total_size
+          from public.admin_media_uploads
+          where admin_id = ${user.id}
+        `
+        if (Array.isArray(statsRows) && statsRows[0]) {
+          mediaTotalCount = statsRows[0].total_count || 0
+          mediaTotalSize = Number(statsRows[0].total_size || 0)
+        }
+      } else if (supabaseServiceClient) {
+        const { data, error } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .select('id, bucket, path, public_url, mime_type, size_bytes, upload_source, metadata, created_at')
+          .eq('admin_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(12)
+        if (!error && data) {
+          mediaUploads = data.map(r => ({
+            id: String(r.id),
+            url: r.public_url || null,
+            bucket: r.bucket || null,
+            path: r.path || null,
+            mimeType: r.mime_type || null,
+            sizeBytes: typeof r.size_bytes === 'number' ? r.size_bytes : null,
+            uploadSource: r.upload_source || r.metadata?.scope || r.metadata?.source || 'unknown',
+            createdAt: r.created_at || null,
+          }))
+        }
+        // Get totals
+        const { count } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .select('*', { count: 'exact', head: true })
+          .eq('admin_id', user.id)
+        mediaTotalCount = count || 0
+        
+        const { data: sizeData } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .select('size_bytes')
+          .eq('admin_id', user.id)
+        if (sizeData) {
+          mediaTotalSize = sizeData.reduce((sum, r) => sum + (r.size_bytes || 0), 0)
+        }
+      }
+    } catch (mediaErr) {
+      console.error('[member-lookup] failed to fetch media uploads', mediaErr)
+    }
+
+    // Fetch user reports (reports against this user)
+    let userReports = []
+    let reportsAgainstCount = 0
+    let reportsByCount = 0
+    try {
+      if (sql) {
+        // Reports against this user
+        const reportsAgainst = await sql`
+          select r.id, r.reason, r.status, r.created_at, r.classified_at,
+                 rp.display_name as reporter_name,
+                 cp.display_name as classifier_name
+          from public.user_reports r
+          left join public.profiles rp on rp.id = r.reporter_id
+          left join public.profiles cp on cp.id = r.classified_by
+          where r.reported_user_id = ${user.id}
+          order by r.created_at desc
+          limit 20
+        `
+        userReports = Array.isArray(reportsAgainst) ? reportsAgainst.map(r => ({
+          id: String(r.id),
+          reason: r.reason || null,
+          status: r.status || 'review',
+          createdAt: r.created_at || null,
+          classifiedAt: r.classified_at || null,
+          reporterName: r.reporter_name || 'Unknown',
+          classifierName: r.classifier_name || null,
+          type: 'against'
+        })) : []
+        
+        // Get counts
+        const countResult = await sql`
+          select
+            (select count(*)::int from public.user_reports where reported_user_id = ${user.id}) as against,
+            (select count(*)::int from public.user_reports where reporter_id = ${user.id}) as by_user
+        `
+        if (Array.isArray(countResult) && countResult[0]) {
+          reportsAgainstCount = countResult[0].against || 0
+          reportsByCount = countResult[0].by_user || 0
+        }
+      } else if (supabaseServiceClient) {
+        const { data: reportsData, error } = await supabaseServiceClient
+          .from('user_reports')
+          .select('id, reason, status, created_at, classified_at, reporter:profiles!user_reports_reporter_id_fkey(display_name), classifier:profiles!user_reports_classified_by_fkey(display_name)')
+          .eq('reported_user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(20)
+        if (!error && reportsData) {
+          userReports = reportsData.map(r => ({
+            id: String(r.id),
+            reason: r.reason || null,
+            status: r.status || 'review',
+            createdAt: r.created_at || null,
+            classifiedAt: r.classified_at || null,
+            reporterName: r.reporter?.display_name || 'Unknown',
+            classifierName: r.classifier?.display_name || null,
+            type: 'against'
+          }))
+        }
+        // Get counts
+        const { count: againstCount } = await supabaseServiceClient
+          .from('user_reports')
+          .select('*', { count: 'exact', head: true })
+          .eq('reported_user_id', user.id)
+        reportsAgainstCount = againstCount || 0
+        
+        const { count: byCount } = await supabaseServiceClient
+          .from('user_reports')
+          .select('*', { count: 'exact', head: true })
+          .eq('reporter_id', user.id)
+        reportsByCount = byCount || 0
+      }
+    } catch (reportsErr) {
+      console.error('[member-lookup] failed to fetch user reports', reportsErr)
+    }
+
     const currentThreatLevel = typeof threatLevel === 'number' ? threatLevel : (typeof profile?.threat_level === 'number' ? profile.threat_level : null)
     res.json({
       ok: true,
@@ -8498,6 +8838,12 @@ app.get('/api/admin/member', async (req, res) => {
       bannedIps,
       threatLevel: currentThreatLevel,
       files: userFiles,
+      mediaUploads,
+      mediaTotalCount,
+      mediaTotalSize,
+      userReports,
+      reportsAgainstCount,
+      reportsByCount,
       topReferrers: topReferrers.slice(0, 5),
       topCountries: topCountries.slice(0, 5),
       topDevices: topDevices.slice(0, 5),
@@ -11918,6 +12264,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
           originalSizeBytes: file.size,
           quality: gardenCoverWebpQuality,
           compressionPercent,
+          uploadSource: 'garden_cover',
           metadata: {
             source: 'garden_cover',
             gardenId,
@@ -12106,6 +12453,38 @@ app.post('/api/messages/upload-image', async (req, res) => {
         file.size > 0 && finalMimeType !== 'image/gif'
           ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
           : 0
+
+      // Record to global image database
+      let uploaderDisplayName = null
+      try {
+        uploaderDisplayName = await getAdminProfileName(user.id)
+      } catch { }
+      
+      try {
+        await recordAdminMediaUpload({
+          adminId: user.id,
+          adminEmail: user.email || null,
+          adminName: uploaderDisplayName,
+          bucket: messageImageUploadBucket,
+          path: objectPath,
+          publicUrl: proxyUrl,
+          mimeType: finalMimeType,
+          originalMimeType: mime,
+          sizeBytes: optimizedBuffer.length,
+          originalSizeBytes: file.size,
+          quality: finalMimeType === 'image/gif' ? null : messageImageWebpQuality,
+          compressionPercent,
+          uploadSource: 'messages',
+          metadata: {
+            source: 'messages',
+            originalName: file.originalname,
+            userId: user.id,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      } catch (recordErr) {
+        console.error('[message-image] failed to record media upload', recordErr)
+      }
 
       res.json({
         ok: true,
@@ -15325,6 +15704,40 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       // Get public URL and transform to media proxy
       const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
       const proxyUrl = supabaseStorageToMediaProxy(urlData?.publicUrl) || urlData?.publicUrl || ''
+
+      // Record to global image database
+      let uploaderDisplayName = null
+      try {
+        uploaderDisplayName = await getAdminProfileName(user.id)
+      } catch { }
+      
+      try {
+        await recordAdminMediaUpload({
+          adminId: user.id,
+          adminEmail: user.email || null,
+          adminName: uploaderDisplayName,
+          bucket: 'photos',
+          path: storagePath,
+          publicUrl: proxyUrl,
+          mimeType: mimeType || 'image/jpeg',
+          originalMimeType: mimeType || 'image/jpeg',
+          sizeBytes: fileBuffer.length,
+          originalSizeBytes: fileBuffer.length,
+          quality: null,
+          compressionPercent: null,
+          uploadSource: folder === 'journal' ? 'garden_journal' : 'garden_photo',
+          metadata: {
+            source: folder === 'journal' ? 'garden_journal' : 'garden_photo',
+            originalName: fileName,
+            gardenId: gardenId,
+            folder: folder,
+            userId: user.id,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      } catch (recordErr) {
+        console.error('[upload] failed to record media upload', recordErr)
+      }
 
       res.json({ ok: true, url: proxyUrl, path: storagePath })
     })
