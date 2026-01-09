@@ -78,8 +78,16 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     previewUrl: string
   } | null>(null)
   
+  // Pagination state
+  const [hasMoreMessages, setHasMoreMessages] = React.useState(true)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+  const initialLoadDoneRef = React.useRef(false)
+  const lastMessageIdRef = React.useRef<string | null>(null)
+  const MESSAGES_PER_PAGE = 20
+  
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const messagesContainerRef = React.useRef<HTMLDivElement>(null)
+  const messagesTopRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const attachMenuRef = React.useRef<HTMLDivElement>(null)
@@ -131,31 +139,88 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`
   }, [])
   
-  // Load messages
+  // Load initial messages (most recent 20)
   const loadMessages = React.useCallback(async () => {
     try {
       setError(null)
-      const data = await getConversationMessages(conversationId)
+      const data = await getConversationMessages(conversationId, { limit: MESSAGES_PER_PAGE })
       setMessages(data)
+      setHasMoreMessages(data.length >= MESSAGES_PER_PAGE)
       await markMessagesAsRead(conversationId)
     } catch (e: any) {
       console.error('[conversation] Failed to load messages:', e)
       setError(e?.message || 'Failed to load messages')
     } finally {
       setLoading(false)
+      initialLoadDoneRef.current = true
     }
   }, [conversationId])
+  
+  // Load more (older) messages when scrolling up
+  const loadMoreMessages = React.useCallback(async () => {
+    if (loadingMore || !hasMoreMessages || messages.length === 0) return
+    
+    setLoadingMore(true)
+    try {
+      const oldestMessage = messages[0]
+      const olderMessages = await getConversationMessages(conversationId, {
+        limit: MESSAGES_PER_PAGE,
+        before: oldestMessage.id
+      })
+      
+      if (olderMessages.length < MESSAGES_PER_PAGE) {
+        setHasMoreMessages(false)
+      }
+      
+      if (olderMessages.length > 0) {
+        // Prepend older messages to the list
+        setMessages(prev => [...olderMessages, ...prev])
+      }
+    } catch (e: any) {
+      console.error('[conversation] Failed to load more messages:', e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [conversationId, hasMoreMessages, loadingMore, messages])
   
   React.useEffect(() => {
     loadMessages()
   }, [loadMessages])
   
-  // Scroll to bottom when messages change
+  // Scroll to bottom - only when new messages arrive (not when loading older)
   React.useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    if (!messagesEndRef.current || messages.length === 0) return
+    
+    const currentLastMessageId = messages[messages.length - 1]?.id
+    const previousLastMessageId = lastMessageIdRef.current
+    
+    // Only scroll if the last message changed (new message added)
+    // or if this is the initial load
+    if (currentLastMessageId !== previousLastMessageId) {
+      const behavior = previousLastMessageId === null ? 'instant' : 'smooth'
+      messagesEndRef.current.scrollIntoView({ behavior })
+      lastMessageIdRef.current = currentLastMessageId
     }
   }, [messages])
+  
+  // Ensure scroll to bottom after initial load completes
+  React.useEffect(() => {
+    if (!loading && messagesEndRef.current && messages.length > 0) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'instant' })
+      lastMessageIdRef.current = messages[messages.length - 1]?.id || null
+    }
+  }, [loading, messages])
+  
+  // Handle scroll to load more messages
+  const handleScroll = React.useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container || loadingMore || !hasMoreMessages) return
+    
+    // Load more when scrolled near the top (within 100px)
+    if (container.scrollTop < 100) {
+      loadMoreMessages()
+    }
+  }, [loadMoreMessages, loadingMore, hasMoreMessages])
   
   // Close attach menu on outside click
   React.useEffect(() => {
@@ -612,6 +677,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       <div 
         ref={messagesContainerRef}
         className="flex-1 overflow-y-auto px-4 py-4 space-y-1"
+        onScroll={handleScroll}
       >
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -638,7 +704,26 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             </p>
           </div>
         ) : (
-          groupedMessages.map((group, groupIdx) => (
+          <>
+            {/* Load more indicator at top */}
+            <div ref={messagesTopRef} className="flex items-center justify-center py-2">
+              {loadingMore ? (
+                <Loader2 className="h-5 w-5 animate-spin text-stone-300 dark:text-stone-600" />
+              ) : hasMoreMessages ? (
+                <button
+                  onClick={loadMoreMessages}
+                  className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                >
+                  {t('messages.loadMore', { defaultValue: 'Load earlier messages' })}
+                </button>
+              ) : messages.length > MESSAGES_PER_PAGE ? (
+                <span className="text-xs text-stone-400 dark:text-stone-500">
+                  {t('messages.beginningOfConversation', { defaultValue: 'Beginning of conversation' })}
+                </span>
+              ) : null}
+            </div>
+            
+            {groupedMessages.map((group, groupIdx) => (
             <div key={groupIdx}>
               {/* Date separator */}
               <div className="flex items-center justify-center my-4">
@@ -673,7 +758,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 />
               ))}
             </div>
-          ))
+          ))}
+          </>
         )}
         <div ref={messagesEndRef} />
       </div>
