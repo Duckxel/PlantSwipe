@@ -3782,6 +3782,18 @@ export const AdminPage: React.FC = () => {
     }>;
     mediaTotalCount?: number;
     mediaTotalSize?: number;
+    userReports?: Array<{
+      id: string;
+      reason: string | null;
+      status: string;
+      createdAt: string | null;
+      classifiedAt: string | null;
+      reporterName: string;
+      classifierName: string | null;
+      type: string;
+    }>;
+    reportsAgainstCount?: number;
+    reportsByCount?: number;
   } | null>(null);
   const [banReason, setBanReason] = React.useState("");
   const [banSubmitting, setBanSubmitting] = React.useState(false);
@@ -9472,6 +9484,114 @@ export const AdminPage: React.FC = () => {
                                         onRemoved={() => lookupMember()}
                                       />
                                     ))
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            {/* Report Cases Section */}
+                            <Card className="rounded-2xl overflow-hidden">
+                              <CardContent className="p-0">
+                                {/* Header */}
+                                <div className="px-4 py-3 bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 border-b border-red-200 dark:border-red-800/50">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                      <span className="text-sm font-semibold text-red-900 dark:text-red-100">Report Cases</span>
+                                      <div className="flex items-center gap-1.5">
+                                        {(memberData.reportsAgainstCount || 0) > 0 && (
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-200">
+                                            {memberData.reportsAgainstCount} against
+                                          </span>
+                                        )}
+                                        {(memberData.reportsByCount || 0) > 0 && (
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
+                                            {memberData.reportsByCount} filed
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <Link
+                                      to="/admin/members/reports"
+                                      className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:underline flex items-center gap-1"
+                                    >
+                                      View all reports
+                                      <ArrowRight className="h-3 w-3" />
+                                    </Link>
+                                  </div>
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                                    Reports filed against this user for review
+                                  </p>
+                                </div>
+                                
+                                {/* Reports Content */}
+                                <div className="p-4">
+                                  {(!memberData.userReports || memberData.userReports.length === 0) ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                      <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-3">
+                                        <CircleCheck className="h-6 w-6 text-green-500" />
+                                      </div>
+                                      <p className="text-sm font-medium text-green-700 dark:text-green-400">No reports against this user</p>
+                                      <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+                                        This user has a clean record
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      {memberData.userReports.slice(0, 5).map((report) => (
+                                        <div
+                                          key={report.id}
+                                          className={cn(
+                                            "p-3 rounded-xl border",
+                                            report.status === 'review'
+                                              ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
+                                              : "bg-stone-50 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700"
+                                          )}
+                                        >
+                                          <div className="flex items-start justify-between gap-2">
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <Badge
+                                                  variant={report.status === 'review' ? 'default' : 'secondary'}
+                                                  className={cn(
+                                                    "text-xs",
+                                                    report.status === 'review' 
+                                                      ? "bg-amber-500" 
+                                                      : "bg-emerald-500"
+                                                  )}
+                                                >
+                                                  {report.status === 'review' ? (
+                                                    <><Clock className="h-3 w-3 mr-1" /> Open</>
+                                                  ) : (
+                                                    <><Check className="h-3 w-3 mr-1" /> Closed</>
+                                                  )}
+                                                </Badge>
+                                                <span className="text-xs text-stone-500">
+                                                  {report.createdAt ? new Date(report.createdAt).toLocaleDateString() : '-'}
+                                                </span>
+                                              </div>
+                                              <p className="text-sm mt-2 line-clamp-2">{report.reason || 'No reason provided'}</p>
+                                              <div className="flex items-center gap-3 mt-2 text-xs text-stone-500">
+                                                <span>Reported by: <span className="font-medium">{report.reporterName}</span></span>
+                                                {report.classifierName && (
+                                                  <span>Handled by: <span className="font-medium">{report.classifierName}</span></span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                      
+                                      {(memberData.reportsAgainstCount || 0) > 5 && (
+                                        <Link
+                                          to="/admin/members/reports"
+                                          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                                        >
+                                          View all {memberData.reportsAgainstCount} reports
+                                          <ArrowRight className="h-4 w-4" />
+                                        </Link>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </CardContent>

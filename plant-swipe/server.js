@@ -8347,6 +8347,46 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch { }
 
+      // Fetch user reports (REST fallback)
+      let userReports = []
+      let reportsAgainstCount = 0
+      let reportsByCount = 0
+      try {
+        const reportsResp = await fetch(`${supabaseUrlEnv}/rest/v1/user_reports?reported_user_id=eq.${encodeURIComponent(targetId)}&select=id,reason,status,created_at,classified_at,reporter:profiles!user_reports_reporter_id_fkey(display_name),classifier:profiles!user_reports_classified_by_fkey(display_name)&order=created_at.desc&limit=20`, {
+          headers: baseHeaders,
+        })
+        if (reportsResp.ok) {
+          const arr = await reportsResp.json().catch(() => [])
+          userReports = Array.isArray(arr) ? arr.map(r => ({
+            id: String(r.id),
+            reason: r.reason || null,
+            status: r.status || 'review',
+            createdAt: r.created_at || null,
+            classifiedAt: r.classified_at || null,
+            reporterName: r.reporter?.display_name || 'Unknown',
+            classifierName: r.classifier?.display_name || null,
+            type: 'against'
+          })) : []
+        }
+        // Get counts
+        const againstCountResp = await fetch(`${supabaseUrlEnv}/rest/v1/user_reports?reported_user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+        })
+        if (againstCountResp.ok) {
+          const cr = againstCountResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) reportsAgainstCount = Number(m[1])
+        }
+        const byCountResp = await fetch(`${supabaseUrlEnv}/rest/v1/user_reports?reporter_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+        })
+        if (byCountResp.ok) {
+          const cr = byCountResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) reportsByCount = Number(m[1])
+        }
+      } catch { }
+
       const threatLevel = typeof profile?.threat_level === 'number' ? profile.threat_level : null
       res.json({
         ok: true,
@@ -8371,6 +8411,9 @@ app.get('/api/admin/member', async (req, res) => {
         mediaUploads,
         mediaTotalCount,
         mediaTotalSize,
+        userReports,
+        reportsAgainstCount,
+        reportsByCount,
         topReferrers: memberTopReferrers.slice(0, 5),
         topCountries: memberTopCountries.slice(0, 5),
         topDevices: memberTopDevices.slice(0, 5),
@@ -8690,6 +8733,81 @@ app.get('/api/admin/member', async (req, res) => {
       console.error('[member-lookup] failed to fetch media uploads', mediaErr)
     }
 
+    // Fetch user reports (reports against this user)
+    let userReports = []
+    let reportsAgainstCount = 0
+    let reportsByCount = 0
+    try {
+      if (sql) {
+        // Reports against this user
+        const reportsAgainst = await sql`
+          select r.id, r.reason, r.status, r.created_at, r.classified_at,
+                 rp.display_name as reporter_name,
+                 cp.display_name as classifier_name
+          from public.user_reports r
+          left join public.profiles rp on rp.id = r.reporter_id
+          left join public.profiles cp on cp.id = r.classified_by
+          where r.reported_user_id = ${user.id}
+          order by r.created_at desc
+          limit 20
+        `
+        userReports = Array.isArray(reportsAgainst) ? reportsAgainst.map(r => ({
+          id: String(r.id),
+          reason: r.reason || null,
+          status: r.status || 'review',
+          createdAt: r.created_at || null,
+          classifiedAt: r.classified_at || null,
+          reporterName: r.reporter_name || 'Unknown',
+          classifierName: r.classifier_name || null,
+          type: 'against'
+        })) : []
+        
+        // Get counts
+        const countResult = await sql`
+          select
+            (select count(*)::int from public.user_reports where reported_user_id = ${user.id}) as against,
+            (select count(*)::int from public.user_reports where reporter_id = ${user.id}) as by_user
+        `
+        if (Array.isArray(countResult) && countResult[0]) {
+          reportsAgainstCount = countResult[0].against || 0
+          reportsByCount = countResult[0].by_user || 0
+        }
+      } else if (supabaseServiceClient) {
+        const { data: reportsData, error } = await supabaseServiceClient
+          .from('user_reports')
+          .select('id, reason, status, created_at, classified_at, reporter:profiles!user_reports_reporter_id_fkey(display_name), classifier:profiles!user_reports_classified_by_fkey(display_name)')
+          .eq('reported_user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(20)
+        if (!error && reportsData) {
+          userReports = reportsData.map(r => ({
+            id: String(r.id),
+            reason: r.reason || null,
+            status: r.status || 'review',
+            createdAt: r.created_at || null,
+            classifiedAt: r.classified_at || null,
+            reporterName: r.reporter?.display_name || 'Unknown',
+            classifierName: r.classifier?.display_name || null,
+            type: 'against'
+          }))
+        }
+        // Get counts
+        const { count: againstCount } = await supabaseServiceClient
+          .from('user_reports')
+          .select('*', { count: 'exact', head: true })
+          .eq('reported_user_id', user.id)
+        reportsAgainstCount = againstCount || 0
+        
+        const { count: byCount } = await supabaseServiceClient
+          .from('user_reports')
+          .select('*', { count: 'exact', head: true })
+          .eq('reporter_id', user.id)
+        reportsByCount = byCount || 0
+      }
+    } catch (reportsErr) {
+      console.error('[member-lookup] failed to fetch user reports', reportsErr)
+    }
+
     const currentThreatLevel = typeof threatLevel === 'number' ? threatLevel : (typeof profile?.threat_level === 'number' ? profile.threat_level : null)
     res.json({
       ok: true,
@@ -8714,6 +8832,9 @@ app.get('/api/admin/member', async (req, res) => {
       mediaUploads,
       mediaTotalCount,
       mediaTotalSize,
+      userReports,
+      reportsAgainstCount,
+      reportsByCount,
       topReferrers: topReferrers.slice(0, 5),
       topCountries: topCountries.slice(0, 5),
       topDevices: topDevices.slice(0, 5),
