@@ -310,8 +310,8 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
   }
 
   return (
-    <section className="space-y-3">
-      <div className="relative overflow-hidden rounded-3xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-emerald-100 p-4 sm:p-6 pb-8 sm:pb-10 shadow-lg dark:border-emerald-800/60 dark:from-[#04281f] dark:via-[#0b1b1a] dark:to-[#0e2f28]">
+    <section>
+      <div className="relative z-0 overflow-hidden rounded-3xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-emerald-100 p-4 sm:p-6 pb-12 sm:pb-16 shadow-lg dark:border-emerald-800/60 dark:from-[#04281f] dark:via-[#0b1b1a] dark:to-[#0e2f28]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.18),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.12),transparent_40%)] pointer-events-none" />
         <div className="relative flex items-start justify-between gap-3">
           <div className="space-y-1">
@@ -453,17 +453,17 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
 
       {/* Loading/Error/Empty States */}
       {loading && (
-        <Card className="rounded-xl border-stone-200 dark:border-stone-700">
+        <Card className="relative z-10 -mt-8 sm:-mt-10 mx-3 sm:mx-6 rounded-xl border-stone-200 dark:border-stone-700">
           <CardContent className="p-4 text-sm text-stone-500 dark:text-stone-400">{t("loading")}</CardContent>
         </Card>
       )}
       {error && (
-        <Card className="rounded-xl border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30">
+        <Card className="relative z-10 -mt-8 sm:-mt-10 mx-3 sm:mx-6 rounded-xl border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30">
           <CardContent className="p-4 text-sm text-red-700 dark:text-red-200">{error}</CardContent>
         </Card>
       )}
       {!loading && !error && advices.length === 0 && canContribute && (
-        <Card className="rounded-xl border-dashed border-emerald-200 bg-emerald-50/60 dark:border-emerald-800 dark:bg-emerald-950/20">
+        <Card className="relative z-10 -mt-8 sm:-mt-10 mx-3 sm:mx-6 rounded-xl border-dashed border-emerald-200 bg-emerald-50/60 dark:border-emerald-800 dark:bg-emerald-950/20">
           <CardContent className="p-4 text-sm text-stone-700 dark:text-stone-200 flex items-center gap-2">
             <ImageIcon className="h-4 w-4 text-emerald-500" />
             {t("empty")}
@@ -472,7 +472,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
       )}
 
       {/* Post-it Notes Grid - overlaps the card above */}
-      <div className="relative -mt-4 sm:-mt-6 mx-2 sm:mx-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-6">
+      <div className="relative z-10 -mt-10 sm:-mt-12 mx-3 sm:mx-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-4">
 
         {advices.map((advice, index) => {
           const canEdit = user && (canModerate || advice.authorId === user.id)
