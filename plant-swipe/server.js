@@ -8854,6 +8854,196 @@ app.get('/api/admin/member', async (req, res) => {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })
   }
 })
+
+// Admin: fetch user messages for moderation/report verification
+app.get('/api/admin/member-messages', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    
+    const userId = (req.query.userId || req.query.user_id || '').toString().trim()
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId parameter' })
+      return
+    }
+    
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+    const offset = Math.max(Number(req.query.offset) || 0, 0)
+    
+    // Get all conversations the user is part of with participant details
+    let conversations = []
+    let messages = []
+    let totalConversations = 0
+    let totalMessages = 0
+    
+    if (sql) {
+      // Get conversations with other participant info
+      const convRows = await sql`
+        SELECT 
+          c.id,
+          c.participant_1,
+          c.participant_2,
+          c.created_at,
+          c.last_message_at,
+          p1.display_name as participant_1_name,
+          p2.display_name as participant_2_name,
+          (SELECT COUNT(*) FROM public.messages m WHERE m.conversation_id = c.id) as message_count
+        FROM public.conversations c
+        LEFT JOIN public.profiles p1 ON p1.id = c.participant_1
+        LEFT JOIN public.profiles p2 ON p2.id = c.participant_2
+        WHERE c.participant_1 = ${userId}::uuid OR c.participant_2 = ${userId}::uuid
+        ORDER BY c.last_message_at DESC NULLS LAST
+      `
+      conversations = convRows || []
+      totalConversations = conversations.length
+      
+      // Get messages sent BY this user (for report verification)
+      const msgRows = await sql`
+        SELECT 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.link_type,
+          m.link_url,
+          m.created_at,
+          m.edited_at,
+          m.deleted_at,
+          m.reply_to_id,
+          ps.display_name as sender_name,
+          -- Get the other participant in the conversation
+          CASE 
+            WHEN c.participant_1 = m.sender_id THEN c.participant_2 
+            ELSE c.participant_1 
+          END as recipient_id,
+          CASE 
+            WHEN c.participant_1 = m.sender_id THEN pr2.display_name 
+            ELSE pr1.display_name 
+          END as recipient_name
+        FROM public.messages m
+        JOIN public.conversations c ON c.id = m.conversation_id
+        LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+        LEFT JOIN public.profiles pr1 ON pr1.id = c.participant_1
+        LEFT JOIN public.profiles pr2 ON pr2.id = c.participant_2
+        WHERE m.sender_id = ${userId}::uuid
+        ORDER BY m.created_at DESC
+        LIMIT ${limit}
+        OFFSET ${offset}
+      `
+      messages = msgRows || []
+      
+      // Get total count of messages sent by user
+      const countRows = await sql`
+        SELECT COUNT(*) as count FROM public.messages WHERE sender_id = ${userId}::uuid
+      `
+      totalMessages = Number(countRows?.[0]?.count) || 0
+      
+      // Log admin action
+      try {
+        let adminName = null
+        const nameRows = await sql`SELECT display_name FROM public.profiles WHERE id = ${adminUserId} LIMIT 1`
+        adminName = nameRows?.[0]?.display_name || null
+        await sql`
+          INSERT INTO public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          VALUES (${adminUserId}, ${adminName}, 'view_user_messages', ${userId}, ${sql.json({ limit, offset, totalMessages })})
+        `
+      } catch { }
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      // REST fallback
+      const token = getBearerTokenFromRequest(req)
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      if (token) baseHeaders['Authorization'] = `Bearer ${token}`
+      
+      // Get conversations
+      const convResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/conversations?or=(participant_1.eq.${encodeURIComponent(userId)},participant_2.eq.${encodeURIComponent(userId)})&select=id,participant_1,participant_2,created_at,last_message_at&order=last_message_at.desc.nullslast`,
+        { headers: baseHeaders }
+      )
+      if (convResp.ok) {
+        const convArr = await convResp.json().catch(() => [])
+        conversations = Array.isArray(convArr) ? convArr : []
+        totalConversations = conversations.length
+        
+        // Fetch participant names
+        const participantIds = new Set()
+        conversations.forEach(c => {
+          participantIds.add(c.participant_1)
+          participantIds.add(c.participant_2)
+        })
+        
+        if (participantIds.size > 0) {
+          const profileResp = await fetch(
+            `${supabaseUrlEnv}/rest/v1/profiles?id=in.(${Array.from(participantIds).join(',')})&select=id,display_name`,
+            { headers: baseHeaders }
+          )
+          if (profileResp.ok) {
+            const profiles = await profileResp.json().catch(() => [])
+            const profileMap = new Map(profiles.map(p => [p.id, p.display_name]))
+            conversations = conversations.map(c => ({
+              ...c,
+              participant_1_name: profileMap.get(c.participant_1) || null,
+              participant_2_name: profileMap.get(c.participant_2) || null,
+            }))
+          }
+        }
+      }
+      
+      // Get messages sent by user
+      const msgResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/messages?sender_id=eq.${encodeURIComponent(userId)}&select=id,conversation_id,sender_id,content,link_type,link_url,created_at,edited_at,deleted_at,reply_to_id&order=created_at.desc&limit=${limit}&offset=${offset}`,
+        { headers: { ...baseHeaders, 'Prefer': 'count=exact' } }
+      )
+      if (msgResp.ok) {
+        messages = await msgResp.json().catch(() => [])
+        const cr = msgResp.headers.get('content-range') || ''
+        const m = cr.match(/\/(\d+)$/)
+        if (m) totalMessages = Number(m[1])
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    
+    res.json({
+      ok: true,
+      userId,
+      conversations: conversations.map(c => ({
+        id: c.id,
+        participant1: c.participant_1,
+        participant2: c.participant_2,
+        participant1Name: c.participant_1_name || null,
+        participant2Name: c.participant_2_name || null,
+        createdAt: c.created_at,
+        lastMessageAt: c.last_message_at,
+        messageCount: c.message_count || 0,
+      })),
+      messages: messages.map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name || null,
+        recipientId: m.recipient_id || null,
+        recipientName: m.recipient_name || null,
+        content: m.content,
+        linkType: m.link_type || null,
+        linkUrl: m.link_url || null,
+        createdAt: m.created_at,
+        editedAt: m.edited_at || null,
+        deletedAt: m.deleted_at || null,
+        replyToId: m.reply_to_id || null,
+      })),
+      totalConversations,
+      totalMessages,
+      limit,
+      offset,
+      hasMore: offset + messages.length < totalMessages,
+    })
+  } catch (e) {
+    console.error('[admin/member-messages] Error:', e)
+    res.status(500).json({ error: e?.message || 'Failed to fetch user messages' })
+  }
+})
+
 // Admin: add a note on a profile
 app.post('/api/admin/member-note', async (req, res) => {
   try {
