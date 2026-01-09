@@ -85,6 +85,28 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const attachMenuRef = React.useRef<HTMLDivElement>(null)
   const realtimeChannelRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
   
+  // Hide mobile nav bar when conversation is open (mobile full-screen mode)
+  React.useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    
+    // Only apply on mobile (below md breakpoint)
+    const isMobile = window.innerWidth < 768
+    if (!isMobile) return
+    
+    // Find and hide the mobile nav host element
+    const navHost = document.querySelector('[data-mobile-nav-root="true"]') as HTMLElement
+    if (navHost) {
+      navHost.style.display = 'none'
+    }
+    
+    return () => {
+      // Restore the nav when leaving conversation view
+      if (navHost) {
+        navHost.style.display = ''
+      }
+    }
+  }, [])
+  
   // Broadcast a message event to other clients
   const broadcastEvent = React.useCallback(async (event: 'message' | 'reaction', data?: any) => {
     const channel = realtimeChannelRef.current
@@ -756,6 +778,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       {/* Input Area */}
       <div className={cn(
         'flex-shrink-0 px-4 pb-4 pt-2 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl md:border md:border-t-0 md:rounded-b-2xl',
+        'pb-[max(1rem,env(safe-area-inset-bottom))]', // Safe area for devices with home indicator
         !replyingTo && !pendingLink && !pendingImage && 'pt-4'
       )}>
         <div className={cn(
