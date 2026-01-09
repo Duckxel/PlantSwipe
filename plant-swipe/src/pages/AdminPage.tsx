@@ -3824,6 +3824,40 @@ export const AdminPage: React.FC = () => {
   const [rolesOpen, setRolesOpen] = React.useState(false); // Default to collapsed
   const [confirmAdminOpen, setConfirmAdminOpen] = React.useState(false); // Confirmation dialog for admin role
 
+  // User messages state (for report investigation)
+  type AdminConversation = {
+    id: string;
+    participant1: string;
+    participant2: string;
+    createdAt: string;
+    updatedAt: string;
+    lastMessageAt: string | null;
+    otherUserId: string;
+    otherUserName: string | null;
+    otherUserAvatar: string | null;
+  };
+  type AdminMessage = {
+    id: string;
+    conversationId: string;
+    senderId: string;
+    senderName: string | null;
+    content: string;
+    linkType: string | null;
+    linkId: string | null;
+    linkUrl: string | null;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt: string | null;
+    editedAt: string | null;
+    isFromTargetUser: boolean;
+  };
+  const [userMessagesLoading, setUserMessagesLoading] = React.useState(false);
+  const [userMessagesError, setUserMessagesError] = React.useState<string | null>(null);
+  const [userConversations, setUserConversations] = React.useState<AdminConversation[]>([]);
+  const [userMessages, setUserMessages] = React.useState<AdminMessage[]>([]);
+  const [messagesOpen, setMessagesOpen] = React.useState(false);
+  const [selectedConversation, setSelectedConversation] = React.useState<string | null>(null);
+
   // Container ref for Members tab to run form-field validation logs
   const membersContainerRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -4121,6 +4155,12 @@ export const AdminPage: React.FC = () => {
       setMemberLoading(true);
       setMemberError(null);
       setMemberData(null);
+      // Reset messages state when looking up a new member
+      setUserConversations([]);
+      setUserMessages([]);
+      setUserMessagesError(null);
+      setMessagesOpen(false);
+      setSelectedConversation(null);
       try {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
@@ -4288,6 +4328,41 @@ export const AdminPage: React.FC = () => {
     },
     [lookupEmail, memberLoading, safeJson],
   );
+
+  // Load user messages for report investigation
+  const loadUserMessages = React.useCallback(async (userId: string) => {
+    if (userMessagesLoading || !userId) return;
+    setUserMessagesLoading(true);
+    setUserMessagesError(null);
+    setUserConversations([]);
+    setUserMessages([]);
+    setSelectedConversation(null);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const url = `/api/admin/member-messages?userId=${encodeURIComponent(userId)}`;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+      } catch {}
+      const resp = await fetch(url, { headers, credentials: "same-origin" });
+      const data = await safeJson(resp);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      setUserConversations(Array.isArray(data?.conversations) ? data.conversations : []);
+      setUserMessages(Array.isArray(data?.messages) ? data.messages : []);
+      // Auto-select first conversation if available
+      if (data?.conversations?.length > 0) {
+        setSelectedConversation(data.conversations[0].id);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setUserMessagesError(msg || "Failed to load messages");
+    } finally {
+      setUserMessagesLoading(false);
+    }
+  }, [userMessagesLoading, safeJson]);
 
   const handleSetThreatLevel = React.useCallback(async () => {
     if (!memberData?.user?.id) return;
@@ -9357,6 +9432,245 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   )}
                                 </div>
+                              </CardContent>
+                            </Card>
+
+                            {/* User Messages Section - for report investigation */}
+                            <Card className="rounded-2xl overflow-hidden">
+                              <CardContent className="p-0">
+                                {/* Header */}
+                                <div 
+                                  className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-b border-blue-200 dark:border-blue-800/50 cursor-pointer hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors"
+                                  onClick={() => {
+                                    if (!messagesOpen && memberData?.user?.id && userConversations.length === 0 && !userMessagesLoading) {
+                                      loadUserMessages(memberData.user.id);
+                                    }
+                                    setMessagesOpen(!messagesOpen);
+                                  }}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <MessageSquareText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                      <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">User Messages</span>
+                                      {userConversations.length > 0 && (
+                                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
+                                          {userConversations.length} conversations
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {userMessagesLoading && (
+                                        <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                                      )}
+                                      {messagesOpen ? (
+                                        <ChevronUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                      ) : (
+                                        <ChevronDown className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                      )}
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                    View user's sent messages to verify reports
+                                  </p>
+                                </div>
+                                
+                                {/* Messages Content */}
+                                {messagesOpen && (
+                                  <div className="p-4">
+                                    {userMessagesLoading ? (
+                                      <div className="flex items-center justify-center py-8">
+                                        <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+                                      </div>
+                                    ) : userMessagesError ? (
+                                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                                        <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
+                                          <AlertTriangle className="h-6 w-6 text-red-500" />
+                                        </div>
+                                        <p className="text-sm text-red-600 dark:text-red-400">{userMessagesError}</p>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="mt-3"
+                                          onClick={() => memberData?.user?.id && loadUserMessages(memberData.user.id)}
+                                        >
+                                          Retry
+                                        </Button>
+                                      </div>
+                                    ) : userConversations.length === 0 ? (
+                                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                                        <div className="w-12 h-12 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center mb-3">
+                                          <MessageSquareIcon className="h-6 w-6 text-stone-400" />
+                                        </div>
+                                        <p className="text-sm text-stone-500 dark:text-stone-400">No conversations found</p>
+                                        <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+                                          This user hasn't started any conversations
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-4">
+                                        {/* Conversation Tabs */}
+                                        <div className="flex flex-wrap gap-2">
+                                          {userConversations.map((conv) => (
+                                            <button
+                                              key={conv.id}
+                                              onClick={() => setSelectedConversation(conv.id)}
+                                              className={cn(
+                                                "flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all",
+                                                selectedConversation === conv.id
+                                                  ? "bg-blue-500 text-white"
+                                                  : "bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700"
+                                              )}
+                                            >
+                                              {conv.otherUserAvatar ? (
+                                                <img
+                                                  src={conv.otherUserAvatar}
+                                                  alt=""
+                                                  className="w-5 h-5 rounded-full object-cover"
+                                                />
+                                              ) : (
+                                                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-[10px] font-semibold">
+                                                  {(conv.otherUserName || '?').charAt(0).toUpperCase()}
+                                                </div>
+                                              )}
+                                              <span className="truncate max-w-[120px]">
+                                                {conv.otherUserName || 'Unknown User'}
+                                              </span>
+                                              <span className="text-xs opacity-70">
+                                                ({userMessages.filter(m => m.conversationId === conv.id).length})
+                                              </span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                        
+                                        {/* Messages for Selected Conversation */}
+                                        {selectedConversation && (
+                                          <div className="border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
+                                            <div className="bg-stone-50 dark:bg-stone-800/50 px-3 py-2 border-b border-stone-200 dark:border-stone-700">
+                                              {(() => {
+                                                const conv = userConversations.find(c => c.id === selectedConversation);
+                                                return (
+                                                  <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="text-xs text-stone-500">Conversation with</span>
+                                                      <button
+                                                        onClick={() => {
+                                                          if (conv?.otherUserName) {
+                                                            lookupMember(conv.otherUserName);
+                                                          }
+                                                        }}
+                                                        className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                                                      >
+                                                        {conv?.otherUserName || 'Unknown User'}
+                                                      </button>
+                                                    </div>
+                                                    {conv?.lastMessageAt && (
+                                                      <span className="text-xs text-stone-400">
+                                                        Last: {new Date(conv.lastMessageAt).toLocaleDateString()}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })()}
+                                            </div>
+                                            <div className="max-h-[400px] overflow-y-auto p-3 space-y-2 bg-white dark:bg-[#1a1a1c]">
+                                              {userMessages
+                                                .filter(m => m.conversationId === selectedConversation)
+                                                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                                                .map((msg) => {
+                                                  // Check if it's an image message
+                                                  const isImage = msg.content?.startsWith('[image:');
+                                                  let imageUrl = '';
+                                                  let caption = '';
+                                                  if (isImage) {
+                                                    const match = msg.content.match(/^\[image:(.*?)\](.*)$/);
+                                                    if (match) {
+                                                      imageUrl = match[1];
+                                                      caption = match[2]?.trim() || '';
+                                                    }
+                                                  }
+                                                  
+                                                  return (
+                                                    <div
+                                                      key={msg.id}
+                                                      className={cn(
+                                                        "flex",
+                                                        msg.isFromTargetUser ? "justify-end" : "justify-start"
+                                                      )}
+                                                    >
+                                                      <div
+                                                        className={cn(
+                                                          "max-w-[80%] rounded-2xl px-3 py-2",
+                                                          msg.isFromTargetUser
+                                                            ? "bg-blue-500 text-white rounded-br-md"
+                                                            : "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 rounded-bl-md",
+                                                          msg.deletedAt && "opacity-50 line-through"
+                                                        )}
+                                                      >
+                                                        {/* Sender name for non-target user messages */}
+                                                        {!msg.isFromTargetUser && (
+                                                          <div className="text-[10px] font-medium opacity-70 mb-1">
+                                                            {msg.senderName || 'Unknown'}
+                                                          </div>
+                                                        )}
+                                                        
+                                                        {/* Message content */}
+                                                        {msg.deletedAt ? (
+                                                          <span className="text-xs italic">Message deleted</span>
+                                                        ) : isImage ? (
+                                                          <div>
+                                                            <a href={imageUrl} target="_blank" rel="noopener noreferrer">
+                                                              <img
+                                                                src={imageUrl}
+                                                                alt="Message image"
+                                                                className="max-w-full rounded-lg max-h-48 object-cover"
+                                                                onError={(e) => {
+                                                                  (e.target as HTMLImageElement).style.display = 'none';
+                                                                }}
+                                                              />
+                                                            </a>
+                                                            {caption && (
+                                                              <p className="text-sm mt-1">{caption}</p>
+                                                            )}
+                                                          </div>
+                                                        ) : (
+                                                          <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                                                        )}
+                                                        
+                                                        {/* Timestamp */}
+                                                        <div className={cn(
+                                                          "text-[10px] mt-1 flex items-center gap-1",
+                                                          msg.isFromTargetUser ? "text-blue-100" : "text-stone-400"
+                                                        )}>
+                                                          {new Date(msg.createdAt).toLocaleString()}
+                                                          {msg.editedAt && !msg.deletedAt && (
+                                                            <span className="italic">(edited)</span>
+                                                          )}
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })}
+                                              {userMessages.filter(m => m.conversationId === selectedConversation).length === 0 && (
+                                                <div className="text-center py-4 text-sm text-stone-400">
+                                                  No messages in this conversation
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {/* Message count summary */}
+                                        <div className="text-xs text-stone-500 dark:text-stone-400 text-center">
+                                          Total: {userMessages.length} messages across {userConversations.length} conversations
+                                          <span className="mx-2">•</span>
+                                          <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                            {userMessages.filter(m => m.isFromTargetUser).length} sent by this user
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </CardContent>
                             </Card>
 

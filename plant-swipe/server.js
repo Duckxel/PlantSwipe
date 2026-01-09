@@ -8969,6 +8969,194 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
   }
 })
 
+// Admin: fetch user messages/conversations for review (used for report investigation)
+app.get('/api/admin/member-messages', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    
+    const userId = (req.query.userId || req.query.user_id || '').toString().trim()
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId parameter' })
+      return
+    }
+    
+    // Fetch all conversations this user is part of
+    let conversations = []
+    let messages = []
+    
+    if (sql) {
+      // Get conversations with other user details
+      const convRows = await sql`
+        select 
+          c.id,
+          c.participant_1,
+          c.participant_2,
+          c.created_at,
+          c.updated_at,
+          c.last_message_at,
+          case when c.participant_1 = ${userId} then c.participant_2 else c.participant_1 end as other_user_id,
+          p.display_name as other_user_name,
+          p.avatar_url as other_user_avatar
+        from public.conversations c
+        left join public.profiles p on p.id = (
+          case when c.participant_1 = ${userId} then c.participant_2 else c.participant_1 end
+        )
+        where c.participant_1 = ${userId} or c.participant_2 = ${userId}
+        order by c.last_message_at desc nulls last
+        limit 50
+      `
+      
+      conversations = Array.isArray(convRows) ? convRows.map(c => ({
+        id: c.id,
+        participant1: c.participant_1,
+        participant2: c.participant_2,
+        createdAt: c.created_at,
+        updatedAt: c.updated_at,
+        lastMessageAt: c.last_message_at,
+        otherUserId: c.other_user_id,
+        otherUserName: c.other_user_name || null,
+        otherUserAvatar: c.other_user_avatar || null
+      })) : []
+      
+      // If we have conversations, fetch messages from them
+      if (conversations.length > 0) {
+        const convIds = conversations.map(c => c.id)
+        const msgRows = await sql`
+          select 
+            m.id,
+            m.conversation_id,
+            m.sender_id,
+            m.content,
+            m.link_type,
+            m.link_id,
+            m.link_url,
+            m.created_at,
+            m.updated_at,
+            m.deleted_at,
+            m.edited_at,
+            p.display_name as sender_name
+          from public.messages m
+          left join public.profiles p on p.id = m.sender_id
+          where m.conversation_id = any(${convIds})
+          order by m.created_at desc
+          limit 200
+        `
+        
+        messages = Array.isArray(msgRows) ? msgRows.map(m => ({
+          id: m.id,
+          conversationId: m.conversation_id,
+          senderId: m.sender_id,
+          senderName: m.sender_name || null,
+          content: m.content,
+          linkType: m.link_type || null,
+          linkId: m.link_id || null,
+          linkUrl: m.link_url || null,
+          createdAt: m.created_at,
+          updatedAt: m.updated_at,
+          deletedAt: m.deleted_at || null,
+          editedAt: m.edited_at || null,
+          isFromTargetUser: m.sender_id === userId
+        })) : []
+      }
+    } else if (supabaseServiceClient) {
+      // Fallback to Supabase client
+      const { data: convData, error: convError } = await supabaseServiceClient
+        .from('conversations')
+        .select('id, participant_1, participant_2, created_at, updated_at, last_message_at')
+        .or(`participant_1.eq.${userId},participant_2.eq.${userId}`)
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .limit(50)
+      
+      if (!convError && convData) {
+        // Fetch other user profiles
+        const otherUserIds = convData.map(c => c.participant_1 === userId ? c.participant_2 : c.participant_1)
+        const { data: profiles } = await supabaseServiceClient
+          .from('profiles')
+          .select('id, display_name, avatar_url')
+          .in('id', otherUserIds)
+        
+        const profileMap = new Map((profiles || []).map(p => [p.id, p]))
+        
+        conversations = convData.map(c => {
+          const otherUserId = c.participant_1 === userId ? c.participant_2 : c.participant_1
+          const profile = profileMap.get(otherUserId)
+          return {
+            id: c.id,
+            participant1: c.participant_1,
+            participant2: c.participant_2,
+            createdAt: c.created_at,
+            updatedAt: c.updated_at,
+            lastMessageAt: c.last_message_at,
+            otherUserId,
+            otherUserName: profile?.display_name || null,
+            otherUserAvatar: profile?.avatar_url || null
+          }
+        })
+        
+        if (conversations.length > 0) {
+          const convIds = conversations.map(c => c.id)
+          const { data: msgData } = await supabaseServiceClient
+            .from('messages')
+            .select('id, conversation_id, sender_id, content, link_type, link_id, link_url, created_at, updated_at, deleted_at, edited_at')
+            .in('conversation_id', convIds)
+            .order('created_at', { ascending: false })
+            .limit(200)
+          
+          if (msgData) {
+            // Fetch sender profiles
+            const senderIds = [...new Set(msgData.map(m => m.sender_id))]
+            const { data: senderProfiles } = await supabaseServiceClient
+              .from('profiles')
+              .select('id, display_name')
+              .in('id', senderIds)
+            
+            const senderMap = new Map((senderProfiles || []).map(p => [p.id, p.display_name]))
+            
+            messages = msgData.map(m => ({
+              id: m.id,
+              conversationId: m.conversation_id,
+              senderId: m.sender_id,
+              senderName: senderMap.get(m.sender_id) || null,
+              content: m.content,
+              linkType: m.link_type || null,
+              linkId: m.link_id || null,
+              linkUrl: m.link_url || null,
+              createdAt: m.created_at,
+              updatedAt: m.updated_at,
+              deletedAt: m.deleted_at || null,
+              editedAt: m.edited_at || null,
+              isFromTargetUser: m.sender_id === userId
+            }))
+          }
+        }
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    
+    // Log admin action
+    try {
+      if (sql) {
+        await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminUserId}, null, 'view_user_messages', ${userId}, ${sql.json({ conversationCount: conversations.length, messageCount: messages.length })})`
+      }
+    } catch { }
+    
+    res.json({
+      ok: true,
+      userId,
+      conversations,
+      messages,
+      totalConversations: conversations.length,
+      totalMessages: messages.length
+    })
+  } catch (e) {
+    console.error('[admin/member-messages] error:', e)
+    res.status(500).json({ error: e?.message || 'Failed to fetch user messages' })
+  }
+})
+
 // Admin: list users who have connected from a specific IP address
 app.get('/api/admin/members-by-ip', async (req, res) => {
   try {
