@@ -53,14 +53,14 @@ const AdviceBadge: React.FC<{ roles?: UserRole[] | null }> = ({ roles }) => {
   return null
 }
 
-// Post-it note color schemes
+// Post-it note color schemes - softer pastel colors
 const POST_IT_COLORS = [
-  { bg: "bg-yellow-200", darkBg: "dark:bg-yellow-400/90", text: "text-yellow-900", darkText: "dark:text-yellow-950", shadow: "shadow-yellow-300/50" },
-  { bg: "bg-pink-200", darkBg: "dark:bg-pink-400/90", text: "text-pink-900", darkText: "dark:text-pink-950", shadow: "shadow-pink-300/50" },
-  { bg: "bg-green-200", darkBg: "dark:bg-green-400/90", text: "text-green-900", darkText: "dark:text-green-950", shadow: "shadow-green-300/50" },
-  { bg: "bg-blue-200", darkBg: "dark:bg-blue-400/90", text: "text-blue-900", darkText: "dark:text-blue-950", shadow: "shadow-blue-300/50" },
-  { bg: "bg-orange-200", darkBg: "dark:bg-orange-400/90", text: "text-orange-900", darkText: "dark:text-orange-950", shadow: "shadow-orange-300/50" },
-  { bg: "bg-purple-200", darkBg: "dark:bg-purple-400/90", text: "text-purple-900", darkText: "dark:text-purple-950", shadow: "shadow-purple-300/50" },
+  { bg: "bg-amber-50", darkBg: "dark:bg-amber-100/80", text: "text-amber-800", darkText: "dark:text-amber-900", shadow: "shadow-amber-200/40" },
+  { bg: "bg-rose-50", darkBg: "dark:bg-rose-100/80", text: "text-rose-800", darkText: "dark:text-rose-900", shadow: "shadow-rose-200/40" },
+  { bg: "bg-emerald-50", darkBg: "dark:bg-emerald-100/80", text: "text-emerald-800", darkText: "dark:text-emerald-900", shadow: "shadow-emerald-200/40" },
+  { bg: "bg-sky-50", darkBg: "dark:bg-sky-100/80", text: "text-sky-800", darkText: "dark:text-sky-900", shadow: "shadow-sky-200/40" },
+  { bg: "bg-orange-50", darkBg: "dark:bg-orange-100/80", text: "text-orange-800", darkText: "dark:text-orange-900", shadow: "shadow-orange-200/40" },
+  { bg: "bg-violet-50", darkBg: "dark:bg-violet-100/80", text: "text-violet-800", darkText: "dark:text-violet-900", shadow: "shadow-violet-200/40" },
 ]
 
 // Rotation classes for Post-it effect
@@ -312,27 +312,13 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
             <p className="text-sm text-stone-600 dark:text-stone-300 max-w-2xl">
               {t("subtitle")}
             </p>
-            <div className="mt-2 flex flex-wrap gap-2 text-xs text-emerald-800 dark:text-emerald-200">
-              <Badge className="rounded-full bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-500 shadow">
-                <ShieldCheck className="h-3.5 w-3.5 mr-1" />
-                {t("title")}
-              </Badge>
-              <Badge className="rounded-full bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-100 dark:border-amber-700">
-                <Megaphone className="h-3.5 w-3.5 mr-1" />
-                {t("helper")}
-              </Badge>
-            </div>
           </div>
           <ShieldCheck className="h-10 w-10 text-emerald-500 drop-shadow-md" />
         </div>
 
         {canContribute && (
           <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-emerald-200/70 bg-white/80 p-3 sm:p-4 shadow-inner dark:border-emerald-700/50 dark:bg-[#0f1f1f]/80">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-stone-600 dark:text-stone-300 flex items-center gap-2">
-                <Megaphone className="h-4 w-4 text-emerald-600" />
-                {t("helper")}
-              </p>
+            <div className="flex items-center justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -419,13 +405,10 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                     {formNotice.text}
                   </div>
                 )}
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-stone-500 dark:text-stone-400">
-                    {uploading ? t("uploading") : t("helper")}
-                  </div>
+                <div className="flex items-center justify-end">
                   <Button type="submit" disabled={submitting || uploading} className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md">
                     <Plus className="h-4 w-4 mr-2" />
-                    {t("submit")}
+                    {uploading ? t("uploading") : t("submit")}
                   </Button>
                 </div>
               </form>
@@ -628,14 +611,6 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                         </Button>
                       </div>
                     )}
-                  </div>
-
-                  {/* Pro badge */}
-                  <div className="flex items-center gap-1">
-                    <Sparkles className={cn("h-3.5 w-3.5", color.text, color.darkText)} />
-                    <span className={cn("text-[10px] font-bold uppercase tracking-wider", color.text, color.darkText)}>
-                      {t("title")}
-                    </span>
                   </div>
 
                   {/* Content text */}
