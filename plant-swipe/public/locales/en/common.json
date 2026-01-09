@@ -2740,6 +2740,8 @@
       "welcomeDesc": "Your AI gardening assistant. Ask me anything about your plants!",
       "placeholder": "Ask me about your garden...",
       "hint": "Type / for commands • Shift+Enter for new line",
+      "uploadFromGallery": "Upload from gallery",
+      "takePhoto": "Take a photo",
       "context": {
         "title": "Add Context"
       },

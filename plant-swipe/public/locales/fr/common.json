@@ -2740,6 +2740,8 @@
       "welcomeDesc": "Votre assistante IA de jardinage. Posez-moi toutes vos questions sur vos plantes !",
       "placeholder": "Parlez-moi de votre jardin...",
       "hint": "Tapez / pour les commandes • Maj+Entrée pour une nouvelle ligne",
+      "uploadFromGallery": "Choisir dans la galerie",
+      "takePhoto": "Prendre une photo",
       "context": {
         "title": "Ajouter du contexte"
       },
