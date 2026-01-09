@@ -8,7 +8,7 @@
 
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MessageCircle, X, Sparkles } from 'lucide-react'
+import { X, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface AphyliaChatBubbleProps {
@@ -38,7 +38,8 @@ export const AphyliaChatBubble: React.FC<AphyliaChatBubbleProps> = ({
         'w-12 h-12 md:w-14 md:h-14 rounded-full',
         'bg-gradient-to-br from-emerald-500 to-emerald-600',
         'hover:from-emerald-400 hover:to-emerald-500',
-        'shadow-lg shadow-emerald-500/30',
+        // Subtle shadow - reduced from shadow-lg to shadow-md with lower opacity
+        'shadow-md shadow-emerald-500/20',
         'flex items-center justify-center',
         'transition-all duration-300 ease-out',
         'focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2',
@@ -48,8 +49,8 @@ export const AphyliaChatBubble: React.FC<AphyliaChatBubbleProps> = ({
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       exit={{ scale: 0, opacity: 0 }}
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
+      whileHover={{ scale: 1.03 }}
+      whileTap={{ scale: 0.97 }}
       aria-label={isOpen ? 'Close Aphylia chat' : 'Open Aphylia chat'}
     >
       <AnimatePresence mode="wait">
@@ -66,28 +67,13 @@ export const AphyliaChatBubble: React.FC<AphyliaChatBubbleProps> = ({
         ) : (
           <motion.div
             key="open"
-            initial={{ rotate: 90, opacity: 0 }}
-            animate={{ rotate: 0, opacity: 1 }}
-            exit={{ rotate: -90, opacity: 0 }}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="relative"
           >
-            <MessageCircle className="w-6 h-6 text-white" />
-            {/* Sparkle decoration */}
-            <motion.div
-              className="absolute -top-1 -right-1"
-              animate={{
-                scale: [1, 1.2, 1],
-                opacity: [0.7, 1, 0.7]
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                ease: 'easeInOut'
-              }}
-            >
-              <Sparkles className="w-3 h-3 text-yellow-300" />
-            </motion.div>
+            {/* Sparkles icon as main icon */}
+            <Sparkles className="w-6 h-6 text-white" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -108,17 +94,17 @@ export const AphyliaChatBubble: React.FC<AphyliaChatBubbleProps> = ({
         <div className="absolute top-1/2 -right-1 -translate-y-1/2 border-4 border-transparent border-l-gray-900/90" />
       </div>
       
-      {/* Pulse animation when closed */}
+      {/* Subtle pulse animation when closed - reduced intensity */}
       {!isOpen && (
         <motion.div
-          className="absolute inset-0 rounded-full bg-emerald-400"
-          initial={{ scale: 1, opacity: 0.5 }}
+          className="absolute inset-0 rounded-full bg-emerald-400/30"
+          initial={{ scale: 1, opacity: 0.3 }}
           animate={{
-            scale: [1, 1.5],
-            opacity: [0.5, 0]
+            scale: [1, 1.2],
+            opacity: [0.3, 0]
           }}
           transition={{
-            duration: 2,
+            duration: 3,
             repeat: Infinity,
             ease: 'easeOut'
           }}
