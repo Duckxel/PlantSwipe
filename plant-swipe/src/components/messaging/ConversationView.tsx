@@ -69,7 +69,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const [replyingTo, setReplyingTo] = React.useState<Message | null>(null)
   const [linkShareOpen, setLinkShareOpen] = React.useState(false)
   const [showAttachMenu, setShowAttachMenu] = React.useState(false)
-  const [uploadingImage, setUploadingImage] = React.useState(false)
   const [cameraOpen, setCameraOpen] = React.useState(false)
   const [pendingLink, setPendingLink] = React.useState<{
     type: LinkType
@@ -551,6 +550,23 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   }
   
+  // Handle camera capture - creates a preview, waits for user to press send
+  const handleCameraCapture = (file: File) => {
+    setError(null)
+    
+    // Clean up previous preview URL if any
+    if (pendingImage?.previewUrl) {
+      URL.revokeObjectURL(pendingImage.previewUrl)
+    }
+    
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file)
+    setPendingImage({ file, previewUrl })
+    
+    // Focus textarea for optional caption
+    textareaRef.current?.focus()
+  }
+  
   // Cancel pending image
   const cancelPendingImage = () => {
     if (pendingImage?.previewUrl) {
@@ -915,7 +931,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               size="icon"
               className="rounded-full h-9 w-9 flex-shrink-0 text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200"
               onClick={() => setShowAttachMenu(!showAttachMenu)}
-              disabled={uploadingImage}
+              disabled={sending}
             >
               <Plus className={cn("h-5 w-5 transition-transform", showAttachMenu && "rotate-45")} />
             </Button>
