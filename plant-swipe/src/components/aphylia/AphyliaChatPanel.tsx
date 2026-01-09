@@ -283,6 +283,19 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [showSlashCommands, setShowSlashCommands] = useState(false)
   
+  // Hide mobile nav bar when chat is open on mobile
+  useEffect(() => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+    if (isOpen && !isMinimized && isMobile) {
+      document.body.classList.add('aphylia-chat-open')
+    } else {
+      document.body.classList.remove('aphylia-chat-open')
+    }
+    return () => {
+      document.body.classList.remove('aphylia-chat-open')
+    }
+  }, [isOpen, isMinimized])
+  
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (messagesEndRef.current) {

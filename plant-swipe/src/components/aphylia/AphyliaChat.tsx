@@ -56,6 +56,8 @@ export const AphyliaChat: React.FC<AphyliaChatProps> = ({
   })
   
   // Build available chips from context - memoized to avoid unnecessary re-renders
+  // We intentionally use specific properties instead of full objects to prevent
+  // re-renders caused by object reference changes from parent components
   const computedAvailableChips = useMemo(() => {
     const chips: ContextChip[] = [...availableChips]
     
@@ -78,6 +80,7 @@ export const AphyliaChat: React.FC<AphyliaChatProps> = ({
     }
     
     return chips
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gardenContext?.gardenId, gardenContext?.gardenName, plantContext?.gardenPlantId, plantContext?.nickname, plantContext?.plantName, availableChips])
   
   // Handle image upload

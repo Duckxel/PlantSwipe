@@ -50,6 +50,20 @@
       }
     }
 
+    /* Hide mobile nav bar when Aphylia chat is open (full-screen on mobile) */
+    body.aphylia-chat-open {
+      /* No bottom padding needed when chat covers the screen */
+      padding-bottom: 0 !important;
+      /* Prevent background scrolling while chat is open */
+      overflow: hidden;
+    }
+    
+    body.aphylia-chat-open #mobile-nav-root,
+    body.aphylia-chat-open [data-mobile-nav-root="true"] {
+      /* Hide the mobile nav when chat is full-screen */
+      display: none !important;
+    }
+
   #root {
     min-height: 100vh;
     min-height: 100dvh;
