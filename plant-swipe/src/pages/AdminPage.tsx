@@ -77,6 +77,7 @@ import {
   ArrowRight,
   FileImage,
   MessageSquare as MessageSquareIcon,
+  MessageSquareText,
   BookOpen,
   Flower2,
 } from "lucide-react";
@@ -3814,6 +3815,9 @@ export const AdminPage: React.FC = () => {
     }
   }, [memberData?.threatLevel]);
 
+  // Threat level panel visibility
+  const [threatLevelOpen, setThreatLevelOpen] = React.useState(false);
+
   // Roles management state
   const [memberRoles, setMemberRoles] = React.useState<UserRole[]>([]);
   const [roleSubmitting, setRoleSubmitting] = React.useState<string | null>(null);
@@ -4190,6 +4194,34 @@ export const AdminPage: React.FC = () => {
                 adminCommentary: file?.adminCommentary || file?.admin_commentary || null,
               }))
             : [],
+          mediaUploads: Array.isArray(data?.mediaUploads)
+            ? data.mediaUploads.map((media: any) => ({
+                id: String(media.id),
+                url: media?.url || media?.public_url || null,
+                bucket: media?.bucket || null,
+                path: media?.path || null,
+                mimeType: media?.mimeType || media?.mime_type || null,
+                sizeBytes: typeof media?.sizeBytes === "number" ? media.sizeBytes : (typeof media?.size_bytes === "number" ? media.size_bytes : null),
+                uploadSource: media?.uploadSource || media?.upload_source || "unknown",
+                createdAt: media?.createdAt || media?.created_at || null,
+              }))
+            : [],
+          mediaTotalCount: typeof data?.mediaTotalCount === "number" ? data.mediaTotalCount : 0,
+          mediaTotalSize: typeof data?.mediaTotalSize === "number" ? data.mediaTotalSize : 0,
+          userReports: Array.isArray(data?.userReports)
+            ? data.userReports.map((report: any) => ({
+                id: String(report.id),
+                reason: report?.reason || null,
+                status: report?.status || "review",
+                createdAt: report?.createdAt || report?.created_at || null,
+                classifiedAt: report?.classifiedAt || report?.classified_at || null,
+                reporterName: report?.reporterName || "Unknown",
+                classifierName: report?.classifierName || null,
+                type: report?.type || "against",
+              }))
+            : [],
+          reportsAgainstCount: typeof data?.reportsAgainstCount === "number" ? data.reportsAgainstCount : 0,
+          reportsByCount: typeof data?.reportsByCount === "number" ? data.reportsByCount : 0,
         });
         // Extract and set member roles
         const profileRoles = Array.isArray(data?.profile?.roles) ? data.profile.roles : [];
@@ -8006,7 +8038,7 @@ export const AdminPage: React.FC = () => {
                                           </span>
                                         ) : null}
                                       </div>
-                                      <div className="flex flex-wrap gap-1 mt-1">
+                                      <div className="flex flex-wrap gap-1 mt-1 items-center">
                                         {/* Role Badges */}
                                       {memberRoles.map((role) => (
                                         <UserRoleBadge
@@ -8016,6 +8048,20 @@ export const AdminPage: React.FC = () => {
                                           showLabel
                                         />
                                       ))}
+                                      {/* Add/Manage Roles Button */}
+                                      <button
+                                        type="button"
+                                        onClick={() => setRolesOpen(!rolesOpen)}
+                                        className={cn(
+                                          "inline-flex items-center justify-center h-5 w-5 rounded-full border-2 border-dashed transition-all",
+                                          rolesOpen 
+                                            ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" 
+                                            : "border-stone-300 dark:border-stone-600 text-stone-400 dark:text-stone-500 hover:border-stone-400 dark:hover:border-stone-500 hover:text-stone-500 dark:hover:text-stone-400"
+                                        )}
+                                        title={rolesOpen ? "Close role management" : "Manage roles"}
+                                      >
+                                        <Plus className={cn("h-3 w-3 transition-transform", rolesOpen && "rotate-45")} />
+                                      </button>
                                       {(() => {
                                         const level =
                                           typeof memberData.threatLevel ===
@@ -8026,15 +8072,19 @@ export const AdminPage: React.FC = () => {
                                           THREAT_LEVEL_META[level] ||
                                           THREAT_LEVEL_META[0];
                                         return (
-                                          <span
+                                          <button
+                                            type="button"
+                                            onClick={() => setThreatLevelOpen(!threatLevelOpen)}
                                             className={cn(
-                                              "rounded-full px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1",
+                                              "rounded-full px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer hover:ring-2 hover:ring-offset-1 transition-all",
                                               meta.badge,
+                                              threatLevelOpen && "ring-2 ring-offset-1"
                                             )}
+                                            title="Click to modify threat level"
                                           >
                                             <Shield className="h-3 w-3" />
                                             Lvl {level} - {meta.label}
-                                          </span>
+                                          </button>
                                         );
                                       })()}
                                       {memberData.isBannedEmail && (
@@ -8273,147 +8323,155 @@ export const AdminPage: React.FC = () => {
                               );
                             })()}
 
-                            {/* Threat Level Section - Improved UI */}
-                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden">
-                              {/* Header */}
-                              <div className="px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] border-b border-stone-200 dark:border-[#3e3e42]">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <Shield className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                                    <span className="text-sm font-semibold">Threat Level</span>
+                            {/* Threat Level Section - Collapsible, opens on badge click */}
+                            {threatLevelOpen && (
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                {/* Header */}
+                                <div 
+                                  className="px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] border-b border-stone-200 dark:border-[#3e3e42] cursor-pointer"
+                                  onClick={() => setThreatLevelOpen(false)}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Shield className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                      <span className="text-sm font-semibold">Change Threat Level</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {(() => {
+                                        const currentLevel = typeof memberData.threatLevel === "number" ? memberData.threatLevel : 0;
+                                        const meta = THREAT_LEVEL_META[currentLevel] || THREAT_LEVEL_META[0];
+                                        return (
+                                          <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", meta.badge)}>
+                                            Level {currentLevel} – {meta.label}
+                                          </span>
+                                        );
+                                      })()}
+                                      <ChevronDown className="h-4 w-4 text-stone-500 rotate-180" />
+                                    </div>
                                   </div>
-                                  {(() => {
-                                    const currentLevel = typeof memberData.threatLevel === "number" ? memberData.threatLevel : 0;
-                                    const meta = THREAT_LEVEL_META[currentLevel] || THREAT_LEVEL_META[0];
-                                    return (
-                                      <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", meta.badge)}>
-                                        Level {currentLevel} – {meta.label}
-                                      </span>
-                                    );
-                                  })()}
-                                </div>
-                                {memberData.threatLevel === 3 && (memberData.bannedByName || memberData.bannedAt) && (
-                                  <div className="mt-2 text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1.5">
-                                    <Ban className="h-3 w-3" />
-                                    Banned by {memberData.bannedByName || "admin"}
-                                    {memberData.bannedAt ? ` on ${new Date(memberData.bannedAt).toLocaleString()}` : ""}
-                                  </div>
-                                )}
-                              </div>
-                              
-                              {/* Threat Level Cards */}
-                              <div className="p-4 space-y-3">
-                                <div className="grid grid-cols-2 gap-2">
-                                  {([0, 1, 2, 3] as const).map((level) => {
-                                    const meta = THREAT_LEVEL_META[level];
-                                    const isSelected = threatLevelSelection === level;
-                                    const isCurrent = memberData.threatLevel === level;
-                                    const ThreatIcon = level === 0 ? CircleCheck : level === 1 ? AlertTriangle : level === 2 ? ShieldAlert : Ban;
-                                    
-                                    return (
-                                      <button
-                                        key={level}
-                                        type="button"
-                                        onClick={() => {
-                                          if (level === 3 && level !== threatLevelSelection) {
-                                            setPendingThreatLevel(3);
-                                            setThreatLevelConfirmOpen(true);
-                                          } else {
-                                            setThreatLevelSelection(level);
-                                          }
-                                        }}
-                                        className={cn(
-                                          "relative p-3 rounded-xl border-2 text-left transition-all",
-                                          isSelected 
-                                            ? `${meta.cardBg} ${meta.cardBorder} ring-2 ring-offset-1 ring-offset-white dark:ring-offset-[#1e1e20]`
-                                            : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52] bg-white dark:bg-[#252526]",
-                                          isSelected && level === 0 && "ring-emerald-400",
-                                          isSelected && level === 1 && "ring-amber-400",
-                                          isSelected && level === 2 && "ring-red-400",
-                                          isSelected && level === 3 && "ring-stone-600"
-                                        )}
-                                      >
-                                        {isCurrent && (
-                                          <div className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">
-                                            Current
-                                          </div>
-                                        )}
-                                        <div className="flex items-start gap-2">
-                                          <div className={cn(
-                                            "p-1.5 rounded-lg",
-                                            isSelected ? meta.cardBg : "bg-stone-100 dark:bg-[#2d2d30]"
-                                          )}>
-                                            <ThreatIcon className={cn("h-4 w-4", isSelected ? meta.iconColor : "text-stone-500 dark:text-stone-400")} />
-                                          </div>
-                                          <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-1.5">
-                                              <span className={cn(
-                                                "text-sm font-semibold",
-                                                level === 3 && isSelected && "text-white"
-                                              )}>
-                                                {meta.label}
-                                              </span>
-                                              <span className={cn(
-                                                "text-[10px] opacity-60 font-medium",
-                                                level === 3 && isSelected && "text-white/70"
-                                              )}>
-                                                Lvl {level}
-                                              </span>
-                                            </div>
-                                            <p className={cn(
-                                              "text-[11px] leading-tight mt-0.5 line-clamp-2",
-                                              level === 3 && isSelected ? "text-white/80" : "text-stone-500 dark:text-stone-400"
-                                            )}>
-                                              {meta.text}
-                                            </p>
-                                          </div>
-                                        </div>
-                                        {isSelected && (
-                                          <div className="absolute bottom-2 right-2">
-                                            <Check className={cn("h-4 w-4", level === 3 ? "text-white" : meta.iconColor)} />
-                                          </div>
-                                        )}
-                                      </button>
-                                    );
-                                  })}
+                                  {memberData.threatLevel === 3 && (memberData.bannedByName || memberData.bannedAt) && (
+                                    <div className="mt-2 text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1.5">
+                                      <Ban className="h-3 w-3" />
+                                      Banned by {memberData.bannedByName || "admin"}
+                                      {memberData.bannedAt ? ` on ${new Date(memberData.bannedAt).toLocaleString()}` : ""}
+                                    </div>
+                                  )}
                                 </div>
                                 
-                                {/* Update Button */}
-                                <div className="flex items-center gap-2 pt-2 border-t border-stone-100 dark:border-[#3e3e42]">
-                                  <Button
-                                    onClick={handleSetThreatLevel}
-                                    disabled={threatLevelUpdating || !memberData?.user?.id || threatLevelSelection === memberData.threatLevel}
-                                    className={cn(
-                                      "flex-1 rounded-xl transition-all",
-                                      threatLevelSelection === 3 
-                                        ? "bg-red-600 hover:bg-red-700 text-white" 
-                                        : threatLevelSelection === memberData.threatLevel 
-                                          ? "bg-stone-200 text-stone-500 dark:bg-stone-700 dark:text-stone-400"
-                                          : ""
-                                    )}
-                                  >
-                                    {threatLevelUpdating ? (
-                                      <>
-                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                        Updating...
-                                      </>
-                                    ) : threatLevelSelection === memberData.threatLevel ? (
-                                      "No changes"
-                                    ) : threatLevelSelection === 3 ? (
-                                      <>
-                                        <Ban className="h-4 w-4 mr-2" />
-                                        Set to Banned
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Shield className="h-4 w-4 mr-2" />
-                                        Update Threat Level
-                                      </>
-                                    )}
-                                  </Button>
+                                {/* Threat Level Cards */}
+                                <div className="p-4 space-y-3">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {([0, 1, 2, 3] as const).map((level) => {
+                                      const meta = THREAT_LEVEL_META[level];
+                                      const isSelected = threatLevelSelection === level;
+                                      const isCurrent = memberData.threatLevel === level;
+                                      const ThreatIcon = level === 0 ? CircleCheck : level === 1 ? AlertTriangle : level === 2 ? ShieldAlert : Ban;
+                                      
+                                      return (
+                                        <button
+                                          key={level}
+                                          type="button"
+                                          onClick={() => {
+                                            if (level === 3 && level !== threatLevelSelection) {
+                                              setPendingThreatLevel(3);
+                                              setThreatLevelConfirmOpen(true);
+                                            } else {
+                                              setThreatLevelSelection(level);
+                                            }
+                                          }}
+                                          className={cn(
+                                            "relative p-3 rounded-xl border-2 text-left transition-all",
+                                            isSelected 
+                                              ? `${meta.cardBg} ${meta.cardBorder} ring-2 ring-offset-1 ring-offset-white dark:ring-offset-[#1e1e20]`
+                                              : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52] bg-white dark:bg-[#252526]",
+                                            isSelected && level === 0 && "ring-emerald-400",
+                                            isSelected && level === 1 && "ring-amber-400",
+                                            isSelected && level === 2 && "ring-red-400",
+                                            isSelected && level === 3 && "ring-stone-600"
+                                          )}
+                                        >
+                                          {isCurrent && (
+                                            <div className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                                              Current
+                                            </div>
+                                          )}
+                                          <div className="flex items-start gap-2">
+                                            <div className={cn(
+                                              "p-1.5 rounded-lg",
+                                              isSelected ? meta.cardBg : "bg-stone-100 dark:bg-[#2d2d30]"
+                                            )}>
+                                              <ThreatIcon className={cn("h-4 w-4", isSelected ? meta.iconColor : "text-stone-500 dark:text-stone-400")} />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className={cn(
+                                                  "text-sm font-semibold",
+                                                  level === 3 && isSelected && "text-white"
+                                                )}>
+                                                  {meta.label}
+                                                </span>
+                                                <span className={cn(
+                                                  "text-[10px] opacity-60 font-medium",
+                                                  level === 3 && isSelected && "text-white/70"
+                                                )}>
+                                                  Lvl {level}
+                                                </span>
+                                              </div>
+                                              <p className={cn(
+                                                "text-[11px] leading-tight mt-0.5 line-clamp-2",
+                                                level === 3 && isSelected ? "text-white/80" : "text-stone-500 dark:text-stone-400"
+                                              )}>
+                                                {meta.text}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          {isSelected && (
+                                            <div className="absolute bottom-2 right-2">
+                                              <Check className={cn("h-4 w-4", level === 3 ? "text-white" : meta.iconColor)} />
+                                            </div>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {/* Update Button */}
+                                  <div className="flex items-center gap-2 pt-2 border-t border-stone-100 dark:border-[#3e3e42]">
+                                    <Button
+                                      onClick={handleSetThreatLevel}
+                                      disabled={threatLevelUpdating || !memberData?.user?.id || threatLevelSelection === memberData.threatLevel}
+                                      className={cn(
+                                        "flex-1 rounded-xl transition-all",
+                                        threatLevelSelection === 3 
+                                          ? "bg-red-600 hover:bg-red-700 text-white" 
+                                          : threatLevelSelection === memberData.threatLevel 
+                                            ? "bg-stone-200 text-stone-500 dark:bg-stone-700 dark:text-stone-400"
+                                            : ""
+                                      )}
+                                    >
+                                      {threatLevelUpdating ? (
+                                        <>
+                                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                          Updating...
+                                        </>
+                                      ) : threatLevelSelection === memberData.threatLevel ? (
+                                        "No changes"
+                                      ) : threatLevelSelection === 3 ? (
+                                        <>
+                                          <Ban className="h-4 w-4 mr-2" />
+                                          Set to Banned
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Shield className="h-4 w-4 mr-2" />
+                                          Update Threat Level
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            )}
                             
                             {/* Ban Confirmation Dialog */}
                             <Dialog open={threatLevelConfirmOpen} onOpenChange={setThreatLevelConfirmOpen}>
@@ -8469,25 +8527,25 @@ export const AdminPage: React.FC = () => {
                               </DialogContent>
                             </Dialog>
 
-                            {/* Roles Management Section - Redesigned */}
-                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e]">
-                              {/* Header */}
-                              <div 
-                                className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
-                                onClick={() => setRolesOpen(!rolesOpen)}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                                  <span className="text-sm font-medium">User Roles</span>
-                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
-                                    {memberRoles.length} active
-                                  </span>
+                            {/* Roles Management Section - Only shown when rolesOpen is true */}
+                            {rolesOpen && (
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e] animate-in fade-in slide-in-from-top-2 duration-200">
+                                {/* Header */}
+                                <div 
+                                  className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
+                                  onClick={() => setRolesOpen(false)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                    <span className="text-sm font-medium">Manage User Roles</span>
+                                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                                      {memberRoles.length} active
+                                    </span>
+                                  </div>
+                                  <ChevronDown className="h-4 w-4 text-stone-500 rotate-180" />
                                 </div>
-                                <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${rolesOpen ? "rotate-180" : ""}`} />
-                              </div>
-                              
-                              {/* Role Cards Grid */}
-                              {rolesOpen && (
+                                
+                                {/* Role Cards Grid */}
                                 <div className="p-4 space-y-3">
                                   {/* Active Roles Summary */}
                                   {memberRoles.length > 0 && (
@@ -8570,8 +8628,8 @@ export const AdminPage: React.FC = () => {
                                     </span>
                                   </div>
                                 </div>
-                              )}
-                            </div>
+                              </div>
+                            )}
                             
                             {/* Confirm Admin Role Dialog */}
                             <Dialog open={confirmAdminOpen} onOpenChange={setConfirmAdminOpen}>
@@ -9137,12 +9195,24 @@ export const AdminPage: React.FC = () => {
                                               className="group relative aspect-square rounded-xl overflow-hidden bg-stone-100 dark:bg-[#252526] border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-700 transition-all"
                                             >
                                               {isImage && media.url ? (
-                                                <a href={media.url} target="_blank" rel="noreferrer">
+                                                <a href={media.url} target="_blank" rel="noreferrer" className="block w-full h-full">
                                                   <img
                                                     src={media.url}
                                                     alt="Upload"
                                                     className="w-full h-full object-cover"
                                                     loading="lazy"
+                                                    onError={(e) => {
+                                                      // Replace with fallback icon if image fails to load
+                                                      const target = e.currentTarget;
+                                                      target.style.display = 'none';
+                                                      const parent = target.parentElement;
+                                                      if (parent) {
+                                                        const fallback = document.createElement('div');
+                                                        fallback.className = 'w-full h-full flex items-center justify-center bg-stone-100 dark:bg-[#252526]';
+                                                        fallback.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-stone-300 dark:text-stone-600"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+                                                        parent.insertBefore(fallback, target);
+                                                      }
+                                                    }}
                                                   />
                                                   {/* Hover overlay */}
                                                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
@@ -9152,9 +9222,9 @@ export const AdminPage: React.FC = () => {
                                                   </div>
                                                 </a>
                                               ) : (
-                                                <div className="w-full h-full flex items-center justify-center">
+                                                <a href={media.url || "#"} target="_blank" rel="noreferrer" className="w-full h-full flex items-center justify-center">
                                                   <FileImage className="h-8 w-8 text-stone-300 dark:text-stone-600" />
-                                                </div>
+                                                </a>
                                               )}
                                               {/* Source Badge */}
                                               <div className={cn("absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-bold text-white flex items-center gap-0.5", config.color)}>
@@ -9177,36 +9247,6 @@ export const AdminPage: React.FC = () => {
                                         </Link>
                                       )}
                                     </>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-
-                            <Card className="rounded-2xl">
-                              <CardContent className="p-4 space-y-2">
-                                <div className="flex items-start justify-between">
-                                  <div className="text-sm font-medium">
-                                    Admin notes
-                                  </div>
-                                  <AddAdminNote
-                                    profileId={memberData.user?.id || ""}
-                                    onAdded={() => lookupMember()}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  {(memberData.adminNotes || []).length ===
-                                  0 ? (
-                                    <div className="text-sm opacity-60">
-                                      No notes yet.
-                                    </div>
-                                  ) : (
-                                    (memberData.adminNotes || []).map((n) => (
-                                      <NoteRow
-                                        key={n.id}
-                                        note={n}
-                                        onRemoved={() => lookupMember()}
-                                      />
-                                    ))
                                   )}
                                 </div>
                               </CardContent>
@@ -9377,6 +9417,38 @@ export const AdminPage: React.FC = () => {
                                   )}
                               </div>
                             )}
+
+                            {/* Admin Commentary - Last Element */}
+                            <Card className="rounded-2xl">
+                              <CardContent className="p-4 space-y-2">
+                                <div className="flex items-start justify-between">
+                                  <div className="text-sm font-medium flex items-center gap-2">
+                                    <MessageSquareText className="h-4 w-4 text-stone-500" />
+                                    Admin Commentary
+                                  </div>
+                                  <AddAdminNote
+                                    profileId={memberData.user?.id || ""}
+                                    onAdded={() => lookupMember()}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  {(memberData.adminNotes || []).length ===
+                                  0 ? (
+                                    <div className="text-sm opacity-60">
+                                      No notes yet.
+                                    </div>
+                                  ) : (
+                                    (memberData.adminNotes || []).map((n) => (
+                                      <NoteRow
+                                        key={n.id}
+                                        note={n}
+                                        onRemoved={() => lookupMember()}
+                                      />
+                                    ))
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
                           </div>
                         )}
                       </CardContent>
