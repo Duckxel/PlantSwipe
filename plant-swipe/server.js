@@ -2478,14 +2478,22 @@ async function ensureAdminMediaUploadsTable() {
       quality integer,
       compression_percent integer,
       metadata jsonb,
+      upload_source text,
       created_at timestamptz not null default now()
     );
     create index if not exists admin_media_uploads_created_idx on public.admin_media_uploads (created_at desc);
     create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
     create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
+    create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
+  `
+  // Add column if it doesn't exist (for existing installations)
+  const addColumnDdl = `
+    alter table public.admin_media_uploads add column if not exists upload_source text;
+    create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
   `
   try {
     await sql.unsafe(ddl, [], { simple: true })
+    await sql.unsafe(addColumnDdl, [], { simple: true })
     adminMediaUploadsEnsured = true
   } catch (err) {
     console.error('[schema] failed to ensure admin_media_uploads table', err)
@@ -2530,6 +2538,13 @@ function normalizeAdminMediaRow(row) {
   // Transform any Supabase URLs to proxy URLs for backward compatibility
   const rawUrl = row.public_url || row.publicUrl || null
   const url = rawUrl ? supabaseStorageToMediaProxy(rawUrl) : null
+  // Derive upload source from column, metadata.scope, or metadata.source
+  const uploadSource = 
+    row.upload_source || 
+    row.uploadSource || 
+    row.metadata?.scope || 
+    row.metadata?.source || 
+    'admin'
   return {
     id: row.id || null,
     adminId: row.admin_id || row.adminId || null,
@@ -2552,6 +2567,7 @@ function normalizeAdminMediaRow(row) {
         ? row.compression_percent
         : row.compressionPercent ?? null,
     metadata: row.metadata || null,
+    uploadSource,
     createdAt: row.created_at || row.createdAt || null,
   }
 }
@@ -2586,13 +2602,15 @@ async function recordAdminMediaUpload(row) {
       }
       return base
     })()
+    // Derive upload_source from metadata.scope, metadata.source, or row.uploadSource
+    const uploadSource = row.uploadSource || row.metadata?.scope || row.metadata?.source || 'admin'
 
     if (sql) {
       const inserted = await sql`
         insert into public.admin_media_uploads
-          (admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at)
+          (admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at)
         values
-          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(metadataPayload || null)}, ${createdAtValue})
+          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(metadataPayload || null)}, ${uploadSource}, ${createdAtValue})
         on conflict (bucket, path) do update set
           admin_id = excluded.admin_id,
           admin_email = excluded.admin_email,
@@ -2604,9 +2622,10 @@ async function recordAdminMediaUpload(row) {
           original_size_bytes = excluded.original_size_bytes,
           quality = excluded.quality,
           compression_percent = excluded.compression_percent,
-            metadata = excluded.metadata,
+          metadata = excluded.metadata,
+          upload_source = excluded.upload_source,
           created_at = excluded.created_at
-        returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at
+        returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at
       `
       return Array.isArray(inserted) && inserted.length > 0
         ? normalizeAdminMediaRow(inserted[0])
@@ -2630,12 +2649,13 @@ async function recordAdminMediaUpload(row) {
             quality: row.quality,
             compression_percent: row.compressionPercent,
             metadata: metadataPayload || null,
+            upload_source: uploadSource,
             created_at: createdAtValue,
           },
           { onConflict: 'bucket,path' }
         )
         .select(
-          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at'
+          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at'
         )
         .maybeSingle()
       if (error) throw error
@@ -2731,6 +2751,7 @@ async function syncGardenCoverMedia(existingKeys, limit = 200) {
       originalSizeBytes: null,
       quality: gardenCoverWebpQuality,
       compressionPercent: null,
+      uploadSource: 'garden_cover',
       metadata: {
         source: 'garden_cover',
         gardenId: row.id || null,
@@ -3405,6 +3426,38 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
 
           // Use media proxy
           const proxyUrl = supabaseStorageToMediaProxy(publicData.publicUrl)
+
+          // Record to global image database
+          let uploaderDisplayName = null
+          try {
+            uploaderDisplayName = await getAdminProfileName(user.id)
+          } catch { }
+          
+          try {
+            await recordAdminMediaUpload({
+              adminId: user.id,
+              adminEmail: user.email || null,
+              adminName: uploaderDisplayName,
+              bucket: adminUploadBucket,
+              path: path,
+              publicUrl: proxyUrl,
+              mimeType: 'image/webp',
+              originalMimeType: file.mimetype || 'image/unknown',
+              sizeBytes: buffer.length,
+              originalSizeBytes: file.size,
+              quality: 80,
+              compressionPercent: file.size > 0 ? Math.max(0, Math.round(100 - (buffer.length / file.size) * 100)) : 0,
+              uploadSource: 'contact_screenshot',
+              metadata: {
+                source: 'contact_screenshot',
+                originalName: file.originalname,
+                userId: user.id,
+              },
+              createdAt: new Date().toISOString(),
+            })
+          } catch (recordErr) {
+            console.error('[contact-upload] failed to record media upload', recordErr)
+          }
 
           res.json({ url: proxyUrl })
         } catch (e) {
@@ -5262,10 +5315,18 @@ app.get('/api/admin/media', async (req, res) => {
   if (!admin) return
 
   const limitParam = Number.parseInt(String(req.query?.limit || ''), 10)
-  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 50
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 100
   const bucketParamRaw =
     typeof req.query?.bucket === 'string'
       ? String(req.query.bucket).trim().toLowerCase()
+      : null
+  const sourceParam =
+    typeof req.query?.source === 'string'
+      ? String(req.query.source).trim().toLowerCase()
+      : null
+  const userIdParam =
+    typeof req.query?.userId === 'string'
+      ? String(req.query.userId).trim()
       : null
   const gardenBucketName = gardenCoverUploadBucket
     ? gardenCoverUploadBucket.toLowerCase()
@@ -5277,15 +5338,15 @@ app.get('/api/admin/media', async (req, res) => {
     let rows = []
     if (sql) {
       rows =
-        await sql`select id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at from public.admin_media_uploads order by created_at desc limit ${limit}`
+        await sql`select id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at from public.admin_media_uploads order by created_at desc limit ${limit * 2}`
     } else if (supabaseServiceClient) {
       const { data, error } = await supabaseServiceClient
         .from('admin_media_uploads')
         .select(
-          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at',
+          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at',
         )
         .order('created_at', { ascending: false })
-        .limit(limit)
+        .limit(limit * 2)
       if (error) throw error
       rows = data || []
     } else {
@@ -5296,9 +5357,25 @@ app.get('/api/admin/media', async (req, res) => {
     let media = (rows || [])
       .map((row) => normalizeAdminMediaRow(row))
       .filter(Boolean)
+    
+    // Filter by bucket if specified
     if (bucketParamRaw) {
       media = media.filter(
         (item) => (item?.bucket || '').toLowerCase() === bucketParamRaw,
+      )
+    }
+    
+    // Filter by source/function if specified
+    if (sourceParam) {
+      media = media.filter(
+        (item) => (item?.uploadSource || '').toLowerCase() === sourceParam,
+      )
+    }
+    
+    // Filter by user ID if specified
+    if (userIdParam) {
+      media = media.filter(
+        (item) => item?.adminId === userIdParam,
       )
     }
 
@@ -5309,7 +5386,7 @@ app.get('/api/admin/media', async (req, res) => {
     )
 
     let combined = [...media]
-    if (includeGardenCovers) {
+    if (includeGardenCovers && !sourceParam) {
       try {
         const gardenMedia = await syncGardenCoverMedia(seenKeys, limit)
         combined = combined.concat(gardenMedia.filter(Boolean))
@@ -5326,7 +5403,30 @@ app.get('/api/admin/media', async (req, res) => {
       return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0)
     })
 
-    res.json({ ok: true, media: combined.slice(0, limit) })
+    // Collect unique sources for filter dropdown
+    const availableSources = [...new Set(combined.map(item => item?.uploadSource).filter(Boolean))].sort()
+    
+    // Collect stats
+    const totalSize = combined.reduce((sum, item) => sum + (item?.sizeBytes || 0), 0)
+    const stats = {
+      totalCount: combined.length,
+      totalSize,
+      bySource: availableSources.reduce((acc, src) => {
+        const items = combined.filter(item => item?.uploadSource === src)
+        acc[src] = {
+          count: items.length,
+          size: items.reduce((sum, item) => sum + (item?.sizeBytes || 0), 0),
+        }
+        return acc
+      }, {}),
+    }
+
+    res.json({ 
+      ok: true, 
+      media: combined.slice(0, limit),
+      availableSources,
+      stats,
+    })
   } catch (err) {
     console.error('[media] failed to load admin media uploads', err)
     res.status(500).json({ error: 'Failed to load media uploads' })
@@ -11918,6 +12018,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
           originalSizeBytes: file.size,
           quality: gardenCoverWebpQuality,
           compressionPercent,
+          uploadSource: 'garden_cover',
           metadata: {
             source: 'garden_cover',
             gardenId,
@@ -12106,6 +12207,38 @@ app.post('/api/messages/upload-image', async (req, res) => {
         file.size > 0 && finalMimeType !== 'image/gif'
           ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
           : 0
+
+      // Record to global image database
+      let uploaderDisplayName = null
+      try {
+        uploaderDisplayName = await getAdminProfileName(user.id)
+      } catch { }
+      
+      try {
+        await recordAdminMediaUpload({
+          adminId: user.id,
+          adminEmail: user.email || null,
+          adminName: uploaderDisplayName,
+          bucket: messageImageUploadBucket,
+          path: objectPath,
+          publicUrl: proxyUrl,
+          mimeType: finalMimeType,
+          originalMimeType: mime,
+          sizeBytes: optimizedBuffer.length,
+          originalSizeBytes: file.size,
+          quality: finalMimeType === 'image/gif' ? null : messageImageWebpQuality,
+          compressionPercent,
+          uploadSource: 'messages',
+          metadata: {
+            source: 'messages',
+            originalName: file.originalname,
+            userId: user.id,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      } catch (recordErr) {
+        console.error('[message-image] failed to record media upload', recordErr)
+      }
 
       res.json({
         ok: true,
@@ -15325,6 +15458,40 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       // Get public URL and transform to media proxy
       const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
       const proxyUrl = supabaseStorageToMediaProxy(urlData?.publicUrl) || urlData?.publicUrl || ''
+
+      // Record to global image database
+      let uploaderDisplayName = null
+      try {
+        uploaderDisplayName = await getAdminProfileName(user.id)
+      } catch { }
+      
+      try {
+        await recordAdminMediaUpload({
+          adminId: user.id,
+          adminEmail: user.email || null,
+          adminName: uploaderDisplayName,
+          bucket: 'photos',
+          path: storagePath,
+          publicUrl: proxyUrl,
+          mimeType: mimeType || 'image/jpeg',
+          originalMimeType: mimeType || 'image/jpeg',
+          sizeBytes: fileBuffer.length,
+          originalSizeBytes: fileBuffer.length,
+          quality: null,
+          compressionPercent: null,
+          uploadSource: folder === 'journal' ? 'garden_journal' : 'garden_photo',
+          metadata: {
+            source: folder === 'journal' ? 'garden_journal' : 'garden_photo',
+            originalName: fileName,
+            gardenId: gardenId,
+            folder: folder,
+            userId: user.id,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      } catch (recordErr) {
+        console.error('[upload] failed to record media upload', recordErr)
+      }
 
       res.json({ ok: true, url: proxyUrl, path: storagePath })
     })
