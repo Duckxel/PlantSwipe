@@ -534,18 +534,19 @@ export function parseLinkUrl(url: string): { type: LinkType; id: string } | null
 
 /**
  * Upload an image for messaging.
+ * Uses the server-side endpoint which handles optimization with sharp.
  * Returns the public URL of the uploaded image.
  */
 export async function uploadMessageImage(file: File): Promise<{ url: string; thumbnailUrl?: string }> {
   const session = (await supabase.auth.getSession()).data.session
-  if (!session?.user?.id) {
+  if (!session?.access_token) {
     throw new Error('Not authenticated')
   }
   
   // Validate file type
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif', 'image/avif']
   if (!allowedTypes.includes(file.type)) {
-    throw new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.')
+    throw new Error('Invalid file type. Only JPEG, PNG, GIF, WebP, HEIC, and AVIF are allowed.')
   }
   
   // Validate file size (max 10MB)
@@ -554,46 +555,31 @@ export async function uploadMessageImage(file: File): Promise<{ url: string; thu
     throw new Error('File too large. Maximum size is 10MB.')
   }
   
-  // Generate unique filename
-  const ext = file.name.split('.').pop() || 'jpg'
-  const timestamp = Date.now()
-  const randomId = Math.random().toString(36).substring(2, 10)
-  const filename = `${session.user.id}/${timestamp}-${randomId}.${ext}`
+  // Upload via server endpoint (handles optimization with sharp)
+  const formData = new FormData()
+  formData.append('file', file)
   
-  // Upload to Supabase storage
-  const { error } = await supabase.storage
-    .from('message-images')
-    .upload(filename, file, {
-      cacheControl: '31536000', // 1 year cache
-      upsert: false
-    })
+  const response = await fetch('/api/messages/upload-image', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`
+    },
+    body: formData
+  })
   
-  if (error) {
-    // If bucket doesn't exist, try uploads bucket as fallback
-    const { error: fallbackError } = await supabase.storage
-      .from('uploads')
-      .upload(`messages/${filename}`, file, {
-        cacheControl: '31536000',
-        upsert: false
-      })
-    
-    if (fallbackError) {
-      console.error('[messaging] Failed to upload image:', fallbackError)
-      throw new Error('Failed to upload image')
-    }
-    
-    const { data: urlData } = supabase.storage
-      .from('uploads')
-      .getPublicUrl(`messages/${filename}`)
-    
-    return { url: urlData.publicUrl }
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    console.error('[messaging] Failed to upload image:', errorData)
+    throw new Error(errorData.error || 'Failed to upload image')
   }
   
-  const { data: urlData } = supabase.storage
-    .from('message-images')
-    .getPublicUrl(filename)
+  const data = await response.json()
   
-  return { url: urlData.publicUrl }
+  if (!data.ok || !data.url) {
+    throw new Error('Failed to upload image: Invalid response')
+  }
+  
+  return { url: data.url }
 }
 
 /**
