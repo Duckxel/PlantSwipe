@@ -5314,6 +5314,11 @@ app.get('/api/admin/media', async (req, res) => {
   const admin = await ensureEditor(req, res)
   if (!admin) return
 
+  // Ensure table schema is up to date (adds upload_source column if missing)
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
   const limitParam = Number.parseInt(String(req.query?.limit || ''), 10)
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 100
   const bucketParamRaw =
@@ -8665,6 +8670,10 @@ app.get('/api/admin/member', async (req, res) => {
     let mediaUploads = []
     let mediaTotalSize = 0
     let mediaTotalCount = 0
+    try {
+      // Ensure table schema is up to date (adds upload_source column if missing)
+      await ensureAdminMediaUploadsTable()
+    } catch { }
     try {
       if (sql) {
         const mediaRows = await sql`
