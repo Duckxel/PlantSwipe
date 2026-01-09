@@ -67,10 +67,8 @@ import {
   Store,
   ShieldAlert,
   Ban,
-  Eye,
   X,
   Image,
-  ZoomIn,
   CircleCheck,
   Loader2,
   Square,
@@ -3807,9 +3805,6 @@ export const AdminPage: React.FC = () => {
   const [threatLevelConfirmOpen, setThreatLevelConfirmOpen] = React.useState(false);
   const [pendingThreatLevel, setPendingThreatLevel] = React.useState<number | null>(null);
   
-  // Files viewer state
-  const [filesExpanded, setFilesExpanded] = React.useState(false);
-  const [selectedFileIndex, setSelectedFileIndex] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     if (typeof memberData?.threatLevel === "number") {
@@ -9090,7 +9085,7 @@ export const AdminPage: React.FC = () => {
                                           <span className="text-emerald-600 dark:text-emerald-400">total</span>
                                         </div>
                                       )}
-                                      {memberData.user?.id && (memberData.mediaTotalCount || 0) > 0 && (
+                                      {memberData.user?.id && (
                                         <Link
                                           to={`/admin/upload/library?userId=${memberData.user.id}`}
                                           className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:underline"
@@ -9118,8 +9113,8 @@ export const AdminPage: React.FC = () => {
                                   ) : (
                                     <>
                                       {/* Media Grid */}
-                                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                                        {memberData.mediaUploads.slice(0, 8).map((media) => {
+                                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                                        {memberData.mediaUploads.slice(0, 5).map((media) => {
                                           const isImage = (media.mimeType || "").startsWith("image/");
                                           // Source badge config
                                           const sourceConfig: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -9172,7 +9167,7 @@ export const AdminPage: React.FC = () => {
                                       </div>
                                       
                                       {/* View All Link */}
-                                      {(memberData.mediaTotalCount || 0) > 8 && memberData.user?.id && (
+                                      {(memberData.mediaTotalCount || 0) > 5 && memberData.user?.id && (
                                         <Link
                                           to={`/admin/upload/library?userId=${memberData.user.id}`}
                                           className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
@@ -9186,278 +9181,6 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               </CardContent>
                             </Card>
-
-                            {/* Report Cases / Plant Images Section */}
-                            <Card className="rounded-2xl overflow-hidden">
-                              <CardContent className="p-0">
-                                {/* Header */}
-                                <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-b border-amber-200 dark:border-amber-800/50">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                                      <span className="text-sm font-semibold text-amber-900 dark:text-amber-100">Plant Images & Reports</span>
-                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-200">
-                                        {(memberData.files || []).length}
-                                      </span>
-                                    </div>
-                                    {memberData.files && memberData.files.length > 6 && (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setFilesExpanded(!filesExpanded)}
-                                        className="rounded-lg text-xs h-7 px-2 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-                                      >
-                                        {filesExpanded ? "Show less" : `Show all (${memberData.files.length})`}
-                                        <ChevronDown className={cn("h-3 w-3 ml-1 transition-transform", filesExpanded && "rotate-180")} />
-                                      </Button>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                                    Garden plant images with admin commentary and moderation notes
-                                  </p>
-                                </div>
-                                
-                                {/* Files Content */}
-                                <div className="p-4">
-                                  {(!memberData.files || memberData.files.length === 0) ? (
-                                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                                      <div className="w-12 h-12 rounded-full bg-stone-100 dark:bg-[#2d2d30] flex items-center justify-center mb-3">
-                                        <Image className="h-6 w-6 text-stone-400" />
-                                      </div>
-                                      <p className="text-sm text-stone-500 dark:text-stone-400">No files uploaded by this user yet</p>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      {/* Files Grid with Thumbnails */}
-                                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                        {(filesExpanded ? memberData.files : memberData.files.slice(0, 6)).map((file, index) => {
-                                          const uploaded = file.uploadedAt
-                                            ? new Date(file.uploadedAt).toLocaleDateString()
-                                            : null;
-                                          const hasImage = !!file.imageUrl;
-                                          
-                                          return (
-                                            <div
-                                              key={file.id}
-                                              className={cn(
-                                                "group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-stone-50 dark:bg-[#1b1b1d] transition-all hover:shadow-lg hover:border-stone-300 dark:hover:border-[#4e4e52]",
-                                                file.adminCommentary && "ring-2 ring-amber-300 dark:ring-amber-600"
-                                              )}
-                                            >
-                                              {/* Thumbnail / Preview */}
-                                              <div 
-                                                className="aspect-square bg-stone-100 dark:bg-[#252526] relative cursor-pointer"
-                                                onClick={() => hasImage && setSelectedFileIndex(index)}
-                                              >
-                                                {hasImage ? (
-                                                  <>
-                                                    <img
-                                                      src={file.imageUrl!}
-                                                      alt={file.plantName || "File"}
-                                                      className="w-full h-full object-cover"
-                                                      loading="lazy"
-                                                    />
-                                                    {/* Hover Overlay */}
-                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                      <div className="bg-white/90 dark:bg-black/80 rounded-full p-2">
-                                                        <ZoomIn className="h-5 w-5 text-stone-700 dark:text-stone-200" />
-                                                      </div>
-                                                    </div>
-                                                  </>
-                                                ) : (
-                                                  <div className="w-full h-full flex items-center justify-center">
-                                                    <Image className="h-8 w-8 text-stone-300 dark:text-stone-600" />
-                                                  </div>
-                                                )}
-                                                
-                                                {/* Admin Comment Badge */}
-                                                {file.adminCommentary && (
-                                                  <div className="absolute top-2 right-2">
-                                                    <div className="bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                                                      <AlertTriangle className="h-2.5 w-2.5" />
-                                                      Note
-                                                    </div>
-                                                  </div>
-                                                )}
-                                              </div>
-                                              
-                                              {/* File Info */}
-                                              <div className="p-2.5 space-y-1">
-                                                <div className="text-xs font-semibold truncate" title={file.plantName || "File"}>
-                                                  {file.plantName || "File"}
-                                                </div>
-                                                {file.caption && (
-                                                  <p className="text-[11px] text-stone-500 dark:text-stone-400 line-clamp-1" title={file.caption}>
-                                                    {file.caption}
-                                                  </p>
-                                                )}
-                                                <div className="flex items-center justify-between pt-1">
-                                                  <span className="text-[10px] text-stone-400">
-                                                    {uploaded || "-"}
-                                                  </span>
-                                                  {hasImage && (
-                                                    <a
-                                                      href={file.imageUrl!}
-                                                      target="_blank"
-                                                      rel="noreferrer"
-                                                      onClick={(e) => e.stopPropagation()}
-                                                      className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
-                                                    >
-                                                      <ExternalLink className="h-3 w-3" />
-                                                      Open
-                                                    </a>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                      
-                                      {/* Show More Button (for mobile) */}
-                                      {!filesExpanded && memberData.files.length > 6 && (
-                                        <Button
-                                          variant="ghost"
-                                          className="w-full mt-3 rounded-xl text-xs"
-                                          onClick={() => setFilesExpanded(true)}
-                                        >
-                                          Show {memberData.files.length - 6} more files
-                                          <ChevronDown className="h-3 w-3 ml-1" />
-                                        </Button>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                            
-                            {/* File Viewer Modal/Lightbox */}
-                            {selectedFileIndex !== null && memberData.files && memberData.files[selectedFileIndex] && (
-                              <Dialog open={selectedFileIndex !== null} onOpenChange={() => setSelectedFileIndex(null)}>
-                                <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-2xl">
-                                  {(() => {
-                                    const file = memberData.files![selectedFileIndex!];
-                                    const uploaded = file.uploadedAt
-                                      ? new Date(file.uploadedAt).toLocaleString()
-                                      : null;
-                                    const totalFiles = memberData.files!.length;
-                                    const hasPrev = selectedFileIndex > 0;
-                                    const hasNext = selectedFileIndex < totalFiles - 1;
-                                    
-                                    return (
-                                      <>
-                                        {/* Close Button */}
-                                        <button
-                                          onClick={() => setSelectedFileIndex(null)}
-                                          className="absolute top-4 right-4 z-10 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-                                        >
-                                          <X className="h-5 w-5" />
-                                        </button>
-                                        
-                                        {/* Image */}
-                                        <div className="relative bg-stone-900 flex items-center justify-center min-h-[300px] max-h-[70vh]">
-                                          {file.imageUrl ? (
-                                            <img
-                                              src={file.imageUrl}
-                                              alt={file.plantName || "File"}
-                                              className="max-w-full max-h-[70vh] object-contain"
-                                            />
-                                          ) : (
-                                            <div className="flex items-center justify-center py-20">
-                                              <Image className="h-20 w-20 text-stone-600" />
-                                            </div>
-                                          )}
-                                          
-                                          {/* Navigation Arrows */}
-                                          {hasPrev && (
-                                            <button
-                                              onClick={() => setSelectedFileIndex(selectedFileIndex - 1)}
-                                              className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-3 transition-colors"
-                                            >
-                                              <ChevronLeft className="h-6 w-6" />
-                                            </button>
-                                          )}
-                                          {hasNext && (
-                                            <button
-                                              onClick={() => setSelectedFileIndex(selectedFileIndex + 1)}
-                                              className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-3 transition-colors"
-                                            >
-                                              <ChevronRight className="h-6 w-6" />
-                                            </button>
-                                          )}
-                                          
-                                          {/* Counter */}
-                                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-sm px-3 py-1 rounded-full">
-                                            {selectedFileIndex + 1} / {totalFiles}
-                                          </div>
-                                        </div>
-                                        
-                                        {/* File Details */}
-                                        <div className="p-4 bg-white dark:bg-[#1e1e20] space-y-3">
-                                          <div className="flex items-start justify-between gap-4">
-                                            <div className="min-w-0">
-                                              <h3 className="font-semibold text-lg truncate">
-                                                {file.plantName || "Untitled File"}
-                                              </h3>
-                                              {file.caption && (
-                                                <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
-                                                  {file.caption}
-                                                </p>
-                                              )}
-                                            </div>
-                                            {file.imageUrl && (
-                                              <a
-                                                href={file.imageUrl}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="shrink-0"
-                                              >
-                                                <Button variant="outline" size="sm" className="rounded-lg">
-                                                  <ExternalLink className="h-4 w-4 mr-2" />
-                                                  Open Original
-                                                </Button>
-                                              </a>
-                                            )}
-                                          </div>
-                                          
-                                          <div className="flex items-center gap-4 text-xs text-stone-500">
-                                            {uploaded && (
-                                              <span className="flex items-center gap-1">
-                                                <Clock className="h-3 w-3" />
-                                                {uploaded}
-                                              </span>
-                                            )}
-                                            {file.gardenPlantId && (
-                                              <span className="flex items-center gap-1">
-                                                <Leaf className="h-3 w-3" />
-                                                {file.gardenPlantId}
-                                              </span>
-                                            )}
-                                          </div>
-                                          
-                                          {/* Admin Commentary */}
-                                          {file.adminCommentary && (
-                                            <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
-                                              <div className="flex items-start gap-2">
-                                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                                                <div>
-                                                  <div className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">
-                                                    Admin Note
-                                                  </div>
-                                                  <p className="text-sm text-amber-700 dark:text-amber-300">
-                                                    {file.adminCommentary}
-                                                  </p>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                </DialogContent>
-                              </Dialog>
-                            )}
 
                             <Card className="rounded-2xl">
                               <CardContent className="p-4 space-y-2">
