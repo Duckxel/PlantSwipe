@@ -1595,6 +1595,35 @@ create index if not exists admin_media_uploads_admin_idx on public.admin_media_u
 create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
 create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
 
+-- Add upload_source column to existing installations (safe to run multiple times)
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'admin_media_uploads' 
+    and column_name = 'upload_source'
+  ) then
+    alter table public.admin_media_uploads add column upload_source text;
+  end if;
+end $$;
+
+-- Backfill upload_source from metadata for existing records
+update public.admin_media_uploads
+set upload_source = coalesce(
+  metadata->>'scope',
+  metadata->>'source',
+  case 
+    when path like '%garden%cover%' then 'garden_cover'
+    when path like '%blog%' then 'blog'
+    when path like '%messages%' then 'messages'
+    when path like '%pro-advice%' or path like '%pro_advice%' then 'pro_advice'
+    when path like '%contact%' then 'contact_screenshot'
+    when path like '%journal%' then 'garden_journal'
+    else 'admin'
+  end
+)
+where upload_source is null;
+
 -- ========== Team Members (About page) ==========
 create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),

@@ -26,7 +26,9 @@ set upload_source = coalesce(
     when path like '%garden%cover%' then 'garden_cover'
     when path like '%blog%' then 'blog'
     when path like '%messages%' then 'messages'
-    when path like '%pro-advice%' then 'pro_advice'
+    when path like '%pro-advice%' or path like '%pro_advice%' then 'pro_advice'
+    when path like '%contact%' then 'contact_screenshot'
+    when path like '%journal%' then 'garden_journal'
     else 'admin'
   end
 )
