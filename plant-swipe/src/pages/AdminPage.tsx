@@ -3883,6 +3883,46 @@ export const AdminPage: React.FC = () => {
 
   // Member messages dialog state
   const [memberMessagesOpen, setMemberMessagesOpen] = React.useState(false);
+  const [memberMessagesStats, setMemberMessagesStats] = React.useState<{
+    conversationCount: number;
+    messageCount: number;
+    loading: boolean;
+  }>({ conversationCount: 0, messageCount: 0, loading: false });
+
+  const loadMemberMessagesStats = React.useCallback(
+    async (userId: string) => {
+      if (!userId) return;
+      setMemberMessagesStats((prev) => ({ ...prev, loading: true }));
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const token = session?.access_token;
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+        } catch {}
+        const resp = await fetch(
+          `/api/admin/member-messages?userId=${encodeURIComponent(userId)}&limit=1`,
+          { headers, credentials: "same-origin" },
+        );
+        const data = await safeJson(resp);
+        if (resp.ok) {
+          setMemberMessagesStats({
+            conversationCount: data?.totalConversations || 0,
+            messageCount: data?.totalMessages || 0,
+            loading: false,
+          });
+        } else {
+          setMemberMessagesStats({ conversationCount: 0, messageCount: 0, loading: false });
+        }
+      } catch (e: unknown) {
+        console.error("Failed to load member messages stats:", e);
+        setMemberMessagesStats({ conversationCount: 0, messageCount: 0, loading: false });
+      }
+    },
+    [safeJson],
+  );
 
   const loadMemberVisitsSeries = React.useCallback(
     async (userId: string, opts?: { initial?: boolean }) => {
@@ -4515,20 +4555,22 @@ export const AdminPage: React.FC = () => {
     [roleFilter, loadMemberList],
   );
 
-  // Auto-load visits series when a member is selected
+  // Auto-load visits series and messages stats when a member is selected
   React.useEffect(() => {
     const uid = memberData?.user?.id;
     if (uid) {
       loadMemberVisitsSeries(uid, { initial: true });
+      loadMemberMessagesStats(uid);
     } else {
       setMemberVisitsSeries([]);
       setMemberVisitsTotal30d(0);
       setMemberVisitsUpdatedAt(null);
       setMemberVisitsWarning(null);
+      setMemberMessagesStats({ conversationCount: 0, messageCount: 0, loading: false });
     }
     // Close messages dialog when member changes
     setMemberMessagesOpen(false);
-  }, [memberData?.user?.id, loadMemberVisitsSeries]);
+  }, [memberData?.user?.id, loadMemberVisitsSeries, loadMemberMessagesStats]);
 
   // Refresh member list every time the list view is opened
   React.useEffect(() => {
@@ -9369,17 +9411,30 @@ export const AdminPage: React.FC = () => {
                             {/* User Messages Section - For report verification */}
                             <Card className="rounded-2xl overflow-hidden">
                               <CardContent className="p-0">
-                                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
+                                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-b border-blue-200 dark:border-blue-800/50">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                       <MessageSquareIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                                       <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">User Messages</span>
+                                      {memberMessagesStats.loading ? (
+                                        <RefreshCw className="h-3 w-3 animate-spin text-blue-400" />
+                                      ) : (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
+                                            {memberMessagesStats.messageCount} sent
+                                          </span>
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-200 dark:bg-indigo-800 text-indigo-700 dark:text-indigo-200">
+                                            {memberMessagesStats.conversationCount} chats
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                     <Button
                                       variant="secondary"
                                       size="sm"
                                       className="rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
                                       onClick={() => setMemberMessagesOpen(true)}
+                                      disabled={memberMessagesStats.conversationCount === 0 && !memberMessagesStats.loading}
                                     >
                                       <MessageSquareIcon className="h-4 w-4 mr-2" />
                                       View Messages
