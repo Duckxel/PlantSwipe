@@ -533,7 +533,7 @@ export function parseLinkUrl(url: string): { type: LinkType; id: string } | null
 // ===== Image Upload =====
 
 /** Allowed image types for message uploads */
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const _ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
 
 /** Result from optimized image upload */

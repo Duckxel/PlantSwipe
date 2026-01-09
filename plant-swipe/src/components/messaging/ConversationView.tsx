@@ -69,7 +69,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const [replyingTo, setReplyingTo] = React.useState<Message | null>(null)
   const [linkShareOpen, setLinkShareOpen] = React.useState(false)
   const [showAttachMenu, setShowAttachMenu] = React.useState(false)
-  const [uploadingImage, setUploadingImage] = React.useState(false)
+  const [_uploadingImage, _setUploadingImage] = React.useState(false)
   const [cameraOpen, setCameraOpen] = React.useState(false)
   const [pendingLink, setPendingLink] = React.useState<{
     type: LinkType
@@ -549,6 +549,24 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+  }
+  
+  // Handle camera capture - receives a File from the camera component
+  const handleCameraCapture = (file: File) => {
+    setCameraOpen(false)
+    setError(null)
+    
+    // Clean up previous preview URL if any
+    if (pendingImage?.previewUrl) {
+      URL.revokeObjectURL(pendingImage.previewUrl)
+    }
+    
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file)
+    setPendingImage({ file, previewUrl })
+    
+    // Focus textarea for optional caption
+    textareaRef.current?.focus()
   }
   
   // Cancel pending image
