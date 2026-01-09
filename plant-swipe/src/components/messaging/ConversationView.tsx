@@ -73,12 +73,33 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     url: string
     preview?: LinkPreview
   } | null>(null)
+  const [pendingImage, setPendingImage] = React.useState<{
+    file: File
+    previewUrl: string
+  } | null>(null)
   
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const messagesContainerRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const attachMenuRef = React.useRef<HTMLDivElement>(null)
+  const realtimeChannelRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
+  
+  // Broadcast a message event to other clients
+  const broadcastEvent = React.useCallback(async (event: 'message' | 'reaction', data?: any) => {
+    const channel = realtimeChannelRef.current
+    if (!channel) return
+    
+    try {
+      await channel.send({
+        type: 'broadcast',
+        event,
+        payload: { conversationId, senderId: currentUserId, timestamp: new Date().toISOString(), ...data }
+      })
+    } catch (err) {
+      console.warn('[realtime] Failed to broadcast event:', err)
+    }
+  }, [conversationId, currentUserId])
   
   // Auto-resize textarea
   const adjustTextareaHeight = React.useCallback(() => {
@@ -125,10 +146,29 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
   
+  // Track message IDs for filtering reactions to this conversation only
+  const messageIdsRef = React.useRef<Set<string>>(new Set())
+  
+  // Update message IDs ref when messages change
+  React.useEffect(() => {
+    messageIdsRef.current = new Set(messages.map(m => m.id))
+  }, [messages])
+  
   // Realtime subscription for new messages and reactions
   React.useEffect(() => {
+    if (!currentUserId) return
+    
+    let isSubscribed = true
+    
+    // Create a unique channel for this conversation with broadcast support
     const channel = supabase
-      .channel(`conversation-${conversationId}`)
+      .channel(`conversation-${conversationId}`, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: currentUserId }
+        }
+      })
+      // Listen for postgres changes on messages
       .on(
         'postgres_changes',
         {
@@ -138,6 +178,9 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           filter: `conversation_id=eq.${conversationId}`
         },
         async (payload) => {
+          if (!isSubscribed) return
+          console.log('[realtime] messages event:', payload.eventType)
+          
           if (payload.eventType === 'INSERT') {
             const newMsg = payload.new as any
             // Skip if we already have this message (we added it optimistically)
@@ -186,6 +229,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           }
         }
       )
+      // Listen for postgres changes on reactions (filtered in callback to this conversation's messages)
       .on(
         'postgres_changes',
         {
@@ -194,7 +238,12 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           table: 'message_reactions'
         },
         (payload) => {
+          if (!isSubscribed) return
           const reaction = payload.new as any
+          // Only process reactions for messages in this conversation
+          if (!messageIdsRef.current.has(reaction.message_id)) return
+          
+          console.log('[realtime] reaction INSERT:', reaction)
           setMessages(prev => prev.map(m => {
             if (m.id !== reaction.message_id) return m
             // Add reaction if not already present
@@ -221,7 +270,12 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           table: 'message_reactions'
         },
         (payload) => {
+          if (!isSubscribed) return
           const deleted = payload.old as any
+          // Only process reactions for messages in this conversation
+          if (!messageIdsRef.current.has(deleted.message_id)) return
+          
+          console.log('[realtime] reaction DELETE:', deleted)
           setMessages(prev => prev.map(m => {
             if (m.id !== deleted.message_id) return m
             return {
@@ -231,22 +285,83 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           }))
         }
       )
-      .subscribe()
+      // Also listen for broadcast events as a fallback/supplement
+      .on('broadcast', { event: 'message' }, (payload) => {
+        if (!isSubscribed) return
+        console.log('[realtime] broadcast message event:', payload)
+        // Reload messages when broadcast is received
+        loadMessages()
+      })
+      .on('broadcast', { event: 'reaction' }, (payload) => {
+        if (!isSubscribed) return
+        console.log('[realtime] broadcast reaction event:', payload)
+        // Reload messages when reaction broadcast is received
+        loadMessages()
+      })
+      
+    // Store channel ref for broadcasting
+    realtimeChannelRef.current = channel
+    
+    // Subscribe with status tracking
+    channel.subscribe((status) => {
+      console.log(`[realtime] conversation-${conversationId} subscription status:`, status)
+      if (status === 'SUBSCRIBED') {
+        console.log('[realtime] Successfully subscribed to conversation channel')
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('[realtime] Channel error - will reload messages')
+        if (isSubscribed) {
+          loadMessages()
+        }
+      }
+    })
     
     return () => {
+      isSubscribed = false
+      realtimeChannelRef.current = null
       supabase.removeChannel(channel)
     }
-  }, [conversationId, currentUserId, otherUser])
+  }, [conversationId, currentUserId, otherUser, loadMessages])
   
   // Handle sending message
   const handleSend = async () => {
     const content = newMessage.trim()
-    if (!content && !pendingLink) return
+    if (!content && !pendingLink && !pendingImage) return
     
     setSending(true)
     setError(null)
     
     try {
+      // If there's a pending image, upload it and send as image message
+      if (pendingImage) {
+        const { url } = await uploadMessageImage(pendingImage.file)
+        await sendImageMessage(conversationId, url, content || '', replyingTo?.id)
+        
+        // Clean up preview URL
+        URL.revokeObjectURL(pendingImage.previewUrl)
+        setPendingImage(null)
+        setNewMessage('')
+        setReplyingTo(null)
+        
+        // Reset textarea height
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto'
+        }
+        
+        await loadMessages()
+        
+        // Broadcast to other devices
+        broadcastEvent('message', { type: 'image' })
+        
+        sendMessagePushNotification(
+          otherUser.id,
+          currentUserDisplayName || 'Someone',
+          '📷 ' + t('messages.sentImage', { defaultValue: 'Sent an image' }),
+          conversationId
+        ).catch(() => {})
+        
+        return
+      }
+      
       const msg = await sendMessage({
         conversationId,
         content: content || (pendingLink ? t('messages.sharedLink', { defaultValue: 'Shared a link' }) : ''),
@@ -275,6 +390,9 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         textareaRef.current.style.height = 'auto'
       }
       
+      // Broadcast to other devices
+      broadcastEvent('message', { messageId: msg.id })
+      
       sendMessagePushNotification(
         otherUser.id,
         currentUserDisplayName || 'Someone',
@@ -289,37 +407,52 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   }
   
-  // Handle image upload
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle image selection - creates a preview, waits for user to press send
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     
-    setUploadingImage(true)
     setShowAttachMenu(false)
     setError(null)
     
-    try {
-      const { url } = await uploadMessageImage(file)
-      await sendImageMessage(conversationId, url, '', replyingTo?.id)
-      
-      setReplyingTo(null)
-      await loadMessages()
-      
-      sendMessagePushNotification(
-        otherUser.id,
-        currentUserDisplayName || 'Someone',
-        '📷 ' + t('messages.sentImage', { defaultValue: 'Sent an image' }),
-        conversationId
-      ).catch(() => {})
-    } catch (e: any) {
-      console.error('[conversation] Failed to upload image:', e)
-      setError(e?.message || 'Failed to upload image')
-    } finally {
-      setUploadingImage(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif', 'image/avif']
+    if (!allowedTypes.includes(file.type)) {
+      setError(t('messages.invalidFileType', { defaultValue: 'Invalid file type. Only images are allowed.' }))
+      return
     }
+    
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024
+    if (file.size > maxSize) {
+      setError(t('messages.fileTooLarge', { defaultValue: 'File too large. Maximum size is 10MB.' }))
+      return
+    }
+    
+    // Clean up previous preview URL if any
+    if (pendingImage?.previewUrl) {
+      URL.revokeObjectURL(pendingImage.previewUrl)
+    }
+    
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file)
+    setPendingImage({ file, previewUrl })
+    
+    // Focus textarea for optional caption
+    textareaRef.current?.focus()
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+  
+  // Cancel pending image
+  const cancelPendingImage = () => {
+    if (pendingImage?.previewUrl) {
+      URL.revokeObjectURL(pendingImage.previewUrl)
+    }
+    setPendingImage(null)
   }
   
   // Handle keyboard shortcuts
@@ -334,6 +467,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const handleReaction = async (messageId: string, emoji: string) => {
     try {
       await toggleReaction(messageId, emoji)
+      // Broadcast to other devices
+      broadcastEvent('reaction', { messageId, emoji })
       loadMessages()
     } catch (e: any) {
       console.error('[conversation] Failed to toggle reaction:', e)
@@ -349,6 +484,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           ? { ...m, content: newContent, editedAt: new Date().toISOString() }
           : m
       ))
+      // Broadcast to other devices
+      broadcastEvent('message', { messageId, type: 'edit' })
     } catch (e: any) {
       console.error('[conversation] Failed to edit message:', e)
     }
@@ -363,6 +500,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           ? { ...m, deletedAt: new Date().toISOString() }
           : m
       ))
+      // Broadcast to other devices
+      broadcastEvent('message', { messageId, type: 'delete' })
     } catch (e: any) {
       console.error('[conversation] Failed to delete message:', e)
     }
@@ -577,8 +716,35 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         </div>
       )}
       
+      {/* Pending image preview */}
+      {pendingImage && (
+        <div className="mx-4 flex items-center gap-3 px-4 py-3 bg-stone-100 dark:bg-[#2a2a2d] rounded-t-2xl border-b-0">
+          <div className="relative">
+            <img
+              src={pendingImage.previewUrl}
+              alt=""
+              className="w-16 h-16 rounded-xl object-cover"
+            />
+            <button
+              onClick={cancelPendingImage}
+              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-stone-800 dark:bg-stone-600 text-white flex items-center justify-center shadow-md hover:bg-stone-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-medium text-stone-600 dark:text-stone-300">
+              {t('messages.imageReady', { defaultValue: 'Image ready to send' })}
+            </span>
+            <p className="text-xs text-stone-400 dark:text-stone-500 truncate">
+              {t('messages.addCaption', { defaultValue: 'Add a caption or press send' })}
+            </p>
+          </div>
+        </div>
+      )}
+      
       {/* Upload progress */}
-      {uploadingImage && (
+      {sending && pendingImage && (
         <div className="mx-4 flex items-center gap-3 px-4 py-3 bg-stone-100 dark:bg-[#2a2a2d] rounded-t-2xl border-b-0">
           <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
           <span className="text-sm text-stone-600 dark:text-stone-300">
@@ -590,11 +756,11 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       {/* Input Area */}
       <div className={cn(
         'flex-shrink-0 px-4 pb-4 pt-2 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl md:border md:border-t-0 md:rounded-b-2xl',
-        !replyingTo && !pendingLink && !uploadingImage && 'pt-4'
+        !replyingTo && !pendingLink && !pendingImage && 'pt-4'
       )}>
         <div className={cn(
           'flex items-end gap-2 p-2 bg-stone-100 dark:bg-[#2a2a2d] border border-stone-200 dark:border-[#3a3a3d]',
-          replyingTo || pendingLink || uploadingImage ? 'rounded-b-2xl rounded-t-none' : 'rounded-2xl'
+          (replyingTo || pendingLink || pendingImage) ? 'rounded-b-2xl rounded-t-none' : 'rounded-2xl'
         )}>
           {/* Attachment button */}
           <div className="relative" ref={attachMenuRef}>
@@ -666,12 +832,12 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             size="icon"
             className={cn(
               "rounded-full h-9 w-9 flex-shrink-0 transition-all",
-              (newMessage.trim() || pendingLink)
+              (newMessage.trim() || pendingLink || pendingImage)
                 ? "bg-blue-500 hover:bg-blue-600 text-white"
                 : "text-stone-400 dark:text-stone-500"
             )}
             onClick={handleSend}
-            disabled={sending || (!newMessage.trim() && !pendingLink)}
+            disabled={sending || (!newMessage.trim() && !pendingLink && !pendingImage)}
           >
             {sending ? (
               <Loader2 className="h-5 w-5 animate-spin" />
