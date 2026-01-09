@@ -9044,6 +9044,248 @@ app.get('/api/admin/member-messages', async (req, res) => {
   }
 })
 
+// Admin: fetch all messages in a specific conversation (for admin moderation)
+app.get('/api/admin/conversation-messages', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    
+    const conversationId = (req.query.conversationId || req.query.conversation_id || '').toString().trim()
+    if (!conversationId) {
+      res.status(400).json({ error: 'Missing conversationId parameter' })
+      return
+    }
+    
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const before = (req.query.before || '').toString().trim() // Message ID cursor for pagination
+    
+    let conversation = null
+    let messages = []
+    let hasMore = false
+    
+    if (sql) {
+      // Get conversation details with participant info
+      const convRows = await sql`
+        SELECT 
+          c.id,
+          c.participant_1,
+          c.participant_2,
+          c.created_at,
+          c.last_message_at,
+          p1.display_name as participant_1_name,
+          p1.avatar_url as participant_1_avatar,
+          p2.display_name as participant_2_name,
+          p2.avatar_url as participant_2_avatar
+        FROM public.conversations c
+        LEFT JOIN public.profiles p1 ON p1.id = c.participant_1
+        LEFT JOIN public.profiles p2 ON p2.id = c.participant_2
+        WHERE c.id = ${conversationId}::uuid
+      `
+      if (!convRows || convRows.length === 0) {
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+      conversation = convRows[0]
+      
+      // Get messages with cursor-based pagination
+      let msgQuery
+      if (before) {
+        // Get the created_at of the cursor message
+        const cursorRows = await sql`SELECT created_at FROM public.messages WHERE id = ${before}::uuid`
+        const cursorTime = cursorRows?.[0]?.created_at
+        if (cursorTime) {
+          msgQuery = await sql`
+            SELECT 
+              m.id,
+              m.conversation_id,
+              m.sender_id,
+              m.content,
+              m.link_type,
+              m.link_url,
+              m.link_preview,
+              m.reply_to_id,
+              m.created_at,
+              m.edited_at,
+              m.deleted_at,
+              m.read_at,
+              ps.display_name as sender_name,
+              ps.avatar_url as sender_avatar
+            FROM public.messages m
+            LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+            WHERE m.conversation_id = ${conversationId}::uuid
+              AND m.created_at < ${cursorTime}
+            ORDER BY m.created_at DESC
+            LIMIT ${limit + 1}
+          `
+        } else {
+          msgQuery = []
+        }
+      } else {
+        msgQuery = await sql`
+          SELECT 
+            m.id,
+            m.conversation_id,
+            m.sender_id,
+            m.content,
+            m.link_type,
+            m.link_url,
+            m.link_preview,
+            m.reply_to_id,
+            m.created_at,
+            m.edited_at,
+            m.deleted_at,
+            m.read_at,
+            ps.display_name as sender_name,
+            ps.avatar_url as sender_avatar
+          FROM public.messages m
+          LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+          WHERE m.conversation_id = ${conversationId}::uuid
+          ORDER BY m.created_at DESC
+          LIMIT ${limit + 1}
+        `
+      }
+      
+      messages = msgQuery || []
+      hasMore = messages.length > limit
+      if (hasMore) messages = messages.slice(0, limit)
+      
+      // Reverse to get chronological order
+      messages = messages.reverse()
+      
+      // Get reply-to messages if any
+      const replyToIds = messages.filter(m => m.reply_to_id).map(m => m.reply_to_id)
+      const replyToMap = new Map()
+      if (replyToIds.length > 0) {
+        const replyRows = await sql`
+          SELECT m.id, m.sender_id, m.content, m.created_at, p.display_name as sender_name
+          FROM public.messages m
+          LEFT JOIN public.profiles p ON p.id = m.sender_id
+          WHERE m.id = ANY(${replyToIds}::uuid[])
+        `
+        for (const r of replyRows || []) {
+          replyToMap.set(r.id, {
+            id: r.id,
+            senderId: r.sender_id,
+            senderName: r.sender_name,
+            content: r.content,
+            createdAt: r.created_at,
+          })
+        }
+      }
+      
+      // Get reactions for messages
+      const messageIds = messages.map(m => m.id)
+      const reactionMap = new Map()
+      if (messageIds.length > 0) {
+        const reactionRows = await sql`
+          SELECT r.id, r.message_id, r.user_id, r.emoji, r.created_at, p.display_name as user_name
+          FROM public.message_reactions r
+          LEFT JOIN public.profiles p ON p.id = r.user_id
+          WHERE r.message_id = ANY(${messageIds}::uuid[])
+        `
+        for (const r of reactionRows || []) {
+          if (!reactionMap.has(r.message_id)) reactionMap.set(r.message_id, [])
+          reactionMap.get(r.message_id).push({
+            id: r.id,
+            userId: r.user_id,
+            userName: r.user_name,
+            emoji: r.emoji,
+            createdAt: r.created_at,
+          })
+        }
+      }
+      
+      // Attach replies and reactions to messages
+      messages = messages.map(m => ({
+        ...m,
+        replyTo: m.reply_to_id ? replyToMap.get(m.reply_to_id) || null : null,
+        reactions: reactionMap.get(m.id) || [],
+      }))
+      
+      // Log admin action
+      try {
+        let adminName = null
+        const nameRows = await sql`SELECT display_name FROM public.profiles WHERE id = ${adminUserId} LIMIT 1`
+        adminName = nameRows?.[0]?.display_name || null
+        await sql`
+          INSERT INTO public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          VALUES (${adminUserId}, ${adminName}, 'view_conversation', ${conversationId}, ${sql.json({ messageCount: messages.length })})
+        `
+      } catch { }
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      // REST fallback - simplified version
+      const token = getBearerTokenFromRequest(req)
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      if (token) baseHeaders['Authorization'] = `Bearer ${token}`
+      
+      // Get conversation
+      const convResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/conversations?id=eq.${encodeURIComponent(conversationId)}&select=id,participant_1,participant_2,created_at,last_message_at`,
+        { headers: baseHeaders }
+      )
+      if (convResp.ok) {
+        const convArr = await convResp.json().catch(() => [])
+        conversation = Array.isArray(convArr) && convArr[0] ? convArr[0] : null
+      }
+      
+      if (!conversation) {
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+      
+      // Get messages
+      const msgResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/messages?conversation_id=eq.${encodeURIComponent(conversationId)}&select=id,conversation_id,sender_id,content,link_type,link_url,link_preview,reply_to_id,created_at,edited_at,deleted_at,read_at&order=created_at.desc&limit=${limit}`,
+        { headers: baseHeaders }
+      )
+      if (msgResp.ok) {
+        messages = await msgResp.json().catch(() => [])
+        messages = messages.reverse()
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    
+    res.json({
+      ok: true,
+      conversation: {
+        id: conversation.id,
+        participant1: conversation.participant_1,
+        participant2: conversation.participant_2,
+        participant1Name: conversation.participant_1_name || null,
+        participant1Avatar: conversation.participant_1_avatar || null,
+        participant2Name: conversation.participant_2_name || null,
+        participant2Avatar: conversation.participant_2_avatar || null,
+        createdAt: conversation.created_at,
+        lastMessageAt: conversation.last_message_at,
+      },
+      messages: messages.map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name || null,
+        senderAvatar: m.sender_avatar || null,
+        content: m.content,
+        linkType: m.link_type || null,
+        linkUrl: m.link_url || null,
+        linkPreview: m.link_preview || null,
+        replyToId: m.reply_to_id || null,
+        replyTo: m.replyTo || null,
+        createdAt: m.created_at,
+        editedAt: m.edited_at || null,
+        deletedAt: m.deleted_at || null,
+        readAt: m.read_at || null,
+        reactions: m.reactions || [],
+      })),
+      hasMore,
+    })
+  } catch (e) {
+    console.error('[admin/conversation-messages] Error:', e)
+    res.status(500).json({ error: e?.message || 'Failed to fetch conversation messages' })
+  }
+})
+
 // Admin: add a note on a profile
 app.post('/api/admin/member-note', async (req, res) => {
   try {

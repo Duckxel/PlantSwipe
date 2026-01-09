@@ -14,6 +14,7 @@ import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
 import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
+import { AdminUserMessagesDialog } from "@/components/admin/AdminUserMessagesDialog";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -3880,83 +3881,8 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
 
-  // Member messages state (for admin moderation/report verification)
-  type AdminMessage = {
-    id: string;
-    conversationId: string;
-    senderId: string;
-    senderName: string | null;
-    recipientId: string | null;
-    recipientName: string | null;
-    content: string;
-    linkType: string | null;
-    linkUrl: string | null;
-    createdAt: string;
-    editedAt: string | null;
-    deletedAt: string | null;
-    replyToId: string | null;
-  };
-  type AdminConversation = {
-    id: string;
-    participant1: string;
-    participant2: string;
-    participant1Name: string | null;
-    participant2Name: string | null;
-    createdAt: string;
-    lastMessageAt: string | null;
-    messageCount: number;
-  };
+  // Member messages dialog state
   const [memberMessagesOpen, setMemberMessagesOpen] = React.useState(false);
-  const [memberMessagesLoading, setMemberMessagesLoading] = React.useState(false);
-  const [memberMessages, setMemberMessages] = React.useState<AdminMessage[]>([]);
-  const [memberConversations, setMemberConversations] = React.useState<AdminConversation[]>([]);
-  const [memberMessagesTotalCount, setMemberMessagesTotalCount] = React.useState(0);
-  const [memberMessagesHasMore, setMemberMessagesHasMore] = React.useState(false);
-  const [memberMessagesOffset, setMemberMessagesOffset] = React.useState(0);
-
-  const loadMemberMessages = React.useCallback(
-    async (userId: string, opts?: { reset?: boolean }) => {
-      if (!userId || memberMessagesLoading) return;
-      const reset = !!opts?.reset;
-      const offset = reset ? 0 : memberMessagesOffset;
-      setMemberMessagesLoading(true);
-      try {
-        const session = (await supabase.auth.getSession()).data.session;
-        const token = session?.access_token;
-        const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-        try {
-          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
-          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
-        } catch {}
-        const resp = await fetch(
-          `/api/admin/member-messages?userId=${encodeURIComponent(userId)}&limit=50&offset=${offset}`,
-          { headers, credentials: "same-origin" },
-        );
-        const data = await safeJson(resp);
-        if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
-        
-        const newMessages = Array.isArray(data?.messages) ? data.messages : [];
-        const conversations = Array.isArray(data?.conversations) ? data.conversations : [];
-        
-        if (reset) {
-          setMemberMessages(newMessages);
-          setMemberMessagesOffset(newMessages.length);
-        } else {
-          setMemberMessages((prev) => [...prev, ...newMessages]);
-          setMemberMessagesOffset(offset + newMessages.length);
-        }
-        setMemberConversations(conversations);
-        setMemberMessagesTotalCount(data?.totalMessages || 0);
-        setMemberMessagesHasMore(data?.hasMore || false);
-      } catch (e: unknown) {
-        console.error("Failed to load member messages:", e);
-      } finally {
-        setMemberMessagesLoading(false);
-      }
-    },
-    [memberMessagesLoading, memberMessagesOffset, safeJson],
-  );
 
   const loadMemberVisitsSeries = React.useCallback(
     async (userId: string, opts?: { initial?: boolean }) => {
@@ -4600,12 +4526,7 @@ export const AdminPage: React.FC = () => {
       setMemberVisitsUpdatedAt(null);
       setMemberVisitsWarning(null);
     }
-    // Reset messages state when member changes
-    setMemberMessages([]);
-    setMemberConversations([]);
-    setMemberMessagesTotalCount(0);
-    setMemberMessagesHasMore(false);
-    setMemberMessagesOffset(0);
+    // Close messages dialog when member changes
     setMemberMessagesOpen(false);
   }, [memberData?.user?.id, loadMemberVisitsSeries]);
 
@@ -9448,170 +9369,36 @@ export const AdminPage: React.FC = () => {
                             {/* User Messages Section - For report verification */}
                             <Card className="rounded-2xl overflow-hidden">
                               <CardContent className="p-0">
-                                {/* Header */}
-                                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-b border-blue-200 dark:border-blue-800/50">
+                                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                       <MessageSquareIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                                      <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">Sent Messages</span>
-                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
-                                        {memberMessagesTotalCount || memberConversations.reduce((sum, c) => sum + (c.messageCount || 0), 0) || '?'}
-                                      </span>
+                                      <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">User Messages</span>
                                     </div>
-                                    <button
-                                      onClick={() => {
-                                        if (!memberMessagesOpen && memberData?.user?.id) {
-                                          loadMemberMessages(memberData.user.id, { reset: true });
-                                        }
-                                        setMemberMessagesOpen(!memberMessagesOpen);
-                                      }}
-                                      className="flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
+                                      onClick={() => setMemberMessagesOpen(true)}
                                     >
-                                      {memberMessagesOpen ? 'Hide' : 'View messages'}
-                                      <ChevronDown className={cn("h-4 w-4 transition-transform", memberMessagesOpen && "rotate-180")} />
-                                    </button>
+                                      <MessageSquareIcon className="h-4 w-4 mr-2" />
+                                      View Messages
+                                    </Button>
                                   </div>
                                   <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                                    View messages sent by this user to verify reports
+                                    Browse conversations from this user's perspective to verify reports
                                   </p>
                                 </div>
-                                
-                                {/* Messages Content */}
-                                {memberMessagesOpen && (
-                                  <div className="p-4">
-                                    {memberMessagesLoading && memberMessages.length === 0 ? (
-                                      <div className="flex items-center justify-center py-8">
-                                        <RefreshCw className="h-5 w-5 animate-spin text-blue-500" />
-                                        <span className="ml-2 text-sm text-stone-500">Loading messages...</span>
-                                      </div>
-                                    ) : memberMessages.length === 0 ? (
-                                      <div className="flex flex-col items-center justify-center py-8 text-center">
-                                        <div className="w-12 h-12 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center mb-3">
-                                          <MessageSquareIcon className="h-6 w-6 text-stone-400" />
-                                        </div>
-                                        <p className="text-sm text-stone-500 dark:text-stone-400">No messages sent by this user</p>
-                                      </div>
-                                    ) : (
-                                      <div className="space-y-3">
-                                        {/* Conversations summary */}
-                                        {memberConversations.length > 0 && (
-                                          <div className="mb-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                                            <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">
-                                              Conversations ({memberConversations.length})
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                              {memberConversations.map((conv) => {
-                                                const otherName = conv.participant1 === memberData?.user?.id 
-                                                  ? conv.participant2Name 
-                                                  : conv.participant1Name;
-                                                return (
-                                                  <span 
-                                                    key={conv.id} 
-                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white dark:bg-[#252526] text-xs border border-blue-200 dark:border-blue-700"
-                                                  >
-                                                    <span className="font-medium">{otherName || 'Unknown'}</span>
-                                                    <span className="text-stone-400">•</span>
-                                                    <span className="text-stone-500">{conv.messageCount} msg</span>
-                                                  </span>
-                                                );
-                                              })}
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {/* Messages list */}
-                                        <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                                          {memberMessages.map((msg) => (
-                                            <div 
-                                              key={msg.id} 
-                                              className={cn(
-                                                "p-3 rounded-xl border",
-                                                msg.deletedAt 
-                                                  ? "bg-stone-100 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700 opacity-60"
-                                                  : "bg-white dark:bg-[#252526] border-stone-200 dark:border-[#3e3e42]"
-                                              )}
-                                            >
-                                              <div className="flex items-start justify-between gap-2 mb-1">
-                                                <div className="flex items-center gap-2 text-xs">
-                                                  <span className="font-medium text-stone-700 dark:text-stone-300">
-                                                    To: {msg.recipientName || 'Unknown'}
-                                                  </span>
-                                                  <span className="text-stone-400">•</span>
-                                                  <span className="text-stone-500">
-                                                    {msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '-'}
-                                                  </span>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                  {msg.editedAt && (
-                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">edited</Badge>
-                                                  )}
-                                                  {msg.deletedAt && (
-                                                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">deleted</Badge>
-                                                  )}
-                                                  {msg.linkType && (
-                                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{msg.linkType}</Badge>
-                                                  )}
-                                                </div>
-                                              </div>
-                                              <p className={cn(
-                                                "text-sm break-words whitespace-pre-wrap",
-                                                msg.deletedAt && "italic text-stone-400 dark:text-stone-500"
-                                              )}>
-                                                {msg.deletedAt 
-                                                  ? '[Message deleted]' 
-                                                  : msg.content.startsWith('[image:') 
-                                                    ? '📷 [Image message]' 
-                                                    : msg.content
-                                                }
-                                              </p>
-                                              {msg.content.startsWith('[image:') && !msg.deletedAt && (
-                                                <div className="mt-2">
-                                                  <img 
-                                                    src={msg.content.match(/\[image:(.*?)\]/)?.[1] || ''}
-                                                    alt="Message image"
-                                                    className="max-w-[200px] max-h-[200px] rounded-lg object-cover cursor-pointer hover:opacity-80"
-                                                    onClick={() => {
-                                                      const url = msg.content.match(/\[image:(.*?)\]/)?.[1];
-                                                      if (url) window.open(url, '_blank');
-                                                    }}
-                                                  />
-                                                </div>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-
-                                        {/* Load more button */}
-                                        {memberMessagesHasMore && (
-                                          <button
-                                            onClick={() => memberData?.user?.id && loadMemberMessages(memberData.user.id)}
-                                            disabled={memberMessagesLoading}
-                                            className="w-full py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors flex items-center justify-center gap-2"
-                                          >
-                                            {memberMessagesLoading ? (
-                                              <>
-                                                <RefreshCw className="h-4 w-4 animate-spin" />
-                                                Loading...
-                                              </>
-                                            ) : (
-                                              <>
-                                                Load more messages
-                                                <ArrowRight className="h-4 w-4" />
-                                              </>
-                                            )}
-                                          </button>
-                                        )}
-
-                                        {/* Total count */}
-                                        <div className="text-xs text-center text-stone-400 dark:text-stone-500">
-                                          Showing {memberMessages.length} of {memberMessagesTotalCount} messages
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
                               </CardContent>
                             </Card>
+
+                            {/* Messages Dialog */}
+                            <AdminUserMessagesDialog
+                              open={memberMessagesOpen}
+                              onOpenChange={setMemberMessagesOpen}
+                              userId={memberData?.user?.id || ''}
+                              userName={memberData?.profile?.display_name || memberData?.user?.email || null}
+                            />
 
                             {(memberData.isBannedEmail ||
                               (memberData.bannedIps &&
