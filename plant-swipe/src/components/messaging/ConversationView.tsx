@@ -69,7 +69,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const [replyingTo, setReplyingTo] = React.useState<Message | null>(null)
   const [linkShareOpen, setLinkShareOpen] = React.useState(false)
   const [showAttachMenu, setShowAttachMenu] = React.useState(false)
-  const [_uploadingImage, _setUploadingImage] = React.useState(false)
+  const [uploadingImage, _setUploadingImage] = React.useState(false)
   const [cameraOpen, setCameraOpen] = React.useState(false)
   const [pendingLink, setPendingLink] = React.useState<{
     type: LinkType
