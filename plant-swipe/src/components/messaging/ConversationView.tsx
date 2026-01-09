@@ -362,7 +362,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   }
   
   return (
-    <div className="fixed inset-0 md:relative md:inset-auto flex flex-col bg-stone-50 dark:bg-[#0f0f10] md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:h-[calc(100vh-12rem)]">
+    <div className="fixed inset-0 md:relative md:inset-auto flex flex-col bg-stone-50 dark:bg-[#0f0f10] pb-[calc(96px+env(safe-area-inset-bottom,0px))] md:pb-0 md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:h-[calc(100vh-12rem)]">
       {/* Header */}
       <header className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl border-b border-stone-200/50 dark:border-[#2a2a2d]/50 md:rounded-t-2xl md:border md:border-b-0">
         <Button
@@ -633,9 +633,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             )}
           </Button>
         </div>
-        
-        {/* Safe area for iOS */}
-        <div className="h-[env(safe-area-inset-bottom)] md:hidden" />
       </div>
       
       {/* Link Share Dialog */}
