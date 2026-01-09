@@ -842,6 +842,8 @@ const blogUploadPrefixRaw = (process.env.BLOG_UPLOAD_PREFIX || 'blog').trim()
 const blogUploadPrefix = blogUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'blog'
 const proAdviceUploadPrefixRaw = (process.env.PRO_ADVICE_UPLOAD_PREFIX || 'pro-advice').trim()
 const proAdviceUploadPrefix = proAdviceUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'pro-advice'
+const messagesUploadPrefixRaw = (process.env.MESSAGES_UPLOAD_PREFIX || 'messages').trim()
+const messagesUploadPrefix = messagesUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'messages'
 const adminUploadMaxBytes = (() => {
   const raw = Number(process.env.ADMIN_UPLOAD_MAX_BYTES)
   if (Number.isFinite(raw) && raw > 0) return raw
@@ -5140,6 +5142,49 @@ app.post('/api/pro-advice/upload-image', async (req, res) => {
     prefixBuilder: ({ req }) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [proAdviceUploadPrefix, folder].filter(Boolean).join('/')
+    },
+  })
+})
+
+// Messages image upload - for chat images
+app.post('/api/messages/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  
+  // Require authenticated user
+  let uploader = null
+  try {
+    uploader = await getUserFromRequest(req)
+  } catch { }
+  
+  if (!uploader?.id) {
+    res.status(401).json({ error: 'You must be signed in to upload images' })
+    return
+  }
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  let uploaderDisplayName = null
+  try {
+    uploaderDisplayName = await getAdminProfileName(uploader.id)
+  } catch { }
+
+  await handleScopedImageUpload(req, res, {
+    actorId: uploader.id,
+    auditLabel: 'messages',
+    uploaderInfo: {
+      id: uploader.id,
+      email: uploader.email || null,
+      name: uploaderDisplayName || null,
+    },
+    prefixBuilder: ({ req }) => {
+      // Organize by user ID for easier management
+      const userId = uploader?.id || 'anonymous'
+      return `${messagesUploadPrefix}/${userId}`
     },
   })
 })
@@ -12689,7 +12734,53 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       res.status(403).json({ ok: false, error: 'This garden is private' })
       return
     }
-    // TODO: For friends_only, would need to check friend status with members
+
+    // Check friends_only access: user must be friends with at least one garden member
+    if (!isMember && gardenPrivacy === 'friends_only') {
+      if (!user || !user.id) {
+        res.status(403).json({ ok: false, error: 'This garden is for friends only' })
+        return
+      }
+      // Check if user is friend with ANY member
+      const memberIds = members.map((m) => m.userId).filter(Boolean)
+      let isFriend = false
+
+      if (memberIds.length > 0) {
+        if (sql) {
+          try {
+            const rows = await sql`
+              select 1 from public.friends 
+              where user_id = ${user.id} 
+              and friend_id = any(${sql.array(memberIds)}::uuid[])
+              limit 1
+            `
+            if (rows && rows.length > 0) isFriend = true
+          } catch (e) {
+            console.error('[overview] Friend check failed (SQL)', e)
+          }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          // REST fallback
+          try {
+            const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+            const bearer = getAuthTokenFromRequest(req)
+            if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+            const idsStr = memberIds.join(',')
+            const resp = await fetch(`${supabaseUrlEnv}/rest/v1/friends?user_id=eq.${encodeURIComponent(user.id)}&friend_id=in.(${idsStr})&limit=1`, { headers })
+            if (resp.ok) {
+              const data = await resp.json().catch(() => [])
+              if (Array.isArray(data) && data.length > 0) isFriend = true
+            }
+          } catch (e) {
+            console.error('[overview] Friend check failed (REST)', e)
+          }
+        }
+      }
+
+      if (!isFriend) {
+        res.status(403).json({ ok: false, error: 'This garden is visible only to friends of members' })
+        return
+      }
+    }
 
     // Calculate today's progress and stats server-side to avoid round-trips
     const today = new Date().toISOString().slice(0, 10)

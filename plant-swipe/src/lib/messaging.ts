@@ -532,12 +532,30 @@ export function parseLinkUrl(url: string): { type: LinkType; id: string } | null
 
 // ===== Image Upload =====
 
+/** Allowed image types for message uploads */
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
+
+/** Result from optimized image upload */
+export type MessageImageUploadResult = {
+  ok?: boolean
+  url?: string | null
+  bucket?: string
+  path?: string
+  mimeType?: string
+  size?: number
+  originalMimeType?: string
+  originalSize?: number
+  compressionPercent?: number | null
+  optimized?: boolean
+}
+
 /**
  * Upload an image for messaging.
  * Uses the server-side endpoint which handles optimization with sharp.
  * Returns the public URL of the uploaded image.
  */
-export async function uploadMessageImage(file: File): Promise<{ url: string; thumbnailUrl?: string }> {
+export async function uploadMessageImage(file: File): Promise<{ url: string }> {
   const session = (await supabase.auth.getSession()).data.session
   if (!session?.access_token) {
     throw new Error('Not authenticated')
@@ -550,8 +568,7 @@ export async function uploadMessageImage(file: File): Promise<{ url: string; thu
   }
   
   // Validate file size (max 10MB)
-  const maxSize = 10 * 1024 * 1024
-  if (file.size > maxSize) {
+  if (file.size > MAX_IMAGE_SIZE) {
     throw new Error('File too large. Maximum size is 10MB.')
   }
   
