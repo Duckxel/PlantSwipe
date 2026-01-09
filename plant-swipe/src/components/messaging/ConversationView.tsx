@@ -548,42 +548,42 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   }
   
   return (
-    <div className="fixed inset-0 bottom-[70px] md:bottom-0 md:relative md:inset-auto flex flex-col bg-stone-50 dark:bg-[#0f0f10] md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:h-[calc(100vh-12rem)]">
+    <div className="fixed inset-0 z-50 md:z-auto md:relative md:inset-auto flex flex-col bg-stone-50 dark:bg-[#0f0f10] md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:h-[calc(100vh-12rem)]">
       {/* Header */}
-      <header className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl border-b border-stone-200/50 dark:border-[#2a2a2d]/50 md:rounded-t-2xl md:border md:border-b-0">
+      <header className="flex-shrink-0 flex items-center px-2 py-3 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl border-b border-stone-200/50 dark:border-[#2a2a2d]/50 md:rounded-t-2xl md:border md:border-b-0">
+        {/* Back button - left aligned */}
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-full h-10 w-10 -ml-2"
+          className="rounded-full h-10 w-10 flex-shrink-0"
           onClick={onBack}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         
+        {/* Centered user info */}
         <button
           onClick={() => navigate(`/u/${encodeURIComponent(otherUser.displayName || '')}`)}
-          className="flex items-center gap-3 flex-1 min-w-0 active:opacity-70 transition-opacity"
+          className="flex-1 flex items-center justify-center gap-2 min-w-0 active:opacity-70 transition-opacity"
         >
           {otherUser.avatarUrl ? (
             <img
               src={otherUser.avatarUrl}
               alt=""
-              className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-[#1a1a1c]"
+              className="w-8 h-8 rounded-full object-cover ring-2 ring-white dark:ring-[#1a1a1c]"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold shadow-md">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-sm font-semibold shadow-md">
               {(otherUser.displayName || 'U').charAt(0).toUpperCase()}
             </div>
           )}
-          <div className="text-left min-w-0">
-            <h2 className="font-semibold text-stone-900 dark:text-white truncate">
-              {otherUser.displayName || t('messages.unknownUser', { defaultValue: 'Unknown User' })}
-            </h2>
-            <p className="text-xs text-stone-500 dark:text-stone-400">
-              {t('messages.tapToViewProfile', { defaultValue: 'Tap to view profile' })}
-            </p>
-          </div>
+          <h2 className="font-semibold text-stone-900 dark:text-white truncate">
+            {otherUser.displayName || t('messages.unknownUser', { defaultValue: 'Unknown User' })}
+          </h2>
         </button>
+        
+        {/* Spacer to balance the back button for centering */}
+        <div className="w-10 h-10 flex-shrink-0" />
       </header>
       
       {/* Messages Container */}
