@@ -15,7 +15,7 @@ import { useAuthActions } from "@/context/AuthActionsContext"
 import { hasAnyRole, USER_ROLES, checkEditorAccess } from "@/constants/userRoles"
 import type { UserRole } from "@/constants/userRoles"
 import { useTranslation } from "react-i18next"
-import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, ChevronDown, ChevronUp, Pencil, Save, Trash2, Maximize2 } from "lucide-react"
+import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, Pencil, Save, Trash2, Maximize2 } from "lucide-react"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { cn } from "@/lib/utils"
 import { createPlantProAdvice, deletePlantProAdvice, fetchPlantProAdvices, updatePlantProAdvice, uploadProAdviceImage } from "@/lib/proAdvice"
@@ -328,101 +328,126 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
         </div>
 
         {canContribute && (
-          <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-emerald-200/70 bg-white/80 p-3 sm:p-4 shadow-inner dark:border-emerald-700/50 dark:bg-[#0f1f1f]/80">
-            <div className="flex items-center justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="rounded-full border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700/60 dark:bg-transparent dark:text-emerald-200"
-                onClick={() => {
-                  setFormOpen((prev) => !prev)
-                  setFormNotice(null)
-                }}
-              >
-                {formOpen ? <ChevronUp className="mr-2 h-4 w-4" /> : <ChevronDown className="mr-2 h-4 w-4" />}
-                {formOpen ? tCommon("close", { defaultValue: "Close" }) : t("submit")}
-              </Button>
-            </div>
-
-            {formOpen && (
-              <form
-                className="relative mt-2 space-y-3 rounded-2xl border border-emerald-200/70 bg-white/80 p-3 sm:p-4 shadow-inner dark:border-emerald-700/50 dark:bg-[#0f1f1f]/80"
-                onSubmit={handleSubmit}
-              >
-                <div className="space-y-1.5">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-stone-700 dark:text-stone-100">
-                    <Megaphone className="h-4 w-4 text-emerald-600" />
-                    {t("contentLabel")}
-                  </label>
-                  <Textarea
-                    value={content}
-                    onChange={(e) => {
-                      setContent(e.target.value)
-                      setFormNotice(null)
-                    }}
-                    placeholder={t("placeholder", { plant: plantName })}
-                    rows={4}
-                    className="rounded-xl border-emerald-200/70 focus:ring-emerald-400 dark:border-emerald-700/60 dark:bg-[#0f1816]"
-                  />
+          <div className="mt-5">
+            {/* Prominent Add Advice Button - shown when form is closed */}
+            {!formOpen && (
+              <div className="flex flex-col items-center gap-3 py-6 px-4 rounded-2xl border-2 border-dashed border-emerald-300/80 bg-gradient-to-b from-emerald-50/80 to-white dark:border-emerald-700/50 dark:from-emerald-950/30 dark:to-transparent">
+                <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+                  <ShieldCheck className="h-4 w-4" />
+                  <span className="font-medium">{t("canContribute")}</span>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("referenceLabel")}</label>
-                    <Input
-                      value={referenceUrl}
+                <Button
+                  type="button"
+                  size="lg"
+                  className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all px-8 py-3 text-base font-semibold"
+                  onClick={() => {
+                    setFormOpen(true)
+                    setFormNotice(null)
+                  }}
+                >
+                  <Plus className="mr-2 h-5 w-5" />
+                  {t("addAdvice")}
+                </Button>
+                <p className="text-xs text-stone-500 dark:text-stone-400 text-center max-w-sm">
+                  {t("contributeHint")}
+                </p>
+              </div>
+            )}
+
+            {/* Form - shown when formOpen is true */}
+            {formOpen && (
+              <div className="rounded-2xl border border-emerald-200/70 bg-white/90 p-4 sm:p-5 shadow-md dark:border-emerald-700/50 dark:bg-[#0f1f1f]/90">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-base font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                    <Plus className="h-5 w-5" />
+                    {t("addAdvice")}
+                  </h4>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full text-stone-500 hover:text-stone-700 hover:bg-stone-100 dark:text-stone-400 dark:hover:text-stone-200"
+                    onClick={() => setFormOpen(false)}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    {tCommon("cancel", { defaultValue: "Cancel" })}
+                  </Button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-stone-700 dark:text-stone-100">
+                      <Megaphone className="h-4 w-4 text-emerald-600" />
+                      {t("contentLabel")}
+                    </label>
+                    <Textarea
+                      value={content}
                       onChange={(e) => {
-                        setReferenceUrl(e.target.value)
+                        setContent(e.target.value)
                         setFormNotice(null)
                       }}
-                      placeholder="https://"
-                      type="url"
+                      placeholder={t("placeholder", { plant: plantName })}
+                      rows={4}
                       className="rounded-xl border-emerald-200/70 focus:ring-emerald-400 dark:border-emerald-700/60 dark:bg-[#0f1816]"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("imageLabel")}</label>
-                    <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-2 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm cursor-pointer transition hover:-translate-y-[1px] hover:shadow dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-100">
-                        <Upload className="h-4 w-4" />
-                        <span>{file ? file.name : t("pickImage")}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            setFile(e.target.files?.[0] || null)
-                            setFormNotice(null)
-                          }}
-                        />
-                      </label>
-                      {file && (
-                        <Button type="button" variant="ghost" size="icon" onClick={() => setFile(null)} aria-label={t("clearImage")}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("referenceLabel")}</label>
+                      <Input
+                        value={referenceUrl}
+                        onChange={(e) => {
+                          setReferenceUrl(e.target.value)
+                          setFormNotice(null)
+                        }}
+                        placeholder="https://"
+                        type="url"
+                        className="rounded-xl border-emerald-200/70 focus:ring-emerald-400 dark:border-emerald-700/60 dark:bg-[#0f1816]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("imageLabel")}</label>
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-2 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm cursor-pointer transition hover:-translate-y-[1px] hover:shadow dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-100">
+                          <Upload className="h-4 w-4" />
+                          <span>{file ? file.name : t("pickImage")}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              setFile(e.target.files?.[0] || null)
+                              setFormNotice(null)
+                            }}
+                          />
+                        </label>
+                        {file && (
+                          <Button type="button" variant="ghost" size="icon" onClick={() => setFile(null)} aria-label={t("clearImage")}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-                {formNotice && (
-                  <div
-                    className={cn(
-                      "text-xs rounded-lg px-3 py-2",
-                      formNotice.type === "success"
-                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
-                        : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200"
-                    )}
-                  >
-                    {formNotice.text}
+                  {formNotice && (
+                    <div
+                      className={cn(
+                        "text-xs rounded-lg px-3 py-2",
+                        formNotice.type === "success"
+                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
+                          : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200"
+                      )}
+                    >
+                      {formNotice.text}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-center pt-2">
+                    <Button type="submit" disabled={submitting || uploading} size="lg" className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md px-8">
+                      <Plus className="h-4 w-4 mr-2" />
+                      {uploading ? t("uploading") : t("submit")}
+                    </Button>
                   </div>
-                )}
-                <div className="flex items-center justify-end">
-                  <Button type="submit" disabled={submitting || uploading} className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md">
-                    <Plus className="h-4 w-4 mr-2" />
-                    {uploading ? t("uploading") : t("submit")}
-                  </Button>
-                </div>
-              </form>
+                </form>
+              </div>
             )}
           </div>
         )}
