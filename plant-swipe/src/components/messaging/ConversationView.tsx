@@ -11,6 +11,7 @@ import { useLanguageNavigate } from '@/lib/i18nRouting'
 import { Button } from '@/components/ui/button'
 import { 
   ArrowLeft, 
+  ArrowDown,
   Send, 
   Loader2, 
   Link as LinkIcon,
@@ -81,9 +82,11 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   // Pagination state
   const [hasMoreMessages, setHasMoreMessages] = React.useState(true)
   const [loadingMore, setLoadingMore] = React.useState(false)
+  const [showScrollToBottom, setShowScrollToBottom] = React.useState(false)
   const initialLoadDoneRef = React.useRef(false)
   const lastMessageIdRef = React.useRef<string | null>(null)
   const MESSAGES_PER_PAGE = 20
+  const SCROLL_THRESHOLD = 300 // Show button when scrolled up more than 300px from bottom
   
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const messagesContainerRef = React.useRef<HTMLDivElement>(null)
@@ -211,16 +214,27 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   }, [loading, messages])
   
-  // Handle scroll to load more messages
+  // Handle scroll to load more messages and show/hide scroll-to-bottom button
   const handleScroll = React.useCallback(() => {
     const container = messagesContainerRef.current
-    if (!container || loadingMore || !hasMoreMessages) return
+    if (!container) return
     
     // Load more when scrolled near the top (within 100px)
-    if (container.scrollTop < 100) {
+    if (!loadingMore && hasMoreMessages && container.scrollTop < 100) {
       loadMoreMessages()
     }
+    
+    // Show scroll-to-bottom button when scrolled up significantly
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    setShowScrollToBottom(distanceFromBottom > SCROLL_THRESHOLD)
   }, [loadMoreMessages, loadingMore, hasMoreMessages])
+  
+  // Scroll to the bottom of the conversation
+  const scrollToBottom = React.useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [])
   
   // Close attach menu on outside click
   React.useEffect(() => {
@@ -763,6 +777,26 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         )}
         <div ref={messagesEndRef} />
       </div>
+      
+      {/* Scroll to bottom floating button */}
+      {showScrollToBottom && (
+        <button
+          onClick={scrollToBottom}
+          className={cn(
+            "absolute right-4 z-10 flex items-center justify-center",
+            "w-10 h-10 rounded-full bg-white dark:bg-[#2a2a2d] shadow-lg",
+            "border border-stone-200 dark:border-[#3a3a3d]",
+            "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white",
+            "hover:bg-stone-50 dark:hover:bg-[#3a3a3d] transition-all",
+            "active:scale-95",
+            // Position above the input area - adjust based on what's visible
+            replyingTo || pendingLink || pendingImage ? "bottom-44" : "bottom-24"
+          )}
+          aria-label={t('messages.scrollToBottom', { defaultValue: 'Scroll to latest messages' })}
+        >
+          <ArrowDown className="h-5 w-5" />
+        </button>
+      )}
       
       {/* Error */}
       {error && (
