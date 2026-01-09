@@ -4,16 +4,24 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useAuth } from "@/context/AuthContext"
 import { useAuthActions } from "@/context/AuthActionsContext"
 import { hasAnyRole, USER_ROLES, checkEditorAccess } from "@/constants/userRoles"
 import type { UserRole } from "@/constants/userRoles"
 import { useTranslation } from "react-i18next"
-import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, ChevronDown, ChevronUp, Pencil, Save, Trash2 } from "lucide-react"
+import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, ChevronDown, ChevronUp, Pencil, Save, Trash2, Maximize2 } from "lucide-react"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { cn } from "@/lib/utils"
 import { createPlantProAdvice, deletePlantProAdvice, fetchPlantProAdvices, updatePlantProAdvice, uploadProAdviceImage } from "@/lib/proAdvice"
 import type { PlantProAdvice } from "@/types/proAdvice"
+
+const MAX_CONTENT_LENGTH = 150 // Characters before truncating
 
 type ProAdviceSectionProps = {
   plantId: string
@@ -106,6 +114,9 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
   const [editImageUrl, setEditImageUrl] = React.useState<string | null>(null)
   const [editUploading, setEditUploading] = React.useState(false)
   const [editSubmitting, setEditSubmitting] = React.useState(false)
+
+  // Full-screen modal state
+  const [expandedAdvice, setExpandedAdvice] = React.useState<PlantProAdvice | null>(null)
 
   const normalizeRoles = React.useCallback((roles?: string[] | null): UserRole[] => {
     if (!roles) return []
@@ -544,6 +555,11 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
             )
           }
 
+          const isLongContent = advice.content.length > MAX_CONTENT_LENGTH
+          const truncatedContent = isLongContent 
+            ? advice.content.slice(0, MAX_CONTENT_LENGTH).trim() + "..." 
+            : advice.content
+
           return (
             <div
               key={advice.id}
@@ -561,7 +577,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
               {/* Post-it note card */}
               <div
                 className={cn(
-                  "relative overflow-hidden rounded-sm pt-4 pb-3 px-4 min-h-[180px]",
+                  "relative overflow-hidden rounded-sm pt-4 pb-3 px-4 min-h-[180px] cursor-pointer",
                   "shadow-[4px_4px_10px_rgba(0,0,0,0.15)] hover:shadow-[6px_6px_15px_rgba(0,0,0,0.2)]",
                   "border-b-4 border-r-4 border-black/5",
                   color.bg, color.darkBg
@@ -569,9 +585,19 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                 style={{
                   backgroundImage: "linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%)"
                 }}
+                onClick={() => setExpandedAdvice(advice)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedAdvice(advice) }}
+                aria-label={t("expandAdvice")}
               >
                 {/* Folded corner effect */}
                 <div className="absolute bottom-0 right-0 w-0 h-0 border-l-[20px] border-l-transparent border-b-[20px] border-b-white/40 dark:border-b-white/20" />
+                
+                {/* Expand icon indicator */}
+                <div className={cn("absolute top-2 right-2 opacity-0 group-hover:opacity-70 transition-opacity", color.text, color.darkText)}>
+                  <Maximize2 className="h-3.5 w-3.5" />
+                </div>
                 
                 {/* Content */}
                 <div className="relative space-y-3">
@@ -579,7 +605,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                   <div className="flex items-start gap-2">
                     <button
                       type="button"
-                      onClick={() => handleProfileClick(advice)}
+                      onClick={(e) => { e.stopPropagation(); handleProfileClick(advice) }}
                       className="focus:outline-none focus:ring-2 focus:ring-amber-500 rounded-full flex-shrink-0"
                       aria-label={t("goToProfile", { name: advice.authorDisplayName || advice.authorUsername || "" })}
                     >
@@ -589,7 +615,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                       <div className="flex flex-wrap items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => handleProfileClick(advice)}
+                          onClick={(e) => { e.stopPropagation(); handleProfileClick(advice) }}
                           className={cn("text-sm font-bold hover:underline truncate", color.text, color.darkText)}
                         >
                           {advice.authorDisplayName || advice.authorUsername || t("unknownAuthor")}
@@ -603,42 +629,41 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                     </div>
                     {canEdit && (
                       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button type="button" variant="ghost" size="icon" onClick={() => startEditing(advice)} aria-label={t("edit")} className={cn("h-7 w-7", color.text, color.darkText, "hover:bg-black/10")}>
+                        <Button type="button" variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); startEditing(advice) }} aria-label={t("edit")} className={cn("h-7 w-7", color.text, color.darkText, "hover:bg-black/10")}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <Button type="button" variant="ghost" size="icon" onClick={() => handleDelete(advice.id)} aria-label={t("delete")} className="h-7 w-7 text-red-600 hover:bg-red-100/50 dark:text-red-700">
+                        <Button type="button" variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDelete(advice.id) }} aria-label={t("delete")} className="h-7 w-7 text-red-600 hover:bg-red-100/50 dark:text-red-700">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     )}
                   </div>
 
-                  {/* Content text */}
+                  {/* Content text - truncated */}
                   <p className={cn("text-sm whitespace-pre-line leading-relaxed font-medium", color.text, color.darkText)}>
-                    {advice.content}
+                    {truncatedContent}
                   </p>
 
-                  {/* Image if present */}
+                  {/* Read more indicator */}
+                  {isLongContent && (
+                    <span className={cn("text-xs font-semibold opacity-70", color.text, color.darkText)}>
+                      {t("readMore")}
+                    </span>
+                  )}
+
+                  {/* Image thumbnail if present */}
                   {advice.imageUrl && (
                     <div className="overflow-hidden rounded-lg border-2 border-white/50 shadow-inner">
-                      <img src={advice.imageUrl} alt={`${plantName} pro advice`} className="w-full max-h-32 object-cover" loading="lazy" />
+                      <img src={advice.imageUrl} alt={`${plantName} pro advice`} className="w-full max-h-24 object-cover" loading="lazy" />
                     </div>
                   )}
 
-                  {/* Reference link */}
+                  {/* Reference link indicator */}
                   {advice.referenceUrl && (
-                    <a
-                      className={cn(
-                        "inline-flex items-center gap-1 text-xs font-semibold hover:underline",
-                        color.text, color.darkText
-                      )}
-                      href={advice.referenceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <div className={cn("inline-flex items-center gap-1 text-xs font-semibold opacity-70", color.text, color.darkText)}>
                       <ExternalLink className="h-3 w-3" />
-                      {t("referenceLink")}
-                    </a>
+                      {t("hasReference")}
+                    </div>
                   )}
                 </div>
               </div>
@@ -646,6 +671,103 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
           )
         })}
       </div>
+
+      {/* Full-screen modal for expanded advice */}
+      <Dialog open={expandedAdvice !== null} onOpenChange={(open) => !open && setExpandedAdvice(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-amber-50 dark:bg-amber-100 border-amber-200">
+          {expandedAdvice && (() => {
+            const canEditExpanded = user && (canModerate || expandedAdvice.authorId === user.id)
+            
+            return (
+              <>
+                <DialogHeader className="pb-4 border-b border-amber-200/50">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setExpandedAdvice(null); handleProfileClick(expandedAdvice) }}
+                      className="focus:outline-none focus:ring-2 focus:ring-amber-500 rounded-full flex-shrink-0"
+                    >
+                      <Avatar name={expandedAdvice.authorDisplayName || expandedAdvice.authorUsername} src={expandedAdvice.authorAvatarUrl} />
+                    </button>
+                    <div className="flex-1">
+                      <DialogTitle className="flex items-center gap-2 text-amber-900">
+                        <button
+                          type="button"
+                          onClick={() => { setExpandedAdvice(null); handleProfileClick(expandedAdvice) }}
+                          className="font-bold hover:underline"
+                        >
+                          {expandedAdvice.authorDisplayName || expandedAdvice.authorUsername || t("unknownAuthor")}
+                        </button>
+                        <AdviceBadge roles={expandedAdvice.authorRoles || []} />
+                      </DialogTitle>
+                      <p className="text-xs text-amber-700 flex items-center gap-1 mt-0.5">
+                        <CalendarClock className="h-3 w-3" />
+                        {t("postedAt", { date: formatDate(expandedAdvice.createdAt) })}
+                      </p>
+                    </div>
+                    {canEditExpanded && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => { setExpandedAdvice(null); startEditing(expandedAdvice) }}
+                          aria-label={t("edit")}
+                          className="h-8 w-8 text-amber-700 hover:bg-amber-200"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => { setExpandedAdvice(null); handleDelete(expandedAdvice.id) }}
+                          aria-label={t("delete")}
+                          className="h-8 w-8 text-red-600 hover:bg-red-100"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                  {/* Full content */}
+                  <p className="text-base text-amber-900 whitespace-pre-line leading-relaxed">
+                    {expandedAdvice.content}
+                  </p>
+
+                  {/* Full-size image */}
+                  {expandedAdvice.imageUrl && (
+                    <div className="overflow-hidden rounded-xl border-2 border-amber-200 shadow-md">
+                      <img
+                        src={expandedAdvice.imageUrl}
+                        alt={`${plantName} pro advice`}
+                        className="w-full max-h-[50vh] object-contain bg-white"
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
+
+                  {/* Reference link */}
+                  {expandedAdvice.referenceUrl && (
+                    <a
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-amber-800 hover:text-amber-900 hover:underline bg-amber-100 px-3 py-2 rounded-lg"
+                      href={expandedAdvice.referenceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {t("viewReference")}
+                    </a>
+                  )}
+                </div>
+              </>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }
