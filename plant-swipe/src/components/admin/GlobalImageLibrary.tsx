@@ -26,6 +26,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { SearchInput } from "@/components/ui/search-input"
+import { useLocation, useNavigate } from "react-router-dom"
 
 type RuntimeEnv = {
   __ENV__?: Record<string, string | undefined>
@@ -131,6 +132,15 @@ function formatFullDate(value?: string | null) {
 }
 
 export const GlobalImageLibrary: React.FC = () => {
+  const location = useLocation()
+  const navigate = useNavigate()
+  
+  // Read initial userId from URL query params
+  const initialUserId = React.useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get("userId") || null
+  }, [location.search])
+  
   const [entries, setEntries] = React.useState<MediaEntry[]>([])
   const [availableSources, setAvailableSources] = React.useState<string[]>([])
   const [stats, setStats] = React.useState<MediaStats | null>(null)
@@ -141,9 +151,17 @@ export const GlobalImageLibrary: React.FC = () => {
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedSource, setSelectedSource] = React.useState<string | null>(null)
-  const [selectedUser, setSelectedUser] = React.useState<string | null>(null)
+  const [selectedUser, setSelectedUser] = React.useState<string | null>(initialUserId)
   const [viewMode, setViewMode] = React.useState<"grid" | "list">("grid")
   const [selectedEntry, setSelectedEntry] = React.useState<MediaEntry | null>(null)
+  
+  // Sync selectedUser with URL when it changes from URL
+  React.useEffect(() => {
+    if (initialUserId && initialUserId !== selectedUser) {
+      setSelectedUser(initialUserId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialUserId])
   
   const runtimeEnv = (globalThis as typeof globalThis & RuntimeEnv).__ENV__
   const adminToken =
@@ -265,7 +283,13 @@ export const GlobalImageLibrary: React.FC = () => {
 
   const clearUserFilter = React.useCallback(() => {
     setSelectedUser(null)
-  }, [])
+    // Clear userId from URL if present
+    const params = new URLSearchParams(location.search)
+    if (params.has("userId")) {
+      params.delete("userId")
+      navigate({ search: params.toString() }, { replace: true })
+    }
+  }, [location.search, navigate])
 
   const visibleEntries = React.useMemo(() => {
     let filtered = entries

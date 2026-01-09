@@ -74,6 +74,13 @@ import {
   CircleCheck,
   Loader2,
   Square,
+  FolderOpen,
+  HardDrive,
+  ArrowRight,
+  FileImage,
+  MessageSquare as MessageSquareIcon,
+  BookOpen,
+  Flower2,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -3763,6 +3770,18 @@ export const AdminPage: React.FC = () => {
       plantName: string | null;
       adminCommentary: string | null;
     }>;
+    mediaUploads?: Array<{
+      id: string;
+      url: string | null;
+      bucket: string | null;
+      path: string | null;
+      mimeType: string | null;
+      sizeBytes: number | null;
+      uploadSource: string;
+      createdAt: string | null;
+    }>;
+    mediaTotalCount?: number;
+    mediaTotalSize?: number;
   } | null>(null);
   const [banReason, setBanReason] = React.useState("");
   const [banSubmitting, setBanSubmitting] = React.useState(false);
@@ -9029,16 +9048,143 @@ export const AdminPage: React.FC = () => {
                             </CardContent>
                           </Card>
 
-                            {/* User Files Section - Improved UI */}
+                            {/* Uploaded Media Files Section - Global Image Database */}
                             <Card className="rounded-2xl overflow-hidden">
                               <CardContent className="p-0">
                                 {/* Header */}
-                                <div className="px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] border-b border-stone-200 dark:border-[#3e3e42]">
+                                <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-b border-emerald-200 dark:border-emerald-800/50">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <Image className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                                      <span className="text-sm font-semibold">User Files</span>
-                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                                      <FolderOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                      <span className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Uploaded Media Files</span>
+                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-200">
+                                        {memberData.mediaTotalCount || 0}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      {(memberData.mediaTotalSize || 0) > 0 && (
+                                        <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+                                          <HardDrive className="h-3 w-3" />
+                                          <span className="font-medium">
+                                            {memberData.mediaTotalSize && memberData.mediaTotalSize > 1024 * 1024 * 1024 
+                                              ? `${(memberData.mediaTotalSize / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                                              : memberData.mediaTotalSize && memberData.mediaTotalSize > 1024 * 1024
+                                                ? `${(memberData.mediaTotalSize / (1024 * 1024)).toFixed(2)} MB`
+                                                : memberData.mediaTotalSize && memberData.mediaTotalSize > 1024
+                                                  ? `${(memberData.mediaTotalSize / 1024).toFixed(1)} KB`
+                                                  : `${memberData.mediaTotalSize || 0} B`
+                                            }
+                                          </span>
+                                          <span className="text-emerald-600 dark:text-emerald-400">total</span>
+                                        </div>
+                                      )}
+                                      {memberData.user?.id && (memberData.mediaTotalCount || 0) > 0 && (
+                                        <Link
+                                          to={`/admin/upload/library?userId=${memberData.user.id}`}
+                                          className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:underline"
+                                        >
+                                          View all
+                                          <ArrowRight className="h-3 w-3" />
+                                        </Link>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Media Files Content */}
+                                <div className="p-4">
+                                  {(!memberData.mediaUploads || memberData.mediaUploads.length === 0) ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                      <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3">
+                                        <FileImage className="h-6 w-6 text-emerald-400" />
+                                      </div>
+                                      <p className="text-sm text-stone-500 dark:text-stone-400">No media files uploaded by this user</p>
+                                      <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+                                        Media includes: blog images, messages, garden covers, etc.
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {/* Media Grid */}
+                                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                        {memberData.mediaUploads.slice(0, 8).map((media) => {
+                                          const isImage = (media.mimeType || "").startsWith("image/");
+                                          // Source badge config
+                                          const sourceConfig: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
+                                            admin: { label: "Admin", color: "bg-purple-500", icon: Shield },
+                                            blog: { label: "Blog", color: "bg-blue-500", icon: BookOpen },
+                                            messages: { label: "Chat", color: "bg-green-500", icon: MessageSquareIcon },
+                                            garden_cover: { label: "Garden", color: "bg-emerald-500", icon: Flower2 },
+                                            garden_journal: { label: "Journal", color: "bg-teal-500", icon: BookOpen },
+                                            garden_photo: { label: "Photo", color: "bg-lime-500", icon: Image },
+                                            pro_advice: { label: "Pro", color: "bg-amber-500", icon: Sparkles },
+                                            "pro-advice": { label: "Pro", color: "bg-amber-500", icon: Sparkles },
+                                            contact_screenshot: { label: "Contact", color: "bg-indigo-500", icon: MessageSquareIcon },
+                                          };
+                                          const config = sourceConfig[media.uploadSource] || { label: media.uploadSource, color: "bg-stone-500", icon: FileImage };
+                                          const SourceIcon = config.icon;
+                                          
+                                          return (
+                                            <div
+                                              key={media.id}
+                                              className="group relative aspect-square rounded-xl overflow-hidden bg-stone-100 dark:bg-[#252526] border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-700 transition-all"
+                                            >
+                                              {isImage && media.url ? (
+                                                <a href={media.url} target="_blank" rel="noreferrer">
+                                                  <img
+                                                    src={media.url}
+                                                    alt="Upload"
+                                                    className="w-full h-full object-cover"
+                                                    loading="lazy"
+                                                  />
+                                                  {/* Hover overlay */}
+                                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                    <div className="bg-white/90 dark:bg-black/80 rounded-full p-2">
+                                                      <ExternalLink className="h-4 w-4 text-stone-700 dark:text-stone-200" />
+                                                    </div>
+                                                  </div>
+                                                </a>
+                                              ) : (
+                                                <div className="w-full h-full flex items-center justify-center">
+                                                  <FileImage className="h-8 w-8 text-stone-300 dark:text-stone-600" />
+                                                </div>
+                                              )}
+                                              {/* Source Badge */}
+                                              <div className={cn("absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-bold text-white flex items-center gap-0.5", config.color)}>
+                                                <SourceIcon className="h-2.5 w-2.5" />
+                                                {config.label}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                      
+                                      {/* View All Link */}
+                                      {(memberData.mediaTotalCount || 0) > 8 && memberData.user?.id && (
+                                        <Link
+                                          to={`/admin/upload/library?userId=${memberData.user.id}`}
+                                          className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+                                        >
+                                          View all {memberData.mediaTotalCount} media files
+                                          <ArrowRight className="h-4 w-4" />
+                                        </Link>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            {/* Report Cases / Plant Images Section */}
+                            <Card className="rounded-2xl overflow-hidden">
+                              <CardContent className="p-0">
+                                {/* Header */}
+                                <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-b border-amber-200 dark:border-amber-800/50">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                      <span className="text-sm font-semibold text-amber-900 dark:text-amber-100">Plant Images & Reports</span>
+                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-200">
                                         {(memberData.files || []).length}
                                       </span>
                                     </div>
@@ -9047,13 +9193,16 @@ export const AdminPage: React.FC = () => {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => setFilesExpanded(!filesExpanded)}
-                                        className="rounded-lg text-xs h-7 px-2"
+                                        className="rounded-lg text-xs h-7 px-2 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
                                       >
                                         {filesExpanded ? "Show less" : `Show all (${memberData.files.length})`}
                                         <ChevronDown className={cn("h-3 w-3 ml-1 transition-transform", filesExpanded && "rotate-180")} />
                                       </Button>
                                     )}
                                   </div>
+                                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                    Garden plant images with admin commentary and moderation notes
+                                  </p>
                                 </div>
                                 
                                 {/* Files Content */}

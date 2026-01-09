@@ -8310,6 +8310,43 @@ app.get('/api/admin/member', async (req, res) => {
         const adminName = null
         if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
       } catch { }
+
+      // Fetch media uploads from global image database (REST fallback)
+      let mediaUploads = []
+      let mediaTotalSize = 0
+      let mediaTotalCount = 0
+      try {
+        const mr = await fetch(`${supabaseUrlEnv}/rest/v1/admin_media_uploads?admin_id=eq.${encodeURIComponent(targetId)}&select=id,bucket,path,public_url,mime_type,size_bytes,upload_source,metadata,created_at&order=created_at.desc&limit=12`, {
+          headers: baseHeaders,
+        })
+        if (mr.ok) {
+          const arr = await mr.json().catch(() => [])
+          mediaUploads = Array.isArray(arr) ? arr.map(r => ({
+            id: String(r.id),
+            url: r.public_url || null,
+            bucket: r.bucket || null,
+            path: r.path || null,
+            mimeType: r.mime_type || null,
+            sizeBytes: typeof r.size_bytes === 'number' ? r.size_bytes : null,
+            uploadSource: r.upload_source || r.metadata?.scope || r.metadata?.source || 'unknown',
+            createdAt: r.created_at || null,
+          })) : []
+        }
+        // Get totals via count header
+        const countR = await fetch(`${supabaseUrlEnv}/rest/v1/admin_media_uploads?admin_id=eq.${encodeURIComponent(targetId)}&select=size_bytes`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact' },
+        })
+        if (countR.ok) {
+          const cr = countR.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) mediaTotalCount = Number(m[1])
+          const sizeArr = await countR.json().catch(() => [])
+          if (Array.isArray(sizeArr)) {
+            mediaTotalSize = sizeArr.reduce((sum, r) => sum + (r.size_bytes || 0), 0)
+          }
+        }
+      } catch { }
+
       const threatLevel = typeof profile?.threat_level === 'number' ? profile.threat_level : null
       res.json({
         ok: true,
@@ -8331,6 +8368,9 @@ app.get('/api/admin/member', async (req, res) => {
         bannedIps,
         threatLevel,
         files: userFiles,
+        mediaUploads,
+        mediaTotalCount,
+        mediaTotalSize,
         topReferrers: memberTopReferrers.slice(0, 5),
         topCountries: memberTopCountries.slice(0, 5),
         topDevices: memberTopDevices.slice(0, 5),
@@ -8577,6 +8617,79 @@ app.get('/api/admin/member', async (req, res) => {
       const adminName = null
       if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || qLower || null}, ${sql.json({ via: 'db' })})`
     } catch { }
+
+    // Fetch media uploads from global image database for this user
+    let mediaUploads = []
+    let mediaTotalSize = 0
+    let mediaTotalCount = 0
+    try {
+      if (sql) {
+        const mediaRows = await sql`
+          select id, bucket, path, public_url, mime_type, size_bytes, upload_source, metadata, created_at
+          from public.admin_media_uploads
+          where admin_id = ${user.id}
+          order by created_at desc
+          limit 12
+        `
+        mediaUploads = Array.isArray(mediaRows) ? mediaRows.map(r => ({
+          id: String(r.id),
+          url: r.public_url || null,
+          bucket: r.bucket || null,
+          path: r.path || null,
+          mimeType: r.mime_type || null,
+          sizeBytes: typeof r.size_bytes === 'number' ? r.size_bytes : null,
+          uploadSource: r.upload_source || r.metadata?.scope || r.metadata?.source || 'unknown',
+          createdAt: r.created_at || null,
+        })) : []
+        
+        // Get total count and size
+        const statsRows = await sql`
+          select count(*)::int as total_count, coalesce(sum(size_bytes), 0)::bigint as total_size
+          from public.admin_media_uploads
+          where admin_id = ${user.id}
+        `
+        if (Array.isArray(statsRows) && statsRows[0]) {
+          mediaTotalCount = statsRows[0].total_count || 0
+          mediaTotalSize = Number(statsRows[0].total_size || 0)
+        }
+      } else if (supabaseServiceClient) {
+        const { data, error } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .select('id, bucket, path, public_url, mime_type, size_bytes, upload_source, metadata, created_at')
+          .eq('admin_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(12)
+        if (!error && data) {
+          mediaUploads = data.map(r => ({
+            id: String(r.id),
+            url: r.public_url || null,
+            bucket: r.bucket || null,
+            path: r.path || null,
+            mimeType: r.mime_type || null,
+            sizeBytes: typeof r.size_bytes === 'number' ? r.size_bytes : null,
+            uploadSource: r.upload_source || r.metadata?.scope || r.metadata?.source || 'unknown',
+            createdAt: r.created_at || null,
+          }))
+        }
+        // Get totals
+        const { count } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .select('*', { count: 'exact', head: true })
+          .eq('admin_id', user.id)
+        mediaTotalCount = count || 0
+        
+        const { data: sizeData } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .select('size_bytes')
+          .eq('admin_id', user.id)
+        if (sizeData) {
+          mediaTotalSize = sizeData.reduce((sum, r) => sum + (r.size_bytes || 0), 0)
+        }
+      }
+    } catch (mediaErr) {
+      console.error('[member-lookup] failed to fetch media uploads', mediaErr)
+    }
+
     const currentThreatLevel = typeof threatLevel === 'number' ? threatLevel : (typeof profile?.threat_level === 'number' ? profile.threat_level : null)
     res.json({
       ok: true,
@@ -8598,6 +8711,9 @@ app.get('/api/admin/member', async (req, res) => {
       bannedIps,
       threatLevel: currentThreatLevel,
       files: userFiles,
+      mediaUploads,
+      mediaTotalCount,
+      mediaTotalSize,
       topReferrers: topReferrers.slice(0, 5),
       topCountries: topCountries.slice(0, 5),
       topDevices: topDevices.slice(0, 5),
