@@ -933,7 +933,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               size="icon"
               className="rounded-full h-9 w-9 flex-shrink-0 text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200"
               onClick={() => setShowAttachMenu(!showAttachMenu)}
-              disabled={uploadingImage}
+              disabled={sending}
             >
               <Plus className={cn("h-5 w-5 transition-transform", showAttachMenu && "rotate-45")} />
             </Button>
