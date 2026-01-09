@@ -1775,7 +1775,22 @@
       "deleteGardenTitle": "Delete this garden",
       "deleteGardenWarning": "This will permanently delete the garden, all its plants, tasks, and journal entries. This action cannot be undone.",
       "leaveGardenTitle": "Leave this garden",
-      "leaveGardenWarning": "You will no longer have access to this garden. You can be re-invited by an owner."
+      "leaveGardenWarning": "You will no longer have access to this garden. You can be re-invited by an owner.",
+      "aiAssistant": "AI Assistant",
+      "aiAssistantDescription": "Configure the Aphylia AI chat assistant for this garden."
+    },
+    "gardenSettings": {
+      "aiChat": {
+        "hideLabel": "Hide AI Chat",
+        "hideDescription": "When enabled, the AI assistant chat bubble will not appear in this garden",
+        "hiddenSuccess": "AI chat hidden",
+        "visibleSuccess": "AI chat enabled",
+        "hidden": "Hidden",
+        "visible": "Visible",
+        "chatIsHidden": "Chat bubble is hidden",
+        "chatIsVisible": "Chat bubble is visible",
+        "ownerOnly": "Only garden owners can change this setting"
+      }
     },
     "todaysTasks": {
       "title": "Today's Tasks",
@@ -1910,6 +1925,7 @@
     "joined": "Joined",
     "friend": "Friend",
     "friends": "Friends",
+    "message": "Message",
     "edit": "Edit",
     "logout": "Log out",
     "deleteAccount": "Delete account",
@@ -2718,6 +2734,41 @@
       "unbanSuccess": "User has been unbanned",
       "allFilesForUser": "All Reports for User",
       "totalReports": "Total Reports"
+    },
+    "aphylia": {
+      "welcome": "Hi! I'm Aphylia 🌱",
+      "welcomeDesc": "Your AI gardening assistant. Ask me anything about your plants!",
+      "placeholder": "Ask me about your garden...",
+      "hint": "Type / for commands • Shift+Enter for new line",
+      "uploadFromGallery": "Upload from gallery",
+      "takePhoto": "Take a photo",
+      "context": {
+        "title": "Add Context"
+      },
+      "quickActions": {
+        "title": "Quick Actions",
+        "diagnose": "Diagnose this plant",
+        "wateringSchedule": "Suggest watering schedule",
+        "weeklyPlan": "Plan my week in the garden",
+        "summarizeJournal": "Summarize my garden journal",
+        "plantCare": "Plant care guide",
+        "pestHelp": "Pest & disease help",
+        "seasonalTips": "Seasonal gardening tips",
+        "companionPlants": "Companion plant suggestions"
+      },
+      "errors": {
+        "notAuthenticated": "Please sign in to chat with Aphylia",
+        "notConfigured": "AI chat is not available at the moment",
+        "uploadFailed": "Failed to upload image",
+        "chatFailed": "Something went wrong. Please try again."
+      },
+      "actions": {
+        "send": "Send message",
+        "stop": "Stop generating",
+        "clear": "Clear chat",
+        "attachImage": "Attach image",
+        "removeAttachment": "Remove attachment"
+      }
     }
   }
 }

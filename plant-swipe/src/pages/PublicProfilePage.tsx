@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
 import type { UserRole } from "@/constants/userRoles"
 import { SearchInput } from "@/components/ui/search-input"
@@ -23,6 +23,7 @@ import { Link } from "@/components/i18n/Link"
 import { ReportUserDialog } from "@/components/moderation/ReportUserDialog"
 import { BlockUserDialog } from "@/components/moderation/BlockUserDialog"
 import { hasBlockedUser, unblockUser, isBlockedByUser } from "@/lib/moderation"
+import { getOrCreateConversation } from "@/lib/messaging"
 
 type PublicProfile = {
   id: string
@@ -473,6 +474,7 @@ export default function PublicProfilePage() {
   const [blockDialogOpen, setBlockDialogOpen] = React.useState(false)
   const [isBlocked, setIsBlocked] = React.useState(false)
   const [blockLoading, setBlockLoading] = React.useState(false)
+  const [messageLoading, setMessageLoading] = React.useState(false)
 
   // Share button state
   const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'error'>('idle')
@@ -755,6 +757,20 @@ export default function PublicProfilePage() {
     }
   }, [pp?.id])
 
+  // Handle starting a conversation with this user
+  const handleStartConversation = React.useCallback(async () => {
+    if (!pp?.id || friendStatus !== 'friends') return
+    setMessageLoading(true)
+    try {
+      const conversationId = await getOrCreateConversation(pp.id)
+      navigate(`/messages?conversation=${conversationId}`)
+    } catch (e) {
+      console.error('Failed to start conversation:', e)
+    } finally {
+      setMessageLoading(false)
+    }
+  }, [pp?.id, friendStatus, navigate])
+
   const daysFlat = React.useMemo(() => {
     // Build a fixed 28-day window (UTC)
     // Render as GitHub-like packed columns: 4 rows, 7 columns (top→bottom flow)
@@ -993,30 +1009,18 @@ export default function PublicProfilePage() {
                   )}
                 </div>
                 <div className="ml-auto flex items-start gap-2" ref={anchorRef}>
-                  {/* Share button - always visible */}
-                  <Button 
-                    className="rounded-2xl self-start" 
-                    variant="secondary" 
-                    onClick={handleShare}
-                    aria-label={t('common.share', { defaultValue: 'Share' })}
-                  >
-                    <Share2 className="h-4 w-4" />
-                    {shareStatus === 'copied' ? (
-                      <span className="ml-1.5 text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
-                    ) : shareStatus === 'error' ? (
-                      <span className="ml-1.5 text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
-                    ) : (
-                      <span className="hidden sm:inline ml-1.5 text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
-                    )}
-                  </Button>
                   {isOwner ? (
                     <>
                       <Button className="rounded-2xl self-start" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
                       {menuOpen && menuPos && createPortal(
-                        <div ref={menuRef} className="w-40 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await handleLogout() }}>{t('profile.logout')}</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>{t('profile.deleteAccount')}</button>
+                        <div ref={menuRef} className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); handleShare() }}>
+                            <Share2 className="h-4 w-4" />
+                            {shareStatus === 'copied' ? t('plantInfo.shareCopied', { defaultValue: 'Copied!' }) : t('common.share', { defaultValue: 'Share' })}
+                          </button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await handleLogout() }}>{t('profile.logout')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>{t('profile.deleteAccount')}</button>
                         </div>,
                         document.body
                       )}
@@ -1077,6 +1081,33 @@ export default function PublicProfilePage() {
                           className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-lg z-[60] p-1" 
                           style={{ position: 'fixed', top: otherMenuPos.top, right: otherMenuPos.right }}
                         >
+                          {/* Share button */}
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              handleShare();
+                            }}
+                          >
+                            <Share2 className="h-4 w-4" />
+                            {shareStatus === 'copied' ? t('plantInfo.shareCopied', { defaultValue: 'Copied!' }) : t('common.share', { defaultValue: 'Share' })}
+                          </button>
+                          {/* Message button - only for friends */}
+                          {friendStatus === 'friends' && (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={async (e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                await handleStartConversation();
+                              }}
+                              disabled={messageLoading}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              {t('profile.message', { defaultValue: 'Message' })}
+                            </button>
+                          )}
                           {isBlocked ? (
                             <button 
                               className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
@@ -1137,6 +1168,33 @@ export default function PublicProfilePage() {
                           className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-lg z-[60] p-1" 
                           style={{ position: 'fixed', top: otherMenuPos.top, right: otherMenuPos.right }}
                         >
+                          {/* Share button */}
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              handleShare();
+                            }}
+                          >
+                            <Share2 className="h-4 w-4" />
+                            {shareStatus === 'copied' ? t('plantInfo.shareCopied', { defaultValue: 'Copied!' }) : t('common.share', { defaultValue: 'Share' })}
+                          </button>
+                          {/* Message button - only for friends */}
+                          {friendStatus === 'friends' && (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={async (e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                await handleStartConversation();
+                              }}
+                              disabled={messageLoading}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              {t('profile.message', { defaultValue: 'Message' })}
+                            </button>
+                          )}
                           {isBlocked ? (
                             <button 
                               className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
@@ -1178,7 +1236,41 @@ export default function PublicProfilePage() {
                         document.body
                       )}
                     </>
-                  ) : null}
+                  ) : (
+                    /* Non-logged-in users - show share button only */
+                    <>
+                      <div ref={otherMenuAnchorRef}>
+                        <Button 
+                          className="rounded-2xl" 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => setOtherMenuOpen((o) => !o)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {otherMenuOpen && otherMenuPos && createPortal(
+                        <div 
+                          ref={otherMenuRef} 
+                          className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-lg z-[60] p-1" 
+                          style={{ position: 'fixed', top: otherMenuPos.top, right: otherMenuPos.right }}
+                        >
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              handleShare();
+                            }}
+                          >
+                            <Share2 className="h-4 w-4" />
+                            {shareStatus === 'copied' ? t('plantInfo.shareCopied', { defaultValue: 'Copied!' }) : t('common.share', { defaultValue: 'Share' })}
+                          </button>
+                        </div>,
+                        document.body
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
               {canViewProfile && pp.bio && (

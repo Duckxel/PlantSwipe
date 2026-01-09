@@ -1775,7 +1775,22 @@
       "deleteGardenTitle": "Supprimer ce jardin",
       "deleteGardenWarning": "Cela supprimera définitivement le jardin, toutes ses plantes, tâches et entrées de journal. Cette action ne peut pas être annulée.",
       "leaveGardenTitle": "Quitter ce jardin",
-      "leaveGardenWarning": "Vous n'aurez plus accès à ce jardin. Un propriétaire peut vous réinviter."
+      "leaveGardenWarning": "Vous n'aurez plus accès à ce jardin. Un propriétaire peut vous réinviter.",
+      "aiAssistant": "Assistant IA",
+      "aiAssistantDescription": "Configurez l'assistant IA Aphylia pour ce jardin."
+    },
+    "gardenSettings": {
+      "aiChat": {
+        "hideLabel": "Masquer le chat IA",
+        "hideDescription": "Lorsqu'activé, le bouton de chat IA n'apparaîtra pas dans ce jardin",
+        "hiddenSuccess": "Chat IA masqué",
+        "visibleSuccess": "Chat IA activé",
+        "hidden": "Masqué",
+        "visible": "Visible",
+        "chatIsHidden": "Le bouton de chat est masqué",
+        "chatIsVisible": "Le bouton de chat est visible",
+        "ownerOnly": "Seuls les propriétaires du jardin peuvent modifier ce paramètre"
+      }
     },
     "todaysTasks": {
       "title": "Tâches du jour",
@@ -1910,6 +1925,7 @@
     "joined": "A rejoint",
     "friend": "Ami",
     "friends": "Amis",
+    "message": "Message",
     "edit": "Modifier",
     "logout": "Se déconnecter",
     "deleteAccount": "Supprimer le compte",
@@ -2718,6 +2734,41 @@
       "unbanSuccess": "L'utilisateur a été débanni",
       "allFilesForUser": "Tous les signalements pour l'utilisateur",
       "totalReports": "Total des signalements"
+    },
+    "aphylia": {
+      "welcome": "Salut ! Je suis Aphylia 🌱",
+      "welcomeDesc": "Votre assistante IA de jardinage. Posez-moi toutes vos questions sur vos plantes !",
+      "placeholder": "Parlez-moi de votre jardin...",
+      "hint": "Tapez / pour les commandes • Maj+Entrée pour une nouvelle ligne",
+      "uploadFromGallery": "Choisir dans la galerie",
+      "takePhoto": "Prendre une photo",
+      "context": {
+        "title": "Ajouter du contexte"
+      },
+      "quickActions": {
+        "title": "Actions rapides",
+        "diagnose": "Diagnostiquer cette plante",
+        "wateringSchedule": "Suggérer un calendrier d'arrosage",
+        "weeklyPlan": "Planifier ma semaine au jardin",
+        "summarizeJournal": "Résumer mon journal de jardin",
+        "plantCare": "Guide d'entretien des plantes",
+        "pestHelp": "Aide nuisibles et maladies",
+        "seasonalTips": "Conseils de jardinage saisonniers",
+        "companionPlants": "Suggestions de plantes compagnes"
+      },
+      "errors": {
+        "notAuthenticated": "Veuillez vous connecter pour discuter avec Aphylia",
+        "notConfigured": "Le chat IA n'est pas disponible pour le moment",
+        "uploadFailed": "Échec du téléchargement de l'image",
+        "chatFailed": "Une erreur s'est produite. Veuillez réessayer."
+      },
+      "actions": {
+        "send": "Envoyer le message",
+        "stop": "Arrêter la génération",
+        "clear": "Effacer le chat",
+        "attachImage": "Joindre une image",
+        "removeAttachment": "Supprimer la pièce jointe"
+      }
     }
   }
 }

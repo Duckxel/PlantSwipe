@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React from "react";
+import ReactDOM from "react-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useParams, Routes, Route, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
@@ -77,9 +78,11 @@ import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSecti
 import { GardenJournalSection } from "@/components/garden/GardenJournalSection";
 import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
 import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLanguageEditor";
+import { GardenAiChatToggle } from "@/components/garden/GardenAiChatToggle";
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
+import { AphyliaChat } from "@/components/aphylia";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
 
@@ -3135,6 +3138,7 @@ export const GardenDashboardPage: React.FC = () => {
                       GardenLocationEditor={GardenLocationEditor}
                       GardenAdviceLanguageEditor={GardenAdviceLanguageEditor}
                       GardenPrivacyToggle={GardenPrivacyToggle}
+                      GardenAiChatToggle={GardenAiChatToggle}
                       MemberCard={MemberCard}
                     />
                   ) : (
@@ -3504,9 +3508,41 @@ export const GardenDashboardPage: React.FC = () => {
           </Dialog>
         </>
       )}
+      
+      {/* Aphylia AI Chat - Only visible for garden members when not hidden in settings */}
+      {garden && user && isMember && !garden.hideAiChat && (
+        <AphyliaChatPortal gardenId={garden.id} gardenName={garden.name} />
+      )}
     </div>
   );
 };
+
+// Portal wrapper to render chat outside the main component tree
+// This prevents the chat from interfering with React Router rendering
+function AphyliaChatPortal({ gardenId, gardenName }: { gardenId: string; gardenName: string }) {
+  const [mounted, setMounted] = React.useState(false)
+  
+  React.useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+  
+  const gardenContext = React.useMemo(() => ({
+    gardenId,
+    gardenName,
+  }), [gardenId, gardenName])
+  
+  if (!mounted) return null
+  
+  // Use portal to render outside the main component tree
+  return ReactDOM.createPortal(
+    <AphyliaChat 
+      showBubble={true} 
+      gardenContext={gardenContext}
+    />,
+    document.body
+  )
+}
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RoutineSection({

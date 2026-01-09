@@ -938,6 +938,18 @@ const gardenCoverMulter = multer({
 })
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
 
+// === Messaging Image Upload Settings ===
+const messageImageUploadBucket = gardenCoverUploadBucket || 'PHOTOS' // Reuse the photos bucket
+const messageImageUploadPrefix = 'messages'
+const messageImageMaxBytes = 10 * 1024 * 1024 // 10MB
+const messageImageMaxDimension = 1200 // Slightly smaller than cover images
+const messageImageWebpQuality = 80 // Good quality for chat images
+const messageImageMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: messageImageMaxBytes },
+})
+const singleMessageImageUpload = messageImageMulter.single('file')
+
 // Mime types that should be optimized and converted to WebP
 const optimizableMimeTypes = new Set([
   'image/jpeg',
@@ -11976,6 +11988,147 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
   }
 })
 
+// === Messaging Image Upload Endpoint ===
+// Follows the same pattern as garden cover uploads with sharp optimization
+app.post('/api/messages/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+
+  singleMessageImageUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(messageImageMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      // Allow common image types
+      const allowedMimes = new Set([
+        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+        'image/heic', 'image/heif', 'image/avif'
+      ])
+      if (!allowedMimes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      let finalMimeType = 'image/webp'
+
+      // GIFs are kept as-is to preserve animation
+      if (mime === 'image/gif') {
+        optimizedBuffer = file.buffer
+        finalMimeType = 'image/gif'
+      } else {
+        try {
+          optimizedBuffer = await sharp(file.buffer)
+            .rotate()
+            .resize({
+              width: messageImageMaxDimension,
+              height: messageImageMaxDimension,
+              fit: 'inside',
+              withoutEnlargement: true,
+              fastShrinkOnLoad: true,
+            })
+            .webp({
+              quality: messageImageWebpQuality,
+              effort: 5,
+              smartSubsample: true,
+            })
+            .toBuffer()
+        } catch (sharpErr) {
+          console.error('[message-image] failed to convert image to webp', sharpErr)
+          res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+          return
+        }
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const timestamp = Date.now()
+      const randomId = Math.random().toString(36).substring(2, 10)
+      const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
+      const objectPath = `${messageImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(messageImageUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: finalMimeType,
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[message-image] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(messageImageUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      // Transform URL to use media proxy (hides Supabase project URL)
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+      if (!proxyUrl) {
+        res.status(500).json({ error: 'Failed to generate public URL for message image' })
+        return
+      }
+
+      const compressionPercent =
+        file.size > 0 && finalMimeType !== 'image/gif'
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+      res.json({
+        ok: true,
+        url: proxyUrl,
+        bucket: messageImageUploadBucket,
+        path: objectPath,
+        mimeType: finalMimeType,
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        quality: finalMimeType === 'image/gif' ? null : messageImageWebpQuality,
+        maxDimension: messageImageMaxDimension,
+        compressionPercent,
+      })
+    })().catch((uploadErr) => {
+      console.error('[message-image] unexpected failure', uploadErr)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
+      }
+    })
+  })
+})
+
 // DELETE a garden (and its cover image from storage)
 app.delete('/api/garden/:id', async (req, res) => {
   if (!supabaseServiceClient) {
@@ -15707,6 +15860,1688 @@ app.post('/api/push/instant', async (req, res) => {
   } catch (err) {
     console.error('[push/instant] Failed to send notification:', err)
     res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// ========== Aphylia Garden Chat AI ==========
+// Streaming AI chat endpoint for in-app gardening assistant
+
+// Ensure to_delete folder exists for ephemeral image uploads
+const chatUploadDir = path.join(__dirname, 'uploads', 'to_delete')
+try {
+  if (!fsSync.existsSync(chatUploadDir)) {
+    fsSync.mkdirSync(chatUploadDir, { recursive: true })
+    console.log('[aphylia-chat] Created to_delete upload directory')
+  }
+} catch (err) {
+  console.warn('[aphylia-chat] Failed to create to_delete directory:', err?.message)
+}
+
+// Multer storage for chat image uploads
+const chatImageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, chatUploadDir)
+  },
+  filename: (_req, file, cb) => {
+    const timestamp = Date.now()
+    const randomId = crypto.randomBytes(8).toString('hex')
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg'
+    cb(null, `chat_${timestamp}_${randomId}${ext}`)
+  }
+})
+
+const chatImageUpload = multer({
+  storage: chatImageStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.'))
+    }
+  }
+})
+
+// Hourly cleanup of to_delete folder
+cron.schedule('0 * * * *', async () => {
+  try {
+    const files = await fs.readdir(chatUploadDir)
+    const now = Date.now()
+    const oneHourMs = 60 * 60 * 1000
+    let deletedCount = 0
+    
+    for (const file of files) {
+      const filePath = path.join(chatUploadDir, file)
+      try {
+        const stats = await fs.stat(filePath)
+        if (now - stats.mtimeMs > oneHourMs) {
+          await fs.unlink(filePath)
+          deletedCount++
+        }
+      } catch { }
+    }
+    
+    if (deletedCount > 0) {
+      console.log(`[aphylia-chat] Cleanup: deleted ${deletedCount} old file(s) from to_delete`)
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Cleanup error:', err?.message)
+  }
+})
+
+// Upload image for chat (ephemeral, stored in to_delete folder)
+app.post('/api/ai/garden-chat/upload', chatImageUpload.single('image'), async (req, res) => {
+  try {
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    if (!req.file) {
+      res.status(400).json({ error: 'No image uploaded' })
+      return
+    }
+    
+    // Build URL for the uploaded file
+    const baseUrl = process.env.WEBSITE_URL || `http://localhost:${process.env.PORT || 3000}`
+    const imageUrl = `${baseUrl}/api/ai/garden-chat/image/${req.file.filename}`
+    
+    res.json({
+      success: true,
+      url: imageUrl,
+      filename: req.file.filename
+    })
+  } catch (err) {
+    console.error('[aphylia-chat] Upload error:', err)
+    res.status(500).json({ error: err?.message || 'Upload failed' })
+  }
+})
+
+// Serve uploaded chat images
+app.get('/api/ai/garden-chat/image/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename
+    // Sanitize filename to prevent path traversal
+    if (!filename || filename.includes('..') || filename.includes('/')) {
+      res.status(400).json({ error: 'Invalid filename' })
+      return
+    }
+    
+    const filePath = path.join(chatUploadDir, filename)
+    if (!fsSync.existsSync(filePath)) {
+      res.status(404).json({ error: 'Image not found' })
+      return
+    }
+    
+    // Determine content type
+    const ext = path.extname(filename).toLowerCase()
+    const contentTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    }
+    
+    res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream')
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    res.sendFile(filePath)
+  } catch (err) {
+    console.error('[aphylia-chat] Image serve error:', err)
+    res.status(500).json({ error: 'Failed to serve image' })
+  }
+})
+
+// System prompt for Aphylia gardening assistant
+const APHYLIA_SYSTEM_PROMPT = `You are Aphylia, a friendly and knowledgeable AI gardening assistant built into the Aphylia plant care app.
+
+Your role is to provide expert, personalized gardening advice based on the user's specific garden, plants, and growing conditions.
+
+## Key Capabilities:
+- Plant diagnosis (pests, diseases, nutrient deficiencies)
+- Watering and care schedules
+- Seasonal gardening tips
+- Companion planting advice
+- Task planning and garden management
+- Plant identification from photos
+- Growing tips based on local climate
+- **UPDATE plant health status** when you diagnose issues or improvements
+- **CREATE and MODIFY tasks** for plant care routines
+- **ADD journal entries** to record observations
+- **UPDATE plant notes** with care instructions or observations
+
+## ACTION CAPABILITIES - You Can Modify Garden Data!
+You have the ability to take actions in the user's garden. When appropriate, USE THESE TOOLS:
+
+1. **update_plant_health** - Update a plant's health status (thriving, healthy, okay, struggling, critical)
+   - Use after diagnosing plant issues
+   - Use when user reports improvements
+   
+2. **update_plant_notes** - Add or update notes on a plant
+   - Use to record care instructions, observations, or diagnoses
+   
+3. **create_task** - Create a new care task for a plant
+   - Use to set up watering schedules, fertilizing reminders, etc.
+   
+4. **complete_task** - Mark a task as complete
+   - Use when user confirms they've done a task
+   
+5. **add_journal_entry** - Add a journal entry to the garden
+   - Use to record significant observations, diagnoses, or milestones
+
+IMPORTANT: When you recommend changes (like updating health status or creating tasks), ACTUALLY DO IT using the tools. Don't just suggest - take action!
+
+## Communication Style:
+- Warm, encouraging, and supportive
+- Use emojis sparingly to add personality (🌱 🪴 💧 🌸 etc.)
+- Provide practical, actionable advice
+- Break down complex topics into simple steps
+- Celebrate gardening successes with the user
+- When you take actions, confirm what you did ("I've updated the health status to..." or "I've created a watering task for...")
+
+## Important Guidelines:
+- Base recommendations on the user's specific garden context (location, climate zone, existing plants)
+- Consider seasonal timing when giving advice
+- If you're unsure about something, say so and suggest how they might find more info
+- When analyzing plant photos, be thorough but honest about uncertainty
+- TAKE ACTION when appropriate - update statuses, create tasks, add notes
+
+## When Helping with Tasks:
+- Be specific about timing and frequency
+- Consider the user's existing task load
+- Prioritize based on plant health needs
+- CREATE the tasks directly, don't just suggest them
+
+Always aim to help the user become a more confident and successful gardener!`
+
+// Define tools that the AI can use to modify garden data
+const APHYLIA_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'update_plant_health',
+      description: 'Update the health status of a plant in the garden. Use this after diagnosing plant issues or when the user reports changes in plant health.',
+      parameters: {
+        type: 'object',
+        properties: {
+          garden_plant_id: {
+            type: 'string',
+            description: 'The ID of the garden plant to update (from the context provided)'
+          },
+          health_status: {
+            type: 'string',
+            enum: ['thriving', 'healthy', 'okay', 'struggling', 'critical'],
+            description: 'The new health status for the plant'
+          },
+          reason: {
+            type: 'string',
+            description: 'Brief explanation for the health status change'
+          }
+        },
+        required: ['garden_plant_id', 'health_status']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_plant_notes',
+      description: 'Update or append notes for a plant. Use this to record observations, care instructions, or diagnoses.',
+      parameters: {
+        type: 'object',
+        properties: {
+          garden_plant_id: {
+            type: 'string',
+            description: 'The ID of the garden plant to update'
+          },
+          notes: {
+            type: 'string',
+            description: 'The notes to add or update for this plant'
+          },
+          append: {
+            type: 'boolean',
+            description: 'If true, append to existing notes. If false, replace notes.',
+            default: true
+          }
+        },
+        required: ['garden_plant_id', 'notes']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_task',
+      description: 'Create a new care task for a plant. Use this to set up watering schedules, fertilizing reminders, pruning tasks, etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          garden_plant_id: {
+            type: 'string',
+            description: 'The ID of the garden plant this task is for'
+          },
+          task_type: {
+            type: 'string',
+            enum: ['water', 'fertilize', 'harvest', 'cut', 'custom'],
+            description: 'The type of task'
+          },
+          custom_name: {
+            type: 'string',
+            description: 'Custom name for the task (required if task_type is custom)'
+          },
+          schedule_type: {
+            type: 'string',
+            enum: ['once', 'daily', 'weekly', 'biweekly', 'monthly'],
+            description: 'How often this task should repeat'
+          },
+          due_date: {
+            type: 'string',
+            description: 'When the task is first due (ISO date string)'
+          }
+        },
+        required: ['garden_plant_id', 'task_type', 'schedule_type']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'complete_task',
+      description: 'Mark a task occurrence as complete. Use when user confirms they have completed a task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'The ID of the task to complete'
+          },
+          notes: {
+            type: 'string',
+            description: 'Optional notes about completing this task'
+          }
+        },
+        required: ['task_id']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_journal_entry',
+      description: 'Add a journal entry to the garden. Use to record significant observations, diagnoses, milestones, or summaries.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Title for the journal entry'
+          },
+          content: {
+            type: 'string',
+            description: 'The content/body of the journal entry'
+          },
+          mood: {
+            type: 'string',
+            enum: ['blooming', 'thriving', 'sprouting', 'resting', 'wilting'],
+            description: 'The mood/sentiment for this entry'
+          },
+          plants_mentioned: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of garden_plant_ids mentioned in this entry'
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags for this journal entry (e.g., diagnosis, milestone, observation)'
+          }
+        },
+        required: ['title', 'content']
+      }
+    }
+  }
+]
+
+// Execute a tool call from the AI
+async function executeAphyliaTool(toolName, args, gardenId, userId) {
+  if (!sql) return { success: false, error: 'Database not available' }
+  
+  try {
+    switch (toolName) {
+      case 'update_plant_health': {
+        const { garden_plant_id, health_status, reason } = args
+        
+        // Verify the plant belongs to this garden and user has access
+        const checkRows = await sql`
+          select gp.id from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        // Update the health status
+        await sql`
+          update public.garden_plants
+          set health_status = ${health_status},
+              last_health_update = now()
+          where id = ${garden_plant_id}
+        `
+        
+        // Log the activity
+        const logMsg = 'Health status updated to ' + health_status + (reason ? ': ' + reason : '')
+        await sql`
+          insert into public.garden_activity_logs (garden_id, actor_id, kind, message, plant_name)
+          select ${gardenId}, ${userId}, 'plant_updated', 
+                 ${logMsg},
+                 coalesce(gp.nickname, p.name)
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.id = ${garden_plant_id}
+        `
+        
+        return { success: true, message: 'Updated plant health to ' + health_status }
+      }
+      
+      case 'update_plant_notes': {
+        const { garden_plant_id, notes, append = true } = args
+        
+        // Verify access
+        const checkRows = await sql`
+          select gp.id, gp.notes as existing_notes from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        const existingNotes = checkRows[0].existing_notes || ''
+        const newNotes = append && existingNotes 
+          ? existingNotes + '\n\n' + notes 
+          : notes
+        
+        await sql`
+          update public.garden_plants
+          set notes = ${newNotes}
+          where id = ${garden_plant_id}
+        `
+        
+        return { success: true, message: 'Plant notes updated' }
+      }
+      
+      case 'create_task': {
+        const { garden_plant_id, task_type, custom_name, schedule_type, due_date } = args
+        
+        // Verify access
+        const checkRows = await sql`
+          select gp.id from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        // Map schedule type to interval
+        const intervalMap = {
+          'once': { kind: 'one_time_date', amount: null, unit: null },
+          'daily': { kind: 'repeat_duration', amount: 1, unit: 'day' },
+          'weekly': { kind: 'repeat_duration', amount: 1, unit: 'week' },
+          'biweekly': { kind: 'repeat_duration', amount: 2, unit: 'week' },
+          'monthly': { kind: 'repeat_duration', amount: 1, unit: 'month' }
+        }
+        const schedule = intervalMap[schedule_type] || intervalMap['weekly']
+        
+        const dueAt = due_date ? new Date(due_date) : new Date()
+        
+        // Create the task
+        const taskRows = await sql`
+          insert into public.garden_plant_tasks 
+            (garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit)
+          values 
+            (${gardenId}, ${garden_plant_id}, ${task_type}, ${custom_name || null}, 
+             ${schedule.kind}, ${dueAt}, ${schedule.amount}, ${schedule.unit})
+          returning id
+        `
+        
+        // Create first occurrence
+        await sql`
+          insert into public.garden_plant_task_occurrences (task_id, garden_plant_id, due_at)
+          values (${taskRows[0].id}, ${garden_plant_id}, ${dueAt})
+        `
+        
+        return { success: true, message: 'Created ' + task_type + ' task', taskId: taskRows[0].id }
+      }
+      
+      case 'complete_task': {
+        const { task_id } = args
+        
+        // Find the latest uncompleted occurrence for this task
+        const occRows = await sql`
+          select o.id, o.completed_count, o.required_count
+          from public.garden_plant_task_occurrences o
+          join public.garden_plant_tasks t on t.id = o.task_id
+          join public.garden_members gm on gm.garden_id = t.garden_id
+          where t.id = ${task_id}
+            and t.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+            and o.completed_at is null
+          order by o.due_at asc
+          limit 1
+        `
+        
+        if (occRows.length === 0) {
+          return { success: false, error: 'No pending occurrence found for this task' }
+        }
+        
+        const occ = occRows[0]
+        const newCount = (occ.completed_count || 0) + 1
+        const isComplete = newCount >= (occ.required_count || 1)
+        
+        await sql`
+          update public.garden_plant_task_occurrences
+          set completed_count = ${newCount},
+              completed_at = ${isComplete ? new Date() : null}
+          where id = ${occ.id}
+        `
+        
+        // Record who completed it
+        await sql`
+          insert into public.garden_task_user_completions (occurrence_id, user_id, increment)
+          values (${occ.id}, ${userId}, 1)
+        `
+        
+        return { success: true, message: isComplete ? 'Task completed!' : 'Task progress: ' + newCount + '/' + (occ.required_count || 1) }
+      }
+      
+      case 'add_journal_entry': {
+        const { title, content, mood, plants_mentioned, tags } = args
+        
+        // Verify user has access to this garden
+        const checkRows = await sql`
+          select 1 from public.garden_members
+          where garden_id = ${gardenId} and user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Access denied' }
+        }
+        
+        await sql`
+          insert into public.garden_journal_entries 
+            (garden_id, user_id, entry_date, title, content, mood, plants_mentioned, tags)
+          values 
+            (${gardenId}, ${userId}, current_date, ${title}, ${content}, 
+             ${mood || null}, ${plants_mentioned || []}, ${tags || []})
+        `
+        
+        return { success: true, message: 'Journal entry added' }
+      }
+      
+      default:
+        return { success: false, error: 'Unknown tool: ' + toolName }
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Tool execution error (' + toolName + '):', err)
+    return { success: false, error: err.message || 'Tool execution failed' }
+  }
+}
+
+// Build COMPREHENSIVE context string for the AI from ALL garden data
+async function buildGardenContextString(context) {
+  const parts = []
+  
+  // User context
+  if (context.user) {
+    parts.push(`## User Information`)
+    if (context.user.displayName) parts.push(`- Name: ${context.user.displayName}`)
+    if (context.user.language) parts.push(`- Preferred language: ${context.user.language}`)
+    if (context.user.timezone) parts.push(`- Timezone: ${context.user.timezone}`)
+    if (context.user.experienceYears) parts.push(`- Gardening experience: ${context.user.experienceYears} years`)
+  }
+  
+  // Garden context with full details
+  if (context.garden) {
+    parts.push(`\n## Current Garden: "${context.garden.gardenName}"`)
+    if (context.garden.locationCity) {
+      let location = context.garden.locationCity
+      if (context.garden.locationCountry) location += `, ${context.garden.locationCountry}`
+      parts.push(`- Location: ${location}`)
+    }
+    if (context.garden.locationTimezone) parts.push(`- Timezone: ${context.garden.locationTimezone}`)
+    if (context.garden.adviceLanguage) parts.push(`- Advice language preference: ${context.garden.adviceLanguage}`)
+    if (context.garden.createdAt) {
+      const createdDate = new Date(context.garden.createdAt)
+      parts.push(`- Garden created: ${createdDate.toLocaleDateString()}`)
+    }
+    
+    // Garden streak info
+    if (context.garden.streak) {
+      parts.push(`- Current streak: ${context.garden.streak.currentStreak} days`)
+      parts.push(`- Longest streak: ${context.garden.streak.longestStreak} days`)
+    }
+    
+    // Garden members
+    if (context.garden.members && context.garden.members.length > 0) {
+      parts.push(`\n### Garden Members (${context.garden.members.length} total)`)
+      for (const member of context.garden.members) {
+        let memberInfo = `- ${member.displayName} (${member.role})`
+        if (member.experienceYears) memberInfo += ` - ${member.experienceYears} years experience`
+        parts.push(memberInfo)
+      }
+    }
+    
+    // Recent activity summary
+    if (context.garden.recentActivity && context.garden.recentActivity.length > 0) {
+      parts.push(`\n### Recent Activity (last 7 days)`)
+      const activitySummary = {}
+      for (const activity of context.garden.recentActivity) {
+        activitySummary[activity.kind] = (activitySummary[activity.kind] || 0) + 1
+      }
+      for (const [kind, count] of Object.entries(activitySummary)) {
+        parts.push(`- ${kind}: ${count} occurrences`)
+      }
+    }
+  }
+  
+  // ALL Plants with full details
+  if (context.plants && context.plants.length > 0) {
+    parts.push(`\n## Plants in Garden (${context.plants.length} total)`)
+    for (const plant of context.plants) {
+      let plantInfo = `\n### ${plant.plantName}`
+      if (plant.nickname && plant.nickname !== plant.plantName) plantInfo += ` (nicknamed "${plant.nickname}")`
+      parts.push(plantInfo)
+      
+      if (plant.scientificName) parts.push(`- Scientific name: _${plant.scientificName}_`)
+      if (plant.plantType) parts.push(`- Type: ${plant.plantType}`)
+      if (plant.plantsOnHand > 1) parts.push(`- Quantity: ${plant.plantsOnHand}`)
+      if (plant.healthStatus) parts.push(`- Health status: ${plant.healthStatus}`)
+      if (plant.notes) parts.push(`- Notes: ${plant.notes}`)
+      
+      // Care requirements
+      if (plant.waterFrequency) parts.push(`- Water frequency: ${plant.waterFrequency}`)
+      if (plant.lightLevel) parts.push(`- Light needs: ${plant.lightLevel}`)
+      if (plant.hardinessZone) parts.push(`- Hardiness zone: ${plant.hardinessZone}`)
+      
+      // Flags
+      const flags = []
+      if (plant.isEdible) flags.push('Edible')
+      if (plant.isPoisonous) flags.push('⚠️ Poisonous')
+      if (flags.length > 0) parts.push(`- Flags: ${flags.join(', ')}`)
+      
+      // Tags
+      if (plant.tags && plant.tags.length > 0) {
+        parts.push(`- Tags: ${plant.tags.join(', ')}`)
+      }
+      
+      // Schedule and tasks
+      if (plant.schedule) {
+        parts.push(`- Custom schedule: ${plant.schedule.amount}x per ${plant.schedule.period}`)
+      }
+      if (plant.taskCount > 0) {
+        parts.push(`- Active tasks: ${plant.taskCount}`)
+      }
+    }
+  }
+  
+  // ALL Tasks with full details
+  if (context.tasks && context.tasks.length > 0) {
+    parts.push(`\n## Garden Tasks (${context.tasks.length} total)`)
+    
+    // Group by status
+    const overdueTasks = []
+    const dueTodayTasks = []
+    const upcomingTasks = []
+    const now = new Date()
+    const todayStr = now.toISOString().split('T')[0]
+    
+    for (const task of context.tasks) {
+      if (!task.occurrences || task.occurrences.length === 0) continue
+      
+      for (const occ of task.occurrences) {
+        if (occ.completedAt) continue // Skip completed
+        
+        const dueDate = new Date(occ.dueAt)
+        const dueDateStr = dueDate.toISOString().split('T')[0]
+        
+        const taskEntry = {
+          ...task,
+          dueAt: occ.dueAt,
+          requiredCount: occ.requiredCount,
+          completedCount: occ.completedCount
+        }
+        
+        if (dueDate < now && dueDateStr !== todayStr) {
+          overdueTasks.push(taskEntry)
+        } else if (dueDateStr === todayStr) {
+          dueTodayTasks.push(taskEntry)
+        } else {
+          upcomingTasks.push(taskEntry)
+        }
+      }
+    }
+    
+    if (overdueTasks.length > 0) {
+      parts.push(`\n### ⚠️ Overdue Tasks (${overdueTasks.length})`)
+      for (const task of overdueTasks.slice(0, 10)) {
+        let taskInfo = `- ${task.customName || task.taskType}`
+        if (task.plantName) taskInfo += ` for "${task.plantName}"`
+        const dueDate = new Date(task.dueAt)
+        taskInfo += ` (was due: ${dueDate.toLocaleDateString()})`
+        parts.push(taskInfo)
+      }
+    }
+    
+    if (dueTodayTasks.length > 0) {
+      parts.push(`\n### 📅 Due Today (${dueTodayTasks.length})`)
+      for (const task of dueTodayTasks) {
+        let taskInfo = `- ${task.customName || task.taskType}`
+        if (task.plantName) taskInfo += ` for "${task.plantName}"`
+        if (task.requiredCount > 1) {
+          taskInfo += ` (${task.completedCount || 0}/${task.requiredCount} done)`
+        }
+        parts.push(taskInfo)
+      }
+    }
+    
+    if (upcomingTasks.length > 0) {
+      parts.push(`\n### 🗓️ Upcoming Tasks (${upcomingTasks.length})`)
+      for (const task of upcomingTasks.slice(0, 15)) {
+        let taskInfo = `- ${task.customName || task.taskType}`
+        if (task.plantName) taskInfo += ` for "${task.plantName}"`
+        const dueDate = new Date(task.dueAt)
+        taskInfo += ` (due: ${dueDate.toLocaleDateString()})`
+        parts.push(taskInfo)
+      }
+    }
+  }
+  
+  // ALL Journal entries
+  if (context.journal && context.journal.length > 0) {
+    parts.push(`\n## Garden Journal (${context.journal.length} entries)`)
+    for (const entry of context.journal.slice(0, 20)) {
+      const createdDate = new Date(entry.createdAt)
+      parts.push(`\n### ${entry.title || 'Journal Entry'} - ${createdDate.toLocaleDateString()}`)
+      if (entry.authorName) parts.push(`- Author: ${entry.authorName}`)
+      if (entry.mood) parts.push(`- Mood: ${entry.mood}`)
+      if (entry.weather) parts.push(`- Weather: ${entry.weather}`)
+      if (entry.temperature) parts.push(`- Temperature: ${entry.temperature}`)
+      if (entry.content) {
+        // Truncate very long entries
+        const content = entry.content.length > 500 
+          ? entry.content.substring(0, 500) + '...' 
+          : entry.content
+        parts.push(`- Content: ${content}`)
+      }
+      if (entry.plantsMentioned && entry.plantsMentioned.length > 0) {
+        const plantNames = entry.plantsMentioned.map(p => p.plantName).filter(Boolean)
+        if (plantNames.length > 0) {
+          parts.push(`- Plants mentioned: ${plantNames.join(', ')}`)
+        }
+      }
+    }
+  }
+  
+  // Analytics summary
+  if (context.analytics) {
+    parts.push(`\n## Garden Analytics & Statistics`)
+    
+    if (context.analytics.taskStats) {
+      const stats = context.analytics.taskStats
+      parts.push(`### Task Completion (last 30 days)`)
+      parts.push(`- Completed tasks: ${stats.completed_tasks || 0}`)
+      parts.push(`- Overdue tasks: ${stats.overdue_tasks || 0}`)
+      parts.push(`- Upcoming tasks (next 7 days): ${stats.upcoming_tasks || 0}`)
+    }
+    
+    if (context.analytics.healthDistribution && Object.keys(context.analytics.healthDistribution).length > 0) {
+      parts.push(`### Plant Health Distribution`)
+      for (const [status, count] of Object.entries(context.analytics.healthDistribution)) {
+        parts.push(`- ${status}: ${count} plants`)
+      }
+    }
+    
+    if (context.analytics.dailyActivity && context.analytics.dailyActivity.length > 0) {
+      const totalActivity = context.analytics.dailyActivity.reduce((sum, d) => sum + d.count, 0)
+      const avgActivity = (totalActivity / context.analytics.dailyActivity.length).toFixed(1)
+      parts.push(`### Activity (last 14 days)`)
+      parts.push(`- Total activities: ${totalActivity}`)
+      parts.push(`- Average per day: ${avgActivity}`)
+    }
+  }
+  
+  // Completed tasks with attribution (who did what)
+  if (context.completedTasks && context.completedTasks.length > 0) {
+    parts.push(`\n## Recently Completed Tasks (last 30 days)`)
+    
+    // Group by date
+    const tasksByDate = {}
+    for (const task of context.completedTasks) {
+      const dateStr = new Date(task.completedAt).toLocaleDateString()
+      if (!tasksByDate[dateStr]) tasksByDate[dateStr] = []
+      tasksByDate[dateStr].push(task)
+    }
+    
+    for (const [date, tasks] of Object.entries(tasksByDate).slice(0, 7)) {
+      parts.push(`\n### ${date}`)
+      for (const task of tasks.slice(0, 10)) {
+        let taskInfo = `- ✅ ${task.customName || task.taskType}`
+        if (task.plantName) taskInfo += ` for "${task.plantName}"`
+        
+        // Who completed it
+        if (task.completedBy && task.completedBy.length > 0) {
+          const names = task.completedBy.map(c => c.userName).filter(Boolean)
+          if (names.length > 0) {
+            taskInfo += ` (by ${names.join(', ')})`
+          }
+        }
+        parts.push(taskInfo)
+      }
+    }
+  }
+  
+  // Weekly AI gardening advice history
+  if (context.weeklyAdvice && context.weeklyAdvice.length > 0) {
+    parts.push(`\n## Weekly Gardening Advice History`)
+    
+    for (const advice of context.weeklyAdvice.slice(0, 4)) {
+      const weekDate = new Date(advice.weekStart)
+      parts.push(`\n### Week of ${weekDate.toLocaleDateString()}`)
+      
+      if (advice.summary) {
+        parts.push(`**Summary:** ${advice.summary}`)
+      }
+      
+      if (advice.focusAreas && advice.focusAreas.length > 0) {
+        parts.push(`**Focus areas:** ${advice.focusAreas.join(', ')}`)
+      }
+      
+      if (advice.improvementScore !== null && advice.improvementScore !== undefined) {
+        parts.push(`**Improvement score:** ${advice.improvementScore}/100`)
+      }
+      
+      if (advice.adviceText) {
+        // Truncate very long advice
+        const text = advice.adviceText.length > 600 
+          ? advice.adviceText.substring(0, 600) + '...'
+          : advice.adviceText
+        parts.push(`**Advice:** ${text}`)
+      }
+      
+      if (advice.plantTips && advice.plantTips.length > 0) {
+        parts.push(`**Plant-specific tips:**`)
+        for (const tip of advice.plantTips.slice(0, 5)) {
+          if (tip.plantName && tip.tip) {
+            parts.push(`  - ${tip.plantName}: ${tip.tip}`)
+          }
+        }
+      }
+    }
+  }
+  
+  // Current date/time context
+  const now = new Date()
+  const month = now.toLocaleString('en', { month: 'long' })
+  const season = getSeasonForMonth(now.getMonth())
+  parts.push(`\n## Current Date & Time`)
+  parts.push(`- Date: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`)
+  parts.push(`- Month: ${month}`)
+  parts.push(`- Season: ${season} (Northern Hemisphere)`)
+  
+  return parts.join('\n')
+}
+
+function getSeasonForMonth(month) {
+  // Northern hemisphere seasons
+  if (month >= 2 && month <= 4) return 'Spring'
+  if (month >= 5 && month <= 7) return 'Summer'
+  if (month >= 8 && month <= 10) return 'Autumn/Fall'
+  return 'Winter'
+}
+
+// Fetch COMPREHENSIVE garden context from database - ALL DATA for AI
+async function fetchGardenContext(gardenId, userId) {
+  if (!sql || !gardenId) return null
+  
+  try {
+    // Fetch garden details with all fields
+    const gardenRows = await sql`
+      select 
+        g.id, g.name, g.location_city, g.location_country, 
+        g.location_timezone, g.location_lat, g.location_lon,
+        g.privacy, g.cover_image_url, g.created_at,
+        g.advice_language
+      from public.gardens g
+      join public.garden_members gm on gm.garden_id = g.id
+      where g.id = ${gardenId} and gm.user_id = ${userId}
+    `
+    
+    if (!gardenRows || gardenRows.length === 0) return null
+    
+    const garden = gardenRows[0]
+    
+    // Fetch ALL garden members with their details
+    const memberRows = await sql`
+      select 
+        gm.user_id, gm.role, gm.joined_at,
+        p.display_name, p.experience_years
+      from public.garden_members gm
+      left join public.profiles p on p.id = gm.user_id
+      where gm.garden_id = ${gardenId}
+    `
+    
+    const members = memberRows.map(m => ({
+      userId: m.user_id,
+      role: m.role,
+      displayName: m.display_name || 'Member',
+      experienceYears: m.experience_years,
+      joinedAt: m.joined_at
+    }))
+    
+    // Fetch garden streak and stats
+    let streakInfo = null
+    try {
+      const streakRows = await sql`
+        select current_streak, longest_streak, last_streak_date
+        from public.garden_streaks
+        where garden_id = ${gardenId}
+      `
+      if (streakRows[0]) {
+        streakInfo = {
+          currentStreak: streakRows[0].current_streak || 0,
+          longestStreak: streakRows[0].longest_streak || 0,
+          lastStreakDate: streakRows[0].last_streak_date
+        }
+      }
+    } catch { }
+    
+    // Fetch recent activity logs (last 7 days)
+    let recentActivity = []
+    try {
+      const activityRows = await sql`
+        select kind, message, plant_name, task_name, created_at
+        from public.garden_activity_logs
+        where garden_id = ${gardenId}
+          and created_at > now() - interval '7 days'
+        order by created_at desc
+        limit 30
+      `
+      recentActivity = activityRows.map(a => ({
+        kind: a.kind,
+        message: a.message,
+        plantName: a.plant_name,
+        taskName: a.task_name,
+        createdAt: a.created_at
+      }))
+    } catch { }
+    
+    return {
+      gardenId: garden.id,
+      gardenName: garden.name,
+      locationCity: garden.location_city,
+      locationCountry: garden.location_country,
+      locationTimezone: garden.location_timezone,
+      locationLat: garden.location_lat,
+      locationLon: garden.location_lon,
+      privacy: garden.privacy,
+      adviceLanguage: garden.advice_language,
+      createdAt: garden.created_at,
+      members,
+      memberCount: members.length,
+      streak: streakInfo,
+      recentActivity
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching garden context:', err)
+    return null
+  }
+}
+
+// Fetch ALL plants for a garden with FULL details
+async function fetchPlantsContext(gardenId, plantIds = null) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    // Fetch all plants with their base info, care requirements, and instance data
+    const rows = await sql`
+      select 
+        gp.id as garden_plant_id, 
+        gp.plant_id, 
+        gp.nickname, 
+        gp.health_status, 
+        gp.notes,
+        gp.plants_on_hand,
+        gp.created_at as added_at,
+        gp.display_order,
+        p.name as plant_name,
+        p.scientific_name,
+        p.water_freq_amount,
+        p.water_freq_period,
+        p.light_level,
+        p.hardiness_min,
+        p.hardiness_max,
+        p.is_edible,
+        p.is_poisonous,
+        p.type as plant_type,
+        p.tags as plant_tags
+      from public.garden_plants gp
+      left join public.plants p on p.id = gp.plant_id
+      where gp.garden_id = ${gardenId}
+      order by gp.display_order asc nulls last, gp.created_at asc
+      limit 100
+    `
+    
+    // Fetch task counts and schedules for each plant
+    const plantIds2 = rows.map(r => r.garden_plant_id)
+    let taskCounts = {}
+    let schedules = {}
+    
+    if (plantIds2.length > 0) {
+      try {
+        // Get active task counts per plant
+        const taskCountRows = await sql`
+          select garden_plant_id, count(*)::int as task_count
+          from public.garden_plant_tasks
+          where garden_plant_id = any(${plantIds2}::uuid[])
+          group by garden_plant_id
+        `
+        for (const tc of taskCountRows) {
+          taskCounts[tc.garden_plant_id] = tc.task_count
+        }
+        
+        // Get schedules
+        const scheduleRows = await sql`
+          select garden_plant_id, period, amount
+          from public.garden_plant_schedules
+          where garden_plant_id = any(${plantIds2}::uuid[])
+        `
+        for (const s of scheduleRows) {
+          schedules[s.garden_plant_id] = { period: s.period, amount: s.amount }
+        }
+      } catch { }
+    }
+    
+    return rows.map(row => ({
+      gardenPlantId: row.garden_plant_id,
+      plantId: row.plant_id,
+      plantName: row.plant_name || 'Unknown plant',
+      scientificName: row.scientific_name,
+      nickname: row.nickname,
+      healthStatus: row.health_status,
+      notes: row.notes,
+      plantsOnHand: row.plants_on_hand || 1,
+      addedAt: row.added_at,
+      // Care info
+      waterFrequency: row.water_freq_amount ? `${row.water_freq_amount}x per ${row.water_freq_period || 'week'}` : null,
+      lightLevel: row.light_level,
+      hardinessZone: row.hardiness_min && row.hardiness_max ? `${row.hardiness_min}-${row.hardiness_max}` : null,
+      isEdible: row.is_edible,
+      isPoisonous: row.is_poisonous,
+      plantType: row.plant_type,
+      tags: row.plant_tags,
+      // Instance data
+      taskCount: taskCounts[row.garden_plant_id] || 0,
+      schedule: schedules[row.garden_plant_id] || null
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching plants context:', err)
+    return []
+  }
+}
+
+// Fetch ALL tasks for a garden with full details
+async function fetchTasksContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    // Fetch all tasks with their occurrences
+    const rows = await sql`
+      select 
+        t.id, 
+        t.type, 
+        t.custom_name, 
+        t.garden_plant_id,
+        t.freq_amount,
+        t.freq_period,
+        t.enabled,
+        t.created_at,
+        gp.nickname as plant_nickname,
+        p.name as plant_name,
+        (
+          select json_agg(json_build_object(
+            'dueAt', o.due_at,
+            'completedAt', o.completed_at,
+            'requiredCount', o.required_count,
+            'completedCount', o.completed_count
+          ) order by o.due_at)
+          from public.garden_plant_task_occurrences o
+          where o.task_id = t.id 
+            and o.due_at > now() - interval '7 days'
+            and o.due_at < now() + interval '14 days'
+        ) as occurrences
+      from public.garden_plant_tasks t
+      left join public.garden_plants gp on gp.id = t.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where t.garden_id = ${gardenId}
+      order by t.created_at desc
+      limit 100
+    `
+    
+    return rows.map(row => ({
+      taskId: row.id,
+      taskType: row.type,
+      customName: row.custom_name,
+      plantName: row.plant_nickname || row.plant_name,
+      frequency: row.freq_amount ? `${row.freq_amount}x per ${row.freq_period || 'week'}` : null,
+      enabled: row.enabled,
+      occurrences: row.occurrences || []
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching tasks context:', err)
+    return []
+  }
+}
+
+// Fetch ALL journal entries for a garden (using correct table name)
+async function fetchJournalContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    const rows = await sql`
+      select 
+        j.id,
+        j.title,
+        j.content,
+        j.mood,
+        j.weather_snapshot,
+        j.entry_date,
+        j.tags,
+        j.ai_feedback,
+        j.created_at,
+        j.updated_at,
+        j.plants_mentioned,
+        p.display_name as author_name
+      from public.garden_journal_entries j
+      left join public.profiles p on p.id = j.user_id
+      where j.garden_id = ${gardenId}
+        and j.is_private = false
+      order by j.entry_date desc, j.created_at desc
+      limit 50
+    `
+    
+    // Fetch plant names for mentioned plants
+    const allPlantIds = rows.flatMap(r => r.plants_mentioned || []).filter(Boolean)
+    let plantNameMap = {}
+    if (allPlantIds.length > 0) {
+      try {
+        const plantRows = await sql`
+          select gp.id, coalesce(gp.nickname, p.name) as name
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.id = any(${allPlantIds}::uuid[])
+        `
+        for (const pr of plantRows) {
+          plantNameMap[pr.id] = pr.name
+        }
+      } catch { }
+    }
+    
+    return rows.map(row => {
+      const weather = row.weather_snapshot || {}
+      return {
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        mood: row.mood,
+        weather: weather.description || weather.main,
+        temperature: weather.temp_c ? `${weather.temp_c}°C` : null,
+        entryDate: row.entry_date,
+        tags: row.tags || [],
+        aiFeedback: row.ai_feedback,
+        authorName: row.author_name,
+        createdAt: row.created_at,
+        plantsMentioned: (row.plants_mentioned || []).map(id => ({
+          plantId: id,
+          plantName: plantNameMap[id] || 'Unknown plant'
+        }))
+      }
+    })
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching journal context:', err)
+    return []
+  }
+}
+
+// Fetch weekly AI advice history for a garden
+async function fetchWeeklyAdviceContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    const rows = await sql`
+      select 
+        week_start,
+        advice_text,
+        advice_summary,
+        focus_areas,
+        plant_specific_tips,
+        improvement_score,
+        generated_at
+      from public.garden_ai_advice
+      where garden_id = ${gardenId}
+      order by week_start desc
+      limit 8
+    `
+    
+    return rows.map(row => ({
+      weekStart: row.week_start,
+      adviceText: row.advice_text,
+      summary: row.advice_summary,
+      focusAreas: row.focus_areas || [],
+      plantTips: row.plant_specific_tips || [],
+      improvementScore: row.improvement_score,
+      generatedAt: row.generated_at
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching weekly advice:', err)
+    return []
+  }
+}
+
+// Fetch completed tasks with who completed them
+async function fetchCompletedTasksContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    const rows = await sql`
+      select 
+        t.type as task_type,
+        t.custom_name,
+        o.completed_at,
+        o.completed_count,
+        o.required_count,
+        coalesce(gp.nickname, p.name) as plant_name,
+        (
+          select json_agg(json_build_object(
+            'userName', pr.display_name,
+            'increment', c.increment,
+            'occurredAt', c.occurred_at
+          ) order by c.occurred_at desc)
+          from public.garden_task_user_completions c
+          left join public.profiles pr on pr.id = c.user_id
+          where c.occurrence_id = o.id
+        ) as completions
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      left join public.garden_plants gp on gp.id = t.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where t.garden_id = ${gardenId}
+        and o.completed_at is not null
+        and o.completed_at > now() - interval '30 days'
+      order by o.completed_at desc
+      limit 50
+    `
+    
+    return rows.map(row => ({
+      taskType: row.task_type,
+      customName: row.custom_name,
+      plantName: row.plant_name,
+      completedAt: row.completed_at,
+      completedCount: row.completed_count,
+      requiredCount: row.required_count,
+      completedBy: row.completions || []
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching completed tasks:', err)
+    return []
+  }
+}
+
+// Fetch analytics/stats for a garden
+async function fetchAnalyticsContext(gardenId) {
+  if (!sql || !gardenId) return null
+  
+  try {
+    // Task completion stats for last 30 days
+    const taskStatsRows = await sql`
+      select 
+        count(*) filter (where completed_at is not null)::int as completed_tasks,
+        count(*) filter (where completed_at is null and due_at < now())::int as overdue_tasks,
+        count(*) filter (where completed_at is null and due_at >= now() and due_at < now() + interval '7 days')::int as upcoming_tasks
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      where t.garden_id = ${gardenId}
+        and o.due_at > now() - interval '30 days'
+    `
+    
+    // Plant health distribution
+    const healthRows = await sql`
+      select 
+        health_status,
+        count(*)::int as count
+      from public.garden_plants
+      where garden_id = ${gardenId} and health_status is not null
+      group by health_status
+    `
+    
+    // Activity frequency
+    const activityRows = await sql`
+      select 
+        date_trunc('day', created_at)::date as day,
+        count(*)::int as activity_count
+      from public.garden_activity_logs
+      where garden_id = ${gardenId}
+        and created_at > now() - interval '14 days'
+      group by date_trunc('day', created_at)
+      order by day desc
+    `
+    
+    return {
+      taskStats: taskStatsRows[0] || { completed_tasks: 0, overdue_tasks: 0, upcoming_tasks: 0 },
+      healthDistribution: healthRows.reduce((acc, h) => {
+        acc[h.health_status] = h.count
+        return acc
+      }, {}),
+      dailyActivity: activityRows.map(a => ({
+        date: a.day,
+        count: a.activity_count
+      }))
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching analytics context:', err)
+    return null
+  }
+}
+
+// Main streaming chat endpoint
+app.post('/api/ai/garden-chat', async (req, res) => {
+  try {
+    // Authenticate user
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    // Check if OpenAI is configured
+    if (!openai) {
+      res.status(503).json({ error: 'AI service not configured' })
+      return
+    }
+    
+    const body = req.body || {}
+    const { messages = [], context = {}, quickAction, stream = true } = body
+    
+    if (!messages || messages.length === 0) {
+      res.status(400).json({ error: 'Messages are required' })
+      return
+    }
+    
+    // Get user profile for context
+    let userProfile = null
+    if (sql) {
+      try {
+        const profileRows = await sql`
+          select display_name, language, timezone, experience_years
+          from public.profiles where id = ${user.id}
+        `
+        userProfile = profileRows[0] || null
+      } catch { }
+    }
+    
+    // Build user context
+    const userContext = {
+      userId: user.id,
+      displayName: userProfile?.display_name || 'Gardener',
+      language: context.user?.language || userProfile?.language || 'en',
+      timezone: context.user?.timezone || userProfile?.timezone,
+      experienceYears: context.user?.experienceYears || userProfile?.experience_years
+    }
+    
+    // Fetch COMPREHENSIVE garden context if provided
+    let gardenContext = context.garden || null
+    let plantsContext = []
+    let tasksContext = []
+    let journalContext = []
+    let analyticsContext = null
+    let weeklyAdviceContext = []
+    let completedTasksContext = []
+    
+    if (context.garden?.gardenId) {
+      // Fetch ALL data in parallel for performance
+      const gardenId = context.garden.gardenId
+      
+      const [
+        fetchedGarden,
+        fetchedPlants,
+        fetchedTasks,
+        fetchedJournal,
+        fetchedAnalytics,
+        fetchedWeeklyAdvice,
+        fetchedCompletedTasks
+      ] = await Promise.all([
+        fetchGardenContext(gardenId, user.id),
+        fetchPlantsContext(gardenId),
+        fetchTasksContext(gardenId),
+        fetchJournalContext(gardenId),
+        fetchAnalyticsContext(gardenId),
+        fetchWeeklyAdviceContext(gardenId),
+        fetchCompletedTasksContext(gardenId)
+      ])
+      
+      gardenContext = fetchedGarden || gardenContext
+      plantsContext = fetchedPlants
+      tasksContext = fetchedTasks
+      journalContext = fetchedJournal
+      analyticsContext = fetchedAnalytics
+      weeklyAdviceContext = fetchedWeeklyAdvice
+      completedTasksContext = fetchedCompletedTasks
+      
+      console.log(`[aphylia-chat] Loaded context for garden ${gardenId}: ${plantsContext.length} plants, ${tasksContext.length} tasks, ${journalContext.length} journal entries, ${weeklyAdviceContext.length} weekly advices, ${completedTasksContext.length} completed tasks, ${gardenContext?.members?.length || 0} members`)
+    }
+    
+    // Build full context with ALL data
+    const fullContext = {
+      user: userContext,
+      garden: gardenContext,
+      plants: plantsContext,
+      tasks: tasksContext,
+      journal: journalContext,
+      analytics: analyticsContext,
+      weeklyAdvice: weeklyAdviceContext,
+      completedTasks: completedTasksContext
+    }
+    
+    // Build context string for AI
+    const contextString = await buildGardenContextString(fullContext)
+    
+    // Build system prompt with context
+    let systemPrompt = APHYLIA_SYSTEM_PROMPT
+    if (contextString) {
+      systemPrompt += `\n\n# Current Garden Context\n${contextString}`
+    }
+    
+    // Add quick action specific instructions
+    if (quickAction) {
+      const quickActionPrompts = {
+        'diagnose': '\n\n## Quick Action: Plant Diagnosis\nThe user wants help diagnosing a plant issue. Look carefully at any provided images and ask clarifying questions if needed. Focus on identifying the problem and providing treatment options.',
+        'watering-schedule': '\n\n## Quick Action: Watering Schedule\nThe user wants help creating or optimizing a watering schedule. Consider the plants in their garden, local climate, and seasonal factors.',
+        'weekly-plan': '\n\n## Quick Action: Weekly Garden Plan\nThe user wants a weekly plan for their garden tasks. Prioritize tasks by urgency and create a practical schedule.',
+        'summarize-journal': '\n\n## Quick Action: Summarize Journal\nThe user wants a summary of their garden journal entries. Analyze all journal entries above and highlight: key observations, patterns over time, mood trends, weather correlations, plant health changes, and any notable events or achievements.',
+        'plant-care': '\n\n## Quick Action: Plant Care Guide\nThe user wants comprehensive care advice for a specific plant. Cover watering, light, feeding, and seasonal care.',
+        'pest-help': '\n\n## Quick Action: Pest & Disease Help\nThe user needs help with pest or disease issues. Help identify the problem and provide organic/natural solutions when possible.',
+        'seasonal-tips': '\n\n## Quick Action: Seasonal Tips\nThe user wants seasonal gardening advice. Focus on what to plant, what tasks to prioritize, and how to prepare for the next season.',
+        'companion-plants': '\n\n## Quick Action: Companion Planting\nThe user wants companion planting suggestions. Recommend plants that grow well together and explain the benefits.'
+      }
+      if (quickActionPrompts[quickAction]) {
+        systemPrompt += quickActionPrompts[quickAction]
+      }
+    }
+    
+    // Format messages for OpenAI
+    const openaiMessages = [
+      { role: 'system', content: systemPrompt }
+    ]
+    
+    for (const msg of messages) {
+      const content = []
+      
+      // Add text content
+      if (msg.content) {
+        content.push({ type: 'text', text: msg.content })
+      }
+      
+      // Add images if present
+      if (msg.imageUrls && msg.imageUrls.length > 0) {
+        for (const imageUrl of msg.imageUrls) {
+          // For local images, we need to read and base64 encode them
+          if (imageUrl.includes('/api/ai/garden-chat/image/')) {
+            const filename = imageUrl.split('/').pop()
+            const imagePath = path.join(chatUploadDir, filename)
+            if (fsSync.existsSync(imagePath)) {
+              try {
+                const imageBuffer = await fs.readFile(imagePath)
+                const base64 = imageBuffer.toString('base64')
+                const ext = path.extname(filename).toLowerCase()
+                const mimeTypes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }
+                const mimeType = mimeTypes[ext] || 'image/jpeg'
+                content.push({
+                  type: 'image_url',
+                  image_url: { url: `data:${mimeType};base64,${base64}` }
+                })
+              } catch (imgErr) {
+                console.warn('[aphylia-chat] Failed to read image:', imgErr?.message)
+              }
+            }
+          } else {
+            // External URL
+            content.push({
+              type: 'image_url',
+              image_url: { url: imageUrl }
+            })
+          }
+        }
+      }
+      
+      openaiMessages.push({
+        role: msg.role,
+        content: content.length === 1 && content[0].type === 'text' ? content[0].text : content
+      })
+    }
+    
+    // Get garden ID for tool execution
+    const gardenIdForTools = gardenContext?.gardenId || context.garden?.gardenId
+    
+    if (stream) {
+      // Streaming response using SSE
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.setHeader('X-Accel-Buffering', 'no')
+      
+      // Send start event
+      res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`)
+      
+      try {
+        // First, make a non-streaming call with tools to check if AI wants to use any
+        let messagesWithTools = [...openaiMessages]
+        let toolResults = []
+        let toolCallsExecuted = []
+        
+        if (gardenIdForTools) {
+          // Only enable tools if we have a garden context
+          const initialResponse = await openai.chat.completions.create({
+            model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+            messages: messagesWithTools,
+            tools: APHYLIA_TOOLS,
+            tool_choice: 'auto',
+            max_tokens: 2048,
+            temperature: 0.7
+          })
+          
+          const initialMessage = initialResponse.choices?.[0]?.message
+          
+          // Check if AI wants to use tools
+          if (initialMessage?.tool_calls && initialMessage.tool_calls.length > 0) {
+            // Notify client that tools are being executed
+            res.write(`data: ${JSON.stringify({ type: 'tool_start', tools: initialMessage.tool_calls.map(t => t.function.name) })}\n\n`)
+            
+            // Add assistant message with tool calls to conversation
+            messagesWithTools.push({
+              role: 'assistant',
+              content: initialMessage.content || null,
+              tool_calls: initialMessage.tool_calls
+            })
+            
+            // Execute each tool call
+            for (const toolCall of initialMessage.tool_calls) {
+              const toolName = toolCall.function.name
+              let toolArgs = {}
+              try {
+                toolArgs = JSON.parse(toolCall.function.arguments || '{}')
+              } catch (e) {
+                console.warn('[aphylia-chat] Failed to parse tool arguments:', e)
+              }
+              
+              console.log(`[aphylia-chat] Executing tool: ${toolName}`, toolArgs)
+              
+              const result = await executeAphyliaTool(toolName, toolArgs, gardenIdForTools, user.id)
+              
+              toolCallsExecuted.push({
+                tool: toolName,
+                args: toolArgs,
+                result: result
+              })
+              
+              // Add tool result to conversation
+              messagesWithTools.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(result)
+              })
+              
+              toolResults.push(result)
+            }
+            
+            // Notify client that tools are done
+            res.write(`data: ${JSON.stringify({ type: 'tool_end', results: toolCallsExecuted })}\n\n`)
+          }
+        }
+        
+        // Now stream the final response (with tool results if any)
+        const streamResponse = await openai.chat.completions.create({
+          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          messages: messagesWithTools,
+          stream: true,
+          max_tokens: 2048,
+          temperature: 0.7
+        })
+        
+        let fullContent = ''
+        let totalTokens = 0
+        
+        for await (const chunk of streamResponse) {
+          const delta = chunk.choices?.[0]?.delta
+          if (delta?.content) {
+            fullContent += delta.content
+            res.write(`data: ${JSON.stringify({ type: 'token', token: delta.content })}\n\n`)
+          }
+          
+          // Track usage if available
+          if (chunk.usage) {
+            totalTokens = chunk.usage.total_tokens || 0
+          }
+        }
+        
+        // Send done event with complete message
+        const messageId = crypto.randomUUID()
+        res.write(`data: ${JSON.stringify({
+          type: 'done',
+          message: {
+            id: messageId,
+            role: 'assistant',
+            content: fullContent,
+            createdAt: new Date().toISOString(),
+            toolCalls: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined
+          },
+          usage: {
+            totalTokens
+          }
+        })}\n\n`)
+        
+      } catch (streamErr) {
+        console.error('[aphylia-chat] Stream error:', streamErr)
+        res.write(`data: ${JSON.stringify({ type: 'error', error: streamErr?.message || 'Stream failed' })}\n\n`)
+      }
+      
+      res.end()
+    } else {
+      // Non-streaming response with tools
+      let messagesWithTools = [...openaiMessages]
+      let toolCallsExecuted = []
+      
+      if (gardenIdForTools) {
+        const initialResponse = await openai.chat.completions.create({
+          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          messages: messagesWithTools,
+          tools: APHYLIA_TOOLS,
+          tool_choice: 'auto',
+          max_tokens: 2048,
+          temperature: 0.7
+        })
+        
+        const initialMessage = initialResponse.choices?.[0]?.message
+        
+        if (initialMessage?.tool_calls && initialMessage.tool_calls.length > 0) {
+          messagesWithTools.push({
+            role: 'assistant',
+            content: initialMessage.content || null,
+            tool_calls: initialMessage.tool_calls
+          })
+          
+          for (const toolCall of initialMessage.tool_calls) {
+            const toolName = toolCall.function.name
+            let toolArgs = {}
+            try {
+              toolArgs = JSON.parse(toolCall.function.arguments || '{}')
+            } catch (e) { }
+            
+            const result = await executeAphyliaTool(toolName, toolArgs, gardenIdForTools, user.id)
+            
+            toolCallsExecuted.push({
+              tool: toolName,
+              args: toolArgs,
+              result: result
+            })
+            
+            messagesWithTools.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result)
+            })
+          }
+        }
+      }
+      
+      // Final response
+      const response = await openai.chat.completions.create({
+        model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+        messages: messagesWithTools,
+        max_tokens: 2048,
+        temperature: 0.7
+      })
+      
+      const assistantMessage = response.choices?.[0]?.message
+      const messageId = crypto.randomUUID()
+      
+      res.json({
+        message: {
+          id: messageId,
+          role: 'assistant',
+          content: assistantMessage?.content || '',
+          createdAt: new Date().toISOString(),
+          toolCalls: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined
+        },
+        usage: {
+          promptTokens: response.usage?.prompt_tokens || 0,
+          completionTokens: response.usage?.completion_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0
+        }
+      })
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Error:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Chat failed' })
+    }
   }
 })
 

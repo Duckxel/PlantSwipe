@@ -551,9 +551,9 @@ export type MessageImageUploadResult = {
 }
 
 /**
- * Upload an image for messaging with server-side optimization.
- * Uses the same optimization pipeline as garden covers and admin uploads.
- * Returns the public URL of the optimized image.
+ * Upload an image for messaging.
+ * Uses the server-side endpoint which handles optimization with sharp.
+ * Returns the public URL of the uploaded image.
  */
 export async function uploadMessageImage(file: File): Promise<{ url: string }> {
   const session = (await supabase.auth.getSession()).data.session
@@ -561,13 +561,10 @@ export async function uploadMessageImage(file: File): Promise<{ url: string }> {
     throw new Error('Not authenticated')
   }
   
-  // Validate file type before upload
-  if (!file.type.startsWith('image/')) {
-    throw new Error('Only image files are supported.')
-  }
-  
-  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-    throw new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.')
+  // Validate file type
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif', 'image/avif']
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Invalid file type. Only JPEG, PNG, GIF, WebP, HEIC, and AVIF are allowed.')
   }
   
   // Validate file size (max 10MB)
@@ -575,34 +572,31 @@ export async function uploadMessageImage(file: File): Promise<{ url: string }> {
     throw new Error('File too large. Maximum size is 10MB.')
   }
   
-  // Upload via server API for optimization
+  // Upload via server endpoint (handles optimization with sharp)
   const formData = new FormData()
   formData.append('file', file)
   
   const response = await fetch('/api/messages/upload-image', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${session.access_token}`
+      'Authorization': `Bearer ${session.access_token}`
     },
-    body: formData,
-    credentials: 'same-origin'
+    body: formData
   })
   
-  const data = await response.json().catch(() => null) as MessageImageUploadResult | { error?: string } | null
-  
   if (!response.ok) {
-    const errorMsg = (data as { error?: string })?.error || 'Failed to upload image'
-    throw new Error(errorMsg)
+    const errorData = await response.json().catch(() => ({}))
+    console.error('[messaging] Failed to upload image:', errorData)
+    throw new Error(errorData.error || 'Failed to upload image')
   }
   
-  const result = data as MessageImageUploadResult
-  const url = result?.url
+  const data = await response.json()
   
-  if (!url) {
-    throw new Error('Upload succeeded but no public URL was returned.')
+  if (!data.ok || !data.url) {
+    throw new Error('Failed to upload image: Invalid response')
   }
   
-  return { url }
+  return { url: data.url }
 }
 
 /**

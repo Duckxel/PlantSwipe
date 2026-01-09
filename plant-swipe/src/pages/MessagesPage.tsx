@@ -80,8 +80,14 @@ export const MessagesPage: React.FC = () => {
   React.useEffect(() => {
     if (!user?.id) return
     
+    let isSubscribed = true
+    
     const channel = supabase
-      .channel('messages-list')
+      .channel(`messages-list-${user.id}`, {
+        config: {
+          broadcast: { self: true }
+        }
+      })
       .on(
         'postgres_changes',
         {
@@ -90,7 +96,10 @@ export const MessagesPage: React.FC = () => {
           table: 'messages'
         },
         () => {
-          loadConversations()
+          if (isSubscribed) {
+            console.log('[realtime] New message received, reloading conversations')
+            loadConversations()
+          }
         }
       )
       .on(
@@ -101,12 +110,29 @@ export const MessagesPage: React.FC = () => {
           table: 'messages'
         },
         () => {
-          loadConversations()
+          if (isSubscribed) {
+            console.log('[realtime] Message updated, reloading conversations')
+            loadConversations()
+          }
         }
       )
-      .subscribe()
+      .on('broadcast', { event: 'conversation_update' }, () => {
+        if (isSubscribed) {
+          console.log('[realtime] Broadcast received, reloading conversations')
+          loadConversations()
+        }
+      })
+    
+    channel.subscribe((status) => {
+      console.log('[realtime] Messages list subscription status:', status)
+      if (status === 'CHANNEL_ERROR' && isSubscribed) {
+        // Reload on error as fallback
+        loadConversations()
+      }
+    })
     
     return () => {
+      isSubscribed = false
       supabase.removeChannel(channel)
     }
   }, [user?.id, loadConversations])

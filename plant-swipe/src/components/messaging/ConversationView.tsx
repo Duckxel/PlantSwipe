@@ -11,6 +11,7 @@ import { useLanguageNavigate } from '@/lib/i18nRouting'
 import { Button } from '@/components/ui/button'
 import { 
   ArrowLeft, 
+  ArrowDown,
   Send, 
   Loader2, 
   Link as LinkIcon,
@@ -76,12 +77,65 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     url: string
     preview?: LinkPreview
   } | null>(null)
+  const [pendingImage, setPendingImage] = React.useState<{
+    file: File
+    previewUrl: string
+  } | null>(null)
+  
+  // Pagination state
+  const [hasMoreMessages, setHasMoreMessages] = React.useState(true)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+  const [showScrollToBottom, setShowScrollToBottom] = React.useState(false)
+  const initialLoadDoneRef = React.useRef(false)
+  const lastMessageIdRef = React.useRef<string | null>(null)
+  const MESSAGES_PER_PAGE = 20
+  const SCROLL_THRESHOLD = 300 // Show button when scrolled up more than 300px from bottom
   
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const messagesContainerRef = React.useRef<HTMLDivElement>(null)
+  const messagesTopRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const attachMenuRef = React.useRef<HTMLDivElement>(null)
+  const realtimeChannelRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
+  
+  // Hide mobile nav bar when conversation is open (mobile full-screen mode)
+  React.useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    
+    // Only apply on mobile (below md breakpoint)
+    const isMobile = window.innerWidth < 768
+    if (!isMobile) return
+    
+    // Find and hide the mobile nav host element
+    const navHost = document.querySelector('[data-mobile-nav-root="true"]') as HTMLElement
+    if (navHost) {
+      navHost.style.display = 'none'
+    }
+    
+    return () => {
+      // Restore the nav when leaving conversation view
+      if (navHost) {
+        navHost.style.display = ''
+      }
+    }
+  }, [])
+  
+  // Broadcast a message event to other clients
+  const broadcastEvent = React.useCallback(async (event: 'message' | 'reaction', data?: any) => {
+    const channel = realtimeChannelRef.current
+    if (!channel) return
+    
+    try {
+      await channel.send({
+        type: 'broadcast',
+        event,
+        payload: { conversationId, senderId: currentUserId, timestamp: new Date().toISOString(), ...data }
+      })
+    } catch (err) {
+      console.warn('[realtime] Failed to broadcast event:', err)
+    }
+  }, [conversationId, currentUserId])
   
   // Auto-resize textarea
   const adjustTextareaHeight = React.useCallback(() => {
@@ -91,31 +145,99 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`
   }, [])
   
-  // Load messages
+  // Load initial messages (most recent 20)
   const loadMessages = React.useCallback(async () => {
     try {
       setError(null)
-      const data = await getConversationMessages(conversationId)
+      const data = await getConversationMessages(conversationId, { limit: MESSAGES_PER_PAGE })
       setMessages(data)
+      setHasMoreMessages(data.length >= MESSAGES_PER_PAGE)
       await markMessagesAsRead(conversationId)
     } catch (e: any) {
       console.error('[conversation] Failed to load messages:', e)
       setError(e?.message || 'Failed to load messages')
     } finally {
       setLoading(false)
+      initialLoadDoneRef.current = true
     }
   }, [conversationId])
+  
+  // Load more (older) messages when scrolling up
+  const loadMoreMessages = React.useCallback(async () => {
+    if (loadingMore || !hasMoreMessages || messages.length === 0) return
+    
+    setLoadingMore(true)
+    try {
+      const oldestMessage = messages[0]
+      const olderMessages = await getConversationMessages(conversationId, {
+        limit: MESSAGES_PER_PAGE,
+        before: oldestMessage.id
+      })
+      
+      if (olderMessages.length < MESSAGES_PER_PAGE) {
+        setHasMoreMessages(false)
+      }
+      
+      if (olderMessages.length > 0) {
+        // Prepend older messages to the list
+        setMessages(prev => [...olderMessages, ...prev])
+      }
+    } catch (e: any) {
+      console.error('[conversation] Failed to load more messages:', e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [conversationId, hasMoreMessages, loadingMore, messages])
   
   React.useEffect(() => {
     loadMessages()
   }, [loadMessages])
   
-  // Scroll to bottom when messages change
+  // Scroll to bottom - only when new messages arrive (not when loading older)
   React.useEffect(() => {
+    if (!messagesEndRef.current || messages.length === 0) return
+    
+    const currentLastMessageId = messages[messages.length - 1]?.id
+    const previousLastMessageId = lastMessageIdRef.current
+    
+    // Only scroll if the last message changed (new message added)
+    // or if this is the initial load
+    if (currentLastMessageId !== previousLastMessageId) {
+      const behavior = previousLastMessageId === null ? 'instant' : 'smooth'
+      messagesEndRef.current.scrollIntoView({ behavior })
+      lastMessageIdRef.current = currentLastMessageId
+    }
+  }, [messages])
+  
+  // Ensure scroll to bottom after initial load completes
+  React.useEffect(() => {
+    if (!loading && messagesEndRef.current && messages.length > 0) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'instant' })
+      lastMessageIdRef.current = messages[messages.length - 1]?.id || null
+    }
+  }, [loading, messages])
+  
+  // Handle scroll to load more messages and show/hide scroll-to-bottom button
+  const handleScroll = React.useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    
+    // Load more when scrolled near the top (within 100px)
+    if (!loadingMore && hasMoreMessages && container.scrollTop < 100) {
+      loadMoreMessages()
+    }
+    
+    // Show scroll-to-bottom button when scrolled up significantly
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    setShowScrollToBottom(distanceFromBottom > SCROLL_THRESHOLD)
+  }, [loadMoreMessages, loadingMore, hasMoreMessages])
+  
+  // Scroll to the bottom of the conversation
+  const scrollToBottom = React.useCallback(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages])
+  }, [])
   
   // Close attach menu on outside click
   React.useEffect(() => {
@@ -128,10 +250,29 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
   
-  // Realtime subscription for new messages
+  // Track message IDs for filtering reactions to this conversation only
+  const messageIdsRef = React.useRef<Set<string>>(new Set())
+  
+  // Update message IDs ref when messages change
   React.useEffect(() => {
+    messageIdsRef.current = new Set(messages.map(m => m.id))
+  }, [messages])
+  
+  // Realtime subscription for new messages and reactions
+  React.useEffect(() => {
+    if (!currentUserId) return
+    
+    let isSubscribed = true
+    
+    // Create a unique channel for this conversation with broadcast support
     const channel = supabase
-      .channel(`conversation-${conversationId}`)
+      .channel(`conversation-${conversationId}`, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: currentUserId }
+        }
+      })
+      // Listen for postgres changes on messages
       .on(
         'postgres_changes',
         {
@@ -140,12 +281,18 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           table: 'messages',
           filter: `conversation_id=eq.${conversationId}`
         },
-        (payload) => {
+        async (payload) => {
+          if (!isSubscribed) return
+          console.log('[realtime] messages event:', payload.eventType)
+          
           if (payload.eventType === 'INSERT') {
             const newMsg = payload.new as any
+            // Skip if we already have this message (we added it optimistically)
             setMessages(prev => {
               if (prev.some(m => m.id === newMsg.id)) return prev
-              return [...prev, {
+              
+              // For messages from others, add with sender info
+              const messageToAdd: Message = {
                 id: newMsg.id,
                 conversationId: newMsg.conversation_id,
                 senderId: newMsg.sender_id,
@@ -160,8 +307,15 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 deletedAt: newMsg.deleted_at,
                 editedAt: newMsg.edited_at,
                 readAt: newMsg.read_at,
-                reactions: []
-              }]
+                reactions: [],
+                // Add sender info for messages from the other user
+                sender: newMsg.sender_id !== currentUserId ? {
+                  id: otherUser.id,
+                  displayName: otherUser.displayName,
+                  avatarUrl: otherUser.avatarUrl || null
+                } : undefined
+              }
+              return [...prev, messageToAdd]
             })
             if (newMsg.sender_id !== currentUserId) {
               markMessagesAsRead(conversationId).catch(() => {})
@@ -173,36 +327,145 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 ? { ...m, content: updated.content, editedAt: updated.edited_at, deletedAt: updated.deleted_at }
                 : m
             ))
+          } else if (payload.eventType === 'DELETE') {
+            const deleted = payload.old as any
+            setMessages(prev => prev.filter(m => m.id !== deleted.id))
           }
+        }
+      )
+      // Listen for postgres changes on reactions (filtered in callback to this conversation's messages)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_reactions'
+        },
+        (payload) => {
+          if (!isSubscribed) return
+          const reaction = payload.new as any
+          // Only process reactions for messages in this conversation
+          if (!messageIdsRef.current.has(reaction.message_id)) return
+          
+          console.log('[realtime] reaction INSERT:', reaction)
+          setMessages(prev => prev.map(m => {
+            if (m.id !== reaction.message_id) return m
+            // Add reaction if not already present
+            const existingReaction = m.reactions?.find(r => r.id === reaction.id)
+            if (existingReaction) return m
+            return {
+              ...m,
+              reactions: [...(m.reactions || []), {
+                id: reaction.id,
+                messageId: reaction.message_id,
+                userId: reaction.user_id,
+                emoji: reaction.emoji,
+                createdAt: reaction.created_at
+              }]
+            }
+          }))
         }
       )
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'DELETE',
           schema: 'public',
           table: 'message_reactions'
         },
-        () => {
-          loadMessages()
+        (payload) => {
+          if (!isSubscribed) return
+          const deleted = payload.old as any
+          // Only process reactions for messages in this conversation
+          if (!messageIdsRef.current.has(deleted.message_id)) return
+          
+          console.log('[realtime] reaction DELETE:', deleted)
+          setMessages(prev => prev.map(m => {
+            if (m.id !== deleted.message_id) return m
+            return {
+              ...m,
+              reactions: (m.reactions || []).filter(r => r.id !== deleted.id)
+            }
+          }))
         }
       )
-      .subscribe()
+      // Also listen for broadcast events as a fallback/supplement
+      .on('broadcast', { event: 'message' }, (payload) => {
+        if (!isSubscribed) return
+        console.log('[realtime] broadcast message event:', payload)
+        // Reload messages when broadcast is received
+        loadMessages()
+      })
+      .on('broadcast', { event: 'reaction' }, (payload) => {
+        if (!isSubscribed) return
+        console.log('[realtime] broadcast reaction event:', payload)
+        // Reload messages when reaction broadcast is received
+        loadMessages()
+      })
+      
+    // Store channel ref for broadcasting
+    realtimeChannelRef.current = channel
+    
+    // Subscribe with status tracking
+    channel.subscribe((status) => {
+      console.log(`[realtime] conversation-${conversationId} subscription status:`, status)
+      if (status === 'SUBSCRIBED') {
+        console.log('[realtime] Successfully subscribed to conversation channel')
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('[realtime] Channel error - will reload messages')
+        if (isSubscribed) {
+          loadMessages()
+        }
+      }
+    })
     
     return () => {
+      isSubscribed = false
+      realtimeChannelRef.current = null
       supabase.removeChannel(channel)
     }
-  }, [conversationId, currentUserId, loadMessages])
+  }, [conversationId, currentUserId, otherUser, loadMessages])
   
   // Handle sending message
   const handleSend = async () => {
     const content = newMessage.trim()
-    if (!content && !pendingLink) return
+    if (!content && !pendingLink && !pendingImage) return
     
     setSending(true)
     setError(null)
     
     try {
+      // If there's a pending image, upload it and send as image message
+      if (pendingImage) {
+        const { url } = await uploadMessageImage(pendingImage.file)
+        await sendImageMessage(conversationId, url, content || '', replyingTo?.id)
+        
+        // Clean up preview URL
+        URL.revokeObjectURL(pendingImage.previewUrl)
+        setPendingImage(null)
+        setNewMessage('')
+        setReplyingTo(null)
+        
+        // Reset textarea height
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto'
+        }
+        
+        await loadMessages()
+        
+        // Broadcast to other devices
+        broadcastEvent('message', { type: 'image' })
+        
+        sendMessagePushNotification(
+          otherUser.id,
+          currentUserDisplayName || 'Someone',
+          '📷 ' + t('messages.sentImage', { defaultValue: 'Sent an image' }),
+          conversationId
+        ).catch(() => {})
+        
+        return
+      }
+      
       const msg = await sendMessage({
         conversationId,
         content: content || (pendingLink ? t('messages.sharedLink', { defaultValue: 'Shared a link' }) : ''),
@@ -231,6 +494,9 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         textareaRef.current.style.height = 'auto'
       }
       
+      // Broadcast to other devices
+      broadcastEvent('message', { messageId: msg.id })
+      
       sendMessagePushNotification(
         otherUser.id,
         currentUserDisplayName || 'Someone',
@@ -245,70 +511,52 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   }
   
-  // Allowed image types for upload
-  const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
-  
-  // Handle image upload (shared logic for file picker and camera)
-  const uploadAndSendImage = async (file: File) => {
-    setShowAttachMenu(false)
-    setError(null)
-    
-    // Validate file type before upload
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      setError(t('messages.invalidImageType', { 
-        defaultValue: 'Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.' 
-      }))
-      return
-    }
-    
-    // Validate file size before upload
-    if (file.size > MAX_IMAGE_SIZE) {
-      setError(t('messages.imageTooLarge', { 
-        defaultValue: 'Image too large. Maximum size is 10MB.' 
-      }))
-      return
-    }
-    
-    setUploadingImage(true)
-    
-    try {
-      const { url } = await uploadMessageImage(file)
-      await sendImageMessage(conversationId, url, '', replyingTo?.id)
-      
-      setReplyingTo(null)
-      await loadMessages()
-      
-      sendMessagePushNotification(
-        otherUser.id,
-        currentUserDisplayName || 'Someone',
-        '📷 ' + t('messages.sentImage', { defaultValue: 'Sent an image' }),
-        conversationId
-      ).catch(() => {})
-    } catch (e: unknown) {
-      console.error('[conversation] Failed to upload image:', e)
-      const error = e as { message?: string }
-      setError(error?.message || t('messages.uploadFailed', { defaultValue: 'Failed to upload image' }))
-    } finally {
-      setUploadingImage(false)
-    }
-  }
-  
-  // Handle image selection from file picker
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle image selection - creates a preview, waits for user to press send
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     
-    await uploadAndSendImage(file)
+    setShowAttachMenu(false)
+    setError(null)
     
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif', 'image/avif']
+    if (!allowedTypes.includes(file.type)) {
+      setError(t('messages.invalidFileType', { defaultValue: 'Invalid file type. Only images are allowed.' }))
+      return
+    }
+    
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024
+    if (file.size > maxSize) {
+      setError(t('messages.fileTooLarge', { defaultValue: 'File too large. Maximum size is 10MB.' }))
+      return
+    }
+    
+    // Clean up previous preview URL if any
+    if (pendingImage?.previewUrl) {
+      URL.revokeObjectURL(pendingImage.previewUrl)
+    }
+    
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file)
+    setPendingImage({ file, previewUrl })
+    
+    // Focus textarea for optional caption
+    textareaRef.current?.focus()
+    
+    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
   
-  // Handle camera capture
-  const handleCameraCapture = async (file: File) => {
-    await uploadAndSendImage(file)
+  // Cancel pending image
+  const cancelPendingImage = () => {
+    if (pendingImage?.previewUrl) {
+      URL.revokeObjectURL(pendingImage.previewUrl)
+    }
+    setPendingImage(null)
   }
   
   // Handle keyboard shortcuts
@@ -323,6 +571,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const handleReaction = async (messageId: string, emoji: string) => {
     try {
       await toggleReaction(messageId, emoji)
+      // Broadcast to other devices
+      broadcastEvent('reaction', { messageId, emoji })
       loadMessages()
     } catch (e: any) {
       console.error('[conversation] Failed to toggle reaction:', e)
@@ -338,6 +588,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           ? { ...m, content: newContent, editedAt: new Date().toISOString() }
           : m
       ))
+      // Broadcast to other devices
+      broadcastEvent('message', { messageId, type: 'edit' })
     } catch (e: any) {
       console.error('[conversation] Failed to edit message:', e)
     }
@@ -352,6 +604,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           ? { ...m, deletedAt: new Date().toISOString() }
           : m
       ))
+      // Broadcast to other devices
+      broadcastEvent('message', { messageId, type: 'delete' })
     } catch (e: any) {
       console.error('[conversation] Failed to delete message:', e)
     }
@@ -398,48 +652,49 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   }
   
   return (
-    <div className="fixed inset-0 md:relative md:inset-auto flex flex-col bg-stone-50 dark:bg-[#0f0f10] md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:h-[calc(100vh-12rem)]">
+    <div className="fixed inset-0 z-50 md:z-auto md:relative md:inset-auto flex flex-col bg-stone-50 dark:bg-[#0f0f10] md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:h-[calc(100vh-12rem)]">
       {/* Header */}
-      <header className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl border-b border-stone-200/50 dark:border-[#2a2a2d]/50 md:rounded-t-2xl md:border md:border-b-0">
+      <header className="flex-shrink-0 flex items-center px-2 py-3 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl border-b border-stone-200/50 dark:border-[#2a2a2d]/50 md:rounded-t-2xl md:border md:border-b-0">
+        {/* Back button - left aligned */}
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-full h-10 w-10 -ml-2"
+          className="rounded-full h-10 w-10 flex-shrink-0"
           onClick={onBack}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         
+        {/* Centered user info */}
         <button
           onClick={() => navigate(`/u/${encodeURIComponent(otherUser.displayName || '')}`)}
-          className="flex items-center gap-3 flex-1 min-w-0 active:opacity-70 transition-opacity"
+          className="flex-1 flex items-center justify-center gap-2 min-w-0 active:opacity-70 transition-opacity"
         >
           {otherUser.avatarUrl ? (
             <img
               src={otherUser.avatarUrl}
               alt=""
-              className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-[#1a1a1c]"
+              className="w-8 h-8 rounded-full object-cover ring-2 ring-white dark:ring-[#1a1a1c]"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold shadow-md">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-sm font-semibold shadow-md">
               {(otherUser.displayName || 'U').charAt(0).toUpperCase()}
             </div>
           )}
-          <div className="text-left min-w-0">
-            <h2 className="font-semibold text-stone-900 dark:text-white truncate">
-              {otherUser.displayName || t('messages.unknownUser', { defaultValue: 'Unknown User' })}
-            </h2>
-            <p className="text-xs text-stone-500 dark:text-stone-400">
-              {t('messages.tapToViewProfile', { defaultValue: 'Tap to view profile' })}
-            </p>
-          </div>
+          <h2 className="font-semibold text-stone-900 dark:text-white truncate">
+            {otherUser.displayName || t('messages.unknownUser', { defaultValue: 'Unknown User' })}
+          </h2>
         </button>
+        
+        {/* Spacer to balance the back button for centering */}
+        <div className="w-10 h-10 flex-shrink-0" />
       </header>
       
       {/* Messages Container */}
       <div 
         ref={messagesContainerRef}
         className="flex-1 overflow-y-auto px-4 py-4 space-y-1"
+        onScroll={handleScroll}
       >
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -466,7 +721,26 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             </p>
           </div>
         ) : (
-          groupedMessages.map((group, groupIdx) => (
+          <>
+            {/* Load more indicator at top */}
+            <div ref={messagesTopRef} className="flex items-center justify-center py-2">
+              {loadingMore ? (
+                <Loader2 className="h-5 w-5 animate-spin text-stone-300 dark:text-stone-600" />
+              ) : hasMoreMessages ? (
+                <button
+                  onClick={loadMoreMessages}
+                  className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                >
+                  {t('messages.loadMore', { defaultValue: 'Load earlier messages' })}
+                </button>
+              ) : messages.length > MESSAGES_PER_PAGE ? (
+                <span className="text-xs text-stone-400 dark:text-stone-500">
+                  {t('messages.beginningOfConversation', { defaultValue: 'Beginning of conversation' })}
+                </span>
+              ) : null}
+            </div>
+            
+            {groupedMessages.map((group, groupIdx) => (
             <div key={groupIdx}>
               {/* Date separator */}
               <div className="flex items-center justify-center my-4">
@@ -501,10 +775,31 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 />
               ))}
             </div>
-          ))
+          ))}
+          </>
         )}
         <div ref={messagesEndRef} />
       </div>
+      
+      {/* Scroll to bottom floating button */}
+      {showScrollToBottom && (
+        <button
+          onClick={scrollToBottom}
+          className={cn(
+            "absolute right-4 z-10 flex items-center justify-center",
+            "w-10 h-10 rounded-full bg-white dark:bg-[#2a2a2d] shadow-lg",
+            "border border-stone-200 dark:border-[#3a3a3d]",
+            "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white",
+            "hover:bg-stone-50 dark:hover:bg-[#3a3a3d] transition-all",
+            "active:scale-95",
+            // Position above the input area - adjust based on what's visible
+            replyingTo || pendingLink || pendingImage ? "bottom-44" : "bottom-24"
+          )}
+          aria-label={t('messages.scrollToBottom', { defaultValue: 'Scroll to latest messages' })}
+        >
+          <ArrowDown className="h-5 w-5" />
+        </button>
+      )}
       
       {/* Error */}
       {error && (
@@ -566,8 +861,35 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         </div>
       )}
       
+      {/* Pending image preview */}
+      {pendingImage && (
+        <div className="mx-4 flex items-center gap-3 px-4 py-3 bg-stone-100 dark:bg-[#2a2a2d] rounded-t-2xl border-b-0">
+          <div className="relative">
+            <img
+              src={pendingImage.previewUrl}
+              alt=""
+              className="w-16 h-16 rounded-xl object-cover"
+            />
+            <button
+              onClick={cancelPendingImage}
+              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-stone-800 dark:bg-stone-600 text-white flex items-center justify-center shadow-md hover:bg-stone-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-medium text-stone-600 dark:text-stone-300">
+              {t('messages.imageReady', { defaultValue: 'Image ready to send' })}
+            </span>
+            <p className="text-xs text-stone-400 dark:text-stone-500 truncate">
+              {t('messages.addCaption', { defaultValue: 'Add a caption or press send' })}
+            </p>
+          </div>
+        </div>
+      )}
+      
       {/* Upload progress */}
-      {uploadingImage && (
+      {sending && pendingImage && (
         <div className="mx-4 flex items-center gap-3 px-4 py-3 bg-stone-100 dark:bg-[#2a2a2d] rounded-t-2xl border-b-0">
           <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
           <span className="text-sm text-stone-600 dark:text-stone-300">
@@ -579,11 +901,12 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       {/* Input Area */}
       <div className={cn(
         'flex-shrink-0 px-4 pb-4 pt-2 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl md:border md:border-t-0 md:rounded-b-2xl',
-        !replyingTo && !pendingLink && !uploadingImage && 'pt-4'
+        'pb-[max(1rem,env(safe-area-inset-bottom))]', // Safe area for devices with home indicator
+        !replyingTo && !pendingLink && !pendingImage && 'pt-4'
       )}>
         <div className={cn(
           'flex items-end gap-2 p-2 bg-stone-100 dark:bg-[#2a2a2d] border border-stone-200 dark:border-[#3a3a3d]',
-          replyingTo || pendingLink || uploadingImage ? 'rounded-b-2xl rounded-t-none' : 'rounded-2xl'
+          (replyingTo || pendingLink || pendingImage) ? 'rounded-b-2xl rounded-t-none' : 'rounded-2xl'
         )}>
           {/* Attachment button */}
           <div className="relative" ref={attachMenuRef}>
@@ -667,12 +990,12 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             size="icon"
             className={cn(
               "rounded-full h-9 w-9 flex-shrink-0 transition-all",
-              (newMessage.trim() || pendingLink)
+              (newMessage.trim() || pendingLink || pendingImage)
                 ? "bg-blue-500 hover:bg-blue-600 text-white"
                 : "text-stone-400 dark:text-stone-500"
             )}
             onClick={handleSend}
-            disabled={sending || (!newMessage.trim() && !pendingLink)}
+            disabled={sending || (!newMessage.trim() && !pendingLink && !pendingImage)}
           >
             {sending ? (
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -683,7 +1006,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         </div>
         
         {/* Safe area for iOS */}
-        <div className="h-[env(safe-area-inset-bottom)] md:hidden" />
       </div>
       
       {/* Link Share Dialog */}

@@ -217,7 +217,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     <>
       <div 
         className={cn(
-          'flex items-end gap-2 my-0.5',
+          'flex items-start gap-2 my-0.5',
           isOwn ? 'flex-row-reverse' : 'flex-row',
           isLastInGroup && 'mb-2'
         )}
@@ -229,10 +229,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           setShowReactions(true)
         }}
       >
-        {/* Avatar */}
+        {/* Avatar - mt-2.5 aligns with the text content inside the message bubble (which has py-2.5 padding) */}
         {!isOwn && (
           showAvatar ? (
-            <div className="flex-shrink-0 w-7">
+            <div className="flex-shrink-0 w-7 mt-2.5">
               {otherUser.avatarUrl ? (
                 <img
                   src={otherUser.avatarUrl}
@@ -394,10 +394,35 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
           
+          {/* Reactions - positioned at bottom edge of message bubble */}
+          {Object.keys(reactionCounts).length > 0 && (
+            <div className={cn(
+              'flex flex-wrap gap-1 -mt-2 mb-1 relative z-10',
+              isOwn ? 'justify-end pr-1' : 'justify-start pl-1'
+            )}>
+              {Object.entries(reactionCounts).map(([emoji, data]) => (
+                <button
+                  key={emoji}
+                  onClick={() => onReaction(emoji)}
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all active:scale-95 shadow-sm border',
+                    data.hasOwn 
+                      ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700'
+                      : 'bg-white dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] border-stone-200 dark:border-[#3a3a3d]'
+                  )}
+                >
+                  <span className="text-sm">{emoji}</span>
+                  {data.count > 1 && <span className="font-medium">{data.count}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          
           {/* Time and status */}
           <div className={cn(
-            'flex items-center gap-1.5 mt-1 px-1',
-            isOwn ? 'justify-end' : 'justify-start'
+            'flex items-center gap-1.5 px-1',
+            isOwn ? 'justify-end' : 'justify-start',
+            Object.keys(reactionCounts).length === 0 && 'mt-1'
           )}>
             <span className="text-[10px] text-stone-400 dark:text-stone-500">
               {formatTime(message.createdAt)}
@@ -408,30 +433,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </span>
             )}
           </div>
-          
-          {/* Reactions */}
-          {Object.keys(reactionCounts).length > 0 && (
-            <div className={cn(
-              'flex flex-wrap gap-1 mt-1',
-              isOwn ? 'justify-end' : 'justify-start'
-            )}>
-              {Object.entries(reactionCounts).map(([emoji, data]) => (
-                <button
-                  key={emoji}
-                  onClick={() => onReaction(emoji)}
-                  className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all active:scale-95',
-                    data.hasOwn 
-                      ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-800'
-                      : 'bg-stone-100 dark:bg-[#3a3a3d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#4a4a4d]'
-                  )}
-                >
-                  <span className="text-sm">{emoji}</span>
-                  {data.count > 1 && <span className="font-medium">{data.count}</span>}
-                </button>
-              ))}
-            </div>
-          )}
           
           {/* Reaction picker overlay */}
           {showReactions && (
