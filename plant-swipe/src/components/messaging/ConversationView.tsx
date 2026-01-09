@@ -125,7 +125,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
   
-  // Realtime subscription for new messages
+  // Realtime subscription for new messages and reactions
   React.useEffect(() => {
     const channel = supabase
       .channel(`conversation-${conversationId}`)
@@ -137,12 +137,15 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           table: 'messages',
           filter: `conversation_id=eq.${conversationId}`
         },
-        (payload) => {
+        async (payload) => {
           if (payload.eventType === 'INSERT') {
             const newMsg = payload.new as any
+            // Skip if we already have this message (we added it optimistically)
             setMessages(prev => {
               if (prev.some(m => m.id === newMsg.id)) return prev
-              return [...prev, {
+              
+              // For messages from others, add with sender info
+              const messageToAdd: Message = {
                 id: newMsg.id,
                 conversationId: newMsg.conversation_id,
                 senderId: newMsg.sender_id,
@@ -157,8 +160,15 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 deletedAt: newMsg.deleted_at,
                 editedAt: newMsg.edited_at,
                 readAt: newMsg.read_at,
-                reactions: []
-              }]
+                reactions: [],
+                // Add sender info for messages from the other user
+                sender: newMsg.sender_id !== currentUserId ? {
+                  id: otherUser.id,
+                  displayName: otherUser.displayName,
+                  avatarUrl: otherUser.avatarUrl || null
+                } : undefined
+              }
+              return [...prev, messageToAdd]
             })
             if (newMsg.sender_id !== currentUserId) {
               markMessagesAsRead(conversationId).catch(() => {})
@@ -170,18 +180,55 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 ? { ...m, content: updated.content, editedAt: updated.edited_at, deletedAt: updated.deleted_at }
                 : m
             ))
+          } else if (payload.eventType === 'DELETE') {
+            const deleted = payload.old as any
+            setMessages(prev => prev.filter(m => m.id !== deleted.id))
           }
         }
       )
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'message_reactions'
         },
-        () => {
-          loadMessages()
+        (payload) => {
+          const reaction = payload.new as any
+          setMessages(prev => prev.map(m => {
+            if (m.id !== reaction.message_id) return m
+            // Add reaction if not already present
+            const existingReaction = m.reactions?.find(r => r.id === reaction.id)
+            if (existingReaction) return m
+            return {
+              ...m,
+              reactions: [...(m.reactions || []), {
+                id: reaction.id,
+                messageId: reaction.message_id,
+                userId: reaction.user_id,
+                emoji: reaction.emoji,
+                createdAt: reaction.created_at
+              }]
+            }
+          }))
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'message_reactions'
+        },
+        (payload) => {
+          const deleted = payload.old as any
+          setMessages(prev => prev.map(m => {
+            if (m.id !== deleted.message_id) return m
+            return {
+              ...m,
+              reactions: (m.reactions || []).filter(r => r.id !== deleted.id)
+            }
+          }))
         }
       )
       .subscribe()
@@ -189,7 +236,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [conversationId, currentUserId, loadMessages])
+  }, [conversationId, currentUserId, otherUser])
   
   // Handle sending message
   const handleSend = async () => {
@@ -362,7 +409,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   }
   
   return (
-    <div className="fixed inset-0 md:relative md:inset-auto flex flex-col bg-stone-50 dark:bg-[#0f0f10] md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:h-[calc(100vh-12rem)]">
+    <div className="fixed inset-0 bottom-[70px] md:bottom-0 md:relative md:inset-auto flex flex-col bg-stone-50 dark:bg-[#0f0f10] md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:h-[calc(100vh-12rem)]">
       {/* Header */}
       <header className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl border-b border-stone-200/50 dark:border-[#2a2a2d]/50 md:rounded-t-2xl md:border md:border-b-0">
         <Button
@@ -635,7 +682,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         </div>
         
         {/* Safe area for iOS */}
-        <div className="h-[env(safe-area-inset-bottom)] md:hidden" />
       </div>
       
       {/* Link Share Dialog */}

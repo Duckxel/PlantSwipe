@@ -936,6 +936,18 @@ const gardenCoverMulter = multer({
 })
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
 
+// === Messaging Image Upload Settings ===
+const messageImageUploadBucket = gardenCoverUploadBucket || 'PHOTOS' // Reuse the photos bucket
+const messageImageUploadPrefix = 'messages'
+const messageImageMaxBytes = 10 * 1024 * 1024 // 10MB
+const messageImageMaxDimension = 1200 // Slightly smaller than cover images
+const messageImageWebpQuality = 80 // Good quality for chat images
+const messageImageMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: messageImageMaxBytes },
+})
+const singleMessageImageUpload = messageImageMulter.single('file')
+
 // Mime types that should be optimized and converted to WebP
 const optimizableMimeTypes = new Set([
   'image/jpeg',
@@ -11929,6 +11941,147 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err?.message || 'Failed to delete cover image' })
   }
+})
+
+// === Messaging Image Upload Endpoint ===
+// Follows the same pattern as garden cover uploads with sharp optimization
+app.post('/api/messages/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+
+  singleMessageImageUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(messageImageMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      // Allow common image types
+      const allowedMimes = new Set([
+        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+        'image/heic', 'image/heif', 'image/avif'
+      ])
+      if (!allowedMimes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      let finalMimeType = 'image/webp'
+
+      // GIFs are kept as-is to preserve animation
+      if (mime === 'image/gif') {
+        optimizedBuffer = file.buffer
+        finalMimeType = 'image/gif'
+      } else {
+        try {
+          optimizedBuffer = await sharp(file.buffer)
+            .rotate()
+            .resize({
+              width: messageImageMaxDimension,
+              height: messageImageMaxDimension,
+              fit: 'inside',
+              withoutEnlargement: true,
+              fastShrinkOnLoad: true,
+            })
+            .webp({
+              quality: messageImageWebpQuality,
+              effort: 5,
+              smartSubsample: true,
+            })
+            .toBuffer()
+        } catch (sharpErr) {
+          console.error('[message-image] failed to convert image to webp', sharpErr)
+          res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+          return
+        }
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const timestamp = Date.now()
+      const randomId = Math.random().toString(36).substring(2, 10)
+      const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
+      const objectPath = `${messageImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(messageImageUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: finalMimeType,
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[message-image] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(messageImageUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      // Transform URL to use media proxy (hides Supabase project URL)
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+      if (!proxyUrl) {
+        res.status(500).json({ error: 'Failed to generate public URL for message image' })
+        return
+      }
+
+      const compressionPercent =
+        file.size > 0 && finalMimeType !== 'image/gif'
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+      res.json({
+        ok: true,
+        url: proxyUrl,
+        bucket: messageImageUploadBucket,
+        path: objectPath,
+        mimeType: finalMimeType,
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        quality: finalMimeType === 'image/gif' ? null : messageImageWebpQuality,
+        maxDimension: messageImageMaxDimension,
+        compressionPercent,
+      })
+    })().catch((uploadErr) => {
+      console.error('[message-image] unexpected failure', uploadErr)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
+      }
+    })
+  })
 })
 
 // DELETE a garden (and its cover image from storage)
