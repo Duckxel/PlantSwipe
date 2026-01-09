@@ -229,10 +229,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           setShowReactions(true)
         }}
       >
-        {/* Avatar */}
+        {/* Avatar - mt-2.5 aligns with the text content inside the message bubble (which has py-2.5 padding) */}
         {!isOwn && (
           showAvatar ? (
-            <div className="flex-shrink-0 w-7">
+            <div className="flex-shrink-0 w-7 mt-2.5">
               {otherUser.avatarUrl ? (
                 <img
                   src={otherUser.avatarUrl}

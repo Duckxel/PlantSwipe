@@ -11,6 +11,7 @@ import { useLanguageNavigate } from '@/lib/i18nRouting'
 import { Button } from '@/components/ui/button'
 import { 
   ArrowLeft, 
+  ArrowDown,
   Send, 
   Loader2, 
   Link as LinkIcon,
@@ -78,12 +79,44 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     previewUrl: string
   } | null>(null)
   
+  // Pagination state
+  const [hasMoreMessages, setHasMoreMessages] = React.useState(true)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+  const [showScrollToBottom, setShowScrollToBottom] = React.useState(false)
+  const initialLoadDoneRef = React.useRef(false)
+  const lastMessageIdRef = React.useRef<string | null>(null)
+  const MESSAGES_PER_PAGE = 20
+  const SCROLL_THRESHOLD = 300 // Show button when scrolled up more than 300px from bottom
+  
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const messagesContainerRef = React.useRef<HTMLDivElement>(null)
+  const messagesTopRef = React.useRef<HTMLDivElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const attachMenuRef = React.useRef<HTMLDivElement>(null)
   const realtimeChannelRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
+  
+  // Hide mobile nav bar when conversation is open (mobile full-screen mode)
+  React.useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    
+    // Only apply on mobile (below md breakpoint)
+    const isMobile = window.innerWidth < 768
+    if (!isMobile) return
+    
+    // Find and hide the mobile nav host element
+    const navHost = document.querySelector('[data-mobile-nav-root="true"]') as HTMLElement
+    if (navHost) {
+      navHost.style.display = 'none'
+    }
+    
+    return () => {
+      // Restore the nav when leaving conversation view
+      if (navHost) {
+        navHost.style.display = ''
+      }
+    }
+  }, [])
   
   // Broadcast a message event to other clients
   const broadcastEvent = React.useCallback(async (event: 'message' | 'reaction', data?: any) => {
@@ -109,31 +142,99 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`
   }, [])
   
-  // Load messages
+  // Load initial messages (most recent 20)
   const loadMessages = React.useCallback(async () => {
     try {
       setError(null)
-      const data = await getConversationMessages(conversationId)
+      const data = await getConversationMessages(conversationId, { limit: MESSAGES_PER_PAGE })
       setMessages(data)
+      setHasMoreMessages(data.length >= MESSAGES_PER_PAGE)
       await markMessagesAsRead(conversationId)
     } catch (e: any) {
       console.error('[conversation] Failed to load messages:', e)
       setError(e?.message || 'Failed to load messages')
     } finally {
       setLoading(false)
+      initialLoadDoneRef.current = true
     }
   }, [conversationId])
+  
+  // Load more (older) messages when scrolling up
+  const loadMoreMessages = React.useCallback(async () => {
+    if (loadingMore || !hasMoreMessages || messages.length === 0) return
+    
+    setLoadingMore(true)
+    try {
+      const oldestMessage = messages[0]
+      const olderMessages = await getConversationMessages(conversationId, {
+        limit: MESSAGES_PER_PAGE,
+        before: oldestMessage.id
+      })
+      
+      if (olderMessages.length < MESSAGES_PER_PAGE) {
+        setHasMoreMessages(false)
+      }
+      
+      if (olderMessages.length > 0) {
+        // Prepend older messages to the list
+        setMessages(prev => [...olderMessages, ...prev])
+      }
+    } catch (e: any) {
+      console.error('[conversation] Failed to load more messages:', e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [conversationId, hasMoreMessages, loadingMore, messages])
   
   React.useEffect(() => {
     loadMessages()
   }, [loadMessages])
   
-  // Scroll to bottom when messages change
+  // Scroll to bottom - only when new messages arrive (not when loading older)
   React.useEffect(() => {
+    if (!messagesEndRef.current || messages.length === 0) return
+    
+    const currentLastMessageId = messages[messages.length - 1]?.id
+    const previousLastMessageId = lastMessageIdRef.current
+    
+    // Only scroll if the last message changed (new message added)
+    // or if this is the initial load
+    if (currentLastMessageId !== previousLastMessageId) {
+      const behavior = previousLastMessageId === null ? 'instant' : 'smooth'
+      messagesEndRef.current.scrollIntoView({ behavior })
+      lastMessageIdRef.current = currentLastMessageId
+    }
+  }, [messages])
+  
+  // Ensure scroll to bottom after initial load completes
+  React.useEffect(() => {
+    if (!loading && messagesEndRef.current && messages.length > 0) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'instant' })
+      lastMessageIdRef.current = messages[messages.length - 1]?.id || null
+    }
+  }, [loading, messages])
+  
+  // Handle scroll to load more messages and show/hide scroll-to-bottom button
+  const handleScroll = React.useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    
+    // Load more when scrolled near the top (within 100px)
+    if (!loadingMore && hasMoreMessages && container.scrollTop < 100) {
+      loadMoreMessages()
+    }
+    
+    // Show scroll-to-bottom button when scrolled up significantly
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    setShowScrollToBottom(distanceFromBottom > SCROLL_THRESHOLD)
+  }, [loadMoreMessages, loadingMore, hasMoreMessages])
+  
+  // Scroll to the bottom of the conversation
+  const scrollToBottom = React.useCallback(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages])
+  }, [])
   
   // Close attach menu on outside click
   React.useEffect(() => {
@@ -590,6 +691,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       <div 
         ref={messagesContainerRef}
         className="flex-1 overflow-y-auto px-4 py-4 space-y-1"
+        onScroll={handleScroll}
       >
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -616,7 +718,26 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             </p>
           </div>
         ) : (
-          groupedMessages.map((group, groupIdx) => (
+          <>
+            {/* Load more indicator at top */}
+            <div ref={messagesTopRef} className="flex items-center justify-center py-2">
+              {loadingMore ? (
+                <Loader2 className="h-5 w-5 animate-spin text-stone-300 dark:text-stone-600" />
+              ) : hasMoreMessages ? (
+                <button
+                  onClick={loadMoreMessages}
+                  className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                >
+                  {t('messages.loadMore', { defaultValue: 'Load earlier messages' })}
+                </button>
+              ) : messages.length > MESSAGES_PER_PAGE ? (
+                <span className="text-xs text-stone-400 dark:text-stone-500">
+                  {t('messages.beginningOfConversation', { defaultValue: 'Beginning of conversation' })}
+                </span>
+              ) : null}
+            </div>
+            
+            {groupedMessages.map((group, groupIdx) => (
             <div key={groupIdx}>
               {/* Date separator */}
               <div className="flex items-center justify-center my-4">
@@ -651,10 +772,31 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 />
               ))}
             </div>
-          ))
+          ))}
+          </>
         )}
         <div ref={messagesEndRef} />
       </div>
+      
+      {/* Scroll to bottom floating button */}
+      {showScrollToBottom && (
+        <button
+          onClick={scrollToBottom}
+          className={cn(
+            "absolute right-4 z-10 flex items-center justify-center",
+            "w-10 h-10 rounded-full bg-white dark:bg-[#2a2a2d] shadow-lg",
+            "border border-stone-200 dark:border-[#3a3a3d]",
+            "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white",
+            "hover:bg-stone-50 dark:hover:bg-[#3a3a3d] transition-all",
+            "active:scale-95",
+            // Position above the input area - adjust based on what's visible
+            replyingTo || pendingLink || pendingImage ? "bottom-44" : "bottom-24"
+          )}
+          aria-label={t('messages.scrollToBottom', { defaultValue: 'Scroll to latest messages' })}
+        >
+          <ArrowDown className="h-5 w-5" />
+        </button>
+      )}
       
       {/* Error */}
       {error && (
@@ -756,6 +898,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       {/* Input Area */}
       <div className={cn(
         'flex-shrink-0 px-4 pb-4 pt-2 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl md:border md:border-t-0 md:rounded-b-2xl',
+        'pb-[max(1rem,env(safe-area-inset-bottom))]', // Safe area for devices with home indicator
         !replyingTo && !pendingLink && !pendingImage && 'pt-4'
       )}>
         <div className={cn(
