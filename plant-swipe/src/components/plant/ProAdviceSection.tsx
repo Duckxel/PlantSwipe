@@ -9,10 +9,10 @@ import { useAuthActions } from "@/context/AuthActionsContext"
 import { hasAnyRole, USER_ROLES, checkEditorAccess } from "@/constants/userRoles"
 import type { UserRole } from "@/constants/userRoles"
 import { useTranslation } from "react-i18next"
-import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, ChevronDown, ChevronUp } from "lucide-react"
+import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, ChevronDown, ChevronUp, Pencil, Save, Trash2 } from "lucide-react"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { cn } from "@/lib/utils"
-import { createPlantProAdvice, deletePlantProAdvice, fetchPlantProAdvices, uploadProAdviceImage } from "@/lib/proAdvice"
+import { createPlantProAdvice, deletePlantProAdvice, fetchPlantProAdvices, updatePlantProAdvice, uploadProAdviceImage } from "@/lib/proAdvice"
 import type { PlantProAdvice } from "@/types/proAdvice"
 
 type ProAdviceSectionProps = {
@@ -71,6 +71,15 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
   const [submitting, setSubmitting] = React.useState(false)
   const [formNotice, setFormNotice] = React.useState<{ type: "success" | "error"; text: string } | null>(null)
   const [formOpen, setFormOpen] = React.useState(false)
+
+  // Edit mode state
+  const [editingId, setEditingId] = React.useState<string | null>(null)
+  const [editContent, setEditContent] = React.useState("")
+  const [editReferenceUrl, setEditReferenceUrl] = React.useState("")
+  const [editFile, setEditFile] = React.useState<File | null>(null)
+  const [editImageUrl, setEditImageUrl] = React.useState<string | null>(null)
+  const [editUploading, setEditUploading] = React.useState(false)
+  const [editSubmitting, setEditSubmitting] = React.useState(false)
 
   const normalizeRoles = React.useCallback((roles?: string[] | null): UserRole[] => {
     if (!roles) return []
@@ -193,6 +202,69 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
     }
   }
 
+  const startEditing = (advice: PlantProAdvice) => {
+    setEditingId(advice.id)
+    setEditContent(advice.content)
+    setEditReferenceUrl(advice.referenceUrl || "")
+    setEditImageUrl(advice.imageUrl || null)
+    setEditFile(null)
+    setFormNotice(null)
+  }
+
+  const cancelEditing = () => {
+    setEditingId(null)
+    setEditContent("")
+    setEditReferenceUrl("")
+    setEditFile(null)
+    setEditImageUrl(null)
+  }
+
+  const handleUpdate = async (id: string) => {
+    if (!user) {
+      openLogin()
+      return
+    }
+    const trimmed = editContent.trim()
+    if (!trimmed) {
+      setFormNotice({ type: "error", text: t("validation.missingContent") })
+      return
+    }
+
+    let imageUrl: string | null = editImageUrl
+    setEditSubmitting(true)
+    try {
+      if (editFile) {
+        setEditUploading(true)
+        imageUrl = await uploadProAdviceImage(editFile, { folder: plantId })
+      }
+
+      const updated = await updatePlantProAdvice({
+        id,
+        content: trimmed,
+        imageUrl,
+        referenceUrl: editReferenceUrl.trim() || null,
+        metadata: editReferenceUrl.trim() ? { reference_url: editReferenceUrl.trim() } : {},
+      })
+
+      setAdvices((prev) => prev.map((a) => (a.id === id ? updated : a)))
+      setFormNotice({ type: "success", text: t("updated") })
+      cancelEditing()
+    } catch (err: any) {
+      setFormNotice({
+        type: "error",
+        text: err?.message || t("updateError"),
+      })
+    } finally {
+      setEditUploading(false)
+      setEditSubmitting(false)
+    }
+  }
+
+  const handleRemoveEditImage = () => {
+    setEditImageUrl(null)
+    setEditFile(null)
+  }
+
   const hasAdvice = advices.length > 0
 
   if (!canContribute && !loading && !hasAdvice) {
@@ -203,7 +275,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
   return (
     <section className="space-y-4 sm:space-y-5">
       <div className="relative overflow-hidden rounded-3xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-emerald-100 p-4 sm:p-6 shadow-lg dark:border-emerald-800/60 dark:from-[#04281f] dark:via-[#0b1b1a] dark:to-[#0e2f28]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.18),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.12),transparent_40%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.18),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.12),transparent_40%)] pointer-events-none" />
         <div className="relative flex items-start justify-between gap-3">
           <div className="space-y-1">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700 shadow-sm ring-1 ring-emerald-200/70 dark:bg-white/5 dark:text-emerald-200 dark:ring-emerald-700/40">
@@ -357,7 +429,106 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
         )}
 
         {advices.map((advice) => {
-          const canDelete = user && (canModerate || advice.authorId === user.id)
+          const canEdit = user && (canModerate || advice.authorId === user.id)
+          const isEditing = editingId === advice.id
+
+          if (isEditing) {
+            return (
+              <Card key={advice.id} className="overflow-hidden rounded-2xl border-2 border-emerald-400/80 bg-gradient-to-br from-white via-emerald-50 to-white shadow-lg dark:border-emerald-600/60 dark:from-[#0c1615] dark:via-[#0f201d] dark:to-[#0d1818]">
+                <CardHeader className="p-4 pb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Avatar name={advice.authorDisplayName || advice.authorUsername} src={advice.authorAvatarUrl} />
+                      <div>
+                        <span className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+                          {advice.authorDisplayName || advice.authorUsername || t("unknownAuthor")}
+                        </span>
+                        <AdviceBadge roles={advice.authorRoles || []} />
+                      </div>
+                    </div>
+                    <Badge className="rounded-full bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-700">
+                      <Pencil className="h-3 w-3 mr-1" />
+                      {t("editing")}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 pt-1 space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-stone-700 dark:text-stone-100">
+                      <Megaphone className="h-4 w-4 text-emerald-600" />
+                      {t("contentLabel")}
+                    </label>
+                    <Textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      placeholder={t("placeholder", { plant: plantName })}
+                      rows={4}
+                      className="rounded-xl border-emerald-200/70 focus:ring-emerald-400 dark:border-emerald-700/60 dark:bg-[#0f1816]"
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("referenceLabel")}</label>
+                      <Input
+                        value={editReferenceUrl}
+                        onChange={(e) => setEditReferenceUrl(e.target.value)}
+                        placeholder="https://"
+                        type="url"
+                        className="rounded-xl border-emerald-200/70 focus:ring-emerald-400 dark:border-emerald-700/60 dark:bg-[#0f1816]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-stone-700 dark:text-stone-200">{t("imageLabel")}</label>
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-2 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm cursor-pointer transition hover:-translate-y-[1px] hover:shadow dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-100">
+                          <Upload className="h-4 w-4" />
+                          <span>{editFile ? editFile.name : t("pickImage")}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => setEditFile(e.target.files?.[0] || null)}
+                          />
+                        </label>
+                        {(editFile || editImageUrl) && (
+                          <Button type="button" variant="ghost" size="icon" onClick={handleRemoveEditImage} aria-label={t("clearImage")}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {editImageUrl && !editFile && (
+                    <div className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50 dark:border-stone-700 dark:bg-[#1c1c1c]">
+                      <img src={editImageUrl} alt={`${plantName} pro advice`} className="w-full max-h-40 object-cover" loading="lazy" />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={cancelEditing}
+                      className="rounded-full border-stone-300 text-stone-600 hover:bg-stone-100 dark:border-stone-600 dark:text-stone-300"
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      {tCommon("cancel", { defaultValue: "Cancel" })}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={editSubmitting || editUploading}
+                      onClick={() => handleUpdate(advice.id)}
+                      className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {editUploading ? t("uploading") : t("save")}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          }
+
           return (
             <Card key={advice.id} className="overflow-hidden rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-white via-emerald-50 to-white shadow-md transition hover:-translate-y-1 hover:shadow-lg dark:border-emerald-800/40 dark:from-[#0c1615] dark:via-[#0f201d] dark:to-[#0d1818]">
               <CardHeader className="p-4 pb-2">
@@ -386,10 +557,15 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                       {t("postedAt", { date: formatDate(advice.createdAt) })}
                     </p>
                   </div>
-                  {canDelete && (
-                    <Button type="button" variant="ghost" size="icon" onClick={() => handleDelete(advice.id)} aria-label={t("delete")}>
-                      <X className="h-4 w-4" />
-                    </Button>
+                  {canEdit && (
+                    <div className="flex items-center gap-1">
+                      <Button type="button" variant="ghost" size="icon" onClick={() => startEditing(advice)} aria-label={t("edit")}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => handleDelete(advice.id)} aria-label={t("delete")} className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardHeader>

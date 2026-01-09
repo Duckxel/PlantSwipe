@@ -86,6 +86,42 @@ export async function deletePlantProAdvice(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+type UpdatePlantProAdviceInput = {
+  id: string
+  content?: string
+  imageUrl?: string | null
+  referenceUrl?: string | null
+  metadata?: Record<string, unknown> | null
+}
+
+export async function updatePlantProAdvice(input: UpdatePlantProAdviceInput): Promise<PlantProAdvice> {
+  const payload: Record<string, unknown> = {}
+  
+  if (input.content !== undefined) {
+    payload.content = input.content
+  }
+  if (input.imageUrl !== undefined) {
+    payload.image_url = input.imageUrl
+  }
+  if (input.referenceUrl !== undefined) {
+    payload.reference_url = input.referenceUrl
+  }
+  if (input.metadata !== undefined) {
+    payload.metadata = input.metadata ?? {}
+  }
+
+  const { data, error } = await supabase
+    .from("plant_pro_advices")
+    .update(payload)
+    .eq("id", input.id)
+    .select(ADVICE_SELECT)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error("Pro advice could not be updated.")
+  return mapAdviceRow(data)
+}
+
 type UploadOptions = {
   folder?: string
   signal?: AbortSignal
