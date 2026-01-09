@@ -78,6 +78,7 @@ import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSecti
 import { GardenJournalSection } from "@/components/garden/GardenJournalSection";
 import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
 import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLanguageEditor";
+import { GardenAiChatToggle } from "@/components/garden/GardenAiChatToggle";
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
@@ -3137,6 +3138,7 @@ export const GardenDashboardPage: React.FC = () => {
                       GardenLocationEditor={GardenLocationEditor}
                       GardenAdviceLanguageEditor={GardenAdviceLanguageEditor}
                       GardenPrivacyToggle={GardenPrivacyToggle}
+                      GardenAiChatToggle={GardenAiChatToggle}
                       MemberCard={MemberCard}
                     />
                   ) : (
@@ -3507,8 +3509,8 @@ export const GardenDashboardPage: React.FC = () => {
         </>
       )}
       
-      {/* Aphylia AI Chat - Only visible for garden members, rendered via Portal */}
-      {garden && user && isMember && (
+      {/* Aphylia AI Chat - Only visible for garden members when not hidden in settings */}
+      {garden && user && isMember && !garden.hideAiChat && (
         <AphyliaChatPortal gardenId={garden.id} gardenName={garden.name} />
       )}
     </div>

@@ -11,6 +11,7 @@ import {
   Trash2,
   LogOut,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
@@ -44,6 +45,7 @@ interface GardenSettingsSectionProps {
   GardenLocationEditor: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean }>;
   GardenAdviceLanguageEditor: React.ComponentType<{ garden: Garden | null; userProfileLanguage?: string | null; onSaved: () => Promise<void>; canEdit: boolean }>;
   GardenPrivacyToggle: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean; ownerIsPrivate: boolean }>;
+  GardenAiChatToggle: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean }>;
   MemberCard: React.ComponentType<{ member: GardenSettingsSectionProps["members"][0]; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean; ownerCount: number; currentUserId: string | null }>;
 }
 
@@ -65,6 +67,7 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
   GardenLocationEditor,
   GardenAdviceLanguageEditor,
   GardenPrivacyToggle,
+  GardenAiChatToggle,
   MemberCard,
 }) => {
   const { t } = useTranslation("common");
@@ -198,6 +201,23 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
                 <GardenAdviceLanguageEditor
                   garden={garden}
                   userProfileLanguage={profile?.language}
+                  onSaved={onRefreshGarden}
+                  canEdit={viewerIsOwner}
+                />
+              </Card>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-emerald-600" />
+                {t("gardenDashboard.settingsSection.aiAssistant", "AI Assistant")}
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t("gardenDashboard.settingsSection.aiAssistantDescription", "Configure the Aphylia AI chat assistant for this garden.")}
+              </p>
+              <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-6">
+                <GardenAiChatToggle
+                  garden={garden}
                   onSaved={onRefreshGarden}
                   canEdit={viewerIsOwner}
                 />
