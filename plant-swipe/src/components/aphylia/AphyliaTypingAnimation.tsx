@@ -226,61 +226,26 @@ export const TypingDots: React.FC<{ className?: string }> = ({ className }) => {
   )
 }
 
-// Combined typing indicator with text
+// Combined typing indicator - just 3 dots, no text
 export const AphyliaThinkingIndicator: React.FC<{ 
   className?: string
   compact?: boolean
 }> = ({ className, compact = false }) => {
+  // Both compact and full show just the dots - clean and simple
   if (compact) {
     return (
-      <div className={cn('flex items-center gap-3 px-4 py-3', className)}>
-        <motion.div
-          className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center"
-          animate={{
-            scale: [1, 1.1, 1],
-          }}
-          transition={{
-            duration: 1.5,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-        >
-          <motion.span
-            className="text-white text-sm"
-            animate={{ rotate: [0, 10, -10, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          >
-            🌱
-          </motion.span>
-        </motion.div>
-        <div className="flex flex-col">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Aphylia
-          </span>
-          <div className="flex items-center gap-1.5">
-            <TypingDots />
-            <span className="text-xs text-gray-400 dark:text-gray-500">
-              is thinking
-            </span>
-          </div>
-        </div>
+      <div className={cn('flex items-center gap-2 py-1', className)}>
+        <TypingDots />
       </div>
     )
   }
   
   return (
     <div className={cn(
-      'flex flex-col items-center justify-center gap-3 py-6',
+      'flex items-center justify-center py-2',
       className
     )}>
-      <AphyliaTypingAnimation />
-      <motion.p
-        className="text-sm text-gray-500 dark:text-gray-400"
-        animate={{ opacity: [0.5, 1, 0.5] }}
-        transition={{ duration: 2, repeat: Infinity }}
-      >
-        Aphylia is thinking...
-      </motion.p>
+      <TypingDots />
     </div>
   )
 }
