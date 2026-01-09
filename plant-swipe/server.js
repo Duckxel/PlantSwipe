@@ -12584,55 +12584,47 @@ app.get('/api/garden/:id/overview', async (req, res) => {
 
     // Check friends_only access: user must be friends with at least one garden member
     if (!isMember && gardenPrivacy === 'friends_only') {
-      // Unauthenticated users cannot access friends_only gardens
-      if (!user?.id) {
-        res.status(403).json({ ok: false, error: 'This garden is friends only' })
+      if (!user || !user.id) {
+        res.status(403).json({ ok: false, error: 'This garden is for friends only' })
         return
       }
+      // Check if user is friend with ANY member
+      const memberIds = members.map((m) => m.userId).filter(Boolean)
+      let isFriend = false
 
-      const memberUserIds = members.map(m => m.userId).filter(Boolean)
-      let isFriendWithMember = false
-
-      if (memberUserIds.length > 0) {
+      if (memberIds.length > 0) {
         if (sql) {
-          // SQL path: query friends table directly
           try {
-            const friendCheck = await sql`
-              SELECT 1 FROM public.friends
-              WHERE (user_id = ${user.id} AND friend_id = ANY(${memberUserIds}::uuid[]))
-                 OR (friend_id = ${user.id} AND user_id = ANY(${memberUserIds}::uuid[]))
-              LIMIT 1
+            const rows = await sql`
+              select 1 from public.friends 
+              where user_id = ${user.id} 
+              and friend_id = any(${sql.array(memberIds)}::uuid[])
+              limit 1
             `
-            isFriendWithMember = friendCheck && friendCheck.length > 0
-          } catch (friendErr) {
-            console.error('[overview] Friends check query failed:', friendErr?.message || friendErr)
-            // On error, deny access to be safe
-            isFriendWithMember = false
+            if (rows && rows.length > 0) isFriend = true
+          } catch (e) {
+            console.error('[overview] Friend check failed (SQL)', e)
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          // REST API path: query friends via Supabase REST
+          // REST fallback
           try {
             const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-            const bearer = getBearerTokenFromRequest(req)
+            const bearer = getAuthTokenFromRequest(req)
             if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
-
-            // Check if user is friends with any member (either direction)
-            const memberIdsParam = memberUserIds.map(id => encodeURIComponent(id)).join(',')
-            const friendUrl = `${supabaseUrlEnv}/rest/v1/friends?or=(and(user_id.eq.${encodeURIComponent(user.id)},friend_id.in.(${memberIdsParam})),and(friend_id.eq.${encodeURIComponent(user.id)},user_id.in.(${memberIdsParam})))&limit=1`
-            const friendResp = await fetch(friendUrl, { headers })
-            if (friendResp.ok) {
-              const friendRows = await friendResp.json().catch(() => [])
-              isFriendWithMember = Array.isArray(friendRows) && friendRows.length > 0
+            const idsStr = memberIds.join(',')
+            const resp = await fetch(`${supabaseUrlEnv}/rest/v1/friends?user_id=eq.${encodeURIComponent(user.id)}&friend_id=in.(${idsStr})&limit=1`, { headers })
+            if (resp.ok) {
+              const data = await resp.json().catch(() => [])
+              if (Array.isArray(data) && data.length > 0) isFriend = true
             }
-          } catch (friendErr) {
-            console.error('[overview] Friends REST check failed:', friendErr?.message || friendErr)
-            isFriendWithMember = false
+          } catch (e) {
+            console.error('[overview] Friend check failed (REST)', e)
           }
         }
       }
 
-      if (!isFriendWithMember) {
-        res.status(403).json({ ok: false, error: 'This garden is friends only' })
+      if (!isFriend) {
+        res.status(403).json({ ok: false, error: 'This garden is visible only to friends of members' })
         return
       }
     }
