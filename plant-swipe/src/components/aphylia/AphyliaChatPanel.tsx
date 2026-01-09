@@ -616,7 +616,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
               
               {/* Input area - with safe area padding on mobile */}
               <div className="flex-shrink-0 p-3 pb-[max(env(safe-area-inset-bottom),12px)] md:pb-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                <div className="flex items-end gap-2">
+                <div className="flex items-center gap-2">
                   {/* File upload button */}
                   <input
                     ref={fileInputRef}
@@ -631,7 +631,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                     size="icon"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isSending}
-                    className="flex-shrink-0 w-10 h-10 md:w-9 md:h-9 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    className="flex-shrink-0 w-11 h-11 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                   >
                     <ImageIcon className="w-5 h-5" />
                   </Button>
@@ -647,19 +647,16 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       disabled={isSending}
                       rows={1}
                       className={cn(
-                        'w-full px-4 py-3 md:py-2.5 rounded-xl resize-none',
+                        'w-full px-4 py-2.5 rounded-xl resize-none',
                         'bg-gray-100 dark:bg-gray-800',
                         'border border-transparent focus:border-emerald-300 dark:focus:border-emerald-700',
                         'focus:outline-none focus:ring-0',
                         'text-base md:text-sm text-gray-900 dark:text-gray-100',
                         'placeholder:text-gray-400 dark:placeholder:text-gray-500',
                         'disabled:opacity-50',
-                        'max-h-32'
+                        'max-h-32',
+                        'h-11' // Fixed height to match buttons
                       )}
-                      style={{
-                        minHeight: '46px',
-                        height: 'auto'
-                      }}
                     />
                   </div>
                   
@@ -669,7 +666,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       variant="ghost"
                       size="icon"
                       onClick={onAbortStream}
-                      className="flex-shrink-0 w-10 h-10 md:w-9 md:h-9 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="flex-shrink-0 w-11 h-11 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                     >
                       <StopCircle className="w-5 h-5" />
                     </Button>
@@ -680,7 +677,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       onClick={() => onSendMessage()}
                       disabled={isSending || (!input.trim() && pendingAttachments.length === 0)}
                       className={cn(
-                        'flex-shrink-0 w-10 h-10 md:w-9 md:h-9',
+                        'flex-shrink-0 w-11 h-11',
                         'bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl',
                         'disabled:opacity-50 disabled:hover:bg-emerald-500'
                       )}
