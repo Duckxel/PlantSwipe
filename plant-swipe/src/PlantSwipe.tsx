@@ -47,6 +47,7 @@ const PlantInfoPageLazy = lazy(() => import("@/pages/PlantInfoPage"))
 const PublicProfilePageLazy = lazy(() => import("@/pages/PublicProfilePage"))
 const FriendsPageLazy = lazy(() => import("@/pages/FriendsPage").then(module => ({ default: module.FriendsPage })))
 const MessagesPageLazy = lazy(() => import("@/pages/MessagesPage").then(module => ({ default: module.MessagesPage })))
+const ScanPageLazy = lazy(() => import("@/pages/ScanPage").then(module => ({ default: module.ScanPage })))
 const SettingsPageLazy = lazy(() => import("@/pages/SettingsPage"))
 const ContactUsPageLazy = lazy(() => import("@/pages/ContactUsPage"))
 const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
@@ -1695,6 +1696,16 @@ export default function PlantSwipe() {
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
                   <MessagesPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/scan"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <ScanPageLazy />
                 </Suspense>
               ) : (
                 <Navigate to="/" replace />
