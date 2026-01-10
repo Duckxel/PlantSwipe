@@ -321,6 +321,7 @@
       "messagePlaceholder": "Tell us a bit more about what you need...",
       "attachmentLabel": "Screenshot (optional)",
       "attachmentPlaceholder": "Upload an image",
+      "removeScreenshot": "Remove screenshot",
       "submitButton": "Send message",
       "submitSending": "Sending...",
       "cancelButton": "Cancel",
