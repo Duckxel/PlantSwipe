@@ -1930,6 +1930,19 @@ export const GardenListPage: React.FC = () => {
   ]);
 
   const gardensWithTasks = React.useMemo(() => {
+    // ⚡ Bolt Optimization: O(P + G) complexity instead of O(P * G)
+    // 1. Group plants by garden ID first (O(P))
+    const plantsByGarden: Record<string, any[]> = {};
+    for (const gp of allPlants) {
+      // Only include plants that have tasks
+      if ((occsByPlant[gp.id] || []).length > 0) {
+        if (!plantsByGarden[gp.gardenId]) {
+          plantsByGarden[gp.gardenId] = [];
+        }
+        plantsByGarden[gp.gardenId].push(gp);
+      }
+    }
+
     const byGarden: Array<{
       gardenId: string;
       gardenName: string;
@@ -1937,18 +1950,22 @@ export const GardenListPage: React.FC = () => {
       req: number;
       done: number;
     }> = [];
-    const idToGardenName = gardens.reduce<Record<string, string>>((acc, g) => {
-      acc[g.id] = g.name;
-      return acc;
-    }, {});
+
+    // 2. Create lookup map for garden names (O(G))
+    const idToGardenName: Record<string, string> = {};
     for (const g of gardens) {
-      const plants = allPlants.filter(
-        (gp: any) =>
-          gp.gardenId === g.id && (occsByPlant[gp.id] || []).length > 0,
-      );
-      if (plants.length === 0) continue;
+      idToGardenName[g.id] = g.name;
+    }
+
+    // 3. Iterate gardens and look up pre-grouped plants (O(G))
+    for (const g of gardens) {
+      const plants = plantsByGarden[g.id];
+      if (!plants || plants.length === 0) continue;
+
       let req = 0,
         done = 0;
+
+      // Calculate totals for this garden
       for (const gp of plants) {
         const occs = occsByPlant[gp.id] || [];
         req += occs.reduce(
@@ -1965,6 +1982,7 @@ export const GardenListPage: React.FC = () => {
           0,
         );
       }
+
       byGarden.push({
         gardenId: g.id,
         gardenName: idToGardenName[g.id] || "",
@@ -1973,6 +1991,7 @@ export const GardenListPage: React.FC = () => {
         done,
       });
     }
+
     console.log(
       "[GardenList] gardensWithTasks computed:",
       byGarden.length,
@@ -1980,7 +1999,7 @@ export const GardenListPage: React.FC = () => {
       todayTaskOccurrences.length,
       "occurrences,",
       allPlants.length,
-      "plants",
+      "plants (Optimized)",
     );
     return byGarden;
   }, [gardens, allPlants, occsByPlant, todayTaskOccurrences.length]);
