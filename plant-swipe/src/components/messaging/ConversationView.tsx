@@ -18,7 +18,9 @@ import {
   X,
   Image as ImageIcon,
   Plus,
-  Camera
+  Camera,
+  Search,
+  Images
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { 
@@ -38,6 +40,8 @@ import type { Message, LinkType, LinkPreview } from '@/types/messaging'
 import { MessageBubble } from './MessageBubble'
 import { LinkShareDialog } from './LinkShareDialog'
 import { CameraCapture } from './CameraCapture'
+import { ConversationMediaGallery } from './ConversationMediaGallery'
+import { ConversationSearch } from './ConversationSearch'
 
 interface ConversationViewProps {
   conversationId: string
@@ -71,6 +75,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const [showAttachMenu, setShowAttachMenu] = React.useState(false)
   const [_uploadingImage, _setUploadingImage] = React.useState(false)
   const [cameraOpen, setCameraOpen] = React.useState(false)
+  const [mediaGalleryOpen, setMediaGalleryOpen] = React.useState(false)
+  const [searchOpen, setSearchOpen] = React.useState(false)
   const [pendingLink, setPendingLink] = React.useState<{
     type: LinkType
     id: string
@@ -704,8 +710,27 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           </h2>
         </button>
         
-        {/* Spacer to balance the back button for centering */}
-        <div className="w-10 h-10 flex-shrink-0" />
+        {/* Action buttons - right aligned */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full h-9 w-9 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white"
+            onClick={() => setSearchOpen(true)}
+            title={t('messages.searchMessages', { defaultValue: 'Search messages' })}
+          >
+            <Search className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full h-9 w-9 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white"
+            onClick={() => setMediaGalleryOpen(true)}
+            title={t('messages.viewMedia', { defaultValue: 'View media' })}
+          >
+            <Images className="h-5 w-5" />
+          </Button>
+        </div>
       </header>
       
       {/* Messages Container */}
@@ -1039,6 +1064,26 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         onOpenChange={setCameraOpen}
         onCapture={handleCameraCapture}
       />
+      
+      {/* Media Gallery */}
+      {mediaGalleryOpen && (
+        <ConversationMediaGallery
+          conversationId={conversationId}
+          otherUserDisplayName={otherUser.displayName}
+          onClose={() => setMediaGalleryOpen(false)}
+        />
+      )}
+      
+      {/* Search */}
+      {searchOpen && (
+        <ConversationSearch
+          conversationId={conversationId}
+          otherUserDisplayName={otherUser.displayName}
+          otherUserAvatarUrl={otherUser.avatarUrl}
+          currentUserId={currentUserId}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
     </div>
   )
 }

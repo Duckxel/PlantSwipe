@@ -642,6 +642,202 @@ export function parseImageMessage(content: string): { imageUrl: string; caption?
   }
 }
 
+// ===== Conversation Search & Media =====
+
+/**
+ * Search messages within a conversation.
+ * Returns messages matching the search query.
+ */
+export async function searchConversationMessages(
+  conversationId: string,
+  query: string,
+  options?: {
+    limit?: number
+  }
+): Promise<Message[]> {
+  const session = (await supabase.auth.getSession()).data.session
+  if (!session?.user?.id) {
+    throw new Error('Not authenticated')
+  }
+  
+  if (!query.trim()) {
+    return []
+  }
+  
+  const searchTerm = `%${query.toLowerCase()}%`
+  
+  let dbQuery = supabase
+    .from('messages')
+    .select(`
+      id,
+      conversation_id,
+      sender_id,
+      content,
+      link_type,
+      link_id,
+      link_url,
+      link_preview,
+      reply_to_id,
+      created_at,
+      updated_at,
+      deleted_at,
+      edited_at,
+      read_at
+    `)
+    .eq('conversation_id', conversationId)
+    .is('deleted_at', null)
+    .ilike('content', searchTerm)
+    .order('created_at', { ascending: false })
+  
+  if (options?.limit) {
+    dbQuery = dbQuery.limit(options.limit)
+  } else {
+    dbQuery = dbQuery.limit(50)
+  }
+  
+  const { data, error } = await dbQuery
+  
+  if (error) {
+    if (isMissingTableError(error)) {
+      return []
+    }
+    throw new Error(error.message)
+  }
+  
+  if (!data || data.length === 0) return []
+  
+  // Get sender profiles
+  const senderIds = [...new Set(data.map(m => m.sender_id))]
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .in('id', senderIds)
+  
+  const profileMap = new Map(
+    (profiles || []).map(p => [p.id, { id: p.id, displayName: p.display_name, avatarUrl: p.avatar_url }])
+  )
+  
+  return data.map(row => ({
+    id: row.id,
+    conversationId: row.conversation_id,
+    senderId: row.sender_id,
+    content: row.content,
+    linkType: row.link_type as LinkType | null,
+    linkId: row.link_id,
+    linkUrl: row.link_url,
+    linkPreview: row.link_preview as LinkPreview | null,
+    replyToId: row.reply_to_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    editedAt: row.edited_at,
+    readAt: row.read_at,
+    reactions: [],
+    sender: profileMap.get(row.sender_id)
+  }))
+}
+
+export interface ConversationImage {
+  id: string
+  messageId: string
+  imageUrl: string
+  caption: string | undefined
+  senderId: string
+  senderDisplayName: string | null
+  senderAvatarUrl: string | null
+  createdAt: string
+}
+
+/**
+ * Get all images from a conversation.
+ * Returns images in reverse chronological order (newest first).
+ */
+export async function getConversationImages(
+  conversationId: string,
+  options?: {
+    limit?: number
+    offset?: number
+  }
+): Promise<ConversationImage[]> {
+  const session = (await supabase.auth.getSession()).data.session
+  if (!session?.user?.id) {
+    throw new Error('Not authenticated')
+  }
+  
+  // Query messages that start with [image: pattern
+  let query = supabase
+    .from('messages')
+    .select(`
+      id,
+      conversation_id,
+      sender_id,
+      content,
+      created_at
+    `)
+    .eq('conversation_id', conversationId)
+    .is('deleted_at', null)
+    .like('content', '[image:%')
+    .order('created_at', { ascending: false })
+  
+  if (options?.limit) {
+    query = query.limit(options.limit)
+  } else {
+    query = query.limit(100)
+  }
+  
+  if (options?.offset) {
+    query = query.range(options.offset, options.offset + (options.limit || 100) - 1)
+  }
+  
+  const { data, error } = await query
+  
+  if (error) {
+    if (isMissingTableError(error)) {
+      return []
+    }
+    throw new Error(error.message)
+  }
+  
+  if (!data || data.length === 0) return []
+  
+  // Get sender profiles
+  const senderIds = [...new Set(data.map(m => m.sender_id))]
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .in('id', senderIds)
+  
+  const profileMap = new Map(
+    (profiles || []).map(p => [p.id, { 
+      displayName: p.display_name, 
+      avatarUrl: p.avatar_url 
+    }])
+  )
+  
+  // Parse image messages and return image data
+  const results: ConversationImage[] = []
+  
+  for (const row of data) {
+    const parsed = parseImageMessage(row.content)
+    if (!parsed) continue
+    
+    const profile = profileMap.get(row.sender_id)
+    
+    results.push({
+      id: `${row.id}-image`,
+      messageId: row.id,
+      imageUrl: parsed.imageUrl,
+      caption: parsed.caption,
+      senderId: row.sender_id,
+      senderDisplayName: profile?.displayName || null,
+      senderAvatarUrl: profile?.avatarUrl || null,
+      createdAt: row.created_at
+    })
+  }
+  
+  return results
+}
+
 // ===== Push Notifications =====
 
 /**
