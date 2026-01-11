@@ -880,7 +880,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         }
         
         // Fetch translated names if not English
-        let nameTranslations: Record<string, string> = {}
+        const nameTranslations: Record<string, string> = {}
         if (currentLang !== 'en') {
           const { data: translationsData } = await supabase
             .from('plant_translations')
