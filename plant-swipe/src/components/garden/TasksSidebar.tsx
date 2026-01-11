@@ -2,7 +2,7 @@ import React from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from 'react-i18next'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Loader2 } from 'lucide-react'
 
 const taskTypeConfig = {
   water: { 
@@ -162,7 +162,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                       disabled={isCompleting}
                     >
                       {isCompleting ? (
-                        <span className="animate-spin">⏳</span>
+                        <Loader2 className="w-3 h-3 animate-spin" />
                       ) : (
                         <>
                           <CheckCircle2 className="w-3 h-3 mr-0.5" />
@@ -222,7 +222,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                             disabled={isProgressing}
                           >
                             {isProgressing ? (
-                              <span className="animate-spin text-xs">⏳</span>
+                              <Loader2 className="w-3 h-3 md:w-3.5 md:h-3.5 animate-spin" />
                             ) : (
                               <>
                                 <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 mr-0.5" />
