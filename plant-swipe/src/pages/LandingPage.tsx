@@ -23,9 +23,90 @@ import {
   Sparkles,
   ArrowRight,
   MessageCircle,
+  Users,
+  Zap,
+  Shield,
+  Heart,
+  TrendingUp,
+  Globe,
+  Smartphone,
+  Clock,
+  Flower2,
+  TreeDeciduous,
+  Sprout,
 } from "lucide-react"
 
-// Lightweight landing page - no heavy dependencies for fast LCP
+// CSS Animations
+const animationStyles = `
+  @keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-20px) rotate(3deg); }
+  }
+  @keyframes float-slow {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes float-delayed {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-15px) rotate(-2deg); }
+  }
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+  }
+  @keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  @keyframes bounce-subtle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
+  .animate-float-delayed { animation: float-delayed 7s ease-in-out infinite 1s; }
+  .animate-pulse-glow { animation: pulse-glow 4s ease-in-out infinite; }
+  .animate-gradient { animation: gradient-shift 8s ease infinite; background-size: 200% 200%; }
+  .animate-marquee { animation: marquee 30s linear infinite; }
+  .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
+  .animate-scale-in { animation: scale-in 0.5s ease-out forwards; }
+  .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+  .animate-bounce-subtle { animation: bounce-subtle 2s ease-in-out infinite; }
+  .plant-icon-theme { filter: brightness(0) saturate(100%); }
+  .dark .plant-icon-theme { filter: brightness(0) saturate(100%) invert(100%); }
+  .gradient-text {
+    background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .dark .glass-card {
+    background: rgba(30, 30, 30, 0.7);
+  }
+`
+
 const LandingPage: React.FC = () => {
   const { t } = useTranslation("Landing")
   const { user, profile, signOut } = useAuth()
@@ -39,7 +120,6 @@ const LandingPage: React.FC = () => {
 
   const handleLogout = React.useCallback(async () => {
     await signOut()
-    // Stay on current page unless it requires authentication
     const protectedPrefixes = ['/profile', '/friends', '/settings', '/admin', '/create']
     const isOnProtectedPage = protectedPrefixes.some(prefix => 
       pathWithoutLang === prefix || pathWithoutLang.startsWith(prefix + '/')
@@ -56,148 +136,174 @@ const LandingPage: React.FC = () => {
   })
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-24 pt-2 md:px-8 md:pb-8 md:pt-4 overflow-x-hidden overflow-y-visible">
-      {/* Mobile Logo Header - only shown on mobile, only on landing page */}
-      <header className="md:hidden flex items-center justify-center py-6 mb-2">
-        <Link
-          to={user ? "/discovery" : "/"}
-          className="flex items-center gap-3 no-underline group"
-        >
-          <div className="relative">
-            <div className="absolute inset-0 bg-emerald-500/20 rounded-xl blur-lg group-hover:bg-emerald-500/30 transition-colors" />
-            <img 
-              src="/icons/plant-swipe-icon.svg" 
-              alt="Aphylia" 
-              className="relative h-11 w-10 plant-icon-theme"
-              draggable="false"
-            />
-          </div>
-          <span className="font-brand text-[1.75rem] font-bold tracking-tight text-stone-900 dark:text-white">
-            {t("common.appName", { ns: "common", defaultValue: "Aphylia" })}
-          </span>
-        </Link>
-      </header>
-
-      {/* Style for plant icon to work in dark mode */}
-      <style>{`
-        .plant-icon-theme {
-          filter: brightness(0) saturate(100%);
-        }
-        .dark .plant-icon-theme {
-          filter: brightness(0) saturate(100%) invert(100%);
-        }
-      `}</style>
-
-      {/* Desktop Navigation - uses the real TopBar */}
-      <div className="overflow-y-visible">
-        <TopBar
-          openLogin={openLogin}
-          openSignup={openSignup}
-          user={user}
-          displayName={profile?.display_name || null}
-          onProfile={handleProfileNavigation}
-          onLogout={handleLogout}
-        />
+    <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden">
+      <style>{animationStyles}</style>
+      
+      {/* Ambient Background Elements */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[120px] animate-pulse-glow" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-[100px] animate-pulse-glow" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-emerald-600/5 rounded-full blur-[80px]" />
       </div>
 
-      {/* Mobile Navigation - uses the real MobileNavBar */}
-      <MobileNavBar
-        canCreate={false}
-        onLogin={openLogin}
-        onSignup={openSignup}
-        onProfile={handleProfileNavigation}
-        onLogout={handleLogout}
-      />
+      <div className="relative">
+        {/* Mobile Logo Header */}
+        <header className="md:hidden flex items-center justify-center py-6 mb-2 px-4">
+          <Link to={user ? "/discovery" : "/"} className="flex items-center gap-3 no-underline group">
+            <div className="relative">
+              <div className="absolute inset-0 bg-emerald-500/20 rounded-xl blur-lg group-hover:bg-emerald-500/30 transition-colors" />
+              <img src="/icons/plant-swipe-icon.svg" alt="Aphylia" className="relative h-11 w-10 plant-icon-theme" draggable="false" />
+            </div>
+            <span className="font-brand text-[1.75rem] font-bold tracking-tight text-stone-900 dark:text-white">
+              {t("common.appName", { ns: "common", defaultValue: "Aphylia" })}
+            </span>
+          </Link>
+        </header>
 
-      {/* Hero Section */}
-      <HeroSection />
+        {/* Navigation */}
+        <div className="relative z-50">
+          <TopBar
+            openLogin={openLogin}
+            openSignup={openSignup}
+            user={user}
+            displayName={profile?.display_name || null}
+            onProfile={handleProfileNavigation}
+            onLogout={handleLogout}
+          />
+        </div>
+        <MobileNavBar canCreate={false} onLogin={openLogin} onSignup={openSignup} onProfile={handleProfileNavigation} onLogout={handleLogout} />
 
-      {/* Feature Grid */}
-      <FeaturesSection />
+        {/* Hero Section */}
+        <HeroSection />
 
-      {/* How It Works */}
-      <HowItWorksSection />
+        {/* Stats Banner */}
+        <StatsBanner />
 
-      {/* Showcase */}
-      <ShowcaseSection />
+        {/* Features Grid */}
+        <FeaturesSection />
 
-      {/* Social Proof */}
-      <TestimonialsSection />
+        {/* Interactive Demo */}
+        <InteractiveDemoSection />
 
-      {/* FAQ */}
-      <FAQSection />
+        {/* How It Works */}
+        <HowItWorksSection />
 
-      {/* Final CTA */}
-      <FinalCTASection />
+        {/* Showcase */}
+        <ShowcaseSection />
 
-      {/* Footer - same as the rest of the app */}
-      <Footer />
+        {/* Testimonials */}
+        <TestimonialsSection />
+
+        {/* FAQ */}
+        <FAQSection />
+
+        {/* Final CTA */}
+        <FinalCTASection />
+
+        {/* Footer */}
+        <Footer />
+      </div>
     </div>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   HERO SECTION
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   HERO SECTION - Completely Redesigned
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const HeroSection: React.FC = () => {
   const { t } = useTranslation("Landing")
 
   return (
-    <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-32 overflow-hidden">
-      {/* Background Glow */}
-      <div
-        className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-radial from-emerald-500/10 via-emerald-400/5 to-transparent blur-3xl pointer-events-none"
-        aria-hidden="true"
-      />
+    <section className="relative pt-24 pb-16 lg:pt-32 lg:pb-24 px-4 sm:px-6 lg:px-8 overflow-visible">
+      {/* Floating Plant Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-[10%] opacity-20 dark:opacity-10 animate-float">
+          <Leaf className="h-12 w-12 text-emerald-500 rotate-[-15deg]" />
+        </div>
+        <div className="absolute top-40 right-[15%] opacity-15 dark:opacity-10 animate-float-delayed">
+          <Flower2 className="h-16 w-16 text-pink-400 rotate-12" />
+        </div>
+        <div className="absolute bottom-32 left-[20%] opacity-20 dark:opacity-10 animate-float-slow">
+          <TreeDeciduous className="h-14 w-14 text-emerald-600 rotate-[-8deg]" />
+        </div>
+        <div className="absolute top-60 left-[5%] opacity-10 dark:opacity-5 animate-float-delayed">
+          <Sprout className="h-10 w-10 text-green-500" />
+        </div>
+        <div className="absolute bottom-20 right-[10%] opacity-15 dark:opacity-10 animate-float">
+          <Droplets className="h-8 w-8 text-blue-400" />
+        </div>
+      </div>
 
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left: Copy */}
-          <div className="text-center lg:text-left space-y-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-              <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+      <div className="relative max-w-7xl mx-auto">
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+          {/* Left: Hero Content */}
+          <div className="text-center lg:text-left space-y-8 animate-fade-in-up">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-sm">
+              <div className="relative">
+                <Sparkles className="h-4 w-4 text-emerald-500" />
+                <div className="absolute inset-0 animate-ping">
+                  <Sparkles className="h-4 w-4 text-emerald-500 opacity-50" />
+                </div>
+              </div>
               <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
                 {t("hero.badge")}
               </span>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-[1.1]">
-              {t("hero.title")}{" "}
-              <span className="text-emerald-600 dark:text-emerald-400">
-                {t("hero.titleHighlight")}
-              </span>{" "}
-              {t("hero.titleEnd")}
+            {/* Headline */}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.1]">
+              <span className="text-stone-900 dark:text-white">{t("hero.title")}</span>{" "}
+              <span className="gradient-text">{t("hero.titleHighlight")}</span>{" "}
+              <span className="text-stone-900 dark:text-white">{t("hero.titleEnd")}</span>
             </h1>
 
-            <p className="text-lg sm:text-xl text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed">
+            {/* Subheadline */}
+            <p className="text-lg sm:text-xl text-stone-600 dark:text-stone-300 max-w-xl mx-auto lg:mx-0 leading-relaxed">
               {t("hero.description")}
             </p>
 
+            {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <Link
                 to="/download"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-primary text-primary-foreground text-base font-semibold hover:opacity-90 transition-all"
+                className="group relative inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-emerald-500 text-white text-base font-semibold overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-0.5"
               >
-                <Leaf className="h-5 w-5" />
-                {t("hero.ctaDownload")}
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Leaf className="relative h-5 w-5" />
+                <span className="relative">{t("hero.ctaDownload")}</span>
               </Link>
               <Link
                 to="/discovery"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-secondary text-secondary-foreground text-base font-semibold border border-border hover:bg-secondary/80 transition-all"
+                className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/80 dark:bg-white/10 backdrop-blur-sm text-stone-900 dark:text-white text-base font-semibold border border-stone-200 dark:border-white/20 hover:bg-white dark:hover:bg-white/20 transition-all duration-300 hover:-translate-y-0.5"
               >
-                {t("hero.ctaTryBrowser")}
-                <ArrowRight className="h-4 w-4" />
+                <span>{t("hero.ctaTryBrowser")}</span>
+                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              {t("hero.socialProof")}
-            </p>
+            {/* Social Proof Pills */}
+            <div className="flex flex-wrap items-center gap-4 justify-center lg:justify-start pt-4">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/60 dark:bg-white/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10">
+                <div className="flex -space-x-2">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className={`h-6 w-6 rounded-full border-2 border-white dark:border-stone-800 ${['bg-emerald-400', 'bg-teal-400', 'bg-green-400', 'bg-lime-400'][i]}`} />
+                  ))}
+                </div>
+                <span className="text-sm text-stone-600 dark:text-stone-300">{t("hero.socialProof")}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                ))}
+                <span className="text-sm font-medium text-stone-600 dark:text-stone-300 ml-1">4.9</span>
+              </div>
+            </div>
           </div>
 
-          {/* Right: Hero Card / Phone Mockup */}
-          <div className="relative flex justify-center lg:justify-end">
-            <HeroCard />
+          {/* Right: Hero Visual */}
+          <div className="relative flex justify-center lg:justify-end animate-scale-in" style={{ animationDelay: '0.2s' }}>
+            <HeroVisual />
           </div>
         </div>
       </div>
@@ -205,156 +311,213 @@ const HeroSection: React.FC = () => {
   )
 }
 
-const HeroCard: React.FC = () => {
+const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
 
   return (
     <div className="relative">
-      {/* Glow behind card */}
-      <div
-        className="absolute inset-0 -m-8 bg-gradient-radial from-emerald-500/20 via-emerald-400/5 to-transparent blur-2xl"
-        aria-hidden="true"
-      />
+      {/* Glow Effects */}
+      <div className="absolute inset-0 -m-12 bg-gradient-to-br from-emerald-500/30 via-teal-500/20 to-green-500/30 rounded-full blur-3xl animate-pulse-glow" />
+      
+      {/* Main Phone Frame */}
+      <div className="relative w-[300px] sm:w-[340px] animate-float-slow">
+        <div className="relative bg-stone-900 dark:bg-stone-950 rounded-[3rem] p-3 shadow-2xl shadow-emerald-900/20">
+          {/* Screen */}
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-[#0f1a14] dark:to-[#0a1510] rounded-[2.5rem] overflow-hidden">
+            {/* Dynamic Island */}
+            <div className="h-10 flex items-center justify-center pt-2">
+              <div className="w-24 h-7 bg-stone-900 dark:bg-black rounded-full" />
+            </div>
 
-      {/* Phone Frame */}
-      <div className="relative w-[280px] sm:w-[320px] bg-card rounded-[3rem] p-3 shadow-2xl border border-border">
-        <div className="bg-secondary rounded-[2.5rem] overflow-hidden">
-          {/* Status bar */}
-          <div className="h-8 flex items-center justify-center">
-            <div className="w-20 h-5 bg-muted rounded-full" />
-          </div>
-
-          {/* Content */}
-          <div className="px-4 pb-6 space-y-4">
-            {/* Plant Image Placeholder */}
-            <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-emerald-500/10">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Leaf className="h-16 w-16 text-emerald-500/30" />
-              </div>
-              {/* Overlay info */}
-              <div className="absolute bottom-3 left-3 right-3">
-                <div className="bg-background/90 backdrop-blur-md rounded-xl p-3 space-y-1 border border-border">
-                  <p className="text-foreground font-semibold text-sm">{t("heroCard.plantName")}</p>
-                  <p className="text-muted-foreground text-xs italic">{t("heroCard.plantSubname")}</p>
+            {/* App Content */}
+            <div className="px-5 pb-8 space-y-4">
+              {/* Plant Image Area */}
+              <div className="relative aspect-[4/3] rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
+                    <Leaf className="relative h-20 w-20 text-emerald-500/60" />
+                  </div>
+                </div>
+                {/* Plant Info Overlay */}
+                <div className="absolute bottom-3 left-3 right-3">
+                  <div className="glass-card rounded-2xl p-3 space-y-1 border border-white/30 dark:border-white/10">
+                    <p className="text-stone-900 dark:text-white font-semibold text-sm">{t("heroCard.plantName")}</p>
+                    <p className="text-stone-600 dark:text-stone-400 text-xs italic">{t("heroCard.plantSubname")}</p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Care Info Pills */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-background border border-border">
-                <Droplets className="h-4 w-4 text-blue-500" />
-                <span className="text-xs text-muted-foreground">{t("heroCard.waterFrequency")}</span>
+              {/* Care Pills */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-white/10 border border-stone-200/50 dark:border-white/10">
+                  <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                    <Droplets className="h-4 w-4 text-blue-500" />
+                  </div>
+                  <span className="text-xs text-stone-600 dark:text-stone-300">{t("heroCard.waterFrequency")}</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-white/10 border border-stone-200/50 dark:border-white/10">
+                  <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                    <Sun className="h-4 w-4 text-amber-500" />
+                  </div>
+                  <span className="text-xs text-stone-600 dark:text-stone-300">{t("heroCard.lightLevel")}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-background border border-border">
-                <Sun className="h-4 w-4 text-amber-500" />
-                <span className="text-xs text-muted-foreground">{t("heroCard.lightLevel")}</span>
-              </div>
-            </div>
 
-            {/* Reminder Pill */}
-            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-              <div className="h-8 w-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80">{t("heroCard.nextReminder")}</p>
-                <p className="text-sm font-medium text-foreground">{t("heroCard.waterIn")}</p>
+              {/* Reminder Card */}
+              <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20">
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center animate-bounce-subtle">
+                  <Bell className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 uppercase tracking-wide">{t("heroCard.nextReminder")}</p>
+                  <p className="text-sm font-semibold text-stone-900 dark:text-white">{t("heroCard.waterIn")}</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-emerald-500" />
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Floating elements */}
-      <div className="absolute -top-4 -right-4 px-3 py-2 rounded-xl bg-card shadow-lg border border-border animate-float-slow">
+      {/* Floating Cards */}
+      <div className="absolute -top-4 -left-8 px-4 py-3 rounded-2xl glass-card shadow-lg border border-white/30 dark:border-white/10 animate-float" style={{ animationDelay: '0.5s' }}>
         <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-full bg-emerald-500/20 flex items-center justify-center">
-            <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          <div className="h-8 w-8 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <span className="text-xs font-medium text-foreground">{t("heroCard.careLogged")}</span>
+          <span className="text-sm font-medium text-stone-900 dark:text-white">{t("heroCard.careLogged")}</span>
+        </div>
+      </div>
+
+      <div className="absolute -bottom-2 -right-6 px-4 py-3 rounded-2xl glass-card shadow-lg border border-white/30 dark:border-white/10 animate-float-delayed">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-xl bg-pink-500/20 flex items-center justify-center">
+            <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />
+          </div>
+          <span className="text-sm font-medium text-stone-900 dark:text-white">+42 today</span>
         </div>
       </div>
     </div>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   FEATURES SECTION
-   ───────────────────────────────────────────────────────────────────────────── */
-const colorMap = {
-  emerald: "bg-emerald-500",
-  blue: "bg-blue-500",
-  purple: "bg-purple-500",
-  pink: "bg-pink-500",
-  amber: "bg-amber-500",
-  teal: "bg-teal-500",
-} as const
-
-const FeaturesSection: React.FC = () => {
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STATS BANNER - Animated Counter Section
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const StatsBanner: React.FC = () => {
   const { t } = useTranslation("Landing")
-
-  const features = [
-    {
-      icon: BookMarked,
-      titleKey: "features.smartLibrary.title",
-      descKey: "features.smartLibrary.description",
-      color: "emerald" as const,
-    },
-    {
-      icon: Bell,
-      titleKey: "features.careReminders.title",
-      descKey: "features.careReminders.description",
-      color: "blue" as const,
-    },
-    {
-      icon: BookMarked,
-      titleKey: "features.collections.title",
-      descKey: "features.collections.description",
-      color: "purple" as const,
-    },
-    {
-      icon: Camera,
-      titleKey: "features.plantId.title",
-      descKey: "features.plantId.description",
-      color: "pink" as const,
-    },
-    {
-      icon: NotebookPen,
-      titleKey: "features.journal.title",
-      descKey: "features.journal.description",
-      color: "amber" as const,
-    },
-    {
-      icon: Wifi,
-      titleKey: "features.pwa.title",
-      descKey: "features.pwa.description",
-      color: "teal" as const,
-    },
+  
+  const stats = [
+    { value: "10K+", label: t("stats.plants", { defaultValue: "Plant Species" }), icon: Leaf },
+    { value: "50K+", label: t("stats.users", { defaultValue: "Happy Gardeners" }), icon: Users },
+    { value: "100K+", label: t("stats.tasks", { defaultValue: "Care Tasks Done" }), icon: Check },
+    { value: "4.9", label: t("stats.rating", { defaultValue: "App Store Rating" }), icon: Star },
   ]
 
   return (
-    <section id="features" className="py-20 lg:py-32 scroll-mt-20">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="relative py-12 lg:py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
+      <div className="max-w-7xl mx-auto">
+        <div className="relative rounded-3xl bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 p-[1px]">
+          <div className="rounded-3xl bg-white/95 dark:bg-stone-950/95 backdrop-blur-xl px-8 py-10 lg:px-12">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+              {stats.map((stat, i) => (
+                <div key={i} className="text-center group">
+                  <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-500/10 mb-4 group-hover:scale-110 transition-transform">
+                    <stat.icon className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div className="text-3xl lg:text-4xl font-bold text-stone-900 dark:text-white mb-1">
+                    {stat.value}
+                  </div>
+                  <div className="text-sm text-stone-600 dark:text-stone-400">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   FEATURES SECTION - Bento Grid Style
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const FeaturesSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
+  return (
+    <section id="features" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+      <div className="max-w-7xl mx-auto">
+        {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
+            <Zap className="h-4 w-4 text-emerald-500" />
+            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+              {t("features.badge", { defaultValue: "Powerful Features" })}
+            </span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("features.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("features.subtitle")}
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature, i) => (
-            <FeatureCard
-              key={i}
-              icon={feature.icon}
-              title={t(feature.titleKey)}
-              description={t(feature.descKey)}
-              color={feature.color}
-            />
-          ))}
+        {/* Bento Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+          {/* Large Feature Card */}
+          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/20 p-8 overflow-hidden hover:border-emerald-500/40 transition-all duration-500">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-colors" />
+            <div className="relative">
+              <div className="inline-flex h-14 w-14 rounded-2xl bg-emerald-500 items-center justify-center mb-6 shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform">
+                <BookMarked className="h-7 w-7 text-white" />
+              </div>
+              <h3 className="text-2xl font-bold text-stone-900 dark:text-white mb-3">{t("features.smartLibrary.title")}</h3>
+              <p className="text-stone-600 dark:text-stone-400 text-base leading-relaxed max-w-lg">{t("features.smartLibrary.description")}</p>
+              
+              {/* Mini preview */}
+              <div className="mt-8 flex gap-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-16 w-16 rounded-xl bg-gradient-to-br from-emerald-400/20 to-teal-400/20 border border-emerald-500/20 flex items-center justify-center">
+                    <Leaf className="h-6 w-6 text-emerald-500/50" />
+                  </div>
+                ))}
+                <div className="h-16 w-16 rounded-xl bg-stone-100 dark:bg-white/5 border border-stone-200 dark:border-white/10 flex items-center justify-center">
+                  <span className="text-sm font-medium text-stone-400">+10K</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Regular Feature Cards */}
+          <FeatureCard icon={Bell} title={t("features.careReminders.title")} description={t("features.careReminders.description")} gradient="from-blue-500/10 to-indigo-500/10" iconBg="bg-blue-500" />
+          <FeatureCard icon={Camera} title={t("features.plantId.title")} description={t("features.plantId.description")} gradient="from-pink-500/10 to-rose-500/10" iconBg="bg-pink-500" />
+          <FeatureCard icon={NotebookPen} title={t("features.journal.title")} description={t("features.journal.description")} gradient="from-amber-500/10 to-orange-500/10" iconBg="bg-amber-500" />
+          
+          {/* Wide Feature Card */}
+          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-r from-purple-500/10 via-violet-500/5 to-transparent border border-purple-500/20 p-8 overflow-hidden hover:border-purple-500/40 transition-all duration-500">
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <div className="inline-flex h-14 w-14 rounded-2xl bg-purple-500 items-center justify-center shadow-lg shadow-purple-500/30 group-hover:scale-110 transition-transform flex-shrink-0">
+                <Wifi className="h-7 w-7 text-white" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-stone-900 dark:text-white mb-2">{t("features.pwa.title")}</h3>
+                <p className="text-stone-600 dark:text-stone-400">{t("features.pwa.description")}</p>
+              </div>
+              <div className="flex gap-3 md:ml-auto">
+                <div className="h-12 w-12 rounded-xl bg-white dark:bg-white/10 border border-stone-200 dark:border-white/10 flex items-center justify-center">
+                  <Smartphone className="h-5 w-5 text-stone-600 dark:text-stone-300" />
+                </div>
+                <div className="h-12 w-12 rounded-xl bg-white dark:bg-white/10 border border-stone-200 dark:border-white/10 flex items-center justify-center">
+                  <Globe className="h-5 w-5 text-stone-600 dark:text-stone-300" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <FeatureCard icon={BookMarked} title={t("features.collections.title")} description={t("features.collections.description")} gradient="from-teal-500/10 to-cyan-500/10" iconBg="bg-teal-500" />
         </div>
       </div>
     </section>
@@ -365,67 +528,160 @@ const FeatureCard: React.FC<{
   icon: React.ElementType
   title: string
   description: string
-  color: keyof typeof colorMap
-}> = ({ icon: Icon, title, description, color }) => {
-  return (
-    <div className="group relative rounded-2xl border border-border bg-card p-6 hover:border-emerald-500/30 hover:bg-card/80 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-      {/* Icon */}
-      <div
-        className={`inline-flex h-12 w-12 rounded-xl ${colorMap[color]} items-center justify-center mb-4`}
-      >
-        <Icon className="h-6 w-6 text-white" />
-      </div>
-
-      <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
-      <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
+  gradient: string
+  iconBg: string
+}> = ({ icon: Icon, title, description, gradient, iconBg }) => (
+  <div className={`group relative rounded-3xl bg-gradient-to-br ${gradient} border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl`}>
+    <div className={`inline-flex h-12 w-12 rounded-xl ${iconBg} items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
+      <Icon className="h-6 w-6 text-white" />
     </div>
+    <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">{title}</h3>
+    <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed">{description}</p>
+  </div>
+)
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   INTERACTIVE DEMO SECTION
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const InteractiveDemoSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+  const [activeFeature, setActiveFeature] = React.useState(0)
+
+  const features = [
+    { icon: Leaf, label: t("demo.discover", { defaultValue: "Discover Plants" }), color: "emerald" },
+    { icon: Clock, label: t("demo.schedule", { defaultValue: "Schedule Care" }), color: "blue" },
+    { icon: TrendingUp, label: t("demo.track", { defaultValue: "Track Growth" }), color: "purple" },
+    { icon: Shield, label: t("demo.protect", { defaultValue: "Get Alerts" }), color: "rose" },
+  ]
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveFeature((prev) => (prev + 1) % features.length)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [features.length])
+
+  return (
+    <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-50/30 to-transparent dark:via-emerald-950/20">
+      <div className="max-w-7xl mx-auto">
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+          {/* Left: Demo Visual */}
+          <div className="relative order-2 lg:order-1">
+            <div className="relative aspect-square max-w-md mx-auto">
+              {/* Center Circle */}
+              <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30" />
+              <div className="absolute inset-[25%] rounded-full bg-white dark:bg-stone-900 shadow-2xl shadow-emerald-500/20 flex items-center justify-center">
+                <div className="text-center p-6">
+                  <div className={`inline-flex h-16 w-16 rounded-2xl bg-${features[activeFeature].color}-500 items-center justify-center mb-3`}>
+                    {React.createElement(features[activeFeature].icon, { className: "h-8 w-8 text-white" })}
+                  </div>
+                  <p className="text-sm font-medium text-stone-900 dark:text-white">{features[activeFeature].label}</p>
+                </div>
+              </div>
+              
+              {/* Orbiting Elements */}
+              <div className="absolute inset-0 animate-spin-slow">
+                {features.map((feature, i) => {
+                  const angle = (i * 90) * (Math.PI / 180)
+                  const x = 50 + 42 * Math.cos(angle)
+                  const y = 50 + 42 * Math.sin(angle)
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setActiveFeature(i)}
+                      style={{ left: `${x}%`, top: `${y}%` }}
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 h-12 w-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                        activeFeature === i 
+                          ? `bg-${feature.color}-500 scale-110 shadow-lg` 
+                          : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:scale-105'
+                      }`}
+                    >
+                      <feature.icon className={`h-5 w-5 ${activeFeature === i ? 'text-white' : 'text-stone-600 dark:text-stone-400'}`} />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Content */}
+          <div className="order-1 lg:order-2 text-center lg:text-left">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
+              {t("demo.title", { defaultValue: "Your Complete Plant Care Companion" })}
+            </h2>
+            <p className="text-lg text-stone-600 dark:text-stone-400 mb-8 max-w-lg mx-auto lg:mx-0">
+              {t("demo.description", { defaultValue: "From discovery to daily care, we've got everything you need to help your plants thrive." })}
+            </p>
+            
+            {/* Feature Tabs */}
+            <div className="flex flex-wrap gap-3 justify-center lg:justify-start">
+              {features.map((feature, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveFeature(i)}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 ${
+                    activeFeature === i
+                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                      : 'bg-white dark:bg-white/10 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-white/10 hover:border-emerald-500/30'
+                  }`}
+                >
+                  <feature.icon className="h-4 w-4" />
+                  <span className="text-sm font-medium">{feature.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   HOW IT WORKS
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   HOW IT WORKS - Redesigned
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const HowItWorksSection: React.FC = () => {
   const { t } = useTranslation("Landing")
 
   const steps = [
-    { num: 1, titleKey: "howItWorks.step1.title", descKey: "howItWorks.step1.description" },
-    { num: 2, titleKey: "howItWorks.step2.title", descKey: "howItWorks.step2.description" },
-    { num: 3, titleKey: "howItWorks.step3.title", descKey: "howItWorks.step3.description" },
+    { num: 1, icon: Camera, titleKey: "howItWorks.step1.title", descKey: "howItWorks.step1.description" },
+    { num: 2, icon: BookMarked, titleKey: "howItWorks.step2.title", descKey: "howItWorks.step2.description" },
+    { num: 3, icon: Sparkles, titleKey: "howItWorks.step3.title", descKey: "howItWorks.step3.description" },
   ]
 
   return (
-    <section
-      id="how-it-works"
-      className="py-20 lg:py-32 bg-secondary/30 scroll-mt-20"
-    >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="how-it-works" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+      <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("howItWorks.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("howItWorks.subtitle")}
           </p>
         </div>
 
         <div className="relative">
-          {/* Connecting line (desktop) */}
-          <div
-            className="hidden lg:block absolute top-1/2 left-[16%] right-[16%] h-0.5 bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400"
-            aria-hidden="true"
-          />
+          {/* Connecting Line */}
+          <div className="hidden lg:block absolute top-24 left-[calc(16.67%+24px)] right-[calc(16.67%+24px)] h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 rounded-full" />
 
           <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
             {steps.map((step, i) => (
-              <div key={i} className="relative text-center">
-                {/* Number badge */}
-                <div className="relative z-10 mx-auto mb-6 h-16 w-16 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg">
-                  <span className="text-2xl font-bold text-white">{step.num}</span>
+              <div key={i} className="relative text-center group">
+                {/* Step Number with Icon */}
+                <div className="relative z-10 mx-auto mb-8">
+                  <div className="relative inline-flex">
+                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-xl shadow-emerald-500/30 group-hover:scale-110 transition-transform">
+                      <step.icon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-white dark:bg-stone-900 border-2 border-emerald-500 flex items-center justify-center">
+                      <span className="text-sm font-bold text-emerald-600">{step.num}</span>
+                    </div>
+                  </div>
                 </div>
 
-                <h3 className="text-xl font-semibold text-foreground mb-2">{t(step.titleKey)}</h3>
-                <p className="text-muted-foreground text-sm max-w-xs mx-auto">{t(step.descKey)}</p>
+                <h3 className="text-xl font-bold text-stone-900 dark:text-white mb-3">{t(step.titleKey)}</h3>
+                <p className="text-stone-600 dark:text-stone-400 max-w-xs mx-auto">{t(step.descKey)}</p>
               </div>
             ))}
           </div>
@@ -435,78 +691,66 @@ const HowItWorksSection: React.FC = () => {
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   SHOWCASE SECTION
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SHOWCASE SECTION - Enhanced
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const ShowcaseSection: React.FC = () => {
   const { t } = useTranslation("Landing")
 
   return (
-    <section className="py-20 lg:py-32 overflow-hidden">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-stone-100/50 to-transparent dark:via-stone-900/30">
+      <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("showcase.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("showcase.subtitle")}
           </p>
         </div>
 
-        {/* Showcase Grid */}
-        <div className="relative">
-          {/* Background glow */}
-          <div
-            className="absolute inset-0 -m-20 bg-gradient-radial from-emerald-500/5 to-transparent blur-3xl pointer-events-none"
-            aria-hidden="true"
-          />
-
-          <div className="relative grid md:grid-cols-3 gap-6">
-            {/* Main card */}
-            <div className="md:col-span-2 md:row-span-2 rounded-3xl bg-card border border-border p-8 overflow-hidden relative group">
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgxMjgsMTI4LDEyOCwwLjA1KSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-50" />
-              <div className="relative h-full min-h-[300px] flex flex-col justify-end">
-                <div className="absolute top-4 right-4">
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium border border-emerald-500/20">
-                    {t("showcase.dashboardPreview")}
-                  </span>
-                </div>
-                <div className="space-y-4">
-                  <h3 className="text-2xl font-bold text-foreground">{t("showcase.dashboardTitle")}</h3>
-                  <p className="text-muted-foreground max-w-md">
-                    {t("showcase.dashboardDescription")}
-                  </p>
-                </div>
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Main Dashboard Card */}
+          <div className="md:col-span-2 md:row-span-2 group relative rounded-3xl overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 to-teal-600" />
+            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-50" />
+            <div className="relative h-full min-h-[400px] p-8 flex flex-col justify-between">
+              <span className="inline-flex self-start px-4 py-2 rounded-full bg-white/20 text-white text-sm font-medium backdrop-blur-sm">
+                {t("showcase.dashboardPreview")}
+              </span>
+              <div className="space-y-4">
+                <h3 className="text-3xl font-bold text-white">{t("showcase.dashboardTitle")}</h3>
+                <p className="text-white/80 max-w-md">{t("showcase.dashboardDescription")}</p>
               </div>
             </div>
+          </div>
 
-            {/* Small cards */}
-            <div className="rounded-2xl bg-blue-500/10 border border-blue-500/20 p-6 flex flex-col justify-between">
-              <Droplets className="h-8 w-8 text-blue-500 mb-4" />
-              <div>
-                <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">{t("showcase.wateringReminder")}</p>
-                <p className="text-xs text-blue-600/70 dark:text-blue-400/70">{t("showcase.wateringText")}</p>
-              </div>
+          {/* Water Reminder Card */}
+          <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1">
+            <div className="h-12 w-12 rounded-xl bg-blue-500 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
+              <Droplets className="h-6 w-6 text-white" />
             </div>
+            <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.wateringReminder")}</p>
+            <p className="text-sm text-stone-600 dark:text-stone-400">{t("showcase.wateringText")}</p>
+          </div>
 
-            <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-6 flex flex-col justify-between">
-              <Sun className="h-8 w-8 text-amber-500 mb-4" />
-              <div>
-                <p className="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">{t("showcase.lightCheck")}</p>
-                <p className="text-xs text-amber-600/70 dark:text-amber-400/70">{t("showcase.lightText")}</p>
-              </div>
+          {/* Light Check Card */}
+          <div className="group rounded-3xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1">
+            <div className="h-12 w-12 rounded-xl bg-amber-500 flex items-center justify-center mb-4 shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">
+              <Sun className="h-6 w-6 text-white" />
             </div>
+            <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.lightCheck")}</p>
+            <p className="text-sm text-stone-600 dark:text-stone-400">{t("showcase.lightText")}</p>
+          </div>
 
-            <div className="md:col-span-1 rounded-2xl bg-rose-500/10 border border-rose-500/20 p-6 flex flex-col justify-between">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-                <span className="text-xs text-rose-600/80 dark:text-rose-400/80">{t("showcase.toxicityAlert")}</span>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-rose-600 dark:text-rose-400 mb-1">{t("showcase.petWarning")}</p>
-                <p className="text-xs text-rose-600/70 dark:text-rose-400/70">{t("showcase.petWarningText")}</p>
-              </div>
+          {/* Pet Safety Card */}
+          <div className="md:col-span-1 group rounded-3xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-500/20 p-6 hover:border-rose-500/40 transition-all duration-300 hover:-translate-y-1">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+              <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t("showcase.toxicityAlert")}</span>
             </div>
+            <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.petWarning")}</p>
+            <p className="text-sm text-stone-600 dark:text-stone-400">{t("showcase.petWarningText")}</p>
           </div>
         </div>
       </div>
@@ -514,53 +758,51 @@ const ShowcaseSection: React.FC = () => {
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   TESTIMONIALS
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TESTIMONIALS - Redesigned with Marquee
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const TestimonialsSection: React.FC = () => {
   const { t } = useTranslation("Landing")
 
   const rawTestimonials = t("testimonials.items", { returnObjects: true })
-  const testimonials = Array.isArray(rawTestimonials) ? rawTestimonials as Array<{
-    name: string
-    role: string
-    quote: string
-  }> : []
+  const testimonials = Array.isArray(rawTestimonials) ? rawTestimonials as Array<{ name: string; role: string; quote: string }> : []
 
   return (
-    <section className="py-20 lg:py-32 bg-secondary/30">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-20 lg:py-32 overflow-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("testimonials.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("testimonials.subtitle")}
           </p>
         </div>
+      </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {testimonials.map((testimonial, i) => (
-            <div
-              key={i}
-              className="rounded-2xl border border-border bg-card p-6 hover:shadow-lg transition-shadow"
-            >
-              {/* Stars */}
-              <div className="flex gap-1 mb-4">
-                {[...Array(5)].map((_, j) => (
-                  <Star key={j} className="h-4 w-4 fill-amber-400 text-amber-400" />
-                ))}
-              </div>
-
-              <p className="text-foreground text-sm mb-6 leading-relaxed">"{testimonial.quote}"</p>
-
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center text-white font-semibold text-sm">
-                  {testimonial.name.charAt(0)}
+      {/* Marquee Container */}
+      <div className="relative">
+        <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-emerald-50 dark:from-[#0a0f0a] to-transparent z-10" />
+        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-emerald-50 dark:from-[#0a0f0a] to-transparent z-10" />
+        
+        <div className="flex animate-marquee">
+          {[...testimonials, ...testimonials].map((testimonial, i) => (
+            <div key={i} className="flex-shrink-0 w-[350px] mx-3">
+              <div className="rounded-3xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-6 h-full hover:shadow-xl transition-shadow">
+                <div className="flex gap-1 mb-4">
+                  {[...Array(5)].map((_, j) => (
+                    <Star key={j} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                  ))}
                 </div>
-                <div>
-                  <p className="font-medium text-foreground text-sm">{testimonial.name}</p>
-                  <p className="text-muted-foreground text-xs">{testimonial.role}</p>
+                <p className="text-stone-700 dark:text-stone-300 text-sm mb-6 leading-relaxed">"{testimonial.quote}"</p>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold text-sm">
+                    {testimonial.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-medium text-stone-900 dark:text-white text-sm">{testimonial.name}</p>
+                    <p className="text-stone-500 dark:text-stone-400 text-xs">{testimonial.role}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -571,9 +813,9 @@ const TestimonialsSection: React.FC = () => {
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   FAQ SECTION
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   FAQ SECTION - Redesigned
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const FAQSection: React.FC = () => {
   const [openIndex, setOpenIndex] = React.useState<number | null>(0)
   const { t } = useTranslation("Landing")
@@ -582,61 +824,54 @@ const FAQSection: React.FC = () => {
   const faqs = Array.isArray(rawFaqs) ? rawFaqs as Array<{ q: string; a: string }> : []
 
   return (
-    <section id="faq" className="py-20 lg:py-32 scroll-mt-20">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="faq" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+      <div className="max-w-4xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("faq.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("faq.subtitle")}
           </p>
         </div>
 
         <div className="space-y-4">
           {faqs.map((faq, i) => (
-            <div
-              key={i}
-              className="rounded-2xl border border-border bg-card overflow-hidden"
-            >
+            <div key={i} className="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden hover:border-emerald-500/30 transition-colors">
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                className="w-full px-6 py-4 flex items-center justify-between text-left"
+                className="w-full px-6 py-5 flex items-center justify-between text-left"
                 aria-expanded={openIndex === i}
               >
-                <span className="font-medium text-foreground">{faq.q}</span>
-                <ChevronDown
-                  className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
-                    openIndex === i ? "rotate-180" : ""
-                  }`}
-                />
+                <span className="font-semibold text-stone-900 dark:text-white pr-4">{faq.q}</span>
+                <div className={`h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0 transition-transform duration-300 ${openIndex === i ? 'rotate-180' : ''}`}>
+                  <ChevronDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
               </button>
-              <div
-                className={`overflow-hidden transition-all duration-200 ${
-                  openIndex === i ? "max-h-40" : "max-h-0"
-                }`}
-              >
-                <p className="px-6 pb-4 text-muted-foreground text-sm leading-relaxed">{faq.a}</p>
+              <div className={`overflow-hidden transition-all duration-300 ${openIndex === i ? 'max-h-48' : 'max-h-0'}`}>
+                <p className="px-6 pb-5 text-stone-600 dark:text-stone-400 leading-relaxed">{faq.a}</p>
               </div>
             </div>
           ))}
         </div>
 
         {/* Support CTA */}
-        <div className="mt-12 text-center">
-          <div className="inline-flex flex-col items-center gap-4 p-6 rounded-2xl bg-card border border-border">
-            <MessageCircle className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+        <div className="mt-16 text-center">
+          <div className="inline-flex flex-col items-center gap-4 p-8 rounded-3xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/20">
+            <div className="h-14 w-14 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+              <MessageCircle className="h-7 w-7 text-white" />
+            </div>
             <div className="space-y-1">
-              <p className="font-semibold text-foreground">
-                {t("faq.supportTitle", { defaultValue: "We're here to answer your questions" })}
+              <p className="text-xl font-bold text-stone-900 dark:text-white">
+                {t("faq.supportTitle", { defaultValue: "Still have questions?" })}
               </p>
-              <p className="text-sm text-muted-foreground">
-                {t("faq.supportSubtitle", { defaultValue: "Let us know any question you have" })}
+              <p className="text-stone-600 dark:text-stone-400">
+                {t("faq.supportSubtitle", { defaultValue: "Our team is here to help you" })}
               </p>
             </div>
             <Link
               to="/contact"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/30"
             >
               {t("faq.supportButton", { defaultValue: "Contact Support" })}
               <ArrowRight className="h-4 w-4" />
@@ -648,44 +883,50 @@ const FAQSection: React.FC = () => {
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   FINAL CTA
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   FINAL CTA - Enhanced
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const FinalCTASection: React.FC = () => {
   const { t } = useTranslation("Landing")
 
   return (
-    <section className="py-20 lg:py-32">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="relative rounded-3xl overflow-hidden bg-emerald-500 p-12 lg:p-20">
-          {/* Background pattern */}
-          <div
-            className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30"
-            aria-hidden="true"
-          />
+    <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="relative rounded-[2.5rem] overflow-hidden">
+          {/* Gradient Background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-teal-500 to-green-600" />
+          
+          {/* Animated Orbs */}
+          <div className="absolute top-0 left-0 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-glow" />
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '2s' }} />
+          
+          {/* Pattern Overlay */}
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30" />
 
-          <div className="relative text-center space-y-8">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white max-w-2xl mx-auto leading-tight">
-              {t("finalCta.title")}
-            </h2>
-            <p className="text-lg text-white/80 max-w-xl mx-auto">
-              {t("finalCta.subtitle")}
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link
-                to="/download"
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white text-emerald-600 text-base font-semibold hover:bg-white/90 transition-all"
-              >
-                <Leaf className="h-5 w-5" />
-                {t("finalCta.ctaDownload")}
-              </Link>
-              <Link
-                to="/about"
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-semibold border border-white/20 transition-all"
-              >
-                {t("finalCta.ctaDocs")}
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+          <div className="relative px-8 py-16 lg:px-16 lg:py-24 text-center">
+            <div className="max-w-3xl mx-auto space-y-8">
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight">
+                {t("finalCta.title")}
+              </h2>
+              <p className="text-lg sm:text-xl text-white/80 max-w-2xl mx-auto">
+                {t("finalCta.subtitle")}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+                <Link
+                  to="/download"
+                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white text-emerald-600 text-base font-bold hover:bg-white/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5"
+                >
+                  <Leaf className="h-5 w-5" />
+                  {t("finalCta.ctaDownload")}
+                </Link>
+                <Link
+                  to="/discovery"
+                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-semibold border border-white/30 transition-all hover:-translate-y-0.5"
+                >
+                  {t("finalCta.ctaDocs")}
+                  <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </Link>
+              </div>
             </div>
           </div>
         </div>
