@@ -45,8 +45,8 @@ interface UseNotificationsReturn {
   loading: boolean
   /** Error message if any */
   error: string | null
-  /** Refresh all notification data */
-  refresh: () => Promise<void>
+  /** Refresh all notification data (pass true to force bypass throttle) */
+  refresh: (force?: boolean) => Promise<void>
   /** Whether there are any unread notifications */
   hasUnread: boolean
 }
@@ -87,7 +87,7 @@ export function useNotifications(
   const mountedRef = React.useRef(true)
   const lastRefreshRef = React.useRef<number>(0)
 
-  const refresh = React.useCallback(async () => {
+  const refresh = React.useCallback(async (force?: boolean) => {
     if (!userId) {
       setCounts({ total: 0, unread: 0, friendRequests: 0, gardenInvites: 0, unreadMessages: 0 })
       setFriendRequests([])
@@ -96,9 +96,9 @@ export function useNotifications(
       return
     }
 
-    // Throttle refreshes to max once per 500ms
+    // Throttle refreshes to max once per 500ms (unless forced)
     const now = Date.now()
-    if (now - lastRefreshRef.current < 500) {
+    if (!force && now - lastRefreshRef.current < 500) {
       return
     }
     lastRefreshRef.current = now

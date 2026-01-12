@@ -45,7 +45,7 @@ interface MobileNotificationSheetProps {
   onClose: () => void
   friendRequests: FriendRequest[]
   gardenInvites: GardenInvite[]
-  onRefresh: () => Promise<void>
+  onRefresh: (force?: boolean) => Promise<void>
 }
 
 /**
@@ -101,7 +101,7 @@ export function MobileNotificationSheet({
     setProcessingId(requestId)
     try {
       await supabase.rpc('accept_friend_request', { _request_id: requestId })
-      await onRefresh()
+      await onRefresh(true) // Force refresh to bypass throttle
     } catch (e: any) {
       console.error('Failed to accept friend request:', e)
     } finally {
@@ -116,7 +116,7 @@ export function MobileNotificationSheet({
         .from('friend_requests')
         .update({ status: 'rejected' })
         .eq('id', requestId)
-      await onRefresh()
+      await onRefresh(true) // Force refresh to bypass throttle
     } catch (e: any) {
       console.error('Failed to reject friend request:', e)
     } finally {
@@ -129,7 +129,7 @@ export function MobileNotificationSheet({
     setProcessingId(inviteId)
     try {
       await acceptGardenInvite(inviteId)
-      await onRefresh()
+      await onRefresh(true) // Force refresh to bypass throttle
     } catch (e: any) {
       console.error('Failed to accept garden invite:', e)
     } finally {
@@ -141,7 +141,7 @@ export function MobileNotificationSheet({
     setProcessingId(inviteId)
     try {
       await declineGardenInvite(inviteId)
-      await onRefresh()
+      await onRefresh(true) // Force refresh to bypass throttle
     } catch (e: any) {
       console.error('Failed to decline garden invite:', e)
     } finally {
