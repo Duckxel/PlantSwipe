@@ -1871,17 +1871,22 @@
     "friends": {
       "title": "Amis",
       "pleaseLogin": "Veuillez vous connecter pour gérer vos amis",
-      "pendingInvitations": "Invitations en attente",
-      "sentRequests": "Demandes envoyées",
+      "pendingInvitations": "Reçues",
+      "sentRequests": "Envoyées",
       "yourFriends": "Vos amis",
       "addFriend": "Ajouter un ami",
-      "noFriendsYet": "Aucun ami pour le moment. Recherchez des personnes ci-dessus pour ajouter des amis !",
+      "noFriendsYet": "Aucun ami pour le moment. Ajoutez des amis pour commencer !",
+      "noPendingRequests": "Aucune demande en attente",
+      "noSentRequests": "Aucune demande envoyée",
+      "awaitingResponse": "En attente de réponse",
+      "friendsSince": "Amis depuis",
+      "confirmRemove": "Retirer cet ami ?",
       "viewProfile": "Voir le profil",
       "friendOptions": "Options d'ami",
       "removeFriend": "Retirer l'ami",
       "removeFriendConfirm": "Retirer",
       "pending": "En attente",
-      "friends": "Amis",
+      "friends": "amis",
       "unknown": "Inconnu",
       "addFriendDialog": {
         "title": "Ajouter un ami",
@@ -1889,11 +1894,11 @@
         "searchPlaceholder": "Rechercher par nom d'utilisateur ou e-mail...",
         "searching": "Recherche...",
         "noUsersFound": "Aucun utilisateur trouvé",
-        "addFriend": "Ajouter un ami"
+        "addFriend": "Ajouter"
       },
       "errors": {
         "failedToLoad": "Échec du chargement des amis",
-        "failedToLoadSentRequests": "Échec du chargement des demandes envoyées en attente",
+        "failedToLoadSentRequests": "Échec du chargement des demandes envoyées",
         "failedToLoadRequests": "Échec du chargement des demandes d'amis",
         "searchFailed": "Échec de la recherche",
         "alreadyFriends": "Déjà ami avec cet utilisateur",
@@ -1901,7 +1906,9 @@
         "failedToSend": "Échec de l'envoi de la demande d'ami",
         "failedToAccept": "Échec de l'acceptation de la demande d'ami",
         "failedToReject": "Échec du rejet de la demande d'ami",
-        "failedToRemove": "Échec du retrait de l'ami"
+        "failedToRemove": "Échec du retrait de l'ami",
+        "failedToCancel": "Échec de l'annulation de la demande",
+        "cannotSendRequest": "Impossible d'envoyer une demande d'ami à cet utilisateur"
       }
     },
     "profile": {
