@@ -1,5 +1,5 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
 import { executeRecaptcha } from "@/lib/recaptcha";
@@ -147,6 +147,7 @@ export default function PlantSwipe() {
   const initialCardBoostRef = React.useRef(true)
 
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "landing" | "discovery" | "gardens" | "search" | "profile" | "create" =
@@ -249,6 +250,18 @@ export default function PlantSwipe() {
     const arr = Array.isArray(profile?.liked_plant_ids) ? profile.liked_plant_ids.map(String) : []
     setLikedIds(arr)
   }, [profile])
+
+  // Read search query from URL parameters when on search page
+  React.useEffect(() => {
+    if (pathWithoutLang.startsWith("/search")) {
+      const urlQuery = searchParams.get("q")
+      if (urlQuery && urlQuery !== query) {
+        setQuery(urlQuery)
+        // Clear the URL parameter after setting the query to keep URL clean
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [pathWithoutLang, searchParams, setSearchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadPlants = React.useCallback(async () => {
     // Only show loading if we don't have plants
