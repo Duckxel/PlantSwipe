@@ -17708,19 +17708,24 @@ async function buildGardenContextString(context) {
         parts.push(`- Added to garden: ${addedDate.toLocaleDateString()}`)
       }
       
-      // Care requirements
-      parts.push(`\n#### Care Requirements:`)
-      if (plant.waterFrequency) parts.push(`- Water frequency: ${plant.waterFrequency}`)
-      if (plant.wateringType && plant.wateringType.length > 0) parts.push(`- Watering methods: ${plant.wateringType.join(', ')}`)
-      if (plant.lightLevel) parts.push(`- Light needs: ${plant.lightLevel}`)
+      // Care requirements - only show section if there's care data
+      const careRequirements = []
+      if (plant.waterFrequency) careRequirements.push(`- Water frequency: ${plant.waterFrequency}`)
+      if (plant.wateringType && plant.wateringType.length > 0) careRequirements.push(`- Watering methods: ${plant.wateringType.join(', ')}`)
+      if (plant.lightLevel) careRequirements.push(`- Light needs: ${plant.lightLevel}`)
       if (plant.temperatureRange) {
-        parts.push(`- Temperature range: ${plant.temperatureRange.min}°C to ${plant.temperatureRange.max}°C (ideal: ${plant.temperatureRange.ideal}°C)`)
+        careRequirements.push(`- Temperature range: ${plant.temperatureRange.min}°C to ${plant.temperatureRange.max}°C (ideal: ${plant.temperatureRange.ideal}°C)`)
       }
-      if (plant.humidity) parts.push(`- Humidity needs: ${plant.humidity}%`)
-      if (plant.hardinessZone) parts.push(`- Hardiness zone: ${plant.hardinessZone}`)
-      if (plant.soilType && plant.soilType.length > 0) parts.push(`- Soil types: ${plant.soilType.join(', ')}`)
-      if (plant.nutritionNeeds && plant.nutritionNeeds.length > 0) parts.push(`- Nutrition needs: ${plant.nutritionNeeds.join(', ')}`)
-      if (plant.fertilizerTypes && plant.fertilizerTypes.length > 0) parts.push(`- Fertilizer types: ${plant.fertilizerTypes.join(', ')}`)
+      if (plant.humidity) careRequirements.push(`- Humidity needs: ${plant.humidity}%`)
+      if (plant.hardinessZone) careRequirements.push(`- Hardiness zone: ${plant.hardinessZone}`)
+      if (plant.soilType && plant.soilType.length > 0) careRequirements.push(`- Soil types: ${plant.soilType.join(', ')}`)
+      if (plant.nutritionNeeds && plant.nutritionNeeds.length > 0) careRequirements.push(`- Nutrition needs: ${plant.nutritionNeeds.join(', ')}`)
+      if (plant.fertilizerTypes && plant.fertilizerTypes.length > 0) careRequirements.push(`- Fertilizer types: ${plant.fertilizerTypes.join(', ')}`)
+      
+      if (careRequirements.length > 0) {
+        parts.push(`\n#### Care Requirements:`)
+        parts.push(...careRequirements)
+      }
       
       // Growing info
       if (plant.sowingMonths && plant.sowingMonths.length > 0) parts.push(`- Sowing months: ${plant.sowingMonths.join(', ')}`)
@@ -18895,11 +18900,27 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       console.warn('[aphylia-chat] ⚠️ No garden context provided! AI responses will be generic without garden-specific information.')
     }
     
+    // Use frontend-provided plant summaries as fallback if backend fetch returned empty
+    // This ensures the AI always has some plant context even if database queries fail
+    let effectivePlantsContext = plantsContext
+    if ((!plantsContext || plantsContext.length === 0) && gardenContext?.plants && gardenContext.plants.length > 0) {
+      console.log(`[aphylia-chat] Using ${gardenContext.plants.length} plants from frontend context as fallback`)
+      effectivePlantsContext = gardenContext.plants.map(p => ({
+        gardenPlantId: p.gardenPlantId,
+        plantId: p.plantId,
+        plantName: p.plantName,
+        nickname: p.nickname,
+        healthStatus: p.healthStatus,
+        plantsOnHand: p.plantsOnHand,
+        seedsPlanted: p.seedsPlanted
+      }))
+    }
+    
     // Build full context with ALL data
     const fullContext = {
       user: userContext,
       garden: gardenContext,
-      plants: plantsContext,
+      plants: effectivePlantsContext,
       tasks: tasksContext,
       journal: journalContext,
       analytics: analyticsContext,

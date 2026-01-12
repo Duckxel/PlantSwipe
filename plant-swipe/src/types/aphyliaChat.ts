@@ -51,6 +51,23 @@ export interface ContextChip {
   data?: Record<string, unknown>
 }
 
+export interface GardenMemberContext {
+  userId: string
+  displayName?: string | null
+  role: 'owner' | 'member'
+  joinedAt?: string
+}
+
+export interface GardenPlantSummary {
+  gardenPlantId: string
+  plantId: string
+  plantName: string
+  nickname?: string | null
+  healthStatus?: string | null
+  plantsOnHand?: number
+  seedsPlanted?: number
+}
+
 export interface GardenContext {
   gardenId: string
   gardenName: string
@@ -61,6 +78,18 @@ export interface GardenContext {
   locationLon?: number | null
   plantCount?: number
   memberCount?: number
+  /** Garden members with basic info */
+  members?: GardenMemberContext[]
+  /** Summary of plants in the garden */
+  plants?: GardenPlantSummary[]
+  /** Current task streak */
+  streak?: number
+  /** Garden privacy setting */
+  privacy?: 'public' | 'friends_only' | 'private'
+  /** When the garden was created */
+  createdAt?: string
+  /** Preferred language for advice */
+  adviceLanguage?: string | null
 }
 
 export interface PlantContext {

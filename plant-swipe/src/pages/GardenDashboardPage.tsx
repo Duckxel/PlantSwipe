@@ -3511,7 +3511,11 @@ export const GardenDashboardPage: React.FC = () => {
       
       {/* Aphylia AI Chat - Only visible for garden members when not hidden in settings */}
       {garden && user && isMember && !garden.hideAiChat && (
-        <AphyliaChatPortal gardenId={garden.id} gardenName={garden.name} />
+        <AphyliaChatPortal 
+          garden={garden} 
+          members={members}
+          plants={plants}
+        />
       )}
     </div>
   );
@@ -3519,7 +3523,23 @@ export const GardenDashboardPage: React.FC = () => {
 
 // Portal wrapper to render chat outside the main component tree
 // This prevents the chat from interfering with React Router rendering
-function AphyliaChatPortal({ gardenId, gardenName }: { gardenId: string; gardenName: string }) {
+function AphyliaChatPortal({ 
+  garden, 
+  members,
+  plants 
+}: { 
+  garden: Garden
+  members: Array<{
+    userId: string
+    displayName?: string | null
+    email?: string | null
+    role: "owner" | "member"
+    joinedAt?: string
+    accentKey?: string | null
+    avatarUrl?: string | null
+  }>
+  plants: Array<any>
+}) {
   const [mounted, setMounted] = React.useState(false)
   
   React.useEffect(() => {
@@ -3527,10 +3547,57 @@ function AphyliaChatPortal({ gardenId, gardenName }: { gardenId: string; gardenN
     return () => setMounted(false)
   }, [])
   
+  // Build comprehensive garden context with ALL available data
+  // This ensures the AI has full knowledge of the garden even if backend enrichment fails
   const gardenContext = React.useMemo(() => ({
-    gardenId,
-    gardenName,
-  }), [gardenId, gardenName])
+    gardenId: garden.id,
+    gardenName: garden.name,
+    // Location info
+    locationCity: garden.locationCity,
+    locationCountry: garden.locationCountry,
+    locationTimezone: garden.locationTimezone,
+    locationLat: garden.locationLat,
+    locationLon: garden.locationLon,
+    // Counts
+    plantCount: plants.length,
+    memberCount: members.length,
+    // Garden settings
+    privacy: garden.privacy,
+    streak: garden.streak,
+    createdAt: garden.createdAt,
+    adviceLanguage: garden.preferredLanguage,
+    // Member details - important for AI to know who's in the garden
+    members: members.map(m => ({
+      userId: m.userId,
+      displayName: m.displayName || 'Member',
+      role: m.role,
+      joinedAt: m.joinedAt
+    })),
+    // Plant summaries for quick context
+    plants: plants.map(p => ({
+      gardenPlantId: p.id,
+      plantId: p.plantId,
+      plantName: p.name || p.plantName || 'Unknown Plant',
+      nickname: p.nickname,
+      healthStatus: p.healthStatus,
+      plantsOnHand: p.plantsOnHand,
+      seedsPlanted: p.seedsPlanted
+    }))
+  }), [
+    garden.id, 
+    garden.name, 
+    garden.locationCity, 
+    garden.locationCountry,
+    garden.locationTimezone,
+    garden.locationLat,
+    garden.locationLon,
+    garden.privacy,
+    garden.streak,
+    garden.createdAt,
+    garden.preferredLanguage,
+    members, 
+    plants
+  ])
   
   if (!mounted) return null
   
