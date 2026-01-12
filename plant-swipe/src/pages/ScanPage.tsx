@@ -39,7 +39,7 @@ import {
   formatProbability,
   getConfidenceLevel
 } from '@/lib/plantScan'
-import type { PlantScan, KindwiseApiResponse } from '@/types/scan'
+import type { PlantScan } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 
 export const ScanPage: React.FC = () => {
