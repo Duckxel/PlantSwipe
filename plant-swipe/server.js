@@ -5184,9 +5184,9 @@ app.post('/api/blog/upload-image', async (req, res) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [blogUploadPrefix, folder].filter(Boolean).join('/')
     },
-    // Blog uploads: PHOTOS bucket, 50% quality (standard)
-    bucket: 'PHOTOS',
-    webpQuality: 50,
+    // Blog uploads: UTILITY bucket, 90% quality (same as admin)
+    bucket: 'UTILITY',
+    webpQuality: 90,
   })
 })
 
