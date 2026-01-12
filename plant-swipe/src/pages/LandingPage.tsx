@@ -448,7 +448,18 @@ const HeroSection: React.FC = () => {
 const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
   const { heroCards: dbHeroCards } = useLandingData()
-  const [activeCardIndex, setActiveCardIndex] = React.useState(0)
+  
+  // Start with a random card for variety across different page loads
+  const [activeCardIndex, setActiveCardIndex] = React.useState(() => 
+    dbHeroCards.length > 0 ? Math.floor(Math.random() * dbHeroCards.length) : 0
+  )
+
+  // Reset to random when cards are loaded
+  React.useEffect(() => {
+    if (dbHeroCards.length > 0) {
+      setActiveCardIndex(Math.floor(Math.random() * dbHeroCards.length))
+    }
+  }, [dbHeroCards.length])
 
   // Use first hero card from database if available, otherwise use translation defaults
   const activeCard = dbHeroCards[activeCardIndex] || null
