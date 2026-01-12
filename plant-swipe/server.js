@@ -951,8 +951,8 @@ const messageImageMulter = multer({
 const singleMessageImageUpload = messageImageMulter.single('file')
 
 // === Plant Scan Image Upload Settings ===
-const scanImageUploadBucket = 'plant-scans' // Dedicated bucket for scan images (matches schema)
-const scanImageUploadPrefix = '' // No prefix needed - files stored directly under user ID
+const scanImageUploadBucket = 'PHOTOS' // Use the main photos bucket
+const scanImageUploadPrefix = 'scans' // Organize under scans/ folder
 const scanImageMaxBytes = 10 * 1024 * 1024 // 10MB
 const scanImageMaxDimension = 1920 // Higher quality for identification
 const scanImageWebpQuality = 90 // High quality for better identification
@@ -12868,9 +12868,8 @@ app.post('/api/scan/upload-image', async (req, res) => {
       const timestamp = Date.now()
       const randomId = Math.random().toString(36).substring(2, 10)
       const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
-      // Path structure: {user_id}/{timestamp}-{baseName}-{randomId}.{ext}
-      // This matches the storage policy which expects the first folder to be user ID
-      const objectPath = `${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
+      // Path structure: scans/{user_id}/{timestamp}-{baseName}-{randomId}.{ext}
+      const objectPath = `${scanImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
 
       try {
         const { error: uploadError } = await supabaseServiceClient

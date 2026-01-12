@@ -208,7 +208,7 @@ export async function createPlantScan(
       user_id: session.user.id,
       image_url: imageUrl,
       image_path: imagePath,
-      image_bucket: 'plant-scans',
+      image_bucket: 'PHOTOS',
       api_access_token: apiResponse.access_token,
       api_model_version: apiResponse.model_version,
       api_status: apiResponse.status.toLowerCase(),

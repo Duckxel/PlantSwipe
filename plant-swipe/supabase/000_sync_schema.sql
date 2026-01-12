@@ -8175,7 +8175,7 @@ CREATE TABLE public.plant_scans (
   -- Image information
   image_url TEXT NOT NULL,
   image_path TEXT,  -- Storage path if stored in Supabase
-  image_bucket TEXT DEFAULT 'plant-scans',
+  image_bucket TEXT DEFAULT 'PHOTOS',
   
   -- API request/response
   api_access_token TEXT,  -- Kindwise API access token for the request
