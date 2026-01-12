@@ -8156,3 +8156,165 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_user_conversations(UUID) TO authenticated;
+
+-- =============================================
+-- PLANT SCANS TABLE
+-- Stores plant identification scans using Kindwise API
+-- =============================================
+
+-- ========== Plant Scans Table ==========
+CREATE TABLE IF NOT EXISTS public.plant_scans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  
+  -- Image information
+  image_url TEXT NOT NULL,
+  image_path TEXT,  -- Storage path if stored in Supabase
+  image_bucket TEXT DEFAULT 'plant-scans',
+  
+  -- API request/response
+  api_access_token TEXT,  -- Kindwise API access token for the request
+  api_model_version TEXT,  -- e.g., 'plant_id:3.1.0'
+  api_status TEXT DEFAULT 'pending',  -- pending, processing, completed, failed
+  api_response JSONB,  -- Full API response stored for reference
+  
+  -- Identification results
+  is_plant BOOLEAN,
+  is_plant_probability NUMERIC(5,4),  -- 0.0000 to 1.0000
+  
+  -- Top match result (denormalized for easy querying)
+  top_match_name TEXT,
+  top_match_scientific_name TEXT,
+  top_match_probability NUMERIC(5,4),
+  top_match_entity_id TEXT,
+  
+  -- All suggestions stored as JSONB array
+  suggestions JSONB DEFAULT '[]'::jsonb,
+  
+  -- Similar images from API
+  similar_images JSONB DEFAULT '[]'::jsonb,
+  
+  -- Location data (optional)
+  latitude NUMERIC(9,6),
+  longitude NUMERIC(9,6),
+  
+  -- Link to our database plant (if matched)
+  matched_plant_id UUID REFERENCES public.plants(id) ON DELETE SET NULL,
+  
+  -- User notes
+  user_notes TEXT,
+  
+  -- Metadata
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ  -- Soft delete
+);
+
+-- Indexes for plant_scans
+CREATE INDEX IF NOT EXISTS idx_plant_scans_user_id ON public.plant_scans(user_id);
+CREATE INDEX IF NOT EXISTS idx_plant_scans_created_at ON public.plant_scans(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_plant_scans_top_match ON public.plant_scans(top_match_name);
+CREATE INDEX IF NOT EXISTS idx_plant_scans_matched_plant ON public.plant_scans(matched_plant_id);
+
+-- Enable RLS
+ALTER TABLE public.plant_scans ENABLE ROW LEVEL SECURITY;
+
+-- Grant access
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.plant_scans TO authenticated;
+
+-- ========== RLS Policies for Plant Scans ==========
+-- Users can only see their own scans
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='plant_scans' AND policyname='plant_scans_select_own') THEN
+    DROP POLICY plant_scans_select_own ON public.plant_scans;
+  END IF;
+  CREATE POLICY plant_scans_select_own ON public.plant_scans FOR SELECT TO authenticated
+    USING (auth.uid() = user_id);
+END $$;
+
+-- Users can insert their own scans
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='plant_scans' AND policyname='plant_scans_insert_own') THEN
+    DROP POLICY plant_scans_insert_own ON public.plant_scans;
+  END IF;
+  CREATE POLICY plant_scans_insert_own ON public.plant_scans FOR INSERT TO authenticated
+    WITH CHECK (auth.uid() = user_id);
+END $$;
+
+-- Users can update their own scans
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='plant_scans' AND policyname='plant_scans_update_own') THEN
+    DROP POLICY plant_scans_update_own ON public.plant_scans;
+  END IF;
+  CREATE POLICY plant_scans_update_own ON public.plant_scans FOR UPDATE TO authenticated
+    USING (auth.uid() = user_id);
+END $$;
+
+-- Users can delete their own scans
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='plant_scans' AND policyname='plant_scans_delete_own') THEN
+    DROP POLICY plant_scans_delete_own ON public.plant_scans;
+  END IF;
+  CREATE POLICY plant_scans_delete_own ON public.plant_scans FOR DELETE TO authenticated
+    USING (auth.uid() = user_id);
+END $$;
+
+-- ========== Storage Bucket for Scan Images ==========
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'plant-scans',
+  'plant-scans',
+  true,
+  10485760,  -- 10MB limit
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif']
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies for plant-scans bucket
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='plant_scans_upload_own') THEN
+    CREATE POLICY plant_scans_upload_own ON storage.objects FOR INSERT TO authenticated
+      WITH CHECK (
+        bucket_id = 'plant-scans' 
+        AND (storage.foldername(name))[1] = auth.uid()::text
+      );
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='plant_scans_view_public') THEN
+    CREATE POLICY plant_scans_view_public ON storage.objects FOR SELECT TO public
+      USING (bucket_id = 'plant-scans');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='plant_scans_delete_own') THEN
+    CREATE POLICY plant_scans_delete_own ON storage.objects FOR DELETE TO authenticated
+      USING (
+        bucket_id = 'plant-scans'
+        AND (storage.foldername(name))[1] = auth.uid()::text
+      );
+  END IF;
+END $$;
+
+-- ========== Trigger for updated_at ==========
+CREATE OR REPLACE FUNCTION public.update_plant_scan_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_plant_scan_updated_at ON public.plant_scans;
+CREATE TRIGGER trigger_plant_scan_updated_at
+  BEFORE UPDATE ON public.plant_scans
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_plant_scan_updated_at();
+
+-- Comments for documentation
+COMMENT ON TABLE public.plant_scans IS 'Stores plant identification scans from users using Kindwise Plant.id API';
+COMMENT ON COLUMN public.plant_scans.api_response IS 'Full JSON response from Kindwise API for reference';
+COMMENT ON COLUMN public.plant_scans.suggestions IS 'Array of plant identification suggestions with probabilities';
+COMMENT ON COLUMN public.plant_scans.matched_plant_id IS 'Reference to our plants table if a match was found';
