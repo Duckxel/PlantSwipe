@@ -245,7 +245,7 @@ export const FriendsPage: React.FC = () => {
       .finally(() => setLoading(false));
   }, [user?.id, loadFriends, loadPendingRequests, loadSentPendingRequests]);
 
-  // Dialog search
+  // Dialog search - uses RPC function to properly search profiles with RLS
   const handleDialogSearch = React.useCallback(async () => {
     if (!dialogSearchQuery.trim() || !user?.id) {
       setDialogSearchResults([]);
@@ -255,23 +255,46 @@ export const FriendsPage: React.FC = () => {
     try {
       const query = dialogSearchQuery.trim();
 
-      const { data, error: err } = await supabase
-        .from("profiles")
-        .select("id, display_name")
-        .ilike("display_name", `%${query}%`)
-        .neq("id", user.id)
-        .limit(5);
+      // Use the search_user_profiles RPC function which handles RLS properly
+      const { data, error: err } = await supabase.rpc("search_user_profiles", {
+        _term: query,
+        _limit: 10,
+      });
 
-      if (err) throw err;
+      if (err) {
+        // Fallback to direct query if RPC doesn't exist
+        console.warn("[FriendsPage] RPC search failed, trying direct query:", err.message);
+        const { data: fallbackData, error: fallbackErr } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .ilike("display_name", `%${query}%`)
+          .neq("id", user.id)
+          .limit(10);
+        
+        if (fallbackErr) throw fallbackErr;
+        
+        const results: SearchResult[] = (fallbackData || []).map((p) => ({
+          id: p.id,
+          display_name: p.display_name || null,
+          is_friend: false,
+          is_pending: false,
+        }));
+        
+        await markResultsWithFriendStatus(results);
+        return;
+      }
 
-      let results: SearchResult[] = (data || []).map((p) => ({
-        id: p.id,
-        display_name: p.display_name || null,
-        is_friend: false,
-        is_pending: false,
-      }));
+      // Map RPC results to SearchResult format
+      let results: SearchResult[] = (data || [])
+        .filter((p: any) => p.id !== user.id)
+        .map((p: any) => ({
+          id: p.id,
+          display_name: p.display_name || p.username || null,
+          is_friend: Boolean(p.is_friend),
+          is_pending: false,
+        }));
 
-      // Check for email search
+      // Check for email search (admin feature)
       if (query.includes("@")) {
         try {
           const response = await fetch(`/api/admin/member?q=${encodeURIComponent(query)}`, {
@@ -299,8 +322,26 @@ export const FriendsPage: React.FC = () => {
         }
       }
 
-      // Mark friends and pending requests
+      await markResultsWithFriendStatus(results);
+    } catch (e: any) {
+      setError(e?.message || t("friends.errors.searchFailed"));
+      setDialogSearching(false);
+    }
+  }, [dialogSearchQuery, user?.id, t]);
+
+  // Helper function to mark search results with friend/pending status
+  const markResultsWithFriendStatus = React.useCallback(async (results: SearchResult[]) => {
+    if (!user?.id) {
+      setDialogSearchResults(results.slice(0, 5));
+      setDialogSearching(false);
+      return;
+    }
+
+    try {
+      // Get friend IDs
       const friendIds = new Set(friends.map((f) => f.friend_id));
+      
+      // Get pending sent requests
       const { data: sentRequests } = await supabase
         .from("friend_requests")
         .select("recipient_id")
@@ -316,18 +357,19 @@ export const FriendsPage: React.FC = () => {
         .filter((r) => r.id !== user.id)
         .map((r) => ({
           ...r,
-          is_friend: friendIds.has(r.id),
+          is_friend: r.is_friend || friendIds.has(r.id),
           is_pending: requestIds.has(r.id),
         }))
         .slice(0, 5);
 
       setDialogSearchResults(filteredResults);
-    } catch (e: any) {
-      setError(e?.message || t("friends.errors.searchFailed"));
+    } catch {
+      // If marking fails, still show results
+      setDialogSearchResults(results.slice(0, 5));
     } finally {
       setDialogSearching(false);
     }
-  }, [dialogSearchQuery, user?.id, friends, pendingRequests, t]);
+  }, [user?.id, friends, pendingRequests]);
 
   React.useEffect(() => {
     const timeout = setTimeout(() => handleDialogSearch(), 300);
