@@ -24,6 +24,7 @@ import { ReportUserDialog } from "@/components/moderation/ReportUserDialog"
 import { BlockUserDialog } from "@/components/moderation/BlockUserDialog"
 import { hasBlockedUser, unblockUser, isBlockedByUser } from "@/lib/moderation"
 import { getOrCreateConversation } from "@/lib/messaging"
+import { sendFriendRequestPushNotification } from "@/lib/notifications"
 
 type PublicProfile = {
   id: string
@@ -647,12 +648,21 @@ export default function PublicProfilePage() {
       if (err) throw err
       setFriendStatus('request_sent')
       setFriendRequestId(data.id)
+      
+      // Send push notification to recipient
+      const senderName = profile?.display_name || 'Someone'
+      const { data: recipientProfile } = await supabase
+        .from('profiles')
+        .select('language')
+        .eq('id', pp.id)
+        .maybeSingle()
+      sendFriendRequestPushNotification(pp.id, senderName, recipientProfile?.language || 'en').catch(() => {})
     } catch (e: any) {
       setEditError(e?.message || t('profile.editProfile.failedToSendFriendRequest'))
     } finally {
       setFriendRequestLoading(false)
     }
-  }, [user?.id, pp?.id, isOwner])
+  }, [user?.id, pp?.id, isOwner, profile?.display_name])
 
   const acceptFriendRequest = React.useCallback(async () => {
     if (!friendRequestId || !user?.id || !pp?.id) return

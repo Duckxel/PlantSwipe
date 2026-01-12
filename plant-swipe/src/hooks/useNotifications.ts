@@ -53,7 +53,7 @@ interface UseNotificationsReturn {
 
 const ERROR_LOGGED = new Set<string>()
 const MAX_ERROR_LOG_SIZE = 50 // Limit the number of unique errors we track
-const REFRESH_INTERVAL_MS = 30_000
+const REFRESH_INTERVAL_MS = 15_000 // Poll every 15 seconds as fallback
 
 function trackError(key: string): boolean {
   if (ERROR_LOGGED.has(key)) return false
@@ -181,14 +181,24 @@ export function useNotifications(
 
     const channelName = `notifications-${channelKey}-${userId}`
     const channel = supabase.channel(channelName)
-      // Listen for friend request changes
+      // Listen for friend request changes (both as recipient and requester)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'friend_requests',
         filter: `recipient_id=eq.${userId}`
       }, () => {
-        refresh()
+        // Force refresh to bypass throttle for realtime events
+        refresh(true)
+      })
+      // Also listen for changes where user is the requester (to update sent requests)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'friend_requests',
+        filter: `requester_id=eq.${userId}`
+      }, () => {
+        refresh(true)
       })
       // Listen for garden invite changes
       .on('postgres_changes', {
@@ -197,7 +207,7 @@ export function useNotifications(
         table: 'garden_invites',
         filter: `invitee_id=eq.${userId}`
       }, () => {
-        refresh()
+        refresh(true)
       })
       // Listen for new messages (via conversations that user is part of)
       .on('postgres_changes', {
@@ -205,13 +215,17 @@ export function useNotifications(
         schema: 'public',
         table: 'messages'
       }, () => {
-        refresh()
+        refresh(true)
       })
 
-    const subscription = channel.subscribe()
-    if (subscription instanceof Promise) {
-      subscription.catch(() => {})
-    }
+    // Subscribe with status callback for debugging
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        // Successfully subscribed to realtime updates
+      } else if (status === 'CHANNEL_ERROR') {
+        console.warn('[useNotifications] Realtime channel error, falling back to polling')
+      }
+    })
 
     return () => {
       try {
