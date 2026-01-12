@@ -23,7 +23,6 @@ import {
   CheckCircle2, 
   ExternalLink,
   Trash2,
-  X,
   ChevronRight,
   ScanLine,
   Sparkles,
@@ -42,7 +41,7 @@ import {
   formatProbability,
   getConfidenceLevel
 } from '@/lib/plantScan'
-import type { PlantScan, PlantScanSuggestion, KindwiseApiResponse } from '@/types/scan'
+import type { PlantScan, KindwiseApiResponse } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 
 export const ScanPage: React.FC = () => {
@@ -64,7 +63,7 @@ export const ScanPage: React.FC = () => {
   
   // Scan flow state
   const [cameraOpen, setCameraOpen] = React.useState(false)
-  const [selectedFile, setSelectedFile] = React.useState<File | null>(null)
+  const [, setSelectedFile] = React.useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
   const [isIdentifying, setIsIdentifying] = React.useState(false)
   const [identifyError, setIdentifyError] = React.useState<string | null>(null)
@@ -133,7 +132,6 @@ export const ScanPage: React.FC = () => {
       
       // Upload image to storage
       const uploadResult = await uploadScanImage(file)
-      const imageUrl = uploadedImageUrl || uploadResult.url
       
       // Call identification API
       const apiResponse = await identifyPlant(base64) as KindwiseApiResponse
