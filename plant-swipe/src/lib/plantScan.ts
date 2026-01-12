@@ -26,13 +26,32 @@ const isMissingTableError = (error?: { message?: string; code?: string }) => {
   return false
 }
 
-// ===== Image Upload =====
+// ===== Combined Upload + Identify =====
 
 /**
- * Upload a scan image to Supabase storage
- * Uses server-side optimization endpoint
+ * Result from the combined upload and identify endpoint
  */
-export async function uploadScanImage(file: File): Promise<ScanImageUploadResult> {
+export interface UploadAndIdentifyResult {
+  ok: boolean
+  upload: ScanImageUploadResult
+  identification: KindwiseApiResponse
+}
+
+/**
+ * Upload and identify a plant image in a single request
+ * Uses the same optimization pipeline as all other uploads (Admin, Garden Cover, Messages)
+ * - Converts to WebP with sharp optimization
+ * - Uploads to PHOTOS bucket under scans/{userId}/
+ * - Calls Kindwise API with the optimized image
+ * - Records in admin_media_uploads table
+ */
+export async function uploadAndIdentifyPlant(
+  file: File,
+  options?: {
+    latitude?: number
+    longitude?: number
+  }
+): Promise<UploadAndIdentifyResult> {
   const session = (await supabase.auth.getSession()).data.session
   if (!session?.access_token) {
     throw new Error('Not authenticated')
@@ -48,11 +67,17 @@ export async function uploadScanImage(file: File): Promise<ScanImageUploadResult
     throw new Error('File too large. Maximum size is 10MB.')
   }
   
-  // Upload via server endpoint (handles optimization)
+  // Upload via server endpoint (handles optimization + identification in one request)
   const formData = new FormData()
   formData.append('file', file)
+  if (options?.latitude !== undefined) {
+    formData.append('latitude', String(options.latitude))
+  }
+  if (options?.longitude !== undefined) {
+    formData.append('longitude', String(options.longitude))
+  }
   
-  const response = await fetch('/api/scan/upload-image', {
+  const response = await fetch('/api/scan/upload-and-identify', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${session.access_token}`
@@ -62,20 +87,44 @@ export async function uploadScanImage(file: File): Promise<ScanImageUploadResult
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
-    throw new Error(errorData.error || 'Failed to upload image')
+    throw new Error(errorData.error || 'Failed to scan plant')
   }
   
   const data = await response.json()
   
-  if (!data.ok || !data.url) {
-    throw new Error('Failed to upload image: Invalid response')
+  if (!data.ok || !data.upload || !data.identification) {
+    throw new Error('Failed to scan plant: Invalid response')
   }
   
-  return data as ScanImageUploadResult
+  return data as UploadAndIdentifyResult
+}
+
+// Legacy functions for backwards compatibility
+
+/**
+ * @deprecated Use uploadAndIdentifyPlant instead
+ */
+export async function uploadScanImage(file: File): Promise<ScanImageUploadResult> {
+  const result = await uploadAndIdentifyPlant(file)
+  return result.upload
+}
+
+/**
+ * @deprecated Use uploadAndIdentifyPlant instead - no longer sends base64 over network
+ */
+export async function identifyPlant(
+  _imageBase64: string,
+  _options?: {
+    latitude?: number
+    longitude?: number
+  }
+): Promise<KindwiseApiResponse> {
+  throw new Error('identifyPlant is deprecated. Use uploadAndIdentifyPlant instead.')
 }
 
 /**
  * Convert a File to base64 string
+ * @deprecated No longer needed - server handles image processing
  */
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -83,51 +132,10 @@ export function fileToBase64(file: File): Promise<string> {
     reader.readAsDataURL(file)
     reader.onload = () => {
       const result = reader.result as string
-      // Return just the base64 part if it's a data URL
       resolve(result)
     }
     reader.onerror = (error) => reject(error)
   })
-}
-
-// ===== API Integration =====
-
-/**
- * Identify a plant using Kindwise Plant.id API
- * This calls our server endpoint which handles the API key
- */
-export async function identifyPlant(
-  imageBase64: string,
-  options?: {
-    latitude?: number
-    longitude?: number
-  }
-): Promise<KindwiseApiResponse> {
-  const session = (await supabase.auth.getSession()).data.session
-  if (!session?.access_token) {
-    throw new Error('Not authenticated')
-  }
-  
-  const response = await fetch('/api/scan/identify', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      image: imageBase64,
-      latitude: options?.latitude,
-      longitude: options?.longitude,
-      similar_images: true
-    })
-  })
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-    throw new Error(errorData.error || 'Failed to identify plant')
-  }
-  
-  return await response.json()
 }
 
 // ===== Database Operations =====
@@ -208,7 +216,7 @@ export async function createPlantScan(
       user_id: session.user.id,
       image_url: imageUrl,
       image_path: imagePath,
-      image_bucket: 'plant-scans',
+      image_bucket: 'PHOTOS',
       api_access_token: apiResponse.access_token,
       api_model_version: apiResponse.model_version,
       api_status: apiResponse.status.toLowerCase(),

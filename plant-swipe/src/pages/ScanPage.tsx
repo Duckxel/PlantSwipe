@@ -32,16 +32,14 @@ import {
 import { cn } from '@/lib/utils'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
 import { 
-  uploadScanImage, 
-  fileToBase64, 
-  identifyPlant, 
+  uploadAndIdentifyPlant, 
   createPlantScan,
   getUserScans,
   deleteScan,
   formatProbability,
   getConfidenceLevel
 } from '@/lib/plantScan'
-import type { PlantScan, KindwiseApiResponse } from '@/types/scan'
+import type { PlantScan } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 
 export const ScanPage: React.FC = () => {
@@ -127,17 +125,12 @@ export const ScanPage: React.FC = () => {
     setIdentifyError(null)
     
     try {
-      // Convert file to base64
-      const base64 = await fileToBase64(file)
-      
-      // Upload image to storage
-      const uploadResult = await uploadScanImage(file)
-      
-      // Call identification API
-      const apiResponse = await identifyPlant(base64) as KindwiseApiResponse
+      // Combined upload + identify in a single request
+      // Uses same optimization as Admin/Garden Cover/Messages uploads
+      const result = await uploadAndIdentifyPlant(file)
       
       // Check if it's a plant
-      if (!apiResponse.result?.is_plant?.binary) {
+      if (!result.identification.result?.is_plant?.binary) {
         setIdentifyError(t('scan.errors.notAPlant', { 
           defaultValue: 'This doesn\'t appear to be a plant. Please try a different image.' 
         }))
@@ -146,7 +139,11 @@ export const ScanPage: React.FC = () => {
       }
       
       // Save to database
-      const scan = await createPlantScan(uploadResult.url, uploadResult.path, apiResponse)
+      const scan = await createPlantScan(
+        result.upload.url, 
+        result.upload.path, 
+        result.identification
+      )
       
       setCurrentResult(scan)
       setShowResultDialog(true)
