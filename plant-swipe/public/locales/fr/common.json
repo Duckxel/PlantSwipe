@@ -321,6 +321,7 @@
       "messagePlaceholder": "Dites-nous en un peu plus sur votre demande...",
       "attachmentLabel": "Capture d'écran (optionnel)",
       "attachmentPlaceholder": "Téléverser une image",
+      "removeScreenshot": "Supprimer la capture d'écran",
       "submitButton": "Envoyer le message",
       "submitSending": "Envoi...",
       "cancelButton": "Annuler",
@@ -2784,6 +2785,41 @@
         "clear": "Effacer le chat",
         "attachImage": "Joindre une image",
         "removeAttachment": "Supprimer la pièce jointe"
+      }
+    },
+    "scan": {
+      "pageTitle": "Scanner de Plantes",
+      "pageDescription": "Identifiez n'importe quelle plante en prenant une photo ou en téléchargeant une image",
+      "title": "Scanner de Plantes",
+      "subtitle": "Prenez une photo ou téléchargez une image pour identifier n'importe quelle plante",
+      "signInTitle": "Connectez-vous pour Scanner",
+      "signInDescription": "Veuillez vous connecter pour identifier les plantes et sauvegarder votre historique de scans.",
+      "newScanTitle": "Identifier une Plante",
+      "newScanHint": "Prenez une photo nette d'une feuille, d'une fleur ou de la plante entière pour de meilleurs résultats.",
+      "takePhoto": "Prendre une Photo",
+      "uploadImage": "Télécharger",
+      "identifying": "Identification en cours...",
+      "identifyingHint": "Notre IA analyse votre image. Cela ne prend généralement que quelques secondes.",
+      "errorTitle": "Échec de l'Identification",
+      "tryAgain": "Réessayer",
+      "history": "Vos Scans",
+      "noScans": "Aucun scan encore",
+      "noScansHint": "Prenez une photo ou téléchargez une image d'une plante pour commencer.",
+      "unknownPlant": "Plante Inconnue",
+      "inDatabase": "Dans la Base",
+      "resultTitle": "Résultat de l'Identification",
+      "resultDescription": "Voici ce que nous avons trouvé à partir de votre image.",
+      "topMatch": "Meilleure Correspondance",
+      "viewInDatabase": "Voir dans Notre Base",
+      "otherSuggestions": "Autres Possibilités",
+      "similarImages": "Images Similaires",
+      "scanAnother": "Scanner une Autre",
+      "deleteTitle": "Supprimer le Scan ?",
+      "deleteDescription": "Cela supprimera définitivement ce scan de votre historique. Cette action est irréversible.",
+      "errors": {
+        "loadFailed": "Impossible de charger vos scans",
+        "notAPlant": "Ceci ne semble pas être une plante. Veuillez essayer une autre image.",
+        "identifyFailed": "Échec de l'identification de la plante. Veuillez réessayer."
       }
     }
   }
