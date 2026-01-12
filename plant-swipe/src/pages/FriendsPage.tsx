@@ -369,36 +369,49 @@ export const FriendsPage: React.FC = () => {
         return;
       }
 
+      // Check for existing requests in BOTH directions
       const { data: existingRequest } = await supabase
         .from("friend_requests")
-        .select("id, status")
-        .eq("requester_id", user.id)
-        .eq("recipient_id", recipientId)
+        .select("id, status, requester_id")
+        .or(`and(requester_id.eq.${user.id},recipient_id.eq.${recipientId}),and(requester_id.eq.${recipientId},recipient_id.eq.${user.id})`)
         .maybeSingle();
 
       if (existingRequest) {
         if (existingRequest.status === "pending") {
+          // If there's a pending request FROM the other user TO us, we should accept it instead
+          if (existingRequest.requester_id === recipientId) {
+            // Accept their request instead of sending a new one
+            await supabase.rpc("accept_friend_request", { _request_id: existingRequest.id });
+            handleDialogSearch();
+            await Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()]);
+            setError(null);
+            return;
+          }
           setError(t("friends.errors.requestAlreadySent"));
           return;
         }
+        
+        // For rejected or accepted requests, delete the old one and create a new one
+        // This works regardless of RLS policies since we're creating a new record
         if (existingRequest.status === "rejected" || existingRequest.status === "accepted") {
+          // Delete the old request (we can delete our own requests)
           await supabase
             .from("friend_requests")
-            .update({ status: "pending" })
+            .delete()
             .eq("id", existingRequest.id);
-          handleDialogSearch();
-          await loadSentPendingRequests();
-          sendFriendRequestNotification(recipientId);
-          setError(null);
-          return;
         }
       }
 
-      await supabase.from("friend_requests").insert({
+      // Create a new friend request
+      const { error: insertError } = await supabase.from("friend_requests").insert({
         requester_id: user.id,
         recipient_id: recipientId,
         status: "pending",
       });
+
+      if (insertError) {
+        throw insertError;
+      }
 
       sendFriendRequestNotification(recipientId);
       handleDialogSearch();
@@ -409,7 +422,7 @@ export const FriendsPage: React.FC = () => {
     } finally {
       setProcessingId(null);
     }
-  }, [user?.id, sendFriendRequestNotification, handleDialogSearch, loadSentPendingRequests, t]);
+  }, [user?.id, sendFriendRequestNotification, handleDialogSearch, loadFriends, loadPendingRequests, loadSentPendingRequests, t]);
 
   // Accept request
   const acceptRequest = React.useCallback(async (requestId: string) => {
