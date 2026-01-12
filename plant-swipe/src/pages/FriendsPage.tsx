@@ -21,8 +21,7 @@ import {
   Loader2,
   MoreHorizontal,
   ExternalLink,
-  UserMinus,
-  Search
+  UserMinus
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { createPortal } from "react-dom";
@@ -988,22 +987,12 @@ export const FriendsPage: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-              <SearchInput
-                placeholder={t("friends.addFriendDialog.searchPlaceholder")}
-                value={dialogSearchQuery}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDialogSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            {dialogSearching && (
-              <div className="flex items-center justify-center gap-2 py-4 text-sm text-stone-400">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t("friends.addFriendDialog.searching")}
-              </div>
-            )}
+            <SearchInput
+              placeholder={t("friends.addFriendDialog.searchPlaceholder")}
+              value={dialogSearchQuery}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDialogSearchQuery(e.target.value)}
+              loading={dialogSearching}
+            />
 
             {dialogSearchResults.length > 0 && (
               <div className="space-y-2 max-h-[300px] overflow-y-auto">

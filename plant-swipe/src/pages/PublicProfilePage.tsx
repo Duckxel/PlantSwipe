@@ -596,39 +596,44 @@ export default function PublicProfilePage() {
     if (!user?.id || !pp?.id || isOwner) return
     setFriendRequestLoading(true)
     try {
-      // Check if there's an existing request (including rejected/accepted ones)
+      // Check if there's an existing request in EITHER direction
       const { data: existingRequest } = await supabase
         .from('friend_requests')
-        .select('id, status')
-        .eq('requester_id', user.id)
-        .eq('recipient_id', pp.id)
+        .select('id, status, requester_id')
+        .or(`and(requester_id.eq.${user.id},recipient_id.eq.${pp.id}),and(requester_id.eq.${pp.id},recipient_id.eq.${user.id})`)
         .maybeSingle()
       
       if (existingRequest) {
         if (existingRequest.status === 'pending') {
+          // If there's a pending request FROM the other user TO us, accept it instead
+          if (existingRequest.requester_id === pp.id) {
+            const { error: acceptErr } = await supabase.rpc('accept_friend_request', {
+              _request_id: existingRequest.id
+            })
+            if (acceptErr) throw acceptErr
+            setFriendStatus('friends')
+            setFriendsSince(new Date().toISOString())
+            setFriendRequestLoading(false)
+            return
+          }
+          // Our request is already pending
           setFriendStatus('request_sent')
           setFriendRequestId(existingRequest.id)
           setFriendRequestLoading(false)
           return
         }
-        // If rejected or accepted, update it to pending (allows resending after removal/rejection)
+        
+        // For rejected or accepted requests, delete the old one first
+        // This ensures we can always create a new request
         if (existingRequest.status === 'rejected' || existingRequest.status === 'accepted') {
-          const { data, error: err } = await supabase
+          await supabase
             .from('friend_requests')
-            .update({ status: 'pending' })
+            .delete()
             .eq('id', existingRequest.id)
-            .select('id')
-            .single()
-          
-          if (err) throw err
-          setFriendStatus('request_sent')
-          setFriendRequestId(data.id)
-          setFriendRequestLoading(false)
-          return
         }
       }
       
-      // No existing request, create a new one
+      // Create a new friend request
       const { data, error: err } = await supabase
         .from('friend_requests')
         .insert({
