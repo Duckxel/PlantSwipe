@@ -27,7 +27,8 @@ import {
   ScanLine,
   Sparkles,
   History,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Search
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
@@ -485,9 +486,13 @@ export const ScanPage: React.FC = () => {
                       <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">
                         {t('scan.topMatch', { defaultValue: 'Best Match' })}
                       </p>
-                      <h3 className="text-xl font-bold text-stone-900 dark:text-white">
+                      <button
+                        onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
+                        className="text-xl font-bold text-stone-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-left underline decoration-dotted underline-offset-2 cursor-pointer"
+                        title={t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
+                      >
                         {currentResult.topMatchName}
-                      </h3>
+                      </button>
                     </div>
                     {currentResult.topMatchProbability && (
                       <Badge 
@@ -505,11 +510,21 @@ export const ScanPage: React.FC = () => {
                     )}
                   </div>
                   
-                  {/* Link to database plant */}
+                  {/* Search in encyclopedia */}
+                  <Button 
+                    onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
+                    variant="outline"
+                    className="w-full mt-4 rounded-full gap-2 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
+                  >
+                    <Search className="h-4 w-4" />
+                    {t('scan.searchInEncyclopedia', { defaultValue: 'Search in Encyclopedia' })}
+                  </Button>
+                  
+                  {/* Link to database plant (if exact match found) */}
                   {currentResult.matchedPlant && (
                     <Button 
                       onClick={() => goToPlantInfo(currentResult.matchedPlant!.id)}
-                      className="w-full mt-4 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                      className="w-full mt-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
                     >
                       <ExternalLink className="h-4 w-4" />
                       {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
@@ -526,17 +541,22 @@ export const ScanPage: React.FC = () => {
                   </h4>
                   <div className="space-y-2">
                     {currentResult.suggestions.slice(1, 5).map((suggestion, idx) => (
-                      <div 
+                      <button 
                         key={suggestion.id || idx}
-                        className="flex items-center justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50"
+                        onClick={() => navigate(`/search?q=${encodeURIComponent(suggestion.name)}`)}
+                        className="flex items-center justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
+                        title={t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
                       >
-                        <span className="text-sm text-stone-700 dark:text-stone-300">
+                        <span className="text-sm text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                           {suggestion.name}
                         </span>
-                        <Badge variant="outline" className="rounded-full text-xs">
-                          {formatProbability(suggestion.probability)}
-                        </Badge>
-                      </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="rounded-full text-xs">
+                            {formatProbability(suggestion.probability)}
+                          </Badge>
+                          <Search className="h-3.5 w-3.5 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </button>
                     ))}
                   </div>
                 </div>
