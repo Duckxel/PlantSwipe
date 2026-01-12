@@ -1850,7 +1850,7 @@ export default function PlantSwipe() {
               path="/admin/*"
               element={
                 <RequireEditor>
-                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
+                  <Suspense fallback={<div className="p-8 flex items-center justify-center gap-2 text-sm opacity-60"><Loader2 className="h-4 w-4 animate-spin" /><span>Loading admin panel...</span></div>}>
                     <AdminPage />
                   </Suspense>
                 </RequireEditor>

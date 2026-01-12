@@ -6004,7 +6004,10 @@ export const AdminPage: React.FC = () => {
                           </div>
 
                           {visitorsLoading ? (
-                            <div className="text-sm opacity-60">Loading...</div>
+                            <div className="flex items-center gap-2 text-sm opacity-60">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Loading...</span>
+                            </div>
                           ) : visitorsSeries.length === 0 ? (
                             <div className="text-sm opacity-60">
                               No data yet.

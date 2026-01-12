@@ -3760,7 +3760,7 @@ function RoutineSection({
                     >
                       {completingPlantIds.has(gp.id) ? (
                         <span className="flex items-center gap-1">
-                          <span className="animate-spin">⏳</span>
+                          <Loader2 className="h-4 w-4 animate-spin" />
                           {t("garden.completing")}
                         </span>
                       ) : (
@@ -3830,7 +3830,7 @@ function RoutineSection({
                               }
                             >
                               {progressingOccIds.has(o.id) ? (
-                                <span className="animate-spin">⏳</span>
+                                <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 t(
                                   "gardenDashboard.routineSection.completePlus1",
