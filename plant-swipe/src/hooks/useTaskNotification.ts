@@ -12,6 +12,64 @@ const REFRESH_INTERVAL_MS = 15_000 // ⚡ Reduced from 30s to 15s for more respo
 const LOCALSTORAGE_KEY = "task_notification_state"
 const LOCALSTORAGE_SYNC_KEY = "task_notification_sync" // For cross-tab sync
 
+/**
+ * ⚡ Fast direct query to check if user has pending tasks today
+ * This bypasses the cache system for faster first-load response
+ * Returns null if query fails (caller should fallback to cache)
+ */
+async function fastCheckPendingTasks(userId: string): Promise<boolean | null> {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const startOfDay = `${today}T00:00:00.000Z`
+    const endOfDay = `${today}T23:59:59.999Z`
+
+    // First, get user's garden IDs (fast query)
+    const { data: gardens, error: gardensError } = await supabase
+      .from("garden_members")
+      .select("garden_id")
+      .eq("user_id", userId)
+    
+    if (gardensError || !gardens || gardens.length === 0) {
+      return null // Fallback to cache
+    }
+
+    const gardenIds = gardens.map(g => g.garden_id)
+
+    // Quick check: are there ANY incomplete task occurrences for today in user's gardens?
+    // This is a fast COUNT query with LIMIT 1 (we just need to know if any exist)
+    const { count, error: countError } = await supabase
+      .from("garden_plant_task_occurrences")
+      .select("id", { count: "exact", head: true })
+      .gte("due_at", startOfDay)
+      .lte("due_at", endOfDay)
+      .in("garden_id", gardenIds)
+      .or("completed_at.is.null,completed_count.lt.required_count")
+      .limit(1)
+
+    if (countError) {
+      // Try alternative approach: check if completed_count < required_count
+      const { data: incomplete, error: incompleteError } = await supabase
+        .from("garden_plant_task_occurrences")
+        .select("id, completed_count, required_count")
+        .gte("due_at", startOfDay)
+        .lte("due_at", endOfDay)
+        .in("garden_id", gardenIds)
+        .is("completed_at", null)
+        .limit(1)
+
+      if (incompleteError) {
+        return null // Fallback to cache
+      }
+
+      return incomplete && incomplete.length > 0
+    }
+
+    return (count ?? 0) > 0
+  } catch {
+    return null // Fallback to cache
+  }
+}
+
 // ⚡ Shared state across all hook instances for instant sync
 let sharedHasUnfinished: boolean | null = null
 let sharedUserId: string | null = null
@@ -154,7 +212,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     }
   }, [clearRefreshTimer, clearInterval])
 
-  const refreshNotification = React.useCallback(async (forceRefreshCache = false) => {
+  const refreshNotification = React.useCallback(async (forceRefreshCache = false, skipThrottle = false) => {
     const nextRequest = requestRef.current + 1
     requestRef.current = nextRequest
 
@@ -166,8 +224,8 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     const now = Date.now()
     const today = new Date().toISOString().slice(0, 10)
     
-    // ⚡ Reduced throttle from 500ms to 100ms for more responsive updates
-    if (!forceRefreshCache && now - lastRefreshTimeRef.current < 100) {
+    // ⚡ Skip throttle on first call or when explicitly requested
+    if (!skipThrottle && !forceRefreshCache && now - lastRefreshTimeRef.current < 100) {
       return stateRef.current
     }
     lastRefreshTimeRef.current = now
@@ -218,7 +276,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     void refreshNotification(forceCache)
   }, [userId, refreshNotification, setState])
 
-  // Initial mount: fast check then background refresh
+  // Initial mount: aggressive check for first-time visitors
   React.useEffect(() => {
     if (!userId) {
       setState(false)
@@ -226,27 +284,31 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     }
     
     // On initial mount:
-    // 1. First, do a FAST check from cache (no refresh) for instant feedback
-    // 2. Then, do a background refresh to ensure data is fresh
+    // For first-time visitors, we run TWO checks in parallel for fastest response:
+    // 1. Fast direct query (bypasses cache, very quick)
+    // 2. Cache-based check (more accurate, may be slower)
     if (!initialRefreshDoneRef.current) {
       initialRefreshDoneRef.current = true
       
-      // Fast path: read from cache immediately (don't force refresh)
-      void refreshNotification(false).then(() => {
-        // Background: refresh cache after initial read completes
-        // Use requestIdleCallback to avoid blocking
-        if ("requestIdleCallback" in window) {
-          window.requestIdleCallback(() => {
-            void refreshNotification(true)
-          }, { timeout: 2000 })
-        } else {
-          setTimeout(() => {
-            void refreshNotification(true)
-          }, 500)
+      // ⚡ Run fast check and cache check in parallel
+      // The fast check will update UI immediately if it finds tasks
+      // The cache check will update with accurate data shortly after
+      
+      // Fast path: direct database query (fastest for first-time visitors)
+      fastCheckPendingTasks(userId).then((hasTasksFast) => {
+        if (hasTasksFast !== null && mountedRef.current) {
+          // Fast check succeeded - update immediately
+          setState(hasTasksFast)
         }
+      }).catch(() => {
+        // Ignore fast check errors - cache check will handle it
       })
+
+      // Normal path: cache-based check (more accurate)
+      // Skip throttle (true) to ensure this runs immediately
+      void refreshNotification(true, true)
     } else {
-      void refreshNotification()
+      void refreshNotification(false, false)
     }
   }, [userId, refreshNotification, setState])
 
