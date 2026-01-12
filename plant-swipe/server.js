@@ -12784,15 +12784,23 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
 
 // === Plant Scan API Endpoints ===
 
-// Upload image for plant scan
-app.post('/api/scan/upload-image', async (req, res) => {
+// Combined upload + identify endpoint
+// Uses the same upload pattern as Admin/Garden Cover/Messages uploads
+// Optimizes image, uploads to storage, calls Kindwise API, returns everything
+app.post('/api/scan/upload-and-identify', async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
     return
   }
   const user = await getUserFromRequest(req)
   if (!user?.id) {
-    res.status(401).json({ error: 'You must be signed in to upload scan images' })
+    res.status(401).json({ error: 'You must be signed in to scan plants' })
+    return
+  }
+
+  if (!KINDWISE_API_KEY) {
+    console.error('[scan] KINDWISE API key not configured')
+    res.status(503).json({ error: 'Plant identification service is not configured' })
     return
   }
 
@@ -12834,6 +12842,10 @@ app.post('/api/scan/upload-image', async (req, res) => {
         return
       }
 
+      // Parse optional location from form data
+      const latitude = req.body?.latitude ? parseFloat(req.body.latitude) : undefined
+      const longitude = req.body?.longitude ? parseFloat(req.body.longitude) : undefined
+
       let optimizedBuffer
       let finalMimeType = 'image/webp'
 
@@ -12859,17 +12871,61 @@ app.post('/api/scan/upload-image', async (req, res) => {
             })
             .toBuffer()
         } catch (sharpErr) {
-          console.error('[scan-image] failed to convert image to webp', sharpErr)
+          console.error('[scan] failed to convert image to webp', sharpErr)
           res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
           return
         }
       }
 
+      // Convert optimized buffer to base64 for Kindwise API
+      const optimizedBase64 = `data:${finalMimeType};base64,${optimizedBuffer.toString('base64')}`
+
+      // Call Kindwise API with the optimized image
+      let identificationResult = null
+      try {
+        const requestBody = {
+          images: [optimizedBase64],
+          similar_images: true,
+        }
+        if (latitude !== undefined && longitude !== undefined && !isNaN(latitude) && !isNaN(longitude)) {
+          requestBody.latitude = latitude
+          requestBody.longitude = longitude
+        }
+
+        console.log('[scan] Calling Kindwise API for user:', user.id)
+
+        const apiResponse = await fetch('https://plant.id/api/v3/identification', {
+          method: 'POST',
+          headers: {
+            'Api-Key': KINDWISE_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        })
+
+        if (!apiResponse.ok) {
+          const errorText = await apiResponse.text()
+          console.error('[scan] Kindwise API error:', apiResponse.status, errorText)
+          res.status(502).json({ 
+            error: 'Plant identification service error', 
+            details: `API returned ${apiResponse.status}` 
+          })
+          return
+        }
+
+        identificationResult = await apiResponse.json()
+        console.log('[scan] Kindwise API success, status:', identificationResult.status)
+      } catch (apiErr) {
+        console.error('[scan] Error calling Kindwise API:', apiErr?.message || apiErr)
+        res.status(500).json({ error: 'Failed to identify plant', details: apiErr?.message })
+        return
+      }
+
+      // Upload optimized image to storage
       const baseName = sanitizeUploadBaseName(file.originalname)
       const timestamp = Date.now()
       const randomId = Math.random().toString(36).substring(2, 10)
       const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
-      // Path structure: scans/{user_id}/{timestamp}-{baseName}-{randomId}.{ext}
       const objectPath = `${scanImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
 
       try {
@@ -12885,7 +12941,7 @@ app.post('/api/scan/upload-image', async (req, res) => {
           throw new Error(uploadError.message || 'Supabase storage upload failed')
         }
       } catch (storageErr) {
-        console.error('[scan-image] supabase storage upload failed', storageErr)
+        console.error('[scan] supabase storage upload failed', storageErr)
         res.status(500).json({ error: storageErr?.message || 'Failed to store image' })
         return
       }
@@ -12935,92 +12991,31 @@ app.post('/api/scan/upload-image', async (req, res) => {
           createdAt: new Date().toISOString(),
         })
       } catch (recordErr) {
-        console.error('[scan-image] failed to record media upload', recordErr)
+        console.error('[scan] failed to record media upload', recordErr)
       }
 
+      // Return combined result
       res.json({
         ok: true,
-        url: proxyUrl,
-        bucket: scanImageUploadBucket,
-        path: objectPath,
-        mimeType: finalMimeType,
-        size: optimizedBuffer.length,
-        originalMimeType: mime,
-        originalSize: file.size,
-        compressionPercent,
+        upload: {
+          url: proxyUrl,
+          bucket: scanImageUploadBucket,
+          path: objectPath,
+          mimeType: finalMimeType,
+          size: optimizedBuffer.length,
+          originalMimeType: mime,
+          originalSize: file.size,
+          compressionPercent,
+        },
+        identification: identificationResult,
       })
-    })().catch((uploadErr) => {
-      console.error('[scan-image] unexpected failure', uploadErr)
+    })().catch((err) => {
+      console.error('[scan] unexpected failure', err)
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Unexpected upload failure' })
+        res.status(500).json({ error: 'Unexpected failure during scan' })
       }
     })
   })
-})
-
-// Identify plant using Kindwise Plant.id API
-app.post('/api/scan/identify', async (req, res) => {
-  const user = await getUserFromRequest(req)
-  if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
-  }
-
-  if (!KINDWISE_API_KEY) {
-    console.error('[scan-identify] KINDWISE API key not configured')
-    res.status(503).json({ error: 'Plant identification service is not configured' })
-    return
-  }
-
-  const { image, latitude, longitude, similar_images = true } = req.body || {}
-  
-  if (!image) {
-    res.status(400).json({ error: 'Image data is required' })
-    return
-  }
-
-  try {
-    // Prepare request to Kindwise Plant.id API
-    const requestBody = {
-      images: [image],
-      similar_images: similar_images,
-    }
-    
-    // Add location if provided
-    if (latitude !== undefined && longitude !== undefined) {
-      requestBody.latitude = latitude
-      requestBody.longitude = longitude
-    }
-
-    console.log('[scan-identify] Calling Kindwise API for user:', user.id)
-
-    const apiResponse = await fetch('https://plant.id/api/v3/identification', {
-      method: 'POST',
-      headers: {
-        'Api-Key': KINDWISE_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    })
-
-    if (!apiResponse.ok) {
-      const errorText = await apiResponse.text()
-      console.error('[scan-identify] Kindwise API error:', apiResponse.status, errorText)
-      res.status(502).json({ 
-        error: 'Plant identification service error', 
-        details: `API returned ${apiResponse.status}` 
-      })
-      return
-    }
-
-    const result = await apiResponse.json()
-    console.log('[scan-identify] Kindwise API success, status:', result.status)
-
-    res.json(result)
-  } catch (err) {
-    console.error('[scan-identify] Error calling Kindwise API:', err?.message || err)
-    res.status(500).json({ error: 'Failed to identify plant', details: err?.message })
-  }
 })
 
 // DELETE a garden (and its cover image from storage)
