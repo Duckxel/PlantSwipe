@@ -2821,7 +2821,8 @@ function getVisitsTableIdentifierParts() {
 const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch { }
-app.use(express.json())
+// Increase JSON body limit to handle base64 encoded images (e.g. for plant scan identification)
+app.use(express.json({ limit: '15mb' }))
 
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
