@@ -164,7 +164,7 @@ do $$ declare
     'landing_features',
     'landing_showcase_cards',
     'landing_testimonials',
-    'landing_faq'
+    'landing_faq',
     -- Plant Scanning
     'plant_scans'
   ];
