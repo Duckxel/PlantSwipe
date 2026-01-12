@@ -41,6 +41,12 @@ import {
   Target,
   Award,
   Lightbulb,
+  Instagram,
+  Twitter,
+  Mail,
+  Seedling,
+  GraduationCap,
+  HandHeart,
 } from "lucide-react"
 
 // Icon mapping for dynamic rendering
@@ -48,6 +54,7 @@ const iconMap: Record<string, React.ElementType> = {
   Leaf, Droplets, Sun, Bell, BookMarked, Camera, NotebookPen, Wifi, Users, Check,
   Clock, TrendingUp, Shield, Heart, Globe, Zap, MessageCircle, Flower2,
   TreeDeciduous, Sprout, Star, Sparkles, Palette, Share2, Calendar, Target, Award, Lightbulb,
+  Instagram, Twitter, Mail, Seedling, GraduationCap, HandHeart,
 }
 
 // Types for database data
@@ -302,6 +309,9 @@ const LandingPage: React.FC = () => {
 
         {/* Stats Banner */}
         <StatsBanner />
+
+        {/* Beginner Friendly Section */}
+        <BeginnerFriendlySection />
 
         {/* Features Grid */}
         <FeaturesSection />
@@ -621,6 +631,116 @@ const StatsBanner: React.FC = () => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   BEGINNER FRIENDLY SECTION - New Gardeners Welcome
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const BeginnerFriendlySection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
+  const beginnerFeatures = [
+    {
+      icon: GraduationCap,
+      title: t("beginner.feature1Title", { defaultValue: "Learn as You Grow" }),
+      description: t("beginner.feature1Desc", { defaultValue: "No gardening experience? No problem! Our app teaches you everything step by step." }),
+      color: "emerald",
+    },
+    {
+      icon: Sparkles,
+      title: t("beginner.feature2Title", { defaultValue: "AI Plant Doctor" }),
+      description: t("beginner.feature2Desc", { defaultValue: "Not sure what's wrong? Just ask Aphylia - our AI assistant explains plant care in simple terms." }),
+      color: "purple",
+    },
+    {
+      icon: Bell,
+      title: t("beginner.feature3Title", { defaultValue: "Never Forget to Water" }),
+      description: t("beginner.feature3Desc", { defaultValue: "Get gentle reminders exactly when your plants need attention. We'll help you build the habit." }),
+      color: "blue",
+    },
+    {
+      icon: Camera,
+      title: t("beginner.feature4Title", { defaultValue: "Identify Any Plant" }),
+      description: t("beginner.feature4Desc", { defaultValue: "Found a plant but don't know what it is? Snap a photo and we'll tell you everything about it." }),
+      color: "pink",
+    },
+  ]
+
+  return (
+    <section className="py-20 lg:py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/4 -left-20 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 -right-20 w-80 h-80 bg-teal-500/5 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
+            <Seedling className="h-4 w-4 text-emerald-500" />
+            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+              {t("beginner.badge", { defaultValue: "Perfect for Beginners" })}
+            </span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
+            {t("beginner.title", { defaultValue: "Know Nothing About Gardening?" })}
+            <br />
+            <span className="gradient-text">{t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })}</span>
+          </h2>
+          <p className="text-lg sm:text-xl text-stone-600 dark:text-stone-400 leading-relaxed">
+            {t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful AI that speaks your language — not complicated botany." })}
+          </p>
+        </div>
+
+        {/* Feature Cards */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {beginnerFeatures.map((feature, i) => (
+            <div
+              key={i}
+              className="group relative rounded-3xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5"
+            >
+              <div className={`h-14 w-14 rounded-2xl bg-${feature.color}-500/10 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
+                <feature.icon className={`h-7 w-7 text-${feature.color}-500`} />
+              </div>
+              <h3 className="text-lg font-bold text-stone-900 dark:text-white mb-2">
+                {feature.title}
+              </h3>
+              <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed">
+                {feature.description}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom CTA */}
+        <div className="mt-12 text-center">
+          <div className="inline-flex flex-col sm:flex-row items-center gap-4 p-6 rounded-2xl bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-green-500/5 border border-emerald-500/10">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                <Heart className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="text-left">
+                <p className="font-semibold text-stone-900 dark:text-white">
+                  {t("beginner.ctaTitle", { defaultValue: "Join thousands of first-time plant parents" })}
+                </p>
+                <p className="text-sm text-stone-600 dark:text-stone-400">
+                  {t("beginner.ctaSubtitle", { defaultValue: "Start your green journey today — we'll guide you every step of the way" })}
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/discovery"
+              className="flex-shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20"
+            >
+              {t("beginner.ctaButton", { defaultValue: "Get Started Free" })}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </div>
       </div>
@@ -1091,27 +1211,62 @@ const FAQSection: React.FC = () => {
           ))}
         </div>
 
-        {/* Support CTA */}
-        <div className="mt-16 text-center">
-          <div className="inline-flex flex-col items-center gap-4 p-8 rounded-3xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/20">
-            <div className="h-14 w-14 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-              <MessageCircle className="h-7 w-7 text-white" />
+        {/* Support CTA - Enhanced with Social Links */}
+        <div className="mt-16">
+          <div className="rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-green-500/10 border border-emerald-500/20 p-8 lg:p-10">
+            <div className="text-center max-w-2xl mx-auto space-y-6">
+              <div className="inline-flex h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 items-center justify-center shadow-lg shadow-emerald-500/30">
+                <HandHeart className="h-8 w-8 text-white" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-stone-900 dark:text-white">
+                  {t("faq.supportTitle", { defaultValue: "We'd love to hear from you!" })}
+                </h3>
+                <p className="text-stone-600 dark:text-stone-400 text-lg">
+                  {t("faq.supportSubtitle", { defaultValue: "Questions, feedback, or just want to say hi? Reach out anytime - it's always a pleasure to connect with plant lovers!" })}
+                </p>
+              </div>
+
+              {/* Social Links */}
+              <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+                <a
+                  href="https://instagram.com/aphylia.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium hover:shadow-lg hover:shadow-pink-500/25 hover:-translate-y-0.5 transition-all"
+                >
+                  <Instagram className="h-5 w-5" />
+                  <span>Instagram</span>
+                </a>
+                <a
+                  href="https://twitter.com/aphylia_app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-sky-500/25 hover:-translate-y-0.5 transition-all"
+                >
+                  <Twitter className="h-5 w-5" />
+                  <span>Twitter</span>
+                </a>
+                <a
+                  href="mailto:hello@aphylia.app"
+                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium hover:shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-0.5 transition-all"
+                >
+                  <Mail className="h-5 w-5" />
+                  <span>Email Us</span>
+                </a>
+              </div>
+
+              <div className="pt-4 border-t border-emerald-500/10">
+                <Link
+                  to="/contact"
+                  className="inline-flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium hover:underline"
+                >
+                  {t("faq.supportButton", { defaultValue: "Or visit our contact page" })}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
             </div>
-            <div className="space-y-1">
-              <p className="text-xl font-bold text-stone-900 dark:text-white">
-                {t("faq.supportTitle", { defaultValue: "Still have questions?" })}
-              </p>
-              <p className="text-stone-600 dark:text-stone-400">
-                {t("faq.supportSubtitle", { defaultValue: "Our team is here to help you" })}
-              </p>
-            </div>
-            <Link
-              to="/contact"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/30"
-            >
-              {t("faq.supportButton", { defaultValue: "Contact Support" })}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
           </div>
         </div>
       </div>
@@ -1141,11 +1296,19 @@ const FinalCTASection: React.FC = () => {
 
           <div className="relative px-8 py-16 lg:px-16 lg:py-24 text-center">
             <div className="max-w-3xl mx-auto space-y-8">
+              {/* Beginner Badge */}
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm">
+                <Seedling className="h-4 w-4 text-white" />
+                <span className="text-sm font-medium text-white">
+                  {t("finalCta.badge", { defaultValue: "No experience needed" })}
+                </span>
+              </div>
+
               <h2 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight">
-                {t("finalCta.title")}
+                {t("finalCta.title", { defaultValue: "Ready to Start Your Plant Journey?" })}
               </h2>
               <p className="text-lg sm:text-xl text-white/80 max-w-2xl mx-auto">
-                {t("finalCta.subtitle")}
+                {t("finalCta.subtitle", { defaultValue: "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents." })}
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
                 <Link
@@ -1153,15 +1316,49 @@ const FinalCTASection: React.FC = () => {
                   className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white text-emerald-600 text-base font-bold hover:bg-white/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5"
                 >
                   <Leaf className="h-5 w-5" />
-                  {t("finalCta.ctaDownload")}
+                  {t("finalCta.ctaDownload", { defaultValue: "Start Growing" })}
                 </Link>
                 <Link
                   to="/discovery"
                   className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-semibold border border-white/30 transition-all hover:-translate-y-0.5"
                 >
-                  {t("finalCta.ctaDocs")}
+                  {t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })}
                   <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                 </Link>
+              </div>
+
+              {/* Social Links */}
+              <div className="pt-8 border-t border-white/20">
+                <p className="text-white/70 text-sm mb-4">
+                  {t("finalCta.socialText", { defaultValue: "Let's connect! We love hearing from you" })}
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <a
+                    href="https://instagram.com/aphylia.app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                    aria-label="Instagram"
+                  >
+                    <Instagram className="h-5 w-5 text-white" />
+                  </a>
+                  <a
+                    href="https://twitter.com/aphylia_app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                    aria-label="Twitter"
+                  >
+                    <Twitter className="h-5 w-5 text-white" />
+                  </a>
+                  <a
+                    href="mailto:hello@aphylia.app"
+                    className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                    aria-label="Email"
+                  >
+                    <Mail className="h-5 w-5 text-white" />
+                  </a>
+                </div>
               </div>
             </div>
           </div>
