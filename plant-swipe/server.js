@@ -963,8 +963,20 @@ const optimizableMimeTypes = new Set([
   'image/webp',
 ])
 
+// Standard quality for non-admin uploads
+const standardUploadWebpQuality = 50
+
 async function handleScopedImageUpload(req, res, options = {}) {
-  const { prefixBuilder, auditLabel = 'admin', actorId = null, uploaderInfo = null } = options
+  const { 
+    prefixBuilder, 
+    auditLabel = 'admin', 
+    actorId = null, 
+    uploaderInfo = null,
+    // Allow overriding bucket, quality, and dimension per endpoint
+    bucket = adminUploadBucket,
+    webpQuality = adminUploadWebpQuality,
+    maxDimension = adminUploadMaxDimension,
+  } = options
 
   singleAdminImageUpload(req, res, (err) => {
     if (err) {
@@ -1017,21 +1029,21 @@ async function handleScopedImageUpload(req, res, options = {}) {
           finalBuffer = await sharp(file.buffer)
             .rotate()
             .resize({
-              width: adminUploadMaxDimension,
-              height: adminUploadMaxDimension,
+              width: maxDimension,
+              height: maxDimension,
               fit: 'inside',
               withoutEnlargement: true,
               fastShrinkOnLoad: true,
             })
             .webp({
-              quality: adminUploadWebpQuality,
+              quality: webpQuality,
               effort: 5,
               smartSubsample: true,
             })
             .toBuffer()
           finalMimeType = 'image/webp'
           finalTypeSegment = sanitizePathSegment('webp', 'webp')
-          quality = adminUploadWebpQuality
+          quality = webpQuality
           compressionPercent = file.size > 0
             ? Math.max(0, Math.round(100 - (finalBuffer.length / file.size) * 100))
             : 0
@@ -1061,7 +1073,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
       const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix)
 
       try {
-        const { error: uploadError } = await supabaseServiceClient.storage.from(adminUploadBucket).upload(objectPath, finalBuffer, {
+        const { error: uploadError } = await supabaseServiceClient.storage.from(bucket).upload(objectPath, finalBuffer, {
           cacheControl: '31536000',
           contentType: finalMimeType,
           upsert: false,
@@ -1075,7 +1087,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         return
       }
 
-      const { data: publicData } = supabaseServiceClient.storage.from(adminUploadBucket).getPublicUrl(objectPath)
+      const { data: publicData } = supabaseServiceClient.storage.from(bucket).getPublicUrl(objectPath)
       const publicUrl = publicData?.publicUrl || null
       // Transform URL to use media proxy (hides Supabase project URL)
       const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
@@ -1083,7 +1095,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
 
       const payload = {
         ok: true,
-        bucket: adminUploadBucket,
+        bucket: bucket,
         path: objectPath,
         url: proxyUrl,
         mimeType: finalMimeType,
@@ -1103,7 +1115,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         adminId: uploaderInfo?.id || null,
         adminEmail: uploaderInfo?.email || null,
         adminName: uploaderInfo?.name || null,
-        bucket: adminUploadBucket,
+        bucket: bucket,
         path: objectPath,
         publicUrl: proxyUrl,
         mimeType: finalMimeType,
@@ -1124,7 +1136,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
       if (actorId) {
         try {
           const detail = {
-            bucket: adminUploadBucket,
+            bucket: bucket,
             path: objectPath,
             url: proxyUrl,
             originalMimeType: mime,
@@ -3401,12 +3413,13 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
           return
         }
 
-        // Optimize
+        // Optimize - use standard 50% quality for non-admin uploads
+        const contactScreenshotQuality = 50
         let buffer
         try {
           buffer = await sharp(file.buffer)
             .resize({ width: 1920, height: 1080, fit: 'inside', withoutEnlargement: true })
-            .webp({ quality: 80 })
+            .webp({ quality: contactScreenshotQuality })
             .toBuffer()
         } catch (e) {
           res.status(400).json({ error: 'Invalid image file' })
@@ -3417,8 +3430,9 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
         const path = `${contactScreenshotPrefix}/${user.id}/${unique}.webp`
 
         try {
+          // Contact screenshots go to PHOTOS bucket (not UTILITY)
           const { error: uploadError } = await supabaseServiceClient.storage
-            .from(adminUploadBucket)
+            .from('PHOTOS')
             .upload(path, buffer, {
               contentType: 'image/webp',
               cacheControl: '3600',
@@ -3428,7 +3442,7 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
           if (uploadError) throw uploadError
 
           const { data: publicData } = supabaseServiceClient.storage
-            .from(adminUploadBucket)
+            .from('PHOTOS')
             .getPublicUrl(path)
 
           // Use media proxy
@@ -3445,14 +3459,14 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
               adminId: user.id,
               adminEmail: user.email || null,
               adminName: uploaderDisplayName,
-              bucket: adminUploadBucket,
+              bucket: 'PHOTOS',
               path: path,
               publicUrl: proxyUrl,
               mimeType: 'image/webp',
               originalMimeType: file.mimetype || 'image/unknown',
               sizeBytes: buffer.length,
               originalSizeBytes: file.size,
-              quality: 80,
+              quality: contactScreenshotQuality,
               compressionPercent: file.size > 0 ? Math.max(0, Math.round(100 - (buffer.length / file.size) * 100)) : 0,
               uploadSource: 'contact_screenshot',
               metadata: {
@@ -3496,7 +3510,7 @@ app.post('/api/contact/delete-screenshot', async (req, res) => {
     }
 
     const info = parseStoragePublicUrl(url)
-    if (!info || info.bucket !== adminUploadBucket) {
+    if (!info || info.bucket !== 'PHOTOS') {
       // Just ignore if it doesn't match our bucket, claim success
       res.json({ ok: true })
       return
@@ -3509,7 +3523,7 @@ app.post('/api/contact/delete-screenshot', async (req, res) => {
     }
 
     const { error } = await supabaseServiceClient.storage
-      .from(adminUploadBucket)
+      .from('PHOTOS')
       .remove([info.path])
 
     if (error) {
@@ -5131,6 +5145,9 @@ app.post('/api/admin/upload-image', async (req, res) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [adminUploadPrefix, folder].filter(Boolean).join('/')
     },
+    // Admin uploads: UTILITY bucket, 90% quality (highest)
+    bucket: 'UTILITY',
+    webpQuality: 90,
   })
 })
 
@@ -5167,6 +5184,9 @@ app.post('/api/blog/upload-image', async (req, res) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [blogUploadPrefix, folder].filter(Boolean).join('/')
     },
+    // Blog uploads: PHOTOS bucket, 50% quality (standard)
+    bucket: 'PHOTOS',
+    webpQuality: 50,
   })
 })
 
@@ -5203,6 +5223,9 @@ app.post('/api/pro-advice/upload-image', async (req, res) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [proAdviceUploadPrefix, folder].filter(Boolean).join('/')
     },
+    // Pro advice uploads: PHOTOS bucket, 50% quality (standard)
+    bucket: 'PHOTOS',
+    webpQuality: 50,
   })
 })
 
@@ -5246,6 +5269,9 @@ app.post('/api/messages/upload-image', async (req, res) => {
       const userId = uploader?.id || 'anonymous'
       return `${messagesUploadPrefix}/${userId}`
     },
+    // Messages uploads: PHOTOS bucket, 50% quality (standard)
+    bucket: 'PHOTOS',
+    webpQuality: 50,
   })
 })
 
@@ -16184,16 +16210,43 @@ app.post('/api/garden/:id/upload', async (req, res) => {
         return
       }
 
+      const originalSize = fileBuffer.length
+      let finalBuffer = fileBuffer
+      let finalMimeType = mimeType
+      let finalExt = fileName.split('.').pop() || 'jpg'
+      const gardenUploadQuality = 50 // Standard 50% quality for non-admin uploads
+
+      // Optimize images (convert to WebP)
+      const isOptimizableImage = ['image/jpeg', 'image/png', 'image/webp'].includes(mimeType.toLowerCase())
+      if (isOptimizableImage) {
+        try {
+          finalBuffer = await sharp(fileBuffer)
+            .rotate()
+            .resize({
+              width: 1920,
+              height: 1920,
+              fit: 'inside',
+              withoutEnlargement: true,
+            })
+            .webp({ quality: gardenUploadQuality })
+            .toBuffer()
+          finalMimeType = 'image/webp'
+          finalExt = 'webp'
+        } catch (sharpErr) {
+          console.error('[garden-upload] sharp optimization failed, using original', sharpErr)
+          // Fall back to original if optimization fails
+        }
+      }
+
       // Generate unique filename
-      const ext = fileName.split('.').pop() || 'jpg'
-      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${finalExt}`
       const storagePath = `gardens/${gardenId}/${folder}/${uniqueName}`
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('photos')
-        .upload(storagePath, fileBuffer, {
-          contentType: mimeType,
+      // Upload to Supabase Storage (PHOTOS bucket)
+      const { data, error } = await supabaseServiceClient.storage
+        .from('PHOTOS')
+        .upload(storagePath, finalBuffer, {
+          contentType: finalMimeType,
           upsert: false,
         })
 
@@ -16204,7 +16257,7 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       }
 
       // Get public URL and transform to media proxy
-      const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
+      const { data: urlData } = supabaseServiceClient.storage.from('PHOTOS').getPublicUrl(storagePath)
       const proxyUrl = supabaseStorageToMediaProxy(urlData?.publicUrl) || urlData?.publicUrl || ''
 
       // Record to global image database
@@ -16213,20 +16266,24 @@ app.post('/api/garden/:id/upload', async (req, res) => {
         uploaderDisplayName = await getAdminProfileName(user.id)
       } catch { }
       
+      const compressionPercent = originalSize > 0 && isOptimizableImage
+        ? Math.max(0, Math.round(100 - (finalBuffer.length / originalSize) * 100))
+        : 0
+
       try {
         await recordAdminMediaUpload({
           adminId: user.id,
           adminEmail: user.email || null,
           adminName: uploaderDisplayName,
-          bucket: 'photos',
+          bucket: 'PHOTOS',
           path: storagePath,
           publicUrl: proxyUrl,
-          mimeType: mimeType || 'image/jpeg',
+          mimeType: finalMimeType,
           originalMimeType: mimeType || 'image/jpeg',
-          sizeBytes: fileBuffer.length,
-          originalSizeBytes: fileBuffer.length,
-          quality: null,
-          compressionPercent: null,
+          sizeBytes: finalBuffer.length,
+          originalSizeBytes: originalSize,
+          quality: isOptimizableImage ? gardenUploadQuality : null,
+          compressionPercent,
           uploadSource: folder === 'journal' ? 'garden_journal' : 'garden_photo',
           metadata: {
             source: folder === 'journal' ? 'garden_journal' : 'garden_photo',
