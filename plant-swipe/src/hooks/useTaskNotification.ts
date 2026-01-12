@@ -8,11 +8,13 @@ type UseTaskNotificationOptions = {
 }
 
 const ERROR_LOGGED = new Set<string>()
-const REFRESH_INTERVAL_MS = 30_000 // Refresh every 30 seconds (more responsive)
+const REFRESH_INTERVAL_MS = 15_000 // ⚡ Reduced from 30s to 15s for more responsive updates
 const LOCALSTORAGE_KEY = "task_notification_state"
+const LOCALSTORAGE_SYNC_KEY = "task_notification_sync" // For cross-tab sync
 
 // ⚡ Shared state across all hook instances for instant sync
 let sharedHasUnfinished: boolean | null = null
+let sharedUserId: string | null = null
 const sharedListeners = new Set<(value: boolean) => void>()
 
 function notifySharedListeners(value: boolean) {
@@ -24,7 +26,7 @@ function notifySharedListeners(value: boolean) {
 function getPersistedState(userId: string | null): boolean {
   if (!userId || typeof window === "undefined") return false
   // First check shared state (fastest - already in memory)
-  if (sharedHasUnfinished !== null) return sharedHasUnfinished
+  if (sharedHasUnfinished !== null && sharedUserId === userId) return sharedHasUnfinished
   // Then check localStorage
   try {
     const stored = localStorage.getItem(LOCALSTORAGE_KEY)
@@ -33,6 +35,7 @@ function getPersistedState(userId: string | null): boolean {
       // Only use if for same user and not too old (1 hour)
       if (parsed.userId === userId && Date.now() - parsed.timestamp < 3600000) {
         sharedHasUnfinished = parsed.hasUnfinished
+        sharedUserId = userId
         return parsed.hasUnfinished
       }
     }
@@ -44,11 +47,18 @@ function getPersistedState(userId: string | null): boolean {
 
 function persistState(userId: string, hasUnfinished: boolean) {
   if (typeof window === "undefined") return
+  sharedUserId = userId
   try {
-    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify({
+    const data = {
       userId,
       hasUnfinished,
       timestamp: Date.now()
+    }
+    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data))
+    // ⚡ Also write to sync key to trigger storage events in other tabs
+    localStorage.setItem(LOCALSTORAGE_SYNC_KEY, JSON.stringify({
+      ...data,
+      nonce: Math.random() // Ensure storage event fires even if value is same
     }))
   } catch {
     // Ignore localStorage errors
@@ -92,6 +102,32 @@ export function useTaskNotification(userId: string | null | undefined, options?:
       sharedListeners.delete(listener)
     }
   }, [])
+
+  // ⚡ Cross-tab synchronization using storage events
+  React.useEffect(() => {
+    if (!userId || typeof window === "undefined") return
+
+    const handleStorageChange = (e: StorageEvent) => {
+      // Listen for changes to the sync key from other tabs
+      if (e.key === LOCALSTORAGE_SYNC_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue)
+          if (parsed.userId === userId) {
+            stateRef.current = parsed.hasUnfinished
+            if (mountedRef.current) {
+              setHasUnfinished(parsed.hasUnfinished)
+            }
+            sharedHasUnfinished = parsed.hasUnfinished
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    return () => window.removeEventListener("storage", handleStorageChange)
+  }, [userId])
 
   const clearRefreshTimer = React.useCallback(() => {
     if (typeof window === "undefined") return
@@ -182,17 +218,33 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     void refreshNotification(forceCache)
   }, [userId, refreshNotification, setState])
 
-  // Initial mount: force cache refresh to ensure fresh data
+  // Initial mount: fast check then background refresh
   React.useEffect(() => {
     if (!userId) {
       setState(false)
       return
     }
-    // On initial mount, force a cache refresh to ensure we have fresh data
-    // But we already show persisted state immediately for instant feedback
+    
+    // On initial mount:
+    // 1. First, do a FAST check from cache (no refresh) for instant feedback
+    // 2. Then, do a background refresh to ensure data is fresh
     if (!initialRefreshDoneRef.current) {
       initialRefreshDoneRef.current = true
-      void refreshNotification(true) // Force cache refresh on mount
+      
+      // Fast path: read from cache immediately (don't force refresh)
+      void refreshNotification(false).then(() => {
+        // Background: refresh cache after initial read completes
+        // Use requestIdleCallback to avoid blocking
+        if ("requestIdleCallback" in window) {
+          window.requestIdleCallback(() => {
+            void refreshNotification(true)
+          }, { timeout: 2000 })
+        } else {
+          setTimeout(() => {
+            void refreshNotification(true)
+          }, 500)
+        }
+      })
     } else {
       void refreshNotification()
     }
@@ -236,6 +288,45 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     return () => window.removeEventListener("focus", handleFocus)
   }, [userId, refreshNotification])
 
+  // ⚡ Route change detection - refresh when navigating between pages
+  React.useEffect(() => {
+    if (!userId || typeof window === "undefined") return
+
+    // Listen for popstate (browser back/forward)
+    const handlePopState = () => {
+      void refreshNotification(true)
+    }
+
+    // Listen for pushState/replaceState via custom event
+    const handleRouteChange = () => {
+      void refreshNotification(true)
+    }
+
+    window.addEventListener("popstate", handlePopState)
+    window.addEventListener("routechange", handleRouteChange)
+
+    // Monkey-patch history methods to detect SPA navigation
+    const originalPushState = history.pushState.bind(history)
+    const originalReplaceState = history.replaceState.bind(history)
+
+    history.pushState = function (...args) {
+      originalPushState(...args)
+      void refreshNotification(true)
+    }
+
+    history.replaceState = function (...args) {
+      originalReplaceState(...args)
+      // Don't refresh on replaceState to avoid loops, just dispatch event
+    }
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState)
+      window.removeEventListener("routechange", handleRouteChange)
+      history.pushState = originalPushState
+      history.replaceState = originalReplaceState
+    }
+  }, [userId, refreshNotification])
+
   React.useEffect(() => {
     if (!userId || typeof window === "undefined") return
     const handler = () => { void refreshNotification() }
@@ -273,6 +364,9 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     }
   }, [userId, scheduleRefresh])
 
+  // ⚡ Subscribe to user-specific task cache updates
+  // Instead of subscribing to all table changes (noisy), we subscribe to cache table changes
+  // which are filtered by user_id
   React.useEffect(() => {
     if (!userId) return
     if (typeof window === "undefined") return
@@ -280,21 +374,25 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     const channelName = `rt-task-badge-${channelKey}-${userId}`
 
     const channel = supabase.channel(channelName)
+      // Listen for changes to user's task cache (much more targeted than all occurrences)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
-        table: "garden_plant_task_occurrences",
-      }, () => scheduleRefresh(true)) // Force cache refresh
+        table: "user_task_daily_cache",
+        filter: `user_id=eq.${userId}`,
+      }, () => {
+        // Cache was updated, refresh immediately
+        scheduleRefresh(false) // Don't need to refresh cache, just read it
+      })
+      // Also listen for garden-level cache changes that might affect this user
       .on("postgres_changes", {
         event: "*",
         schema: "public",
-        table: "garden_plant_tasks",
-      }, () => scheduleRefresh(true)) // Force cache refresh
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "garden_plants",
-      }, () => scheduleRefresh(true)) // Force cache refresh
+        table: "garden_task_daily_cache",
+      }, () => {
+        // Garden cache changed, might affect our count
+        scheduleRefresh(true)
+      })
 
     const subscription = channel.subscribe()
     if (subscription instanceof Promise) {
