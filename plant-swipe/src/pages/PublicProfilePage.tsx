@@ -966,31 +966,34 @@ export default function PublicProfilePage() {
                 <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/10 blur-3xl" />
               </div>
               <CardContent className="relative z-10 p-6 md:p-8 space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
+              {/* Profile header - stacks on mobile, row on tablet+ */}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                {/* Avatar - centered on mobile */}
+                <div className="h-16 w-16 shrink-0 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center mx-auto sm:mx-0" aria-hidden>
                   <UserIcon
                     className="h-8 w-8 text-black"
                   />
                 </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center">
-                          <span className="text-2xl font-semibold truncate">{pp.display_name || pp.username || t('profile.member')}</span>
-                          <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
-                        </div>
-                        {pp.isAdminViewingPrivateNonFriend && (
-                          <div title={t('profile.privateProfileViewedByAdmin')}>
-                            <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
-                          </div>
-                        )}
-                        {!pp.roles?.length && !pp.is_admin && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full border bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-600">{t('profile.member')}</span>
-                        )}
+                {/* Profile info - takes remaining space */}
+                <div className="flex-1 min-w-0 text-center sm:text-left">
+                  <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
+                    <div className="flex items-center gap-1 min-w-0 max-w-full">
+                      <span className="text-xl sm:text-2xl font-semibold truncate max-w-[200px] sm:max-w-[300px]">{pp.display_name || pp.username || t('profile.member')}</span>
+                      <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
+                    </div>
+                    {pp.isAdminViewingPrivateNonFriend && (
+                      <div title={t('profile.privateProfileViewedByAdmin')}>
+                        <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
                       </div>
+                    )}
+                    {!pp.roles?.length && !pp.is_admin && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full border bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-600">{t('profile.member')}</span>
+                    )}
+                  </div>
                   {canViewProfile && (
                     <>
-                      <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
-                      <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
+                      <div className="text-sm opacity-70 mt-1 flex items-center gap-1 justify-center sm:justify-start">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
+                      <div className="text-xs opacity-70 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 justify-center sm:justify-start">
                         {pp.is_online ? (
                           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-500" />{t('profile.currentlyOnline')}</span>
                         ) : (
@@ -999,16 +1002,17 @@ export default function PublicProfilePage() {
                         {pp.joined_at && (
                           <span>
                             • {t('profile.joined')} {new Date(pp.joined_at).toLocaleDateString(i18n.language)}
-                            {stats?.friendsCount != null && stats.friendsCount > 0 && (
-                              <span className="ml-2">• {stats.friendsCount} {stats.friendsCount !== 1 ? t('profile.friends') : t('profile.friend')}</span>
-                            )}
                           </span>
+                        )}
+                        {stats?.friendsCount != null && stats.friendsCount > 0 && (
+                          <span>• {stats.friendsCount} {stats.friendsCount !== 1 ? t('profile.friends') : t('profile.friend')}</span>
                         )}
                       </div>
                     </>
                   )}
                 </div>
-                <div className="ml-auto flex items-start gap-2" ref={anchorRef}>
+                {/* Action buttons - centered on mobile, right-aligned on tablet+ */}
+                <div className="flex items-center justify-center sm:justify-end gap-2 shrink-0 w-full sm:w-auto" ref={anchorRef}>
                   {isOwner ? (
                     <>
                       <Button className="rounded-2xl self-start" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
@@ -1053,7 +1057,7 @@ export default function PublicProfilePage() {
                         </Button>
                       )}
                       {friendStatus === 'friends' && (
-                        <div className="flex flex-col items-end gap-1">
+                        <div className="flex flex-col items-center sm:items-end gap-1">
                           <Button className="rounded-2xl" variant="secondary" disabled>
                             {t('profile.friends')}
                           </Button>
@@ -1274,16 +1278,16 @@ export default function PublicProfilePage() {
                 </div>
               </div>
               {canViewProfile && pp.bio && (
-                <div className="text-sm opacity-90">{pp.bio}</div>
+                <div className="text-sm opacity-90 text-center sm:text-left">{pp.bio}</div>
               )}
               {!canViewProfile && !isOwner && pp.is_private && (
-                <div className="mt-4 p-4 rounded-xl bg-stone-50 border border-stone-200 flex items-start gap-3">
-                  <Lock className="h-5 w-5 mt-0.5 text-stone-600 shrink-0" />
+                <div className="mt-4 p-4 rounded-xl bg-stone-50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-700 flex items-start gap-3">
+                  <Lock className="h-5 w-5 mt-0.5 text-stone-600 dark:text-stone-400 shrink-0" />
                   <div>
-                    <div className="text-sm font-medium text-stone-900 mb-1">
+                    <div className="text-sm font-medium text-stone-900 dark:text-stone-100 mb-1">
                       {t('profile.privateProfile.title')}
                     </div>
-                    <div className="text-xs opacity-70 text-stone-700">
+                    <div className="text-xs opacity-70 text-stone-700 dark:text-stone-300">
                       {t('profile.privateProfile.description')}
                     </div>
                   </div>
@@ -1298,15 +1302,15 @@ export default function PublicProfilePage() {
                   <Card className={glassCard}>
                     <CardContent className="p-6 md:p-8 space-y-4">
                       <div className="text-lg font-semibold">{t("profile.highlights")}</div>
-                    <div className="flex flex-col md:flex-row items-center justify-center gap-0">
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-0">
                       {/* Task completion grid - left side */}
-                      <div className="flex-1 flex justify-center items-center">
+                      <div className="flex-1 flex justify-center items-center py-2">
                         <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1.5 sm:gap-2">
                           {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
                             <div
                               key={idx}
                               tabIndex={0}
-                              className={`h-8 w-8 sm:h-10 sm:w-10 rounded-[4px] ${colorFor(item)}`}
+                              className={`h-7 w-7 sm:h-10 sm:w-10 rounded-[4px] ${colorFor(item)}`}
                               onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
                               onMouseLeave={hideTooltip}
                               onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
@@ -1317,39 +1321,40 @@ export default function PublicProfilePage() {
                         </div>
                       </div>
                       
-                      {/* Thin divider line */}
-                      <div className="hidden md:block w-px h-full min-h-[200px] bg-stone-300 dark:bg-[#3e3e42] mx-2" />
+                      {/* Horizontal divider on mobile, vertical on desktop */}
+                      <div className="w-full h-px md:hidden bg-stone-200 dark:bg-[#3e3e42]" />
+                      <div className="hidden md:block w-px h-full min-h-[200px] bg-stone-300 dark:bg-[#3e3e42] mx-4" />
                       
                       {/* Highlight cards - right side, 2x2 grid */}
-                      <div className="flex-1 flex justify-center items-center">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1.5 mb-2">
-                              <Sprout className="h-5 w-5 text-emerald-600" />
-                              <div className="text-xs opacity-60">{t('profile.plantsOwned')}</div>
+                      <div className="flex-1 flex justify-center items-center py-2">
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
+                              <Sprout className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
+                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.plantsOwned')}</div>
                             </div>
-                            <div className="text-xl font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
+                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
                           </div>
-                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1.5 mb-2">
-                              <Home className="h-5 w-5 text-blue-600" />
-                              <div className="text-xs opacity-60">{t('profile.gardens')}</div>
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
+                              <Home className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.gardens')}</div>
                             </div>
-                            <div className="text-xl font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
+                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
                           </div>
-                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1.5 mb-2">
-                              <Flame className="h-5 w-5 text-orange-500" />
-                              <div className="text-xs opacity-60">{t('profile.currentStreak')}</div>
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
+                              <Flame className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
+                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.currentStreak')}</div>
                             </div>
-                            <div className="text-xl font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
+                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
                           </div>
-                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1.5 mb-2">
-                              <Trophy className="h-5 w-5 text-amber-500" />
-                              <div className="text-xs opacity-60">{t('profile.longestStreak')}</div>
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
+                              <Trophy className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
+                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.longestStreak')}</div>
                             </div>
-                            <div className="text-xl font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
+                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
                           </div>
                         </div>
                       </div>
