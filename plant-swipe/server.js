@@ -835,7 +835,7 @@ if (vapidPublicKey && vapidPrivateKey) {
 const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
 const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || process.env.VITE_ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true'
 
-const adminUploadBucket = (process.env.ADMIN_UPLOAD_BUCKET || process.env.SUPABASE_UTILITY_BUCKET || 'UTILITY').trim() || 'UTILITY'
+const adminUploadBucket = 'UTILITY' // Admin uploads go to UTILITY bucket
 const adminUploadPrefixRaw = (process.env.ADMIN_UPLOAD_PREFIX || 'admin/uploads').trim()
 const adminUploadPrefix = adminUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'admin/uploads'
 const blogUploadPrefixRaw = (process.env.BLOG_UPLOAD_PREFIX || 'blog').trim()
@@ -854,11 +854,7 @@ const adminUploadMaxDimension = (() => {
   if (Number.isFinite(raw) && raw >= 256 && raw <= 8000) return Math.round(raw)
   return 2000
 })()
-const adminUploadWebpQuality = (() => {
-  const raw = Number(process.env.ADMIN_UPLOAD_WEBP_QUALITY)
-  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
-  return 82
-})()
+const adminUploadWebpQuality = 90 // Admin uploads get highest quality (90%)
 const adminUploadMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: adminUploadMaxBytes },
@@ -927,11 +923,7 @@ const gardenCoverMaxDimension = (() => {
   if (Number.isFinite(raw) && raw >= 128 && raw <= 4000) return Math.round(raw)
   return 1000
 })()
-const gardenCoverWebpQuality = (() => {
-  const raw = Number(process.env.GARDEN_UPLOAD_WEBP_QUALITY)
-  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
-  return adminUploadWebpQuality
-})()
+const gardenCoverWebpQuality = 50 // Standard quality for all non-admin uploads (50%)
 const gardenCoverMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: gardenCoverMaxBytes },
@@ -939,11 +931,11 @@ const gardenCoverMulter = multer({
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
 
 // === Messaging Image Upload Settings ===
-const messageImageUploadBucket = gardenCoverUploadBucket || 'PHOTOS' // Reuse the photos bucket
+const messageImageUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
 const messageImageUploadPrefix = 'messages'
 const messageImageMaxBytes = 10 * 1024 * 1024 // 10MB
 const messageImageMaxDimension = 1200 // Slightly smaller than cover images
-const messageImageWebpQuality = 80 // Good quality for chat images
+const messageImageWebpQuality = 50 // Standard quality for all non-admin uploads (50%)
 const messageImageMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: messageImageMaxBytes },
@@ -951,11 +943,11 @@ const messageImageMulter = multer({
 const singleMessageImageUpload = messageImageMulter.single('file')
 
 // === Plant Scan Image Upload Settings ===
-const scanImageUploadBucket = 'PHOTOS' // Use the main photos bucket
+const scanImageUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
 const scanImageUploadPrefix = 'scans' // Organize under scans/ folder
 const scanImageMaxBytes = 10 * 1024 * 1024 // 10MB
-const scanImageMaxDimension = 1920 // Higher quality for identification
-const scanImageWebpQuality = 90 // High quality for better identification
+const scanImageMaxDimension = 1920 // Higher resolution for better identification
+const scanImageWebpQuality = 50 // Standard quality for all non-admin uploads (50%)
 const scanImageMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: scanImageMaxBytes },
