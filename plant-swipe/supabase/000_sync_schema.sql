@@ -8201,7 +8201,7 @@ CREATE TABLE IF NOT EXISTS public.plant_scans (
   longitude NUMERIC(9,6),
   
   -- Link to our database plant (if matched)
-  matched_plant_id UUID REFERENCES public.plants(id) ON DELETE SET NULL,
+  matched_plant_id TEXT REFERENCES public.plants(id) ON DELETE SET NULL,
   
   -- User notes
   user_notes TEXT,
