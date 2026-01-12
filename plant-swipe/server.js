@@ -951,8 +951,8 @@ const messageImageMulter = multer({
 const singleMessageImageUpload = messageImageMulter.single('file')
 
 // === Plant Scan Image Upload Settings ===
-const scanImageUploadBucket = gardenCoverUploadBucket || 'PHOTOS' // Reuse the photos bucket
-const scanImageUploadPrefix = 'scans'
+const scanImageUploadBucket = 'plant-scans' // Dedicated bucket for scan images (matches schema)
+const scanImageUploadPrefix = '' // No prefix needed - files stored directly under user ID
 const scanImageMaxBytes = 10 * 1024 * 1024 // 10MB
 const scanImageMaxDimension = 1920 // Higher quality for identification
 const scanImageWebpQuality = 90 // High quality for better identification
@@ -12781,179 +12781,6 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
   }
 })
 
-// === Messaging Image Upload Endpoint ===
-// Follows the same pattern as garden cover uploads with sharp optimization
-app.post('/api/messages/upload-image', async (req, res) => {
-  if (!supabaseServiceClient) {
-    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
-    return
-  }
-  const user = await getUserFromRequest(req)
-  if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
-  }
-
-  singleMessageImageUpload(req, res, (err) => {
-    if (err) {
-      const message =
-        err?.code === 'LIMIT_FILE_SIZE'
-          ? `File exceeds the maximum size of ${(messageImageMaxBytes / (1024 * 1024)).toFixed(1)} MB`
-          : err?.message || 'Failed to process upload'
-      res.status(400).json({ error: message })
-      return
-    }
-    ;(async () => {
-      const file = req.file
-      if (!file) {
-        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
-        return
-      }
-      const mime = (file.mimetype || '').toLowerCase()
-      if (!mime.startsWith('image/')) {
-        res.status(400).json({ error: 'Only image uploads are supported' })
-        return
-      }
-      // Allow common image types
-      const allowedMimes = new Set([
-        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-        'image/heic', 'image/heif', 'image/avif'
-      ])
-      if (!allowedMimes.has(mime)) {
-        res.status(400).json({ error: `Unsupported image type: ${mime}` })
-        return
-      }
-      if (!file.buffer || file.buffer.length === 0) {
-        res.status(400).json({ error: 'Uploaded file is empty' })
-        return
-      }
-
-      let optimizedBuffer
-      let finalMimeType = 'image/webp'
-
-      // GIFs are kept as-is to preserve animation
-      if (mime === 'image/gif') {
-        optimizedBuffer = file.buffer
-        finalMimeType = 'image/gif'
-      } else {
-        try {
-          optimizedBuffer = await sharp(file.buffer)
-            .rotate()
-            .resize({
-              width: messageImageMaxDimension,
-              height: messageImageMaxDimension,
-              fit: 'inside',
-              withoutEnlargement: true,
-              fastShrinkOnLoad: true,
-            })
-            .webp({
-              quality: messageImageWebpQuality,
-              effort: 5,
-              smartSubsample: true,
-            })
-            .toBuffer()
-        } catch (sharpErr) {
-          console.error('[message-image] failed to convert image to webp', sharpErr)
-          res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
-          return
-        }
-      }
-
-      const baseName = sanitizeUploadBaseName(file.originalname)
-      const timestamp = Date.now()
-      const randomId = Math.random().toString(36).substring(2, 10)
-      const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
-      const objectPath = `${messageImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
-
-      try {
-        const { error: uploadError } = await supabaseServiceClient
-          .storage
-          .from(messageImageUploadBucket)
-          .upload(objectPath, optimizedBuffer, {
-            cacheControl: '31536000',
-            contentType: finalMimeType,
-            upsert: false,
-          })
-        if (uploadError) {
-          throw new Error(uploadError.message || 'Supabase storage upload failed')
-        }
-      } catch (storageErr) {
-        console.error('[message-image] supabase storage upload failed', storageErr)
-        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
-        return
-      }
-
-      const { data: publicData } = supabaseServiceClient
-        .storage
-        .from(messageImageUploadBucket)
-        .getPublicUrl(objectPath)
-      const publicUrl = publicData?.publicUrl || null
-      // Transform URL to use media proxy (hides Supabase project URL)
-      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
-      if (!proxyUrl) {
-        res.status(500).json({ error: 'Failed to generate public URL for message image' })
-        return
-      }
-
-      const compressionPercent =
-        file.size > 0 && finalMimeType !== 'image/gif'
-          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
-          : 0
-
-      // Record to global image database
-      let uploaderDisplayName = null
-      try {
-        uploaderDisplayName = await getAdminProfileName(user.id)
-      } catch { }
-      
-      try {
-        await recordAdminMediaUpload({
-          adminId: user.id,
-          adminEmail: user.email || null,
-          adminName: uploaderDisplayName,
-          bucket: messageImageUploadBucket,
-          path: objectPath,
-          publicUrl: proxyUrl,
-          mimeType: finalMimeType,
-          originalMimeType: mime,
-          sizeBytes: optimizedBuffer.length,
-          originalSizeBytes: file.size,
-          quality: finalMimeType === 'image/gif' ? null : messageImageWebpQuality,
-          compressionPercent,
-          uploadSource: 'messages',
-          metadata: {
-            source: 'messages',
-            originalName: file.originalname,
-            userId: user.id,
-          },
-          createdAt: new Date().toISOString(),
-        })
-      } catch (recordErr) {
-        console.error('[message-image] failed to record media upload', recordErr)
-      }
-
-      res.json({
-        ok: true,
-        url: proxyUrl,
-        bucket: messageImageUploadBucket,
-        path: objectPath,
-        mimeType: finalMimeType,
-        size: optimizedBuffer.length,
-        originalMimeType: mime,
-        originalSize: file.size,
-        quality: finalMimeType === 'image/gif' ? null : messageImageWebpQuality,
-        maxDimension: messageImageMaxDimension,
-        compressionPercent,
-      })
-    })().catch((uploadErr) => {
-      console.error('[message-image] unexpected failure', uploadErr)
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Unexpected upload failure' })
-      }
-    })
-  })
-})
-
 // === Plant Scan API Endpoints ===
 
 // Upload image for plant scan
@@ -12964,9 +12791,14 @@ app.post('/api/scan/upload-image', async (req, res) => {
   }
   const user = await getUserFromRequest(req)
   if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
+    res.status(401).json({ error: 'You must be signed in to upload scan images' })
     return
   }
+
+  // Ensure admin_media_uploads table exists for tracking
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
 
   singleScanImageUpload(req, res, (err) => {
     if (err) {
@@ -13036,7 +12868,9 @@ app.post('/api/scan/upload-image', async (req, res) => {
       const timestamp = Date.now()
       const randomId = Math.random().toString(36).substring(2, 10)
       const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
-      const objectPath = `${scanImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
+      // Path structure: {user_id}/{timestamp}-{baseName}-{randomId}.{ext}
+      // This matches the storage policy which expects the first folder to be user ID
+      const objectPath = `${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
 
       try {
         const { error: uploadError } = await supabaseServiceClient
