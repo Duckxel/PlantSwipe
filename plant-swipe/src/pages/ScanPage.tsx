@@ -118,11 +118,11 @@ export const ScanPage: React.FC = () => {
     setPreviewUrl(url)
     
     // Start identification
-    await identifyPlantFromFile(file, url)
+    await identifyPlantFromFile(file)
   }
   
   // Identify plant from file
-  const identifyPlantFromFile = async (file: File, uploadedImageUrl?: string) => {
+  const identifyPlantFromFile = async (file: File) => {
     setIsIdentifying(true)
     setIdentifyError(null)
     
