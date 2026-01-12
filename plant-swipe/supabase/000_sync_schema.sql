@@ -157,7 +157,9 @@ do $$ declare
     -- Messaging
     'conversations',
     'messages',
-    'message_reactions'
+    'message_reactions',
+    -- Plant Scanning
+    'plant_scans'
   ];
   rec record;
 begin
