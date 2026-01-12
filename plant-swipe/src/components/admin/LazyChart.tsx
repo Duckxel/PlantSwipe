@@ -1,5 +1,6 @@
  // @ts-nocheck
 import React, { Suspense, createContext, useContext, useState, useEffect } from 'react'
+import { Loader2 } from 'lucide-react'
 import type {
   ResponsiveContainerProps,
   LineProps,
@@ -37,7 +38,12 @@ const RechartsProvider: React.FC<{ children: React.ReactNode }> = ({ children })
   
   return (
     <RechartsContext.Provider value={charts}>
-      {charts ? children : <div className="animate-pulse text-sm text-gray-400 p-4">Loading chart...</div>}
+      {charts ? children : (
+        <div className="flex items-center justify-center gap-2 p-4 text-sm text-gray-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading chart...</span>
+        </div>
+      )}
     </RechartsContext.Provider>
   )
 }
@@ -51,8 +57,9 @@ const useCharts = () => {
 
 // Loading skeleton for charts
 const ChartSkeleton: React.FC<{ height?: number | string }> = ({ height = 200 }) => (
-  <div className="w-full flex items-center justify-center" style={{ height: typeof height === 'number' ? `${height}px` : height }}>
-    <div className="animate-pulse text-sm text-gray-400">Loading chart...</div>
+  <div className="w-full flex items-center justify-center gap-2" style={{ height: typeof height === 'number' ? `${height}px` : height }}>
+    <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+    <span className="text-sm text-gray-400">Loading chart...</span>
   </div>
 )
 
