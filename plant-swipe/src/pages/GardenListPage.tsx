@@ -1930,19 +1930,45 @@ export const GardenListPage: React.FC = () => {
   ]);
 
   const gardensWithTasks = React.useMemo(() => {
-    // ⚡ Bolt Optimization: O(P + G) complexity instead of O(P * G)
-    // 1. Group plants by garden ID first (O(P))
-    const plantsByGarden: Record<string, any[]> = {};
+    // ⚡ Optimized: Single-pass O(P + T + G) computation
+    // Avoids redundant lookups and multiple iterations
+
+    // 1. O(P): Create plant lookup by ID
+    const plantsById: Record<string, any> = {};
     for (const gp of allPlants) {
-      // Only include plants that have tasks
-      if ((occsByPlant[gp.id] || []).length > 0) {
-        if (!plantsByGarden[gp.gardenId]) {
-          plantsByGarden[gp.gardenId] = [];
-        }
-        plantsByGarden[gp.gardenId].push(gp);
+      plantsById[gp.id] = gp;
+    }
+
+    // 2. O(T): Single pass over occurrences - compute plants, req, done simultaneously
+    const gardenData: Record<
+      string,
+      { plantIds: Set<string>; plants: any[]; req: number; done: number }
+    > = {};
+
+    for (const o of todayTaskOccurrences) {
+      const plant = plantsById[o.gardenPlantId];
+      if (!plant) continue;
+
+      const gardenId = plant.gardenId;
+      let data = gardenData[gardenId];
+      if (!data) {
+        data = { plantIds: new Set(), plants: [], req: 0, done: 0 };
+        gardenData[gardenId] = data;
+      }
+
+      // Accumulate task counts
+      const reqCount = Math.max(1, Number(o.requiredCount || 1));
+      data.req += reqCount;
+      data.done += Math.min(reqCount, Number(o.completedCount || 0));
+
+      // Track unique plants (Set for O(1) dedup)
+      if (!data.plantIds.has(o.gardenPlantId)) {
+        data.plantIds.add(o.gardenPlantId);
+        data.plants.push(plant);
       }
     }
 
+    // 3. O(G): Build result array in garden order
     const byGarden: Array<{
       gardenId: string;
       gardenName: string;
@@ -1951,58 +1977,29 @@ export const GardenListPage: React.FC = () => {
       done: number;
     }> = [];
 
-    // 2. Create lookup map for garden names (O(G))
-    const idToGardenName: Record<string, string> = {};
     for (const g of gardens) {
-      idToGardenName[g.id] = g.name;
-    }
-
-    // 3. Iterate gardens and look up pre-grouped plants (O(G))
-    for (const g of gardens) {
-      const plants = plantsByGarden[g.id];
-      if (!plants || plants.length === 0) continue;
-
-      let req = 0,
-        done = 0;
-
-      // Calculate totals for this garden
-      for (const gp of plants) {
-        const occs = occsByPlant[gp.id] || [];
-        req += occs.reduce(
-          (a: number, o: any) => a + Math.max(1, Number(o.requiredCount || 1)),
-          0,
-        );
-        done += occs.reduce(
-          (a: number, o: any) =>
-            a +
-            Math.min(
-              Math.max(1, Number(o.requiredCount || 1)),
-              Number(o.completedCount || 0),
-            ),
-          0,
-        );
-      }
-
+      const data = gardenData[g.id];
+      if (!data || data.plants.length === 0) continue;
       byGarden.push({
         gardenId: g.id,
-        gardenName: idToGardenName[g.id] || "",
-        plants,
-        req,
-        done,
+        gardenName: g.name,
+        plants: data.plants,
+        req: data.req,
+        done: data.done,
       });
     }
 
     console.log(
       "[GardenList] gardensWithTasks computed:",
       byGarden.length,
-      "gardens with tasks,",
+      "gardens,",
       todayTaskOccurrences.length,
       "occurrences,",
       allPlants.length,
-      "plants (Optimized)",
+      "plants",
     );
     return byGarden;
-  }, [gardens, allPlants, occsByPlant, todayTaskOccurrences.length]);
+  }, [gardens, allPlants, todayTaskOccurrences]);
 
   const totalTasks = React.useMemo(
     () =>
