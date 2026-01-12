@@ -1210,6 +1210,33 @@ export const GardenListPage: React.FC = () => {
     };
   }, [scheduleReload, user?.id, clearLocalStorageCache]);
 
+  // ⚡ Shared lookup memos - O(1) lookups instead of O(n) .find()/.filter() calls
+  // NOTE: These MUST be defined before callbacks that use them to avoid TDZ errors
+  const plantsById = React.useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const p of allPlants) {
+      map[p.id] = p;
+    }
+    return map;
+  }, [allPlants]);
+
+  const gardensById = React.useMemo(() => {
+    const map: Record<string, (typeof gardens)[0]> = {};
+    for (const g of gardens) {
+      map[g.id] = g;
+    }
+    return map;
+  }, [gardens]);
+
+  const plantIdsByGarden = React.useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const p of allPlants) {
+      if (!map[p.gardenId]) map[p.gardenId] = new Set();
+      map[p.gardenId].add(p.id);
+    }
+    return map;
+  }, [allPlants]);
+
   const onProgressOccurrence = React.useCallback(
     async (occId: string, inc: number) => {
       // Set loading state
@@ -1788,32 +1815,6 @@ export const GardenListPage: React.FC = () => {
     }
     return map;
   }, [todayTaskOccurrences]);
-
-  // ⚡ Shared lookup memos - O(1) lookups instead of O(n) .find()/.filter() calls
-  const plantsById = React.useMemo(() => {
-    const map: Record<string, any> = {};
-    for (const p of allPlants) {
-      map[p.id] = p;
-    }
-    return map;
-  }, [allPlants]);
-
-  const gardensById = React.useMemo(() => {
-    const map: Record<string, (typeof gardens)[0]> = {};
-    for (const g of gardens) {
-      map[g.id] = g;
-    }
-    return map;
-  }, [gardens]);
-
-  const plantIdsByGarden = React.useMemo(() => {
-    const map: Record<string, Set<string>> = {};
-    for (const p of allPlants) {
-      if (!map[p.gardenId]) map[p.gardenId] = new Set();
-      map[p.gardenId].add(p.id);
-    }
-    return map;
-  }, [allPlants]);
 
   // Detect mismatch: progress shows tasks but task list is empty - force reload
   // This runs whenever progress or task list changes
