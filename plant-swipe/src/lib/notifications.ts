@@ -6,9 +6,9 @@
 
 import { supabase } from './supabaseClient'
 import type { 
-  Notification, 
-  NotificationType, 
-  NotificationStatus, 
+  Notification,
+  NotificationType,
+  NotificationStatus,
   GardenInvite, 
   GardenInviteStatus,
   NotificationCounts 
@@ -26,81 +26,40 @@ const isMissingTableError = (error?: { message?: string; code?: string; status?:
 
 /**
  * Get all notifications for a user
+ * Note: The general 'notifications' table is not used in this app.
+ * Notifications are tracked via friend_requests and garden_invites tables.
  */
 export async function getUserNotifications(
-  userId: string,
-  options?: { 
+  _userId: string,
+  _options?: { 
     status?: NotificationStatus
     limit?: number
     offset?: number 
   }
 ): Promise<Notification[]> {
-  let query = supabase
-    .from('notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-
-  if (options?.status) {
-    query = query.eq('status', options.status)
-  }
-  if (options?.limit) {
-    query = query.limit(options.limit)
-  }
-  if (options?.offset) {
-    query = query.range(options.offset, options.offset + (options.limit || 50) - 1)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    // If table doesn't exist, return empty array
-    if (isMissingTableError(error)) {
-      console.warn('[notifications] Table does not exist yet')
-      return []
-    }
-    throw new Error(error.message)
-  }
-
-  return (data || []).map(mapNotificationRow)
+  // The 'notifications' table doesn't exist - notifications are handled
+  // via friend_requests and garden_invites tables instead
+  return []
 }
 
 /**
  * Get unread notification count for a user
+ * Note: The general 'notifications' table is not used in this app.
+ * Notifications are tracked via friend_requests and garden_invites tables.
  */
-export async function getUnreadNotificationCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('notifications')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('status', 'unread')
-
-  if (error) {
-    if (isMissingTableError(error)) {
-      return 0
-    }
-    throw new Error(error.message)
-  }
-
-  return count || 0
+export async function getUnreadNotificationCount(_userId: string): Promise<number> {
+  // The 'notifications' table doesn't exist - notifications are handled
+  // via friend_requests and garden_invites tables instead
+  return 0
 }
 
 /**
  * Get notification counts breakdown
+ * Note: The general 'notifications' table is not used in this app.
+ * Notifications are tracked via friend_requests and garden_invites tables.
  */
 export async function getNotificationCounts(userId: string): Promise<NotificationCounts> {
   try {
-    // Get total unread count
-    const { count: unreadCount, error: unreadError } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('status', 'unread')
-
-    if (unreadError && !isMissingTableError(unreadError)) {
-      throw unreadError
-    }
-
     // Get friend request count
     const { count: friendRequestCount, error: frError } = await supabase
       .from('friend_requests')
@@ -125,19 +84,19 @@ export async function getNotificationCounts(userId: string): Promise<Notificatio
         console.warn('[notifications] Error fetching garden invites:', giError)
       }
       return {
-        total: (unreadCount || 0) + (friendRequestCount || 0),
-        unread: unreadCount || 0,
+        total: friendRequestCount || 0,
+        unread: 0,
         friendRequests: friendRequestCount || 0,
         gardenInvites: 0,
         unreadMessages: 0
       }
     }
 
-    const total = (unreadCount || 0) + (friendRequestCount || 0) + (gardenInviteCount || 0)
+    const total = (friendRequestCount || 0) + (gardenInviteCount || 0)
 
     return {
       total,
-      unread: unreadCount || 0,
+      unread: 0, // The 'notifications' table doesn't exist - this is always 0
       friendRequests: friendRequestCount || 0,
       gardenInvites: gardenInviteCount || 0,
       unreadMessages: 0 // Will be populated by useNotifications hook
@@ -150,47 +109,34 @@ export async function getNotificationCounts(userId: string): Promise<Notificatio
 
 /**
  * Mark a notification as read
+ * Note: The general 'notifications' table is not used in this app.
  */
-export async function markNotificationAsRead(notificationId: string): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ status: 'read', read_at: new Date().toISOString() })
-    .eq('id', notificationId)
-
-  if (error) throw new Error(error.message)
+export async function markNotificationAsRead(_notificationId: string): Promise<void> {
+  // The 'notifications' table doesn't exist - this is a no-op
 }
 
 /**
  * Mark all notifications as read for a user
+ * Note: The general 'notifications' table is not used in this app.
  */
-export async function markAllNotificationsAsRead(userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ status: 'read', read_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .eq('status', 'unread')
-
-  if (error && !isMissingTableError(error)) {
-    throw new Error(error.message)
-  }
+export async function markAllNotificationsAsRead(_userId: string): Promise<void> {
+  // The 'notifications' table doesn't exist - this is a no-op
 }
 
 /**
  * Dismiss a notification
+ * Note: The general 'notifications' table is not used in this app.
  */
-export async function dismissNotification(notificationId: string): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ status: 'dismissed' })
-    .eq('id', notificationId)
-
-  if (error) throw new Error(error.message)
+export async function dismissNotification(_notificationId: string): Promise<void> {
+  // The 'notifications' table doesn't exist - this is a no-op
 }
 
 /**
  * Create a notification
+ * Note: The general 'notifications' table is not used in this app.
+ * Push notifications are handled via the server API and user_notifications table.
  */
-export async function createNotification(params: {
+export async function createNotification(_params: {
   userId: string
   type: NotificationType
   title: string
@@ -199,23 +145,8 @@ export async function createNotification(params: {
   metadata?: Record<string, unknown> | null
   actionUrl?: string | null
 }): Promise<Notification> {
-  const { data, error } = await supabase
-    .from('notifications')
-    .insert({
-      user_id: params.userId,
-      type: params.type,
-      title: params.title,
-      message: params.message,
-      reference_id: params.referenceId || null,
-      metadata: params.metadata || null,
-      action_url: params.actionUrl || null,
-      status: 'unread'
-    })
-    .select()
-    .single()
-
-  if (error) throw new Error(error.message)
-  return mapNotificationRow(data)
+  // The 'notifications' table doesn't exist
+  throw new Error('General notifications are not supported. Use push notifications via the server API.')
 }
 
 // ===== Garden Invites =====
@@ -709,20 +640,3 @@ export async function sendGardenInvitePushNotification(
   })
 }
 
-// ===== Helper Functions =====
-
-function mapNotificationRow(row: any): Notification {
-  return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    type: row.type as NotificationType,
-    title: String(row.title || ''),
-    message: String(row.message || ''),
-    referenceId: row.reference_id ? String(row.reference_id) : null,
-    metadata: row.metadata || null,
-    status: (row.status || 'unread') as NotificationStatus,
-    createdAt: String(row.created_at),
-    readAt: row.read_at ? String(row.read_at) : null,
-    actionUrl: row.action_url || null
-  }
-}

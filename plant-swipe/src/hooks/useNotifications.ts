@@ -199,15 +199,6 @@ export function useNotifications(
       }, () => {
         refresh()
       })
-      // Listen for general notification changes
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${userId}`
-      }, () => {
-        refresh()
-      })
       // Listen for new messages (via conversations that user is part of)
       .on('postgres_changes', {
         event: 'INSERT',
