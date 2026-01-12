@@ -37,12 +37,13 @@ async function fastCheckPendingTasks(userId: string): Promise<boolean | null> {
 
     // Quick check: are there ANY incomplete task occurrences for today in user's gardens?
     // This is a fast COUNT query with LIMIT 1 (we just need to know if any exist)
+    // Note: garden_plant_task_occurrences doesn't have garden_id directly, need to join through garden_plant_tasks
     const { count, error: countError } = await supabase
       .from("garden_plant_task_occurrences")
-      .select("id", { count: "exact", head: true })
+      .select("id, garden_plant_tasks!inner(garden_id)", { count: "exact", head: true })
       .gte("due_at", startOfDay)
       .lte("due_at", endOfDay)
-      .in("garden_id", gardenIds)
+      .in("garden_plant_tasks.garden_id", gardenIds)
       .or("completed_at.is.null,completed_count.lt.required_count")
       .limit(1)
 
@@ -50,10 +51,10 @@ async function fastCheckPendingTasks(userId: string): Promise<boolean | null> {
       // Try alternative approach: check if completed_count < required_count
       const { data: incomplete, error: incompleteError } = await supabase
         .from("garden_plant_task_occurrences")
-        .select("id, completed_count, required_count")
+        .select("id, completed_count, required_count, garden_plant_tasks!inner(garden_id)")
         .gte("due_at", startOfDay)
         .lte("due_at", endOfDay)
-        .in("garden_id", gardenIds)
+        .in("garden_plant_tasks.garden_id", gardenIds)
         .is("completed_at", null)
         .limit(1)
 
