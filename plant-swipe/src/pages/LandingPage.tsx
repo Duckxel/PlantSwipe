@@ -8,6 +8,7 @@ import { Footer } from "@/components/layout/Footer"
 import MobileNavBar from "@/components/layout/MobileNavBar"
 import { useAuthActions } from "@/context/AuthActionsContext"
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
+import { supabase } from "@/lib/supabaseClient"
 import {
   Leaf,
   Droplets,
@@ -34,7 +35,88 @@ import {
   Flower2,
   TreeDeciduous,
   Sprout,
+  Palette,
+  Share2,
+  Calendar,
+  Target,
+  Award,
+  Lightbulb,
 } from "lucide-react"
+
+// Icon mapping for dynamic rendering
+const iconMap: Record<string, React.ElementType> = {
+  Leaf, Droplets, Sun, Bell, BookMarked, Camera, NotebookPen, Wifi, Users, Check,
+  Clock, TrendingUp, Shield, Heart, Globe, Zap, MessageCircle, Flower2,
+  TreeDeciduous, Sprout, Star, Sparkles, Palette, Share2, Calendar, Target, Award, Lightbulb,
+}
+
+// Types for database data
+type HeroCard = {
+  id: string
+  plant_name: string
+  plant_scientific_name: string | null
+  image_url: string | null
+  water_frequency: string
+  light_level: string
+  reminder_text: string
+}
+
+type LandingStats = {
+  plants_count: string
+  plants_label: string
+  users_count: string
+  users_label: string
+  tasks_count: string
+  tasks_label: string
+  rating_value: string
+  rating_label: string
+}
+
+type LandingFeature = {
+  id: string
+  icon_name: string
+  title: string
+  description: string | null
+  color: string
+  is_in_circle: boolean
+}
+
+type Testimonial = {
+  id: string
+  author_name: string
+  author_role: string | null
+  quote: string
+  rating: number
+}
+
+type FAQ = {
+  id: string
+  question: string
+  answer: string
+}
+
+// Context for landing page data
+type LandingDataContextType = {
+  heroCards: HeroCard[]
+  stats: LandingStats | null
+  circleFeatures: LandingFeature[]
+  gridFeatures: LandingFeature[]
+  testimonials: Testimonial[]
+  faqItems: FAQ[]
+  loading: boolean
+}
+
+const LandingDataContext = React.createContext<LandingDataContextType>({
+  heroCards: [],
+  stats: null,
+  circleFeatures: [],
+  gridFeatures: [],
+  testimonials: [],
+  faqItems: [],
+  loading: true,
+})
+
+const useLandingData = () => React.useContext(LandingDataContext)
 
 // CSS Animations
 const animationStyles = `
@@ -114,6 +196,47 @@ const LandingPage: React.FC = () => {
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
 
+  // Load landing page data from database
+  const [landingData, setLandingData] = React.useState<LandingDataContextType>({
+    heroCards: [],
+    stats: null,
+    circleFeatures: [],
+    gridFeatures: [],
+    testimonials: [],
+    faqItems: [],
+    loading: true,
+  })
+
+  React.useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [heroRes, statsRes, featuresRes, testimonialsRes, faqRes] = await Promise.all([
+          supabase.from("landing_hero_cards").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
+          supabase.from("landing_features").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_testimonials").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_faq").select("*").eq("is_active", true).order("position"),
+        ])
+
+        const features = featuresRes.data || []
+        
+        setLandingData({
+          heroCards: heroRes.data || [],
+          stats: statsRes.data || null,
+          circleFeatures: features.filter((f: LandingFeature) => f.is_in_circle),
+          gridFeatures: features.filter((f: LandingFeature) => !f.is_in_circle),
+          testimonials: testimonialsRes.data || [],
+          faqItems: faqRes.data || [],
+          loading: false,
+        })
+      } catch (e) {
+        console.error("Failed to load landing data:", e)
+        setLandingData(prev => ({ ...prev, loading: false }))
+      }
+    }
+    loadData()
+  }, [])
+
   const handleProfileNavigation = React.useCallback(() => {
     navigate('/profile')
   }, [navigate])
@@ -136,6 +259,7 @@ const LandingPage: React.FC = () => {
   })
 
   return (
+    <LandingDataContext.Provider value={landingData}>
     <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden">
       <style>{animationStyles}</style>
       
@@ -204,6 +328,7 @@ const LandingPage: React.FC = () => {
         <Footer />
       </div>
     </div>
+    </LandingDataContext.Provider>
   )
 }
 
@@ -313,6 +438,26 @@ const HeroSection: React.FC = () => {
 
 const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { heroCards: dbHeroCards } = useLandingData()
+  const [activeCardIndex, setActiveCardIndex] = React.useState(0)
+
+  // Use first hero card from database if available, otherwise use translation defaults
+  const activeCard = dbHeroCards[activeCardIndex] || null
+  const plantName = activeCard?.plant_name || t("heroCard.plantName")
+  const plantScientific = activeCard?.plant_scientific_name || t("heroCard.plantSubname")
+  const waterFrequency = activeCard?.water_frequency || t("heroCard.waterFrequency")
+  const lightLevel = activeCard?.light_level || t("heroCard.lightLevel")
+  const reminderText = activeCard?.reminder_text || t("heroCard.waterIn")
+  const imageUrl = activeCard?.image_url
+
+  // Auto-cycle through cards if multiple exist
+  React.useEffect(() => {
+    if (dbHeroCards.length <= 1) return
+    const interval = setInterval(() => {
+      setActiveCardIndex((prev) => (prev + 1) % dbHeroCards.length)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [dbHeroCards.length])
 
   return (
     <div className="relative">
@@ -333,17 +478,25 @@ const HeroVisual: React.FC = () => {
             <div className="px-5 pb-8 space-y-4">
               {/* Plant Image Area */}
               <div className="relative aspect-[4/3] rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
-                    <Leaf className="relative h-20 w-20 text-emerald-500/60" />
+                {imageUrl ? (
+                  <img 
+                    src={imageUrl} 
+                    alt={plantName}
+                    className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
+                      <Leaf className="relative h-20 w-20 text-emerald-500/60" />
+                    </div>
                   </div>
-                </div>
+                )}
                 {/* Plant Info Overlay */}
                 <div className="absolute bottom-3 left-3 right-3">
                   <div className="glass-card rounded-2xl p-3 space-y-1 border border-white/30 dark:border-white/10">
-                    <p className="text-stone-900 dark:text-white font-semibold text-sm">{t("heroCard.plantName")}</p>
-                    <p className="text-stone-600 dark:text-stone-400 text-xs italic">{t("heroCard.plantSubname")}</p>
+                    <p className="text-stone-900 dark:text-white font-semibold text-sm">{plantName}</p>
+                    <p className="text-stone-600 dark:text-stone-400 text-xs italic">{plantScientific}</p>
                   </div>
                 </div>
               </div>
@@ -354,13 +507,13 @@ const HeroVisual: React.FC = () => {
                   <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
                     <Droplets className="h-4 w-4 text-blue-500" />
                   </div>
-                  <span className="text-xs text-stone-600 dark:text-stone-300">{t("heroCard.waterFrequency")}</span>
+                  <span className="text-xs text-stone-600 dark:text-stone-300">{waterFrequency}</span>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-white/10 border border-stone-200/50 dark:border-white/10">
                   <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
                     <Sun className="h-4 w-4 text-amber-500" />
                   </div>
-                  <span className="text-xs text-stone-600 dark:text-stone-300">{t("heroCard.lightLevel")}</span>
+                  <span className="text-xs text-stone-600 dark:text-stone-300">{lightLevel}</span>
                 </div>
               </div>
 
@@ -371,10 +524,27 @@ const HeroVisual: React.FC = () => {
                 </div>
                 <div className="flex-1">
                   <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 uppercase tracking-wide">{t("heroCard.nextReminder")}</p>
-                  <p className="text-sm font-semibold text-stone-900 dark:text-white">{t("heroCard.waterIn")}</p>
+                  <p className="text-sm font-semibold text-stone-900 dark:text-white">{reminderText}</p>
                 </div>
                 <ArrowRight className="h-4 w-4 text-emerald-500" />
               </div>
+
+              {/* Card Indicators - show if multiple cards */}
+              {dbHeroCards.length > 1 && (
+                <div className="flex justify-center gap-1.5 pt-2">
+                  {dbHeroCards.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveCardIndex(i)}
+                      className={`h-1.5 rounded-full transition-all ${
+                        i === activeCardIndex 
+                          ? 'w-6 bg-emerald-500' 
+                          : 'w-1.5 bg-stone-300 dark:bg-stone-600 hover:bg-stone-400'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -407,12 +577,30 @@ const HeroVisual: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const StatsBanner: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { stats: dbStats } = useLandingData()
   
+  // Use database values if available, otherwise fallback to translations
   const stats = [
-    { value: "10K+", label: t("stats.plants", { defaultValue: "Plant Species" }), icon: Leaf },
-    { value: "50K+", label: t("stats.users", { defaultValue: "Happy Gardeners" }), icon: Users },
-    { value: "100K+", label: t("stats.tasks", { defaultValue: "Care Tasks Done" }), icon: Check },
-    { value: "4.9", label: t("stats.rating", { defaultValue: "App Store Rating" }), icon: Star },
+    { 
+      value: dbStats?.plants_count || "10K+", 
+      label: dbStats?.plants_label || t("stats.plants", { defaultValue: "Plant Species" }), 
+      icon: Leaf 
+    },
+    { 
+      value: dbStats?.users_count || "50K+", 
+      label: dbStats?.users_label || t("stats.users", { defaultValue: "Happy Gardeners" }), 
+      icon: Users 
+    },
+    { 
+      value: dbStats?.tasks_count || "100K+", 
+      label: dbStats?.tasks_label || t("stats.tasks", { defaultValue: "Care Tasks Done" }), 
+      icon: Check 
+    },
+    { 
+      value: dbStats?.rating_value || "4.9", 
+      label: dbStats?.rating_label || t("stats.rating", { defaultValue: "App Store Rating" }), 
+      icon: Star 
+    },
   ]
 
   return (
@@ -545,14 +733,29 @@ const FeatureCard: React.FC<{
    ═══════════════════════════════════════════════════════════════════════════════ */
 const InteractiveDemoSection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { circleFeatures: dbFeatures } = useLandingData()
   const [activeFeature, setActiveFeature] = React.useState(0)
 
-  const features = [
+  // Default features - 8 features for a fuller circle
+  const defaultFeatures = [
     { icon: Leaf, label: t("demo.discover", { defaultValue: "Discover Plants" }), color: "emerald" },
     { icon: Clock, label: t("demo.schedule", { defaultValue: "Schedule Care" }), color: "blue" },
     { icon: TrendingUp, label: t("demo.track", { defaultValue: "Track Growth" }), color: "purple" },
     { icon: Shield, label: t("demo.protect", { defaultValue: "Get Alerts" }), color: "rose" },
+    { icon: Camera, label: t("demo.identify", { defaultValue: "Identify Plants" }), color: "pink" },
+    { icon: NotebookPen, label: t("demo.journal", { defaultValue: "Keep Journal" }), color: "amber" },
+    { icon: Users, label: t("demo.community", { defaultValue: "Join Community" }), color: "teal" },
+    { icon: Sparkles, label: t("demo.ai", { defaultValue: "AI Assistant" }), color: "indigo" },
   ]
+
+  // Use database features if available, otherwise use defaults
+  const features = dbFeatures.length > 0 
+    ? dbFeatures.map(f => ({
+        icon: iconMap[f.icon_name] || Leaf,
+        label: f.title,
+        color: f.color,
+      }))
+    : defaultFeatures
 
   React.useEffect(() => {
     const interval = setInterval(() => {
@@ -571,32 +774,39 @@ const InteractiveDemoSection: React.FC = () => {
               {/* Center Circle */}
               <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30" />
               <div className="absolute inset-[25%] rounded-full bg-white dark:bg-stone-900 shadow-2xl shadow-emerald-500/20 flex items-center justify-center">
-                <div className="text-center p-6">
-                  <div className={`inline-flex h-16 w-16 rounded-2xl bg-${features[activeFeature].color}-500 items-center justify-center mb-3`}>
-                    {React.createElement(features[activeFeature].icon, { className: "h-8 w-8 text-white" })}
-                  </div>
-                  <p className="text-sm font-medium text-stone-900 dark:text-white">{features[activeFeature].label}</p>
+                <div className="text-center p-4 sm:p-6">
+                  {features[activeFeature] && (
+                    <>
+                      <div className={`inline-flex h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-${features[activeFeature].color}-500 items-center justify-center mb-3`}>
+                        {React.createElement(features[activeFeature].icon, { className: "h-7 w-7 sm:h-8 sm:w-8 text-white" })}
+                      </div>
+                      <p className="text-xs sm:text-sm font-medium text-stone-900 dark:text-white">{features[activeFeature].label}</p>
+                    </>
+                  )}
                 </div>
               </div>
               
               {/* Orbiting Elements */}
               <div className="absolute inset-0 animate-spin-slow">
                 {features.map((feature, i) => {
-                  const angle = (i * 90) * (Math.PI / 180)
+                  const angleStep = 360 / features.length
+                  const angle = (i * angleStep - 90) * (Math.PI / 180) // Start from top
                   const x = 50 + 42 * Math.cos(angle)
                   const y = 50 + 42 * Math.sin(angle)
+                  const IconComponent = feature.icon
+                  const colorClass = `bg-${feature.color}-500`
                   return (
                     <button
                       key={i}
                       onClick={() => setActiveFeature(i)}
                       style={{ left: `${x}%`, top: `${y}%` }}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 h-12 w-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
                         activeFeature === i 
-                          ? `bg-${feature.color}-500 scale-110 shadow-lg` 
+                          ? `${colorClass} scale-110 shadow-lg` 
                           : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:scale-105'
                       }`}
                     >
-                      <feature.icon className={`h-5 w-5 ${activeFeature === i ? 'text-white' : 'text-stone-600 dark:text-stone-400'}`} />
+                      <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${activeFeature === i ? 'text-white' : 'text-stone-600 dark:text-stone-400'}`} />
                     </button>
                   )
                 })}
@@ -763,9 +973,24 @@ const ShowcaseSection: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const TestimonialsSection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { testimonials: dbTestimonials } = useLandingData()
 
+  // Use database testimonials if available, otherwise fallback to translations
   const rawTestimonials = t("testimonials.items", { returnObjects: true })
-  const testimonials = Array.isArray(rawTestimonials) ? rawTestimonials as Array<{ name: string; role: string; quote: string }> : []
+  const fallbackTestimonials = Array.isArray(rawTestimonials) 
+    ? rawTestimonials as Array<{ name: string; role: string; quote: string }> 
+    : []
+
+  const testimonials = dbTestimonials.length > 0 
+    ? dbTestimonials.map(t => ({
+        name: t.author_name,
+        role: t.author_role || "",
+        quote: t.quote,
+        rating: t.rating,
+      }))
+    : fallbackTestimonials.map(t => ({ ...t, rating: 5 }))
+
+  if (testimonials.length === 0) return null
 
   return (
     <section className="py-20 lg:py-32 overflow-hidden">
@@ -791,7 +1016,10 @@ const TestimonialsSection: React.FC = () => {
               <div className="rounded-3xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-6 h-full hover:shadow-xl transition-shadow">
                 <div className="flex gap-1 mb-4">
                   {[...Array(5)].map((_, j) => (
-                    <Star key={j} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                    <Star 
+                      key={j} 
+                      className={`h-4 w-4 ${j < (testimonial.rating || 5) ? 'fill-amber-400 text-amber-400' : 'text-stone-300'}`} 
+                    />
                   ))}
                 </div>
                 <p className="text-stone-700 dark:text-stone-300 text-sm mb-6 leading-relaxed">"{testimonial.quote}"</p>
@@ -819,9 +1047,17 @@ const TestimonialsSection: React.FC = () => {
 const FAQSection: React.FC = () => {
   const [openIndex, setOpenIndex] = React.useState<number | null>(0)
   const { t } = useTranslation("Landing")
+  const { faqItems: dbFaqItems } = useLandingData()
 
+  // Use database FAQ items if available, otherwise fallback to translations
   const rawFaqs = t("faq.items", { returnObjects: true })
-  const faqs = Array.isArray(rawFaqs) ? rawFaqs as Array<{ q: string; a: string }> : []
+  const fallbackFaqs = Array.isArray(rawFaqs) ? rawFaqs as Array<{ q: string; a: string }> : []
+
+  const faqs = dbFaqItems.length > 0 
+    ? dbFaqItems.map(f => ({ q: f.question, a: f.answer }))
+    : fallbackFaqs
+
+  if (faqs.length === 0) return null
 
   return (
     <section id="faq" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
@@ -848,7 +1084,7 @@ const FAQSection: React.FC = () => {
                   <ChevronDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 </div>
               </button>
-              <div className={`overflow-hidden transition-all duration-300 ${openIndex === i ? 'max-h-48' : 'max-h-0'}`}>
+              <div className={`overflow-hidden transition-all duration-300 ${openIndex === i ? 'max-h-96' : 'max-h-0'}`}>
                 <p className="px-6 pb-5 text-stone-600 dark:text-stone-400 leading-relaxed">{faq.a}</p>
               </div>
             </div>
