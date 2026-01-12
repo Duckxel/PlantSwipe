@@ -44,7 +44,6 @@ import {
   Instagram,
   Twitter,
   Mail,
-  Seedling,
   GraduationCap,
   HandHeart,
 } from "lucide-react"
@@ -54,7 +53,7 @@ const iconMap: Record<string, React.ElementType> = {
   Leaf, Droplets, Sun, Bell, BookMarked, Camera, NotebookPen, Wifi, Users, Check,
   Clock, TrendingUp, Shield, Heart, Globe, Zap, MessageCircle, Flower2,
   TreeDeciduous, Sprout, Star, Sparkles, Palette, Share2, Calendar, Target, Award, Lightbulb,
-  Instagram, Twitter, Mail, Seedling, GraduationCap, HandHeart,
+  Instagram, Twitter, Mail, GraduationCap, HandHeart,
 }
 
 // Types for database data
@@ -683,7 +682,7 @@ const BeginnerFriendlySection: React.FC = () => {
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
-            <Seedling className="h-4 w-4 text-emerald-500" />
+            <Sprout className="h-4 w-4 text-emerald-500" />
             <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
               {t("beginner.badge", { defaultValue: "Perfect for Beginners" })}
             </span>
@@ -1298,7 +1297,7 @@ const FinalCTASection: React.FC = () => {
             <div className="max-w-3xl mx-auto space-y-8">
               {/* Beginner Badge */}
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm">
-                <Seedling className="h-4 w-4 text-white" />
+                <Sprout className="h-4 w-4 text-white" />
                 <span className="text-sm font-medium text-white">
                   {t("finalCta.badge", { defaultValue: "No experience needed" })}
                 </span>
