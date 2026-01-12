@@ -157,7 +157,14 @@ do $$ declare
     -- Messaging
     'conversations',
     'messages',
-    'message_reactions'
+    'message_reactions',
+    -- Landing Page CMS
+    'landing_hero_cards',
+    'landing_stats',
+    'landing_features',
+    'landing_showcase_cards',
+    'landing_testimonials',
+    'landing_faq'
   ];
   rec record;
 begin
@@ -8156,3 +8163,175 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_user_conversations(UUID) TO authenticated;
+
+-- ========== Landing Page CMS Tables ==========
+-- These tables store configurable content for the landing page
+
+-- Hero Cards: Multiple plant cards shown in the hero section
+create table if not exists public.landing_hero_cards (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  plant_name text not null,
+  plant_scientific_name text,
+  plant_description text,
+  image_url text,
+  water_frequency text default '2x/week',
+  light_level text default 'Bright indirect',
+  reminder_text text default 'Water in 2 days',
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Add indexes
+create index if not exists idx_landing_hero_cards_position on public.landing_hero_cards(position);
+create index if not exists idx_landing_hero_cards_active on public.landing_hero_cards(is_active);
+
+-- Landing Stats: Single row containing all stats displayed on the landing page
+create table if not exists public.landing_stats (
+  id uuid primary key default gen_random_uuid(),
+  plants_count text not null default '10K+',
+  plants_label text not null default 'Plant Species',
+  users_count text not null default '50K+',
+  users_label text not null default 'Happy Gardeners',
+  tasks_count text not null default '100K+',
+  tasks_label text not null default 'Care Tasks Done',
+  rating_value text not null default '4.9',
+  rating_label text not null default 'App Store Rating',
+  updated_at timestamptz default now()
+);
+
+-- Ensure only one row exists for stats
+create or replace function public.ensure_single_landing_stats()
+returns trigger as $$
+begin
+  if (select count(*) from public.landing_stats) > 0 and TG_OP = 'INSERT' then
+    raise exception 'Only one landing_stats row allowed';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists ensure_single_landing_stats_trigger on public.landing_stats;
+create trigger ensure_single_landing_stats_trigger
+  before insert on public.landing_stats
+  for each row execute function public.ensure_single_landing_stats();
+
+-- Landing Features: Feature cards shown in the spinning circle and features section
+create table if not exists public.landing_features (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  icon_name text not null default 'Leaf',
+  title text not null,
+  description text,
+  color text not null default 'emerald',
+  is_in_circle boolean not null default false,
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_features_position on public.landing_features(position);
+create index if not exists idx_landing_features_active on public.landing_features(is_active);
+create index if not exists idx_landing_features_circle on public.landing_features(is_in_circle);
+
+-- Landing Showcase Cards: Cards in the "Designed for your jungle" section
+create table if not exists public.landing_showcase_cards (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  card_type text not null default 'small',
+  icon_name text,
+  title text not null,
+  description text,
+  badge_text text,
+  image_url text,
+  color text not null default 'emerald',
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_showcase_position on public.landing_showcase_cards(position);
+create index if not exists idx_landing_showcase_active on public.landing_showcase_cards(is_active);
+
+-- Landing Testimonials: Customer reviews/testimonials
+create table if not exists public.landing_testimonials (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  author_name text not null,
+  author_role text,
+  author_avatar_url text,
+  quote text not null,
+  rating integer not null default 5 check (rating >= 1 and rating <= 5),
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_testimonials_position on public.landing_testimonials(position);
+create index if not exists idx_landing_testimonials_active on public.landing_testimonials(is_active);
+
+-- Landing FAQ: Frequently asked questions
+create table if not exists public.landing_faq (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  question text not null,
+  answer text not null,
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_faq_position on public.landing_faq(position);
+create index if not exists idx_landing_faq_active on public.landing_faq(is_active);
+
+-- RLS Policies for Landing Page Tables
+-- All landing tables are publicly readable but only admin-writable
+
+alter table public.landing_hero_cards enable row level security;
+drop policy if exists "Landing hero cards are publicly readable" on public.landing_hero_cards;
+create policy "Landing hero cards are publicly readable" on public.landing_hero_cards for select using (true);
+drop policy if exists "Admins can manage landing hero cards" on public.landing_hero_cards;
+create policy "Admins can manage landing hero cards" on public.landing_hero_cards for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_stats enable row level security;
+drop policy if exists "Landing stats are publicly readable" on public.landing_stats;
+create policy "Landing stats are publicly readable" on public.landing_stats for select using (true);
+drop policy if exists "Admins can manage landing stats" on public.landing_stats;
+create policy "Admins can manage landing stats" on public.landing_stats for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_features enable row level security;
+drop policy if exists "Landing features are publicly readable" on public.landing_features;
+create policy "Landing features are publicly readable" on public.landing_features for select using (true);
+drop policy if exists "Admins can manage landing features" on public.landing_features;
+create policy "Admins can manage landing features" on public.landing_features for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_showcase_cards enable row level security;
+drop policy if exists "Landing showcase cards are publicly readable" on public.landing_showcase_cards;
+create policy "Landing showcase cards are publicly readable" on public.landing_showcase_cards for select using (true);
+drop policy if exists "Admins can manage landing showcase cards" on public.landing_showcase_cards;
+create policy "Admins can manage landing showcase cards" on public.landing_showcase_cards for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_testimonials enable row level security;
+drop policy if exists "Landing testimonials are publicly readable" on public.landing_testimonials;
+create policy "Landing testimonials are publicly readable" on public.landing_testimonials for select using (true);
+drop policy if exists "Admins can manage landing testimonials" on public.landing_testimonials;
+create policy "Admins can manage landing testimonials" on public.landing_testimonials for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_faq enable row level security;
+drop policy if exists "Landing FAQ are publicly readable" on public.landing_faq;
+create policy "Landing FAQ are publicly readable" on public.landing_faq for select using (true);
+drop policy if exists "Admins can manage landing FAQ" on public.landing_faq;
+create policy "Admins can manage landing FAQ" on public.landing_faq for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);

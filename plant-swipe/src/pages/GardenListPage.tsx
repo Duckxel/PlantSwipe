@@ -2317,7 +2317,7 @@ export const GardenListPage: React.FC = () => {
                   >
                     {markingAllCompleted ? (
                       <span className="flex items-center gap-2">
-                        <span className="animate-spin">⏳</span>
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         {t("garden.completing")}
                       </span>
                     ) : (
@@ -2407,7 +2407,7 @@ export const GardenListPage: React.FC = () => {
                         >
                           {completingGardenIds.has(gw.gardenId) ? (
                             <span className="flex items-center gap-1">
-                              <span className="animate-spin">⏳</span>
+                              <Loader2 className="h-4 w-4 animate-spin" />
                             </span>
                           ) : (
                             t("garden.completeAll")
@@ -2483,7 +2483,7 @@ export const GardenListPage: React.FC = () => {
                                   disabled={progressingOccIds.has(o.id)}
                                 >
                                   {progressingOccIds.has(o.id) ? (
-                                    <span className="animate-spin">⏳</span>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
                                   ) : (
                                     t("garden.complete", "Complete")
                                   )}

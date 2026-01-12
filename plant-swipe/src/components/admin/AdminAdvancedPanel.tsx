@@ -17,9 +17,11 @@ import {
   Copy,
   Palette,
   Users,
+  Smartphone,
 } from "lucide-react"
 import { AdminColorsPanel } from "./AdminColorsPanel"
 import { AdminTeamPanel } from "./AdminTeamPanel"
+import { AdminLandingPanel } from "./AdminLandingPanel"
 
 // ========================
 // LOGS TAB (existing AdminLogs functionality)
@@ -221,7 +223,10 @@ const LogsTab: React.FC = () => {
         </div>
         {error && <div className="text-sm text-rose-600">{error}</div>}
         {loading ? (
-          <div className="text-sm opacity-60">Loading...</div>
+          <div className="flex items-center gap-2 text-sm opacity-60">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Loading...</span>
+          </div>
         ) : logs.length === 0 ? (
           <div className="text-sm opacity-60">No admin activity logged.</div>
         ) : (
@@ -1005,7 +1010,7 @@ const SitemapTab: React.FC = () => {
 // ========================
 // MAIN PANEL COMPONENT
 // ========================
-type AdvancedView = "logs" | "sitemap" | "colors" | "team"
+type AdvancedView = "logs" | "sitemap" | "colors" | "team" | "landing"
 
 export const AdminAdvancedPanel: React.FC = () => {
   const location = useLocation()
@@ -1014,6 +1019,7 @@ export const AdminAdvancedPanel: React.FC = () => {
     if (location.pathname.includes("/advanced/sitemap")) return "sitemap"
     if (location.pathname.includes("/advanced/colors")) return "colors"
     if (location.pathname.includes("/advanced/team")) return "team"
+    if (location.pathname.includes("/advanced/landing")) return "landing"
     return "logs"
   }, [location.pathname])
 
@@ -1024,7 +1030,7 @@ export const AdminAdvancedPanel: React.FC = () => {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">Advanced</h1>
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
-            Logs, sitemap visualization, colors, and team management
+            Logs, sitemap, colors, team management, and landing page CMS
           </p>
         </div>
 
@@ -1078,6 +1084,18 @@ export const AdminAdvancedPanel: React.FC = () => {
             <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Team
           </Link>
+          <Link
+            to="/admin/advanced/landing"
+            className={cn(
+              "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
+              activeView === "landing"
+                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+            )}
+          >
+            <Smartphone className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            Landing
+          </Link>
         </div>
       </div>
 
@@ -1086,6 +1104,7 @@ export const AdminAdvancedPanel: React.FC = () => {
       {activeView === "sitemap" && <SitemapTab />}
       {activeView === "colors" && <AdminColorsPanel />}
       {activeView === "team" && <AdminTeamPanel />}
+      {activeView === "landing" && <AdminLandingPanel />}
     </div>
   )
 }
