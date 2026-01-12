@@ -1,5 +1,4 @@
 import React from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,13 +9,27 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
-import { User, UserPlus, Check, X, ArrowUpRight } from "lucide-react";
+import { 
+  User, 
+  UserPlus, 
+  Check, 
+  X, 
+  Clock,
+  Users,
+  Inbox,
+  SendHorizontal,
+  Loader2,
+  MoreHorizontal,
+  ExternalLink,
+  UserMinus
+} from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { sendFriendRequestPushNotification } from "@/lib/notifications";
 import { areUsersBlocked } from "@/lib/moderation";
+import { cn } from "@/lib/utils";
 
 type FriendRequest = {
   id: string;
@@ -56,62 +69,76 @@ type SearchResult = {
   is_pending?: boolean;
 };
 
+/**
+ * Format a date string to relative time
+ */
+function formatRelativeTime(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSeconds < 60) return "Just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Get initials from a display name
+ */
+function getInitials(name: string | null | undefined): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.charAt(0).toUpperCase();
+}
+
 export const FriendsPage: React.FC = () => {
   const { user, profile } = useAuth();
   const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
   const [friends, setFriends] = React.useState<Friend[]>([]);
-  const [pendingRequests, setPendingRequests] = React.useState<FriendRequest[]>(
-    [],
-  );
-  const [sentPendingRequests, setSentPendingRequests] = React.useState<
-    FriendRequest[]
-  >([]);
+  const [pendingRequests, setPendingRequests] = React.useState<FriendRequest[]>([]);
+  const [sentPendingRequests, setSentPendingRequests] = React.useState<FriendRequest[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [menuOpenFriendId, setMenuOpenFriendId] = React.useState<string | null>(
-    null,
-  );
-  const [menuPos, setMenuPos] = React.useState<{
-    top: number;
-    right: number;
-  } | null>(null);
-  const [confirmingRemove, setConfirmingRemove] = React.useState<string | null>(
-    null,
-  );
+  const [processingId, setProcessingId] = React.useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = React.useState<string | null>(null);
+  const [menuPos, setMenuPos] = React.useState<{ top: number; left: number } | null>(null);
+  const [confirmingRemove, setConfirmingRemove] = React.useState<string | null>(null);
   const [addFriendDialogOpen, setAddFriendDialogOpen] = React.useState(false);
   const [dialogSearchQuery, setDialogSearchQuery] = React.useState("");
-  const [dialogSearchResults, setDialogSearchResults] = React.useState<
-    SearchResult[]
-  >([]);
+  const [dialogSearchResults, setDialogSearchResults] = React.useState<SearchResult[]>([]);
   const [dialogSearching, setDialogSearching] = React.useState(false);
-  const menuRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
-  const anchorRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
-  const glassCard =
-    "rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_25px_70px_-40px_rgba(15,23,42,0.65)]";
-  const friendListCard =
-    glassCard +
-    " relative overflow-hidden shadow-[0_35px_95px_-45px_rgba(16,185,129,0.75)]";
+  
+  const menuButtonRefs = React.useRef<Map<string, HTMLButtonElement>>(new Map());
+  const menuRef = React.useRef<HTMLDivElement>(null);
 
+  // Load friends
   const loadFriends = React.useCallback(async () => {
     if (!user?.id) return;
     try {
       const { data, error: err } = await supabase
         .from("friends")
-        .select(
-          `
-          id,
-          user_id,
-          friend_id,
-          created_at
-        `,
-        )
+        .select("id, user_id, friend_id, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (err) throw err;
 
-      // Fetch friend profiles separately
       const friendIds = (data || []).map((f) => f.friend_id);
       if (friendIds.length > 0) {
         const { data: profiles } = await supabase
@@ -119,30 +146,10 @@ export const FriendsPage: React.FC = () => {
           .select("id, display_name")
           .in("id", friendIds);
 
-        // Fetch emails for friends using RPC function
-        const emailPromises = friendIds.map(async (id) => {
-          try {
-            const { data: emailData } = await supabase.rpc("get_friend_email", {
-              _friend_id: id,
-            });
-            return { id, email: emailData || null };
-          } catch {
-            return { id, email: null };
-          }
-        });
-        const emails = await Promise.all(emailPromises);
-        const emailMap = new Map(emails.map((e) => [e.id, e.email]));
-
         const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
         const friendsWithProfiles = (data || []).map((f) => ({
           ...f,
-          friend_profile: {
-            ...(profileMap.get(f.friend_id) || {
-              id: f.friend_id,
-              display_name: null,
-            }),
-            email: emailMap.get(f.friend_id) || null,
-          },
+          friend_profile: profileMap.get(f.friend_id) || { id: f.friend_id, display_name: null },
         }));
         setFriends(friendsWithProfiles as Friend[]);
       } else {
@@ -151,29 +158,21 @@ export const FriendsPage: React.FC = () => {
     } catch (e: any) {
       setError(e?.message || t("friends.errors.failedToLoad"));
     }
-  }, [user?.id]);
+  }, [user?.id, t]);
 
+  // Load sent pending requests
   const loadSentPendingRequests = React.useCallback(async () => {
     if (!user?.id) return;
     try {
       const { data, error: err } = await supabase
         .from("friend_requests")
-        .select(
-          `
-          id,
-          requester_id,
-          recipient_id,
-          created_at,
-          status
-        `,
-        )
+        .select("id, requester_id, recipient_id, created_at, status")
         .eq("requester_id", user.id)
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 
       if (err) throw err;
 
-      // Fetch recipient profiles separately
       const recipientIds = (data || []).map((r) => r.recipient_id);
       if (recipientIds.length > 0) {
         const { data: profiles } = await supabase
@@ -181,27 +180,12 @@ export const FriendsPage: React.FC = () => {
           .select("id, display_name")
           .in("id", recipientIds);
 
-        // Fetch emails using RPC function for friends
-        const emailPromises = recipientIds.map(async (id) => {
-          try {
-            const { data: emailData } = await supabase.rpc("get_friend_email", {
-              _friend_id: id,
-            });
-            return { id, email: emailData || null };
-          } catch {
-            return { id, email: null };
-          }
-        });
-        const emails = await Promise.all(emailPromises);
-        const emailMap = new Map(emails.map((e) => [e.id, e.email]));
-
         const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
         const requestsWithProfiles = (data || []).map((r) => ({
           ...r,
           recipient_profile: {
             id: r.recipient_id,
             display_name: profileMap.get(r.recipient_id)?.display_name || null,
-            email: emailMap.get(r.recipient_id) || null,
           },
         }));
         setSentPendingRequests(requestsWithProfiles as FriendRequest[]);
@@ -211,68 +195,36 @@ export const FriendsPage: React.FC = () => {
     } catch (e: any) {
       setError(e?.message || t("friends.errors.failedToLoadSentRequests"));
     }
-  }, [user?.id]);
+  }, [user?.id, t]);
 
+  // Load pending requests received
   const loadPendingRequests = React.useCallback(async () => {
     if (!user?.id) return;
     try {
       const { data, error: err } = await supabase
         .from("friend_requests")
-        .select(
-          `
-          id,
-          requester_id,
-          recipient_id,
-          created_at,
-          status
-        `,
-        )
+        .select("id, requester_id, recipient_id, created_at, status")
         .eq("recipient_id", user.id)
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 
       if (err) throw err;
 
-      // Fetch requester profiles separately
       const requesterIds = (data || []).map((r) => r.requester_id);
       if (requesterIds.length > 0) {
-        const { data: profiles, error: profileErr } = await supabase
+        const { data: profiles } = await supabase
           .from("profiles")
           .select("id, display_name")
           .in("id", requesterIds);
 
-        if (profileErr) {
-          console.error("Error fetching requester profiles:", profileErr);
-        }
-
-        // Fetch emails using RPC function (only for users who sent friend requests to you)
-        const emailPromises = requesterIds.map(async (id) => {
-          try {
-            const { data: emailData } = await supabase.rpc(
-              "get_friend_request_requester_email",
-              { _requester_id: id },
-            );
-            return { id, email: emailData || null };
-          } catch (e) {
-            console.error("Error fetching email for requester:", id, e);
-            return { id, email: null };
-          }
-        });
-        const emails = await Promise.all(emailPromises);
-        const emailMap = new Map(emails.map((e) => [e.id, e.email]));
-
         const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
-        const requestsWithProfiles = (data || []).map((r) => {
-          const profile = profileMap.get(r.requester_id);
-          return {
-            ...r,
-            requester_profile: {
-              id: r.requester_id,
-              display_name: profile?.display_name || null,
-              email: emailMap.get(r.requester_id) || null,
-            },
-          };
-        });
+        const requestsWithProfiles = (data || []).map((r) => ({
+          ...r,
+          requester_profile: {
+            id: r.requester_id,
+            display_name: profileMap.get(r.requester_id)?.display_name || null,
+          },
+        }));
         setPendingRequests(requestsWithProfiles as FriendRequest[]);
       } else {
         setPendingRequests([]);
@@ -280,23 +232,20 @@ export const FriendsPage: React.FC = () => {
     } catch (e: any) {
       setError(e?.message || t("friends.errors.failedToLoadRequests"));
     }
-  }, [user?.id]);
+  }, [user?.id, t]);
 
+  // Initial load
   React.useEffect(() => {
     if (!user?.id) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    Promise.all([
-      loadFriends(),
-      loadPendingRequests(),
-      loadSentPendingRequests(),
-    ]).finally(() => {
-      setLoading(false);
-    });
+    Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()])
+      .finally(() => setLoading(false));
   }, [user?.id, loadFriends, loadPendingRequests, loadSentPendingRequests]);
 
+  // Dialog search - uses RPC function to properly search profiles with RLS
   const handleDialogSearch = React.useCallback(async () => {
     if (!dialogSearchQuery.trim() || !user?.id) {
       setDialogSearchResults([]);
@@ -306,43 +255,55 @@ export const FriendsPage: React.FC = () => {
     try {
       const query = dialogSearchQuery.trim();
 
-      // Search by display_name (username)
-      // Note: Email search would require server endpoint, so we search by username
-      const { data, error: err } = await supabase
-        .from("profiles")
-        .select("id, display_name")
-        .ilike("display_name", `%${query}%`)
-        .neq("id", user.id)
-        .limit(3);
+      // Use the search_user_profiles RPC function which handles RLS properly
+      const { data, error: err } = await supabase.rpc("search_user_profiles", {
+        _term: query,
+        _limit: 10,
+      });
 
-      if (err) throw err;
-
-      let results: SearchResult[] = [];
-      if (data) {
-        results = data.map((p) => ({
+      if (err) {
+        // Fallback to direct query if RPC doesn't exist
+        console.warn("[FriendsPage] RPC search failed, trying direct query:", err.message);
+        const { data: fallbackData, error: fallbackErr } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .ilike("display_name", `%${query}%`)
+          .neq("id", user.id)
+          .limit(10);
+        
+        if (fallbackErr) throw fallbackErr;
+        
+        const results: SearchResult[] = (fallbackData || []).map((p) => ({
           id: p.id,
           display_name: p.display_name || null,
-          email: null,
           is_friend: false,
+          is_pending: false,
         }));
+        
+        await markResultsWithFriendStatus(results);
+        return;
       }
 
-      // If query looks like an email, try to find user by email via server endpoint
+      // Map RPC results to SearchResult format
+      let results: SearchResult[] = (data || [])
+        .filter((p: any) => p.id !== user.id)
+        .map((p: any) => ({
+          id: p.id,
+          display_name: p.display_name || p.username || null,
+          is_friend: Boolean(p.is_friend),
+          is_pending: false,
+        }));
+
+      // Check for email search (admin feature)
       if (query.includes("@")) {
         try {
-          const response = await fetch(
-            `/api/admin/member?q=${encodeURIComponent(query)}`,
-            {
-              credentials: "same-origin",
-            },
-          );
+          const response = await fetch(`/api/admin/member?q=${encodeURIComponent(query)}`, {
+            credentials: "same-origin",
+          });
           if (response.ok) {
             const memberData = await response.json();
             if (memberData.id && memberData.id !== user.id) {
-              // Check if already in results
-              const existingIndex = results.findIndex(
-                (r) => r.id === memberData.id,
-              );
+              const existingIndex = results.findIndex((r) => r.id === memberData.id);
               if (existingIndex >= 0) {
                 results[existingIndex].email = memberData.email || null;
               } else {
@@ -351,19 +312,36 @@ export const FriendsPage: React.FC = () => {
                   display_name: memberData.profile?.display_name || null,
                   email: memberData.email || null,
                   is_friend: false,
+                  is_pending: false,
                 });
               }
             }
           }
-        } catch (_e) {
+        } catch {
           // Ignore email search errors
         }
       }
 
-      // Get friend IDs and check which results are already friends
-      const friendIds = new Set(friends.map((f) => f.friend_id));
+      await markResultsWithFriendStatus(results);
+    } catch (e: any) {
+      setError(e?.message || t("friends.errors.searchFailed"));
+      setDialogSearching(false);
+    }
+  }, [dialogSearchQuery, user?.id, t]);
 
-      // Get pending request IDs
+  // Helper function to mark search results with friend/pending status
+  const markResultsWithFriendStatus = React.useCallback(async (results: SearchResult[]) => {
+    if (!user?.id) {
+      setDialogSearchResults(results.slice(0, 5));
+      setDialogSearching(false);
+      return;
+    }
+
+    try {
+      // Get friend IDs
+      const friendIds = new Set(friends.map((f) => f.friend_id));
+      
+      // Get pending sent requests
       const { data: sentRequests } = await supabase
         .from("friend_requests")
         .select("recipient_id")
@@ -375,677 +353,752 @@ export const FriendsPage: React.FC = () => {
         ...(sentRequests?.map((r) => r.recipient_id) || []),
       ]);
 
-      // Mark friends and pending requests
       const filteredResults = results
         .filter((r) => r.id !== user.id)
         .map((r) => ({
           ...r,
-          is_friend: friendIds.has(r.id),
+          is_friend: r.is_friend || friendIds.has(r.id),
           is_pending: requestIds.has(r.id),
         }))
-        .slice(0, 3); // Limit to top 3
+        .slice(0, 5);
 
       setDialogSearchResults(filteredResults);
-    } catch (e: any) {
-      setError(e?.message || t("friends.errors.searchFailed"));
+    } catch {
+      // If marking fails, still show results
+      setDialogSearchResults(results.slice(0, 5));
     } finally {
       setDialogSearching(false);
     }
-  }, [dialogSearchQuery, user?.id, friends, pendingRequests]);
+  }, [user?.id, friends, pendingRequests]);
 
   React.useEffect(() => {
-    const timeout = setTimeout(() => {
-      handleDialogSearch();
-    }, 300);
+    const timeout = setTimeout(() => handleDialogSearch(), 300);
     return () => clearTimeout(timeout);
   }, [dialogSearchQuery, handleDialogSearch]);
 
-  // Helper function to send push notification for friend request
+  // Send friend request notification
   const sendFriendRequestNotification = React.useCallback(async (recipientId: string) => {
-    const senderName = profile?.display_name || 'Someone';
+    const senderName = profile?.display_name || "Someone";
     const { data: recipientProfile } = await supabase
       .from("profiles")
       .select("language")
       .eq("id", recipientId)
       .maybeSingle();
-    sendFriendRequestPushNotification(
-      recipientId,
-      senderName,
-      recipientProfile?.language || 'en'
-    ).catch(() => {});
+    sendFriendRequestPushNotification(recipientId, senderName, recipientProfile?.language || "en").catch(() => {});
   }, [profile?.display_name]);
 
-  const sendFriendRequest = React.useCallback(
-    async (recipientId: string) => {
-      if (!user?.id) return;
-      try {
-        // Check if either user has blocked the other
-        const blocked = await areUsersBlocked(user.id, recipientId);
-        if (blocked) {
-          setError(t("friends.errors.cannotSendRequest", { defaultValue: "Cannot send friend request to this user" }));
+  // Send friend request
+  const sendFriendRequest = React.useCallback(async (recipientId: string) => {
+    if (!user?.id) return;
+    setProcessingId(recipientId);
+    try {
+      const blocked = await areUsersBlocked(user.id, recipientId);
+      if (blocked) {
+        setError(t("friends.errors.cannotSendRequest", { defaultValue: "Cannot send friend request to this user" }));
+        return;
+      }
+
+      const { data: existingFriend } = await supabase
+        .from("friends")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("friend_id", recipientId)
+        .maybeSingle();
+
+      if (existingFriend) {
+        setError(t("friends.errors.alreadyFriends"));
+        return;
+      }
+
+      // Check for existing requests in BOTH directions
+      const { data: existingRequest } = await supabase
+        .from("friend_requests")
+        .select("id, status, requester_id")
+        .or(`and(requester_id.eq.${user.id},recipient_id.eq.${recipientId}),and(requester_id.eq.${recipientId},recipient_id.eq.${user.id})`)
+        .maybeSingle();
+
+      if (existingRequest) {
+        if (existingRequest.status === "pending") {
+          // If there's a pending request FROM the other user TO us, we should accept it instead
+          if (existingRequest.requester_id === recipientId) {
+            // Accept their request instead of sending a new one
+            await supabase.rpc("accept_friend_request", { _request_id: existingRequest.id });
+            handleDialogSearch();
+            await Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()]);
+            setError(null);
+            return;
+          }
+          setError(t("friends.errors.requestAlreadySent"));
           return;
         }
         
-        // Check if already friends
-        const { data: existingFriend } = await supabase
-          .from("friends")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("friend_id", recipientId)
-          .maybeSingle();
-
-        if (existingFriend) {
-          setError(t("friends.errors.alreadyFriends"));
-          return;
-        }
-
-        // Check if request already exists (including rejected/accepted ones)
-        const { data: existingRequest } = await supabase
-          .from("friend_requests")
-          .select("id, status")
-          .eq("requester_id", user.id)
-          .eq("recipient_id", recipientId)
-          .maybeSingle();
-
-        if (existingRequest) {
-          if (existingRequest.status === "pending") {
-            setError(t("friends.errors.requestAlreadySent"));
-            return;
-          }
-          // If rejected or accepted, update it to pending (allows resending after removal/rejection)
-          if (
-            existingRequest.status === "rejected" ||
-            existingRequest.status === "accepted"
-          ) {
-            const { error: err } = await supabase
-              .from("friend_requests")
-              .update({ status: "pending" })
-              .eq("id", existingRequest.id);
-
-            if (err) throw err;
-            // Refresh search results
-            handleDialogSearch();
-            await loadPendingRequests();
-            setError(null);
-            
-            // Send push notification for re-activated request
-            sendFriendRequestNotification(recipientId);
-            return;
-          }
-        }
-
-        // No existing request, create a new one
-        const { error: err } = await supabase.from("friend_requests").insert({
-          requester_id: user.id,
-          recipient_id: recipientId,
-          status: "pending",
-        });
-
-        if (err) throw err;
-
-        // Send push notification for new friend request
-        sendFriendRequestNotification(recipientId);
-
-        // Refresh search results and pending requests
-        handleDialogSearch();
-        await Promise.all([loadPendingRequests(), loadSentPendingRequests()]);
-        setError(null);
-        // Optionally close dialog after successful send
-        // setAddFriendDialogOpen(false)
-      } catch (e: any) {
-        setError(e?.message || t("friends.errors.failedToSend"));
-      }
-    },
-    [
-      user?.id,
-      sendFriendRequestNotification,
-      handleDialogSearch,
-      loadPendingRequests,
-      loadSentPendingRequests,
-    ],
-  );
-
-  const acceptRequest = React.useCallback(
-    async (requestId: string) => {
-      try {
-        const { error: err } = await supabase.rpc("accept_friend_request", {
-          _request_id: requestId,
-        });
-
-        if (err) throw err;
-
-        // Refresh both lists
-        await Promise.all([
-          loadFriends(),
-          loadPendingRequests(),
-          loadSentPendingRequests(),
-        ]);
-        setError(null);
-      } catch (e: any) {
-        setError(e?.message || t("friends.errors.failedToAccept"));
-      }
-    },
-    [loadFriends, loadPendingRequests, loadSentPendingRequests],
-  );
-
-  const rejectRequest = React.useCallback(
-    async (requestId: string) => {
-      try {
-        const { error: err } = await supabase
-          .from("friend_requests")
-          .update({ status: "rejected" })
-          .eq("id", requestId);
-
-        if (err) throw err;
-
-        await Promise.all([loadPendingRequests(), loadSentPendingRequests()]);
-        setError(null);
-      } catch (e: any) {
-        setError(e?.message || t("friends.errors.failedToReject"));
-      }
-    },
-    [loadPendingRequests, loadSentPendingRequests],
-  );
-
-  const removeFriend = React.useCallback(
-    async (friendId: string) => {
-      if (!user?.id) return;
-      setConfirmingRemove(null);
-      setMenuOpenFriendId(null);
-      try {
-        // Remove bidirectional friendship - delete both directions
-        await Promise.all([
-          supabase
-            .from("friends")
-            .delete()
-            .eq("user_id", user.id)
-            .eq("friend_id", friendId),
-          supabase
-            .from("friends")
-            .delete()
-            .eq("user_id", friendId)
-            .eq("friend_id", user.id),
-        ]);
-
-        // Clean up old friend_request records (both directions) to allow resending requests
-        await Promise.all([
-          supabase
+        // For rejected or accepted requests, delete the old one and create a new one
+        // This works regardless of RLS policies since we're creating a new record
+        if (existingRequest.status === "rejected" || existingRequest.status === "accepted") {
+          // Delete the old request (we can delete our own requests)
+          await supabase
             .from("friend_requests")
             .delete()
-            .eq("requester_id", user.id)
-            .eq("recipient_id", friendId),
-          supabase
-            .from("friend_requests")
-            .delete()
-            .eq("requester_id", friendId)
-            .eq("recipient_id", user.id),
-        ]);
-
-        await loadFriends();
-        setError(null);
-      } catch (e: any) {
-        setError(e?.message || t("friends.errors.failedToRemove"));
+            .eq("id", existingRequest.id);
+        }
       }
-    },
-    [user?.id, loadFriends],
-  );
 
-  // Handle menu positioning and click outside
+      // Create a new friend request
+      const { error: insertError } = await supabase.from("friend_requests").insert({
+        requester_id: user.id,
+        recipient_id: recipientId,
+        status: "pending",
+      });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      sendFriendRequestNotification(recipientId);
+      handleDialogSearch();
+      await loadSentPendingRequests();
+      setError(null);
+    } catch (e: any) {
+      setError(e?.message || t("friends.errors.failedToSend"));
+    } finally {
+      setProcessingId(null);
+    }
+  }, [user?.id, sendFriendRequestNotification, handleDialogSearch, loadFriends, loadPendingRequests, loadSentPendingRequests, t]);
+
+  // Accept request
+  const acceptRequest = React.useCallback(async (requestId: string) => {
+    setProcessingId(requestId);
+    try {
+      await supabase.rpc("accept_friend_request", { _request_id: requestId });
+      await Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()]);
+      setError(null);
+    } catch (e: any) {
+      setError(e?.message || t("friends.errors.failedToAccept"));
+    } finally {
+      setProcessingId(null);
+    }
+  }, [loadFriends, loadPendingRequests, loadSentPendingRequests, t]);
+
+  // Reject request
+  const rejectRequest = React.useCallback(async (requestId: string) => {
+    setProcessingId(requestId);
+    try {
+      await supabase.from("friend_requests").update({ status: "rejected" }).eq("id", requestId);
+      await Promise.all([loadPendingRequests(), loadSentPendingRequests()]);
+      setError(null);
+    } catch (e: any) {
+      setError(e?.message || t("friends.errors.failedToReject"));
+    } finally {
+      setProcessingId(null);
+    }
+  }, [loadPendingRequests, loadSentPendingRequests, t]);
+
+  // Cancel sent request
+  const cancelRequest = React.useCallback(async (requestId: string) => {
+    setProcessingId(requestId);
+    try {
+      await supabase.from("friend_requests").delete().eq("id", requestId);
+      await loadSentPendingRequests();
+      setError(null);
+    } catch (e: any) {
+      setError(e?.message || t("friends.errors.failedToCancel", { defaultValue: "Failed to cancel request" }));
+    } finally {
+      setProcessingId(null);
+    }
+  }, [loadSentPendingRequests, t]);
+
+  // Remove friend
+  const removeFriend = React.useCallback(async (friendId: string) => {
+    if (!user?.id) return;
+    setConfirmingRemove(null);
+    setMenuOpenId(null);
+    setProcessingId(friendId);
+    try {
+      await Promise.all([
+        supabase.from("friends").delete().eq("user_id", user.id).eq("friend_id", friendId),
+        supabase.from("friends").delete().eq("user_id", friendId).eq("friend_id", user.id),
+      ]);
+      await Promise.all([
+        supabase.from("friend_requests").delete().eq("requester_id", user.id).eq("recipient_id", friendId),
+        supabase.from("friend_requests").delete().eq("requester_id", friendId).eq("recipient_id", user.id),
+      ]);
+      await loadFriends();
+      setError(null);
+    } catch (e: any) {
+      setError(e?.message || t("friends.errors.failedToRemove"));
+    } finally {
+      setProcessingId(null);
+    }
+  }, [user?.id, loadFriends, t]);
+
+  // Navigate to profile
+  const handleViewProfile = (displayName: string | null | undefined) => {
+    if (!displayName?.trim()) return;
+    navigate(`/u/${encodeURIComponent(displayName)}`);
+  };
+
+  // Menu positioning
   React.useEffect(() => {
-    if (!menuOpenFriendId) return;
-    const menuRef = menuRefs.current.get(menuOpenFriendId);
-    const anchorRef = anchorRefs.current.get(menuOpenFriendId);
+    if (!menuOpenId) return;
 
-    const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (menuRef && menuRef.contains(t)) return;
-      if (anchorRef && anchorRef.contains(t)) return;
-      setMenuOpenFriendId(null);
+    const updatePosition = () => {
+      const button = menuButtonRefs.current.get(menuOpenId);
+      if (!button) return;
+      const rect = button.getBoundingClientRect();
+      setMenuPos({
+        top: rect.bottom + 8,
+        left: Math.min(rect.left, window.innerWidth - 180),
+      });
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if (menuButtonRefs.current.get(menuOpenId)?.contains(target)) return;
+      setMenuOpenId(null);
       setConfirmingRemove(null);
     };
-    const onKey = (e: KeyboardEvent) => {
+
+    const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setMenuOpenFriendId(null);
+        setMenuOpenId(null);
         setConfirmingRemove(null);
       }
     };
-    const recompute = () => {
-      if (!anchorRef) return;
-      const r = anchorRef.getBoundingClientRect();
-      setMenuPos({
-        top: r.bottom + 8,
-        right: Math.max(0, window.innerWidth - r.right),
-      });
-    };
-    document.addEventListener("click", onDoc);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("resize", recompute);
-    window.addEventListener("scroll", recompute, true);
-    recompute();
-    return () => {
-      document.removeEventListener("click", onDoc);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", recompute);
-      window.removeEventListener("scroll", recompute, true);
-    };
-  }, [menuOpenFriendId]);
 
+    updatePosition();
+    document.addEventListener("click", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      document.removeEventListener("click", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [menuOpenId]);
+
+  // Not logged in
   if (!user) {
     return (
-      <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-        <Card className={glassCard}>
-          <CardContent className="p-6 md:p-8 text-center text-sm text-stone-600 dark:text-stone-300">
-            {t("friends.pleaseLogin")}
-          </CardContent>
-        </Card>
+      <div className="max-w-4xl mx-auto px-4 py-12">
+        <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-8 text-center">
+          <Users className="h-12 w-12 mx-auto mb-4 text-stone-300 dark:text-stone-600" />
+          <p className="text-stone-600 dark:text-stone-400">{t("friends.pleaseLogin")}</p>
+        </div>
       </div>
     );
   }
 
+  const totalPending = pendingRequests.length + sentPendingRequests.length;
+
   return (
-    <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-      <div
-        className={`flex flex-col lg:grid gap-6 items-stretch ${
-          pendingRequests.length > 0 || sentPendingRequests.length > 0
-            ? "lg:grid-cols-[300px_1fr_300px]"
-            : "lg:grid-cols-1"
-        }`}
-      >
-        {/* Spacer for left side when received requests don't exist */}
-        {pendingRequests.length === 0 && sentPendingRequests.length > 0 && (
-          <div className="hidden lg:block"></div>
-        )}
-
-        {/* Pending Requests I Received - Top on mobile, Left on desktop */}
-        {pendingRequests.length > 0 && (
-          <Card
-            className={`${glassCard} w-full lg:w-[300px] lg:flex-shrink-0 order-1 lg:order-1 h-full`}
-          >
-            <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
-              <div className="text-xl font-semibold text-black dark:text-white">
-                {t("friends.pendingInvitations")}
-              </div>
-              <div className="space-y-2">
-                {pendingRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42]"
-                  >
-                    <div className="flex flex-col gap-1 flex-1">
-                      <div className="flex items-center gap-2">
-                        <User className="h-5 w-5 opacity-60 text-black dark:text-white" />
-                        <span className="font-medium text-black dark:text-white">
-                          {request.requester_profile?.display_name ||
-                            t("friends.unknown")}
-                        </span>
-                      </div>
-                      {request.requester_profile?.email && (
-                        <div className="text-xs opacity-60 pl-7 text-black dark:text-white">
-                          {request.requester_profile.email}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {request.requester_profile?.display_name && (
-                        <Button
-                          className="rounded-xl"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            navigate(
-                              `/u/${encodeURIComponent(request.requester_profile?.display_name || "")}`,
-                            )
-                          }
-                        >
-                          <ArrowUpRight className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button
-                        className="rounded-xl"
-                        variant="default"
-                        size="sm"
-                        onClick={() => acceptRequest(request.id)}
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        className="rounded-xl"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => rejectRequest(request.id)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-      {/* Friends List Card - Middle */}
-      <Card className={`${friendListCard} w-full order-2 lg:order-2 h-full`}>
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-6 -right-10 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/15 blur-3xl" />
-          <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/10 blur-3xl" />
-        </div>
-        <CardContent className="relative z-10 p-6 md:p-8 space-y-6 h-full flex flex-col">
-            {/* Title and Add Friend Button */}
-            <div className="flex items-center justify-between">
-              <div className="text-2xl font-semibold text-black dark:text-white">
-                {t("friends.title")}
-              </div>
-              <Button
-                className="rounded-xl"
-                variant="default"
-                onClick={() => {
-                  setAddFriendDialogOpen(true);
-                  setDialogSearchQuery("");
-                  setDialogSearchResults([]);
-                }}
-              >
-                <UserPlus className="h-4 w-4 mr-2" /> {t("friends.addFriend")}
-              </Button>
+    <div className="max-w-6xl mx-auto px-4 py-6 pb-24 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-stone-900 dark:text-white flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
+              <Users className="h-5 w-5 text-white" />
             </div>
+            {t("friends.title")}
+          </h1>
+          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+            {friends.length} {t("friends.friends", { defaultValue: "friends" })}
+            {totalPending > 0 && ` • ${totalPending} ${t("notifications.pending", { defaultValue: "pending" })}`}
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            setAddFriendDialogOpen(true);
+            setDialogSearchQuery("");
+            setDialogSearchResults([]);
+          }}
+          className="rounded-xl bg-blue-500 hover:bg-blue-600 text-white shadow-md shadow-blue-500/25"
+        >
+          <UserPlus className="h-4 w-4 mr-2" />
+          {t("friends.addFriend")}
+        </Button>
+      </div>
 
-            {error && (
-              <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-200 dark:border-red-800">
-                {error}
+      {/* Error */}
+      {error && (
+        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-sm text-red-600 dark:text-red-400">
+          {error}
+          <button onClick={() => setError(null)} className="ml-2 underline">
+            {t("common.dismiss", { defaultValue: "Dismiss" })}
+          </button>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Pending Requests Received */}
+        <div className="lg:col-span-1 space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
+              <Inbox className="h-4 w-4 text-white" />
+            </div>
+            <h2 className="font-semibold text-stone-900 dark:text-white">
+              {t("friends.pendingInvitations", { defaultValue: "Received" })}
+            </h2>
+            {pendingRequests.length > 0 && (
+              <span className="ml-auto h-6 min-w-6 px-2 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center justify-center">
+                {pendingRequests.length}
+              </span>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden min-h-[200px]">
+            {pendingRequests.length === 0 ? (
+              <div className="p-8 text-center">
+                <Inbox className="h-10 w-10 mx-auto mb-3 text-stone-200 dark:text-stone-700" />
+                <p className="text-sm text-stone-400 dark:text-stone-500">
+                  {t("friends.noPendingRequests", { defaultValue: "No pending requests" })}
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-stone-100 dark:divide-[#2a2a2d]">
+                {pendingRequests.map((request) => {
+                  const displayName = request.requester_profile?.display_name;
+                  const hasProfile = displayName && displayName.trim();
+                  const isProcessing = processingId === request.id;
+
+                  return (
+                    <div key={request.id} className="p-4">
+                      <div className="flex items-start gap-3">
+                        <button
+                          onClick={() => hasProfile && handleViewProfile(displayName)}
+                          disabled={!hasProfile}
+                          className={cn(
+                            "flex-shrink-0 w-11 h-11 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-semibold text-sm shadow-md",
+                            hasProfile && "cursor-pointer hover:ring-2 hover:ring-amber-400/50 hover:ring-offset-2 dark:hover:ring-offset-[#1e1e20] transition-all"
+                          )}
+                        >
+                          {getInitials(displayName)}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          {hasProfile ? (
+                            <button
+                              onClick={() => handleViewProfile(displayName)}
+                              className="font-medium text-stone-900 dark:text-white truncate block text-left hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                            >
+                              {displayName}
+                            </button>
+                          ) : (
+                            <p className="font-medium text-stone-900 dark:text-white truncate">
+                              {t("friends.unknown")}
+                            </p>
+                          )}
+                          <p className="text-xs text-stone-500 dark:text-stone-400">
+                            {t("notifications.wantsToBeYourFriend")}
+                          </p>
+                          <div className="flex items-center gap-1 mt-1 text-[10px] text-stone-400 dark:text-stone-500">
+                            <Clock className="h-3 w-3" />
+                            <span>{formatRelativeTime(request.created_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-3">
+                        {hasProfile && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 rounded-lg text-xs"
+                            onClick={() => handleViewProfile(displayName)}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                            {t("notifications.viewProfile")}
+                          </Button>
+                        )}
+                        <div className="flex-1" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 rounded-lg text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
+                          onClick={() => rejectRequest(request.id)}
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8 rounded-lg text-xs bg-amber-500 hover:bg-amber-600 text-white"
+                          onClick={() => acceptRequest(request.id)}
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Check className="h-3.5 w-3.5 mr-1" />
+                              {t("common.accept")}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
+          </div>
+        </div>
 
-            {/* Friends list */}
-            <div className="space-y-2">
-              <div className="text-sm font-medium text-black dark:text-white">
-                {t("friends.yourFriends")} ({friends.length})
-              </div>
-              {loading ? (
-                <div className="text-xs opacity-60 text-black dark:text-white">
-                  {t("common.loading")}
-                </div>
-              ) : friends.length === 0 ? (
-                <div className="text-xs opacity-60 p-4 rounded-xl border text-center bg-white dark:bg-[#252526] dark:border-[#3e3e42] text-black dark:text-white">
-                  {t("friends.noFriendsYet")}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {friends.map((friend) => (
-                    <div
-                      key={friend.id}
-                      className="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42]"
-                    >
-                      <div className="flex flex-col gap-1 flex-1">
-                        <div className="flex items-center gap-2">
-                          <User className="h-5 w-5 opacity-60 text-black dark:text-white" />
-                          <span className="font-medium text-black dark:text-white">
-                            {friend.friend_profile?.display_name ||
-                              t("friends.unknown")}
-                          </span>
-                        </div>
-                        {friend.friend_profile?.email && (
-                          <div className="text-xs opacity-60 pl-7 text-black dark:text-white">
-                            {friend.friend_profile.email}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {friend.friend_profile?.display_name && (
-                          <Button
-                            variant="secondary"
-                            size="icon"
-                            className="rounded-full h-8 w-8"
-                            aria-label={t("friends.viewProfile")}
-                            onClick={() =>
-                              navigate(
-                                `/u/${encodeURIComponent(friend.friend_profile?.display_name || "")}`,
-                              )
-                            }
-                          >
-                            <ArrowUpRight className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <div
-                          ref={(el) => {
-                            if (el) anchorRefs.current.set(friend.id, el);
-                          }}
-                        >
-                          <Button
-                            variant="secondary"
-                            size="icon"
-                            className="rounded-full h-8 w-8"
-                            aria-label={t("friends.friendOptions")}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMenuOpenFriendId(
-                                menuOpenFriendId === friend.id
-                                  ? null
-                                  : friend.id,
-                              );
-                              setConfirmingRemove(null);
-                            }}
-                          >
-                            ...
-                          </Button>
-                          {menuOpenFriendId === friend.id &&
-                            menuPos &&
-                            createPortal(
-                              <div
-                                ref={(el) => {
-                                  if (el) menuRefs.current.set(friend.id, el);
-                                }}
-                                className="w-40 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow z-[60] p-1"
-                                style={{
-                                  position: "fixed",
-                                  top: menuPos.top,
-                                  right: menuPos.right,
-                                }}
-                              >
-                                {confirmingRemove === friend.id ? (
-                                  <>
-                                    <div className="px-3 py-2 text-xs text-red-600 dark:text-red-400 mb-1">
-                                      {t("friends.removeFriend")}{" "}
-                                      {friend.friend_profile?.display_name ||
-                                        t("friends.unknown")}
-                                      ?
-                                    </div>
-                                    <div className="flex gap-1">
-                                      <button
-                                        className="flex-1 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-medium"
-                                        onMouseDown={(e) => {
-                                          e.stopPropagation();
-                                          removeFriend(friend.friend_id);
-                                        }}
-                                      >
-                                        {t("common.confirm")}
-                                      </button>
-                                      <button
-                                        className="flex-1 px-2 py-1.5 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-xs text-black dark:text-white"
-                                        onMouseDown={(e) => {
-                                          e.stopPropagation();
-                                          setConfirmingRemove(null);
-                                          setMenuOpenFriendId(null);
-                                        }}
-                                      >
-                                        {t("common.cancel")}
-                                      </button>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <button
-                                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400"
-                                    onMouseDown={(e) => {
-                                      e.stopPropagation();
-                                      setConfirmingRemove(friend.id);
-                                    }}
-                                  >
-                                    {t("friends.removeFriend")}
-                                  </button>
-                                )}
-                              </div>,
-                              document.body,
-                            )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+        {/* Friends List */}
+        <div className="lg:col-span-1 space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+              <Users className="h-4 w-4 text-white" />
             </div>
-          </CardContent>
-        </Card>
+            <h2 className="font-semibold text-stone-900 dark:text-white">
+              {t("friends.yourFriends", { defaultValue: "Your Friends" })}
+            </h2>
+            <span className="ml-auto text-sm text-stone-400 dark:text-stone-500">
+              {friends.length}
+            </span>
+          </div>
 
-        {/* Pending Requests I Sent - Bottom on mobile, Right on desktop */}
-        {sentPendingRequests.length > 0 && (
-          <Card
-            className={`${glassCard} w-full lg:w-[300px] lg:flex-shrink-0 order-3 lg:order-3 h-full`}
-          >
-            <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
-              <div className="text-xl font-semibold text-black dark:text-white">
-                {t("friends.sentRequests")}
+          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden min-h-[200px]">
+            {loading ? (
+              <div className="p-8 text-center">
+                <Loader2 className="h-8 w-8 mx-auto mb-3 text-stone-300 dark:text-stone-600 animate-spin" />
+                <p className="text-sm text-stone-400 dark:text-stone-500">{t("common.loading")}</p>
               </div>
-              <div className="space-y-2">
-                {sentPendingRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42]"
-                  >
-                    <div className="flex flex-col gap-1 flex-1">
-                      <div className="flex items-center gap-2">
-                        <User className="h-5 w-5 opacity-60 text-black dark:text-white" />
-                        <span className="font-medium text-black dark:text-white">
-                          {request.recipient_profile?.display_name ||
-                            t("friends.unknown")}
-                        </span>
-                      </div>
-                      {request.recipient_profile?.email && (
-                        <div className="text-xs opacity-60 pl-7 text-black dark:text-white">
-                          {request.recipient_profile.email}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {request.recipient_profile?.display_name && (
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="rounded-full h-8 w-8"
-                          aria-label={t("friends.viewProfile")}
-                          onClick={() =>
-                            navigate(
-                              `/u/${encodeURIComponent(request.recipient_profile?.display_name || "")}`,
-                            )
-                          }
-                        >
-                          <ArrowUpRight className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button
-                        className="rounded-xl"
-                        variant="secondary"
-                        size="sm"
-                        disabled
+            ) : friends.length === 0 ? (
+              <div className="p-8 text-center">
+                <Users className="h-10 w-10 mx-auto mb-3 text-stone-200 dark:text-stone-700" />
+                <p className="text-sm text-stone-400 dark:text-stone-500 mb-3">
+                  {t("friends.noFriendsYet")}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => setAddFriendDialogOpen(true)}
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  {t("friends.addFriend")}
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y divide-stone-100 dark:divide-[#2a2a2d]">
+                {friends.map((friend) => {
+                  const displayName = friend.friend_profile?.display_name;
+                  const hasProfile = displayName && displayName.trim();
+                  const isProcessing = processingId === friend.friend_id;
+
+                  return (
+                    <div key={friend.id} className="p-4 flex items-center gap-3">
+                      <button
+                        onClick={() => hasProfile && handleViewProfile(displayName)}
+                        disabled={!hasProfile}
+                        className={cn(
+                          "flex-shrink-0 w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold text-sm shadow-md",
+                          hasProfile && "cursor-pointer hover:ring-2 hover:ring-emerald-400/50 hover:ring-offset-2 dark:hover:ring-offset-[#1e1e20] transition-all"
+                        )}
                       >
-                        {t("friends.pending")}
-                      </Button>
+                        {getInitials(displayName)}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        {hasProfile ? (
+                          <button
+                            onClick={() => handleViewProfile(displayName)}
+                            className="font-medium text-stone-900 dark:text-white truncate block text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                          >
+                            {displayName}
+                          </button>
+                        ) : (
+                          <p className="font-medium text-stone-900 dark:text-white truncate">
+                            {t("friends.unknown")}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-1 text-[10px] text-stone-400 dark:text-stone-500">
+                          <Clock className="h-3 w-3" />
+                          <span>{t("friends.friendsSince", { defaultValue: "Friends since" })} {formatRelativeTime(friend.created_at)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {hasProfile && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg"
+                            onClick={() => handleViewProfile(displayName)}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          ref={(el) => {
+                            if (el) menuButtonRefs.current.set(friend.id, el);
+                          }}
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenId(menuOpenId === friend.id ? null : friend.id);
+                            setConfirmingRemove(null);
+                          }}
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <MoreHorizontal className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            )}
+          </div>
+        </div>
 
-        {/* Spacer for right side when sent requests don't exist */}
-        {sentPendingRequests.length === 0 && pendingRequests.length > 0 && (
-          <div className="hidden lg:block"></div>
-        )}
+        {/* Sent Requests */}
+        <div className="lg:col-span-1 space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center">
+              <SendHorizontal className="h-4 w-4 text-white" />
+            </div>
+            <h2 className="font-semibold text-stone-900 dark:text-white">
+              {t("friends.sentRequests", { defaultValue: "Sent" })}
+            </h2>
+            {sentPendingRequests.length > 0 && (
+              <span className="ml-auto h-6 min-w-6 px-2 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center justify-center">
+                {sentPendingRequests.length}
+              </span>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden min-h-[200px]">
+            {sentPendingRequests.length === 0 ? (
+              <div className="p-8 text-center">
+                <SendHorizontal className="h-10 w-10 mx-auto mb-3 text-stone-200 dark:text-stone-700" />
+                <p className="text-sm text-stone-400 dark:text-stone-500">
+                  {t("friends.noSentRequests", { defaultValue: "No sent requests" })}
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-stone-100 dark:divide-[#2a2a2d]">
+                {sentPendingRequests.map((request) => {
+                  const displayName = request.recipient_profile?.display_name;
+                  const hasProfile = displayName && displayName.trim();
+                  const isProcessing = processingId === request.id;
+
+                  return (
+                    <div key={request.id} className="p-4">
+                      <div className="flex items-start gap-3">
+                        <button
+                          onClick={() => hasProfile && handleViewProfile(displayName)}
+                          disabled={!hasProfile}
+                          className={cn(
+                            "flex-shrink-0 w-11 h-11 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-semibold text-sm shadow-md",
+                            hasProfile && "cursor-pointer hover:ring-2 hover:ring-blue-400/50 hover:ring-offset-2 dark:hover:ring-offset-[#1e1e20] transition-all"
+                          )}
+                        >
+                          {getInitials(displayName)}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          {hasProfile ? (
+                            <button
+                              onClick={() => handleViewProfile(displayName)}
+                              className="font-medium text-stone-900 dark:text-white truncate block text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                            >
+                              {displayName}
+                            </button>
+                          ) : (
+                            <p className="font-medium text-stone-900 dark:text-white truncate">
+                              {t("friends.unknown")}
+                            </p>
+                          )}
+                          <p className="text-xs text-stone-500 dark:text-stone-400">
+                            {t("friends.awaitingResponse", { defaultValue: "Awaiting response" })}
+                          </p>
+                          <div className="flex items-center gap-1 mt-1 text-[10px] text-stone-400 dark:text-stone-500">
+                            <Clock className="h-3 w-3" />
+                            <span>{formatRelativeTime(request.created_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-3">
+                        {hasProfile && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 rounded-lg text-xs"
+                            onClick={() => handleViewProfile(displayName)}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                            {t("notifications.viewProfile")}
+                          </Button>
+                        )}
+                        <div className="flex-1" />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-lg text-xs text-red-500 border-red-200 dark:border-red-800/50 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => cancelRequest(request.id)}
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <X className="h-3.5 w-3.5 mr-1" />
+                              {t("common.cancel")}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Friend Options Menu Portal */}
+      {menuOpenId && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-[60] w-44 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] shadow-xl p-1"
+          style={{ top: menuPos.top, left: menuPos.left }}
+        >
+          {confirmingRemove === menuOpenId ? (
+            <div className="p-3">
+              <p className="text-xs text-stone-600 dark:text-stone-400 mb-3">
+                {t("friends.confirmRemove", { defaultValue: "Remove this friend?" })}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="flex-1 h-8 rounded-lg text-xs"
+                  onClick={() => {
+                    setConfirmingRemove(null);
+                    setMenuOpenId(null);
+                  }}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1 h-8 rounded-lg text-xs bg-red-500 hover:bg-red-600 text-white"
+                  onClick={() => {
+                    const friend = friends.find(f => f.id === menuOpenId);
+                    if (friend) removeFriend(friend.friend_id);
+                  }}
+                >
+                  {t("common.remove", { defaultValue: "Remove" })}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              onClick={() => setConfirmingRemove(menuOpenId)}
+            >
+              <UserMinus className="h-4 w-4" />
+              {t("friends.removeFriend")}
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
 
       {/* Add Friend Dialog */}
       <Dialog open={addFriendDialogOpen} onOpenChange={setAddFriendDialogOpen}>
-        <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
+        <DialogContent className="sm:max-w-md rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]">
           <DialogHeader>
-            <DialogTitle>{t("friends.addFriendDialog.title")}</DialogTitle>
+            <DialogTitle className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center">
+                <UserPlus className="h-5 w-5 text-white" />
+              </div>
+              {t("friends.addFriendDialog.title")}
+            </DialogTitle>
             <DialogDescription>
               {t("friends.addFriendDialog.description")}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 pt-2">
             <SearchInput
               placeholder={t("friends.addFriendDialog.searchPlaceholder")}
               value={dialogSearchQuery}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setDialogSearchQuery(e.target.value)
-              }
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDialogSearchQuery(e.target.value)}
+              loading={dialogSearching}
             />
-            {dialogSearching && (
-              <div className="text-xs opacity-60 text-black dark:text-white">
-                {t("friends.addFriendDialog.searching")}
-              </div>
-            )}
+
             {dialogSearchResults.length > 0 && (
-              <div className="space-y-2">
-                {dialogSearchResults.map((result) => (
-                  <div
-                    key={result.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42]"
-                  >
-                    <div className="flex flex-col gap-1 flex-1">
-                      <div className="flex items-center gap-2">
-                        <User className="h-5 w-5 opacity-60 text-black dark:text-white" />
-                        <span className="font-medium text-black dark:text-white">
-                          {result.display_name || t("friends.unknown")}
-                        </span>
-                      </div>
-                      {result.email && (
-                        <div className="text-xs opacity-60 pl-7 text-black dark:text-white">
-                          {result.email}
-                        </div>
-                      )}
-                    </div>
-                    <Button
-                      className="rounded-xl"
-                      variant={
-                        result.is_friend
-                          ? "secondary"
-                          : result.is_pending
-                            ? "secondary"
-                            : "default"
-                      }
-                      size="sm"
-                      onClick={() =>
-                        !result.is_friend &&
-                        !result.is_pending &&
-                        sendFriendRequest(result.id)
-                      }
-                      disabled={result.is_friend || result.is_pending}
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {dialogSearchResults.map((result) => {
+                  const isProcessing = processingId === result.id;
+                  return (
+                    <div
+                      key={result.id}
+                      className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-[#2a2a2d] border border-stone-100 dark:border-[#3a3a3d]"
                     >
-                      {result.is_friend ? (
-                        <>
-                          <Check className="h-4 w-4 mr-1" />{" "}
-                          {t("friends.friends")}
-                        </>
-                      ) : result.is_pending ? (
-                        <>{t("friends.pending")}</>
-                      ) : (
-                        <>
-                          <UserPlus className="h-4 w-4 mr-1" />{" "}
-                          {t("friends.addFriendDialog.addFriend")}
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-semibold text-sm">
+                        {getInitials(result.display_name)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-stone-900 dark:text-white truncate">
+                          {result.display_name || t("friends.unknown")}
+                        </p>
+                        {result.email && (
+                          <p className="text-xs text-stone-400 dark:text-stone-500 truncate">
+                            {result.email}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        className={cn(
+                          "rounded-xl text-xs h-8",
+                          result.is_friend || result.is_pending
+                            ? "bg-stone-100 dark:bg-[#3a3a3d] text-stone-500"
+                            : "bg-blue-500 hover:bg-blue-600 text-white"
+                        )}
+                        onClick={() => !result.is_friend && !result.is_pending && sendFriendRequest(result.id)}
+                        disabled={result.is_friend || result.is_pending || isProcessing}
+                      >
+                        {isProcessing ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : result.is_friend ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            {t("friends.friends")}
+                          </>
+                        ) : result.is_pending ? (
+                          t("friends.pending")
+                        ) : (
+                          <>
+                            <UserPlus className="h-3.5 w-3.5 mr-1" />
+                            {t("friends.addFriendDialog.addFriend")}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             )}
-            {dialogSearchQuery &&
-              !dialogSearching &&
-              dialogSearchResults.length === 0 && (
-                <div className="text-xs opacity-60 text-center py-4 text-black dark:text-white">
+
+            {dialogSearchQuery && !dialogSearching && dialogSearchResults.length === 0 && (
+              <div className="py-8 text-center">
+                <User className="h-10 w-10 mx-auto mb-3 text-stone-200 dark:text-stone-700" />
+                <p className="text-sm text-stone-400 dark:text-stone-500">
                   {t("friends.addFriendDialog.noUsersFound")}
-                </div>
-              )}
+                </p>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

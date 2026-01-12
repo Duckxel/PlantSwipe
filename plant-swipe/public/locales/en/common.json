@@ -1872,17 +1872,22 @@
     "friends": {
       "title": "Friends",
       "pleaseLogin": "Please log in to manage friends",
-      "pendingInvitations": "Pending Invitations",
-      "sentRequests": "Sent Requests",
+      "pendingInvitations": "Received",
+      "sentRequests": "Sent",
       "yourFriends": "Your Friends",
       "addFriend": "Add Friend",
-      "noFriendsYet": "No friends yet. Search for people above to add friends!",
+      "noFriendsYet": "No friends yet. Add friends to get started!",
+      "noPendingRequests": "No pending requests",
+      "noSentRequests": "No sent requests",
+      "awaitingResponse": "Awaiting response",
+      "friendsSince": "Friends since",
+      "confirmRemove": "Remove this friend?",
       "viewProfile": "View profile",
       "friendOptions": "Friend options",
       "removeFriend": "Remove friend",
       "removeFriendConfirm": "Remove",
       "pending": "Pending",
-      "friends": "Friends",
+      "friends": "friends",
       "unknown": "Unknown",
       "addFriendDialog": {
         "title": "Add Friend",
@@ -1890,11 +1895,11 @@
         "searchPlaceholder": "Search by username or email...",
         "searching": "Searching...",
         "noUsersFound": "No users found",
-        "addFriend": "Add Friend"
+        "addFriend": "Add"
       },
       "errors": {
         "failedToLoad": "Failed to load friends",
-        "failedToLoadSentRequests": "Failed to load sent pending requests",
+        "failedToLoadSentRequests": "Failed to load sent requests",
         "failedToLoadRequests": "Failed to load friend requests",
         "searchFailed": "Search failed",
         "alreadyFriends": "Already friends with this user",
@@ -1902,7 +1907,9 @@
         "failedToSend": "Failed to send friend request",
         "failedToAccept": "Failed to accept friend request",
         "failedToReject": "Failed to reject friend request",
-        "failedToRemove": "Failed to remove friend"
+        "failedToRemove": "Failed to remove friend",
+        "failedToCancel": "Failed to cancel request",
+        "cannotSendRequest": "Cannot send friend request to this user"
       }
     },
     "profile": {
@@ -2566,7 +2573,14 @@
   "notifications": {
     "title": "Notifications",
     "empty": "No new notifications",
+    "emptySubtitle": "You're all caught up!",
+    "pending": "pending",
+    "allCaughtUp": "You're all caught up!",
+    "emptyDescription": "No new notifications. We'll let you know when something arrives.",
     "viewAll": "View all",
+    "viewAllActivity": "View all activity",
+    "viewProfile": "View profile",
+    "viewInviter": "View inviter",
     "friendRequests": "Friend Requests",
     "gardenInvites": "Garden Invites",
     "wantsToBeYourFriend": "wants to be your friend",

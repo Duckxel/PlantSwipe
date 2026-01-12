@@ -45,15 +45,15 @@ interface UseNotificationsReturn {
   loading: boolean
   /** Error message if any */
   error: string | null
-  /** Refresh all notification data */
-  refresh: () => Promise<void>
+  /** Refresh all notification data (pass true to force bypass throttle) */
+  refresh: (force?: boolean) => Promise<void>
   /** Whether there are any unread notifications */
   hasUnread: boolean
 }
 
 const ERROR_LOGGED = new Set<string>()
 const MAX_ERROR_LOG_SIZE = 50 // Limit the number of unique errors we track
-const REFRESH_INTERVAL_MS = 30_000
+const REFRESH_INTERVAL_MS = 15_000 // Poll every 15 seconds as fallback
 
 function trackError(key: string): boolean {
   if (ERROR_LOGGED.has(key)) return false
@@ -87,7 +87,7 @@ export function useNotifications(
   const mountedRef = React.useRef(true)
   const lastRefreshRef = React.useRef<number>(0)
 
-  const refresh = React.useCallback(async () => {
+  const refresh = React.useCallback(async (force?: boolean) => {
     if (!userId) {
       setCounts({ total: 0, unread: 0, friendRequests: 0, gardenInvites: 0, unreadMessages: 0 })
       setFriendRequests([])
@@ -96,9 +96,9 @@ export function useNotifications(
       return
     }
 
-    // Throttle refreshes to max once per 500ms
+    // Throttle refreshes to max once per 500ms (unless forced)
     const now = Date.now()
-    if (now - lastRefreshRef.current < 500) {
+    if (!force && now - lastRefreshRef.current < 500) {
       return
     }
     lastRefreshRef.current = now
@@ -181,14 +181,24 @@ export function useNotifications(
 
     const channelName = `notifications-${channelKey}-${userId}`
     const channel = supabase.channel(channelName)
-      // Listen for friend request changes
+      // Listen for friend request changes (both as recipient and requester)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'friend_requests',
         filter: `recipient_id=eq.${userId}`
       }, () => {
-        refresh()
+        // Force refresh to bypass throttle for realtime events
+        refresh(true)
+      })
+      // Also listen for changes where user is the requester (to update sent requests)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'friend_requests',
+        filter: `requester_id=eq.${userId}`
+      }, () => {
+        refresh(true)
       })
       // Listen for garden invite changes
       .on('postgres_changes', {
@@ -197,16 +207,7 @@ export function useNotifications(
         table: 'garden_invites',
         filter: `invitee_id=eq.${userId}`
       }, () => {
-        refresh()
-      })
-      // Listen for general notification changes
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${userId}`
-      }, () => {
-        refresh()
+        refresh(true)
       })
       // Listen for new messages (via conversations that user is part of)
       .on('postgres_changes', {
@@ -214,13 +215,17 @@ export function useNotifications(
         schema: 'public',
         table: 'messages'
       }, () => {
-        refresh()
+        refresh(true)
       })
 
-    const subscription = channel.subscribe()
-    if (subscription instanceof Promise) {
-      subscription.catch(() => {})
-    }
+    // Subscribe with status callback for debugging
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        // Successfully subscribed to realtime updates
+      } else if (status === 'CHANNEL_ERROR') {
+        console.warn('[useNotifications] Realtime channel error, falling back to polling')
+      }
+    })
 
     return () => {
       try {
