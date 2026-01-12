@@ -9,12 +9,58 @@ type UseTaskNotificationOptions = {
 
 const ERROR_LOGGED = new Set<string>()
 const REFRESH_INTERVAL_MS = 30_000 // Refresh every 30 seconds (more responsive)
+const LOCALSTORAGE_KEY = "task_notification_state"
+
+// ⚡ Shared state across all hook instances for instant sync
+let sharedHasUnfinished: boolean | null = null
+const sharedListeners = new Set<(value: boolean) => void>()
+
+function notifySharedListeners(value: boolean) {
+  sharedHasUnfinished = value
+  sharedListeners.forEach(listener => listener(value))
+}
+
+// ⚡ Read from localStorage on module load for instant initial state
+function getPersistedState(userId: string | null): boolean {
+  if (!userId || typeof window === "undefined") return false
+  // First check shared state (fastest - already in memory)
+  if (sharedHasUnfinished !== null) return sharedHasUnfinished
+  // Then check localStorage
+  try {
+    const stored = localStorage.getItem(LOCALSTORAGE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      // Only use if for same user and not too old (1 hour)
+      if (parsed.userId === userId && Date.now() - parsed.timestamp < 3600000) {
+        sharedHasUnfinished = parsed.hasUnfinished
+        return parsed.hasUnfinished
+      }
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+  return false
+}
+
+function persistState(userId: string, hasUnfinished: boolean) {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify({
+      userId,
+      hasUnfinished,
+      timestamp: Date.now()
+    }))
+  } catch {
+    // Ignore localStorage errors
+  }
+}
 
 export function useTaskNotification(userId: string | null | undefined, options?: UseTaskNotificationOptions) {
   const channelKey = options?.channelKey ?? "default"
-  const [hasUnfinished, setHasUnfinished] = React.useState(false)
+  // ⚡ Initialize with persisted state for instant display
+  const [hasUnfinished, setHasUnfinished] = React.useState(() => getPersistedState(userId ?? null))
   const mountedRef = React.useRef(false)
-  const stateRef = React.useRef(false)
+  const stateRef = React.useRef(hasUnfinished)
   const requestRef = React.useRef(0)
   const refreshTimerRef = React.useRef<number | null>(null)
   const intervalRef = React.useRef<number | null>(null)
@@ -25,6 +71,25 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     stateRef.current = value
     if (mountedRef.current) {
       setHasUnfinished(value)
+    }
+    // ⚡ Persist and sync across all hook instances
+    if (userId) {
+      persistState(userId, value)
+      notifySharedListeners(value)
+    }
+  }, [userId])
+
+  // ⚡ Subscribe to shared state updates from other hook instances
+  React.useEffect(() => {
+    const listener = (value: boolean) => {
+      stateRef.current = value
+      if (mountedRef.current) {
+        setHasUnfinished(value)
+      }
+    }
+    sharedListeners.add(listener)
+    return () => {
+      sharedListeners.delete(listener)
     }
   }, [])
 
@@ -65,8 +130,8 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     const now = Date.now()
     const today = new Date().toISOString().slice(0, 10)
     
-    // Throttle refreshes - don't refresh more than once per 500ms unless forced
-    if (!forceRefreshCache && now - lastRefreshTimeRef.current < 500) {
+    // ⚡ Reduced throttle from 500ms to 100ms for more responsive updates
+    if (!forceRefreshCache && now - lastRefreshTimeRef.current < 100) {
       return stateRef.current
     }
     lastRefreshTimeRef.current = now
@@ -77,7 +142,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
         try {
           await Promise.race([
             refreshUserTaskCache(userId, today),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
           ])
         } catch {
           // Ignore timeout/errors - continue with cached read
@@ -108,13 +173,13 @@ export function useTaskNotification(userId: string | null | undefined, options?:
       void refreshNotification(forceCache)
       return
     }
+    // ⚡ Clear any pending refresh and execute immediately (no 80ms delay)
     if (refreshTimerRef.current !== null) {
       window.clearTimeout(refreshTimerRef.current)
-    }
-    refreshTimerRef.current = window.setTimeout(() => {
       refreshTimerRef.current = null
-      void refreshNotification(forceCache)
-    }, 80)
+    }
+    // Execute immediately for responsiveness
+    void refreshNotification(forceCache)
   }, [userId, refreshNotification, setState])
 
   // Initial mount: force cache refresh to ensure fresh data
@@ -124,6 +189,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
       return
     }
     // On initial mount, force a cache refresh to ensure we have fresh data
+    // But we already show persisted state immediately for instant feedback
     if (!initialRefreshDoneRef.current) {
       initialRefreshDoneRef.current = true
       void refreshNotification(true) // Force cache refresh on mount
@@ -242,6 +308,25 @@ export function useTaskNotification(userId: string | null | undefined, options?:
   }, [userId, channelKey, scheduleRefresh, clearRefreshTimer])
 
   return { hasUnfinished, refresh: refreshNotification }
+}
+
+/**
+ * ⚡ Utility function to immediately update task notification state from external sources
+ * Call this when you have fresh task data (e.g., in GardenListPage after loading)
+ * This provides instant feedback without waiting for cache refresh
+ */
+export function updateTaskNotificationState(userId: string, hasUnfinished: boolean) {
+  if (!userId) return
+  persistState(userId, hasUnfinished)
+  notifySharedListeners(hasUnfinished)
+  // Also dispatch custom event for any listeners
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(new CustomEvent("garden:tasks_changed"))
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export default useTaskNotification

@@ -52,6 +52,7 @@ import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
 import { GardenListSkeleton } from "@/components/garden/GardenSkeletons";
+import { updateTaskNotificationState } from "@/hooks/useTaskNotification";
 
 export const GardenListPage: React.FC = () => {
   const { user, profile } = useAuth();
@@ -2027,6 +2028,16 @@ export const GardenListPage: React.FC = () => {
     }
     return { totalTasks: tasks, totalDone: done };
   }, [todayTaskOccurrences]);
+
+  // ⚡ Update task notification state immediately when we have fresh task data
+  // This ensures the red dot indicator in the nav is instantly accurate
+  React.useEffect(() => {
+    if (!user?.id) return;
+    if (loadingTasks) return; // Don't update while still loading
+    // Has unfinished tasks if totalTasks > totalDone
+    const hasUnfinished = totalTasks > totalDone;
+    updateTaskNotificationState(user.id, hasUnfinished);
+  }, [user?.id, totalTasks, totalDone, loadingTasks]);
 
   // Load garden invites
   const loadGardenInvites = React.useCallback(async () => {
