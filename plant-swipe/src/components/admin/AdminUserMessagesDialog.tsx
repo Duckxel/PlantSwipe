@@ -263,13 +263,14 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
   const isImageMessage = (content: string) => content.startsWith('[image:')
   const parseImageUrl = (content: string) => content.match(/\[image:(.*?)\]/)?.[1] || ''
 
-  // Group messages by date
+  // Group messages by date (using ISO date string YYYY-MM-DD for reliable grouping)
   const groupedMessages = React.useMemo(() => {
     const groups: { date: string; messages: AdminMessage[] }[] = []
     let currentDate = ''
     
     messages.forEach(msg => {
-      const msgDate = new Date(msg.createdAt).toLocaleDateString()
+      // Use ISO date format (YYYY-MM-DD) for grouping to avoid locale parsing issues
+      const msgDate = new Date(msg.createdAt).toISOString().split('T')[0]
       if (msgDate !== currentDate) {
         currentDate = msgDate
         groups.push({ date: msgDate, messages: [] })
@@ -280,9 +281,10 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
     return groups
   }, [messages])
 
-  // Format date separator
+  // Format date separator (expects ISO date string YYYY-MM-DD)
   const formatDateSeparator = (dateStr: string) => {
-    const date = new Date(dateStr)
+    // Parse ISO date string reliably by appending time component
+    const date = new Date(dateStr + 'T12:00:00')
     const today = new Date()
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
