@@ -14319,23 +14319,111 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       }
     }
 
-    // Gather comprehensive garden data for advice generation
+    // Gather COMPREHENSIVE garden data for advice generation - ALL plant and garden info
     const plants = await sql`
-      select gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes,
-             p.name as plant_name, p.scientific_name,
-             p.watering_type, p.level_sun, p.maintenance_level
+      select 
+        gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes,
+        gp.seeds_planted, gp.planted_at, gp.expected_bloom_date, gp.last_health_update,
+        gp.override_water_freq_unit, gp.override_water_freq_value,
+        gp.created_at as added_at,
+        -- Base plant info
+        p.name as plant_name, p.scientific_name, p.plant_type,
+        p.utility as plant_utility, p.comestible_part,
+        -- Care requirements
+        p.watering_type, p.water_freq_amount, p.water_freq_period,
+        p.light_level, p.hardiness_min, p.hardiness_max,
+        p.temperature_min, p.temperature_max, p.temperature_ideal,
+        p.hygrometry, p.soil, p.nutrition_need, p.fertilizer,
+        -- Growing info
+        p.sowing_month, p.flowering_month, p.fruiting_month,
+        p.height_cm, p.wingspan_cm, p.separation_cm,
+        p.tutoring, p.transplanting, p.sow_type, p.division,
+        -- Characteristics
+        p.is_edible, p.is_poisonous, p.spiked, p.scent, p.multicolor,
+        p.melliferous, p.conservation_status,
+        -- Problems and companions
+        p.pests, p.diseases, p.companions, p.tags,
+        -- Translated overview
+        (
+          select pt.overview 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as plant_overview
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
-      limit 50
+      limit 100
     `
 
-    // Get garden location for context
+    // Get FULL garden info for context
     const gardenFull = await sql`
-      select location_city, location_country, location_timezone, location_lat, location_lon
+      select 
+        location_city, location_country, location_timezone, location_lat, location_lon,
+        privacy, created_at as garden_created_at,
+        (select count(*)::int from public.garden_plants where garden_id = ${gardenId}) as plant_count,
+        (select count(*)::int from public.garden_members where garden_id = ${gardenId}) as member_count
       from public.gardens where id = ${gardenId} limit 1
     `
     const gardenLocation = gardenFull[0] || {}
+    
+    // Get garden members with their contributions
+    let gardenMembers = []
+    try {
+      const memberRows = await sql`
+        select 
+          gm.role, gm.joined_at,
+          p.display_name, p.experience_years,
+          (
+            select count(*)::int 
+            from public.garden_task_user_completions c
+            join public.garden_plant_task_occurrences o on o.id = c.occurrence_id
+            join public.garden_plant_tasks t on t.id = o.task_id
+            where t.garden_id = ${gardenId} 
+              and c.user_id = gm.user_id 
+              and c.occurred_at > now() - interval '30 days'
+          ) as tasks_completed_30d
+        from public.garden_members gm
+        left join public.profiles p on p.id = gm.user_id
+        where gm.garden_id = ${gardenId}
+        order by gm.role desc, gm.joined_at asc
+      `
+      gardenMembers = memberRows || []
+    } catch { }
+    
+    // Get garden streak info
+    let gardenStreak = null
+    try {
+      const streakRows = await sql`
+        select current_streak, longest_streak, last_streak_date
+        from public.garden_streaks
+        where garden_id = ${gardenId}
+      `
+      if (streakRows[0]) gardenStreak = streakRows[0]
+    } catch { }
+    
+    // Get analytics - health distribution and activity summary
+    let analyticsContext = null
+    try {
+      const healthRows = await sql`
+        select health_status, count(*)::int as count
+        from public.garden_plants
+        where garden_id = ${gardenId} and health_status is not null
+        group by health_status
+      `
+      const activityRows = await sql`
+        select kind, count(*)::int as count
+        from public.garden_activity_logs
+        where garden_id = ${gardenId}
+          and created_at > now() - interval '14 days'
+        group by kind
+        order by count desc
+      `
+      analyticsContext = {
+        healthDistribution: healthRows.reduce((acc, h) => { acc[h.health_status] = h.count; return acc }, {}),
+        activitySummary: activityRows.reduce((acc, a) => { acc[a.kind] = a.count; return acc }, {})
+      }
+    } catch { }
 
     // Get weather data for the location
     let weatherData = null
@@ -14450,17 +14538,73 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       }
     } catch { }
 
-    // Build comprehensive plant list
+    // Build COMPREHENSIVE plant list with ALL details for AI advice
     const plantList = plants.map(p => {
-      const details = []
-      if (p.plants_on_hand) details.push(`${p.plants_on_hand} on hand`)
-      if (p.level_sun) details.push(`sun: ${p.level_sun}`)
-      if (p.maintenance_level) details.push(`maintenance: ${p.maintenance_level}`)
-      if (p.watering_type) details.push(`watering: ${p.watering_type}`)
-      if (p.health_status) details.push(`health: ${p.health_status}`)
-      if (p.notes) details.push(`notes: ${p.notes}`)
-      return `- ${p.nickname || p.plant_name || 'Unknown'} (${p.plant_name || 'N/A'}): ${details.join(', ') || 'no details'}`
-    }).join('\n')
+      const lines = []
+      const displayName = p.nickname || p.plant_name || 'Unknown'
+      lines.push(`### ${displayName}${p.scientific_name ? ` (${p.scientific_name})` : ''}`)
+      
+      // Basic info
+      const basicInfo = []
+      if (p.plant_type) basicInfo.push(`Type: ${p.plant_type}`)
+      if (p.plants_on_hand) basicInfo.push(`Quantity: ${p.plants_on_hand}`)
+      if (p.seeds_planted) basicInfo.push(`Seeds planted: ${p.seeds_planted}`)
+      if (p.health_status) {
+        let healthInfo = `Health: ${p.health_status}`
+        if (p.last_health_update) healthInfo += ` (updated ${new Date(p.last_health_update).toLocaleDateString()})`
+        basicInfo.push(healthInfo)
+      }
+      if (basicInfo.length > 0) lines.push(`- ${basicInfo.join(' | ')}`)
+      
+      // Care requirements
+      const careInfo = []
+      if (p.override_water_freq_value) {
+        careInfo.push(`Watering: ${p.override_water_freq_value}x per ${p.override_water_freq_unit || 'week'} (custom)`)
+      } else if (p.water_freq_amount) {
+        careInfo.push(`Watering: ${p.water_freq_amount}x per ${p.water_freq_period || 'week'}`)
+      }
+      if (p.light_level) careInfo.push(`Light: ${p.light_level}`)
+      if (p.temperature_min && p.temperature_max) {
+        careInfo.push(`Temp: ${p.temperature_min}°C-${p.temperature_max}°C${p.temperature_ideal ? ` (ideal: ${p.temperature_ideal}°C)` : ''}`)
+      }
+      if (p.hygrometry) careInfo.push(`Humidity: ${p.hygrometry}%`)
+      if (careInfo.length > 0) lines.push(`- Care: ${careInfo.join(' | ')}`)
+      
+      // Growing info
+      const growingInfo = []
+      if (p.sowing_month && p.sowing_month.length > 0) growingInfo.push(`Sow: ${p.sowing_month.join(', ')}`)
+      if (p.flowering_month && p.flowering_month.length > 0) growingInfo.push(`Flowers: ${p.flowering_month.join(', ')}`)
+      if (p.fruiting_month && p.fruiting_month.length > 0) growingInfo.push(`Fruits: ${p.fruiting_month.join(', ')}`)
+      if (growingInfo.length > 0) lines.push(`- Growing: ${growingInfo.join(' | ')}`)
+      
+      // Characteristics
+      const chars = []
+      if (p.is_edible) chars.push('Edible')
+      if (p.is_poisonous) chars.push('⚠️ Poisonous')
+      if (p.melliferous) chars.push('Melliferous')
+      if (chars.length > 0) lines.push(`- Traits: ${chars.join(', ')}`)
+      
+      // Problems
+      if ((p.pests && p.pests.length > 0) || (p.diseases && p.diseases.length > 0)) {
+        const problems = []
+        if (p.pests && p.pests.length > 0) problems.push(`Pests: ${p.pests.slice(0, 5).join(', ')}`)
+        if (p.diseases && p.diseases.length > 0) problems.push(`Diseases: ${p.diseases.slice(0, 5).join(', ')}`)
+        lines.push(`- Watch for: ${problems.join(' | ')}`)
+      }
+      
+      // Dates
+      if (p.planted_at || p.expected_bloom_date) {
+        const dates = []
+        if (p.planted_at) dates.push(`Planted: ${new Date(p.planted_at).toLocaleDateString()}`)
+        if (p.expected_bloom_date) dates.push(`Expected bloom: ${new Date(p.expected_bloom_date).toLocaleDateString()}`)
+        lines.push(`- ${dates.join(' | ')}`)
+      }
+      
+      // User notes
+      if (p.notes) lines.push(`- Notes: ${p.notes}`)
+      
+      return lines.join('\n')
+    }).join('\n\n')
 
     // Calculate task statistics for this week and last week
     const thisWeekTasks = taskData.filter(t => t.due_at >= weekAgo)
@@ -14526,6 +14670,47 @@ ${photoObservations.map(p => `- ${p.nickname || p.plant_name || 'Plant'}: ${p.pl
     const dayOfWeekName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()]
     const currentDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
+    // Build member context
+    let memberContext = ''
+    if (gardenMembers.length > 0) {
+      memberContext = `
+═══════════════════════════════════════════════════════════════
+👥 GARDEN MEMBERS (${gardenMembers.length} total)
+═══════════════════════════════════════════════════════════════
+${gardenMembers.map(m => {
+        const info = [`${m.display_name || 'Member'} (${m.role})`]
+        if (m.experience_years) info.push(`${m.experience_years} years experience`)
+        info.push(`${m.tasks_completed_30d || 0} tasks completed this month`)
+        return `- ${info.join(' | ')}`
+      }).join('\n')}`
+    }
+    
+    // Build streak and analytics context
+    let statsContext = ''
+    if (gardenStreak || analyticsContext) {
+      statsContext = `
+═══════════════════════════════════════════════════════════════
+📈 GARDEN STATISTICS
+═══════════════════════════════════════════════════════════════`
+      if (gardenStreak) {
+        statsContext += `
+Current streak: ${gardenStreak.current_streak || 0} days
+Longest streak: ${gardenStreak.longest_streak || 0} days`
+      }
+      if (analyticsContext?.healthDistribution && Object.keys(analyticsContext.healthDistribution).length > 0) {
+        statsContext += `
+
+Plant Health Distribution:
+${Object.entries(analyticsContext.healthDistribution).map(([status, count]) => `- ${status}: ${count} plants`).join('\n')}`
+      }
+      if (analyticsContext?.activitySummary && Object.keys(analyticsContext.activitySummary).length > 0) {
+        statsContext += `
+
+Recent Activity (14 days):
+${Object.entries(analyticsContext.activitySummary).map(([kind, count]) => `- ${kind}: ${count}`).join('\n')}`
+      }
+    }
+
     const prompt = `You are an expert gardener and plant care specialist providing personalized weekly advice. Analyze all the data below and provide comprehensive, actionable advice.
 
 ═══════════════════════════════════════════════════════════════
@@ -14533,13 +14718,22 @@ ${photoObservations.map(p => `- ${p.nickname || p.plant_name || 'Plant'}: ${p.pl
 ═══════════════════════════════════════════════════════════════
 Today: ${dayOfWeekName}, ${currentDate}
 Location: ${gardenLocation.location_city || 'Unknown'}${gardenLocation.location_country ? `, ${gardenLocation.location_country}` : ''}
+Coordinates: ${gardenLocation.location_lat ? `${gardenLocation.location_lat}, ${gardenLocation.location_lon}` : 'Not set'}
 Timezone: ${gardenLocation.location_timezone || 'Unknown'}
 Average task completion time: ${avgCompletionTime}
 
 ═══════════════════════════════════════════════════════════════
 🌱 GARDEN: "${garden.name}"
 ═══════════════════════════════════════════════════════════════
-Plants (${plants.length} total):
+Total Plants: ${gardenLocation.plant_count || plants.length}
+Total Members: ${gardenLocation.member_count || 1}
+Garden Age: ${gardenAge} days
+${memberContext}
+${statsContext}
+
+═══════════════════════════════════════════════════════════════
+🌿 DETAILED PLANT INFORMATION
+═══════════════════════════════════════════════════════════════
 ${plantList || 'No plants yet'}
 
 ═══════════════════════════════════════════════════════════════
