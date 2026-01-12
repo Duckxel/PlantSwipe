@@ -52,6 +52,7 @@ import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
 import { GardenListSkeleton } from "@/components/garden/GardenSkeletons";
+import { updateTaskNotificationState } from "@/hooks/useTaskNotification";
 
 export const GardenListPage: React.FC = () => {
   const { user, profile } = useAuth();
@@ -1210,6 +1211,33 @@ export const GardenListPage: React.FC = () => {
     };
   }, [scheduleReload, user?.id, clearLocalStorageCache]);
 
+  // ⚡ Shared lookup memos - O(1) lookups instead of O(n) .find()/.filter() calls
+  // NOTE: These MUST be defined before callbacks that use them to avoid TDZ errors
+  const plantsById = React.useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const p of allPlants) {
+      map[p.id] = p;
+    }
+    return map;
+  }, [allPlants]);
+
+  const gardensById = React.useMemo(() => {
+    const map: Record<string, (typeof gardens)[0]> = {};
+    for (const g of gardens) {
+      map[g.id] = g;
+    }
+    return map;
+  }, [gardens]);
+
+  const plantIdsByGarden = React.useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const p of allPlants) {
+      if (!map[p.gardenId]) map[p.gardenId] = new Set();
+      map[p.gardenId].add(p.id);
+    }
+    return map;
+  }, [allPlants]);
+
   const onProgressOccurrence = React.useCallback(
     async (occId: string, inc: number) => {
       // Set loading state
@@ -1789,32 +1817,6 @@ export const GardenListPage: React.FC = () => {
     return map;
   }, [todayTaskOccurrences]);
 
-  // ⚡ Shared lookup memos - O(1) lookups instead of O(n) .find()/.filter() calls
-  const plantsById = React.useMemo(() => {
-    const map: Record<string, any> = {};
-    for (const p of allPlants) {
-      map[p.id] = p;
-    }
-    return map;
-  }, [allPlants]);
-
-  const gardensById = React.useMemo(() => {
-    const map: Record<string, (typeof gardens)[0]> = {};
-    for (const g of gardens) {
-      map[g.id] = g;
-    }
-    return map;
-  }, [gardens]);
-
-  const plantIdsByGarden = React.useMemo(() => {
-    const map: Record<string, Set<string>> = {};
-    for (const p of allPlants) {
-      if (!map[p.gardenId]) map[p.gardenId] = new Set();
-      map[p.gardenId].add(p.id);
-    }
-    return map;
-  }, [allPlants]);
-
   // Detect mismatch: progress shows tasks but task list is empty - force reload
   // This runs whenever progress or task list changes
   React.useEffect(() => {
@@ -2026,6 +2028,16 @@ export const GardenListPage: React.FC = () => {
     }
     return { totalTasks: tasks, totalDone: done };
   }, [todayTaskOccurrences]);
+
+  // ⚡ Update task notification state immediately when we have fresh task data
+  // This ensures the red dot indicator in the nav is instantly accurate
+  React.useEffect(() => {
+    if (!user?.id) return;
+    if (loadingTasks) return; // Don't update while still loading
+    // Has unfinished tasks if totalTasks > totalDone
+    const hasUnfinished = totalTasks > totalDone;
+    updateTaskNotificationState(user.id, hasUnfinished);
+  }, [user?.id, totalTasks, totalDone, loadingTasks]);
 
   // Load garden invites
   const loadGardenInvites = React.useCallback(async () => {
