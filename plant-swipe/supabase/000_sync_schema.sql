@@ -8164,6 +8164,28 @@ GRANT EXECUTE ON FUNCTION public.get_user_conversations(UUID) TO authenticated;
 -- Stores plant identification scans using Kindwise API
 -- =============================================
 
+-- Fix: If table exists with wrong column type for matched_plant_id, fix it
+DO $$ 
+BEGIN
+  -- Check if table exists and matched_plant_id is UUID (wrong type)
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'plant_scans' 
+    AND column_name = 'matched_plant_id'
+    AND data_type = 'uuid'
+  ) THEN
+    -- Drop the foreign key constraint if it exists
+    ALTER TABLE public.plant_scans DROP CONSTRAINT IF EXISTS plant_scans_matched_plant_id_fkey;
+    -- Drop the index if it exists
+    DROP INDEX IF EXISTS idx_plant_scans_matched_plant;
+    -- Drop the column
+    ALTER TABLE public.plant_scans DROP COLUMN matched_plant_id;
+    -- Re-add with correct type
+    ALTER TABLE public.plant_scans ADD COLUMN matched_plant_id TEXT REFERENCES public.plants(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 -- ========== Plant Scans Table ==========
 CREATE TABLE IF NOT EXISTS public.plant_scans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
