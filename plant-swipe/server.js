@@ -835,7 +835,7 @@ if (vapidPublicKey && vapidPrivateKey) {
 const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
 const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || process.env.VITE_ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true'
 
-const adminUploadBucket = (process.env.ADMIN_UPLOAD_BUCKET || process.env.SUPABASE_UTILITY_BUCKET || 'UTILITY').trim() || 'UTILITY'
+const adminUploadBucket = 'UTILITY' // Admin uploads go to UTILITY bucket
 const adminUploadPrefixRaw = (process.env.ADMIN_UPLOAD_PREFIX || 'admin/uploads').trim()
 const adminUploadPrefix = adminUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'admin/uploads'
 const blogUploadPrefixRaw = (process.env.BLOG_UPLOAD_PREFIX || 'blog').trim()
@@ -854,11 +854,7 @@ const adminUploadMaxDimension = (() => {
   if (Number.isFinite(raw) && raw >= 256 && raw <= 8000) return Math.round(raw)
   return 2000
 })()
-const adminUploadWebpQuality = (() => {
-  const raw = Number(process.env.ADMIN_UPLOAD_WEBP_QUALITY)
-  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
-  return 82
-})()
+const adminUploadWebpQuality = 90 // Admin uploads get highest quality (90%)
 const adminUploadMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: adminUploadMaxBytes },
@@ -927,11 +923,7 @@ const gardenCoverMaxDimension = (() => {
   if (Number.isFinite(raw) && raw >= 128 && raw <= 4000) return Math.round(raw)
   return 1000
 })()
-const gardenCoverWebpQuality = (() => {
-  const raw = Number(process.env.GARDEN_UPLOAD_WEBP_QUALITY)
-  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
-  return adminUploadWebpQuality
-})()
+const gardenCoverWebpQuality = 50 // Standard quality for all non-admin uploads (50%)
 const gardenCoverMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: gardenCoverMaxBytes },
@@ -939,16 +931,30 @@ const gardenCoverMulter = multer({
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
 
 // === Messaging Image Upload Settings ===
-const messageImageUploadBucket = gardenCoverUploadBucket || 'PHOTOS' // Reuse the photos bucket
+const messageImageUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
 const messageImageUploadPrefix = 'messages'
 const messageImageMaxBytes = 10 * 1024 * 1024 // 10MB
 const messageImageMaxDimension = 1200 // Slightly smaller than cover images
-const messageImageWebpQuality = 80 // Good quality for chat images
+const messageImageWebpQuality = 50 // Standard quality for all non-admin uploads (50%)
 const messageImageMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: messageImageMaxBytes },
 })
 const singleMessageImageUpload = messageImageMulter.single('file')
+
+// === Plant Scan Image Upload Settings ===
+const scanImageUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
+const scanImageUploadPrefix = 'scans' // Organize under scans/ folder
+const scanImageMaxBytes = 10 * 1024 * 1024 // 10MB
+const scanImageMaxDimension = 1920 // Higher resolution for better identification
+const scanImageWebpQuality = 50 // Standard quality for all non-admin uploads (50%)
+const scanImageMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: scanImageMaxBytes },
+})
+const singleScanImageUpload = scanImageMulter.single('file')
+// Kindwise API key from environment
+const KINDWISE_API_KEY = process.env.KINDWISE || process.env.KINDWISE_API_KEY || ''
 
 // Mime types that should be optimized and converted to WebP
 const optimizableMimeTypes = new Set([
@@ -957,8 +963,20 @@ const optimizableMimeTypes = new Set([
   'image/webp',
 ])
 
+// Standard quality for non-admin uploads
+const standardUploadWebpQuality = 50
+
 async function handleScopedImageUpload(req, res, options = {}) {
-  const { prefixBuilder, auditLabel = 'admin', actorId = null, uploaderInfo = null } = options
+  const { 
+    prefixBuilder, 
+    auditLabel = 'admin', 
+    actorId = null, 
+    uploaderInfo = null,
+    // Allow overriding bucket, quality, and dimension per endpoint
+    bucket = adminUploadBucket,
+    webpQuality = adminUploadWebpQuality,
+    maxDimension = adminUploadMaxDimension,
+  } = options
 
   singleAdminImageUpload(req, res, (err) => {
     if (err) {
@@ -1011,21 +1029,21 @@ async function handleScopedImageUpload(req, res, options = {}) {
           finalBuffer = await sharp(file.buffer)
             .rotate()
             .resize({
-              width: adminUploadMaxDimension,
-              height: adminUploadMaxDimension,
+              width: maxDimension,
+              height: maxDimension,
               fit: 'inside',
               withoutEnlargement: true,
               fastShrinkOnLoad: true,
             })
             .webp({
-              quality: adminUploadWebpQuality,
+              quality: webpQuality,
               effort: 5,
               smartSubsample: true,
             })
             .toBuffer()
           finalMimeType = 'image/webp'
           finalTypeSegment = sanitizePathSegment('webp', 'webp')
-          quality = adminUploadWebpQuality
+          quality = webpQuality
           compressionPercent = file.size > 0
             ? Math.max(0, Math.round(100 - (finalBuffer.length / file.size) * 100))
             : 0
@@ -1055,7 +1073,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
       const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix)
 
       try {
-        const { error: uploadError } = await supabaseServiceClient.storage.from(adminUploadBucket).upload(objectPath, finalBuffer, {
+        const { error: uploadError } = await supabaseServiceClient.storage.from(bucket).upload(objectPath, finalBuffer, {
           cacheControl: '31536000',
           contentType: finalMimeType,
           upsert: false,
@@ -1069,7 +1087,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         return
       }
 
-      const { data: publicData } = supabaseServiceClient.storage.from(adminUploadBucket).getPublicUrl(objectPath)
+      const { data: publicData } = supabaseServiceClient.storage.from(bucket).getPublicUrl(objectPath)
       const publicUrl = publicData?.publicUrl || null
       // Transform URL to use media proxy (hides Supabase project URL)
       const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
@@ -1077,7 +1095,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
 
       const payload = {
         ok: true,
-        bucket: adminUploadBucket,
+        bucket: bucket,
         path: objectPath,
         url: proxyUrl,
         mimeType: finalMimeType,
@@ -1097,7 +1115,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         adminId: uploaderInfo?.id || null,
         adminEmail: uploaderInfo?.email || null,
         adminName: uploaderInfo?.name || null,
-        bucket: adminUploadBucket,
+        bucket: bucket,
         path: objectPath,
         publicUrl: proxyUrl,
         mimeType: finalMimeType,
@@ -1118,7 +1136,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
       if (actorId) {
         try {
           const detail = {
-            bucket: adminUploadBucket,
+            bucket: bucket,
             path: objectPath,
             url: proxyUrl,
             originalMimeType: mime,
@@ -2807,7 +2825,8 @@ function getVisitsTableIdentifierParts() {
 const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch { }
-app.use(express.json())
+// Increase JSON body limit to handle base64 encoded images (e.g. for plant scan identification)
+app.use(express.json({ limit: '15mb' }))
 
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
@@ -3394,12 +3413,13 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
           return
         }
 
-        // Optimize
+        // Optimize - use standard 50% quality for non-admin uploads
+        const contactScreenshotQuality = 50
         let buffer
         try {
           buffer = await sharp(file.buffer)
             .resize({ width: 1920, height: 1080, fit: 'inside', withoutEnlargement: true })
-            .webp({ quality: 80 })
+            .webp({ quality: contactScreenshotQuality })
             .toBuffer()
         } catch (e) {
           res.status(400).json({ error: 'Invalid image file' })
@@ -3410,8 +3430,9 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
         const path = `${contactScreenshotPrefix}/${user.id}/${unique}.webp`
 
         try {
+          // Contact screenshots go to PHOTOS bucket (not UTILITY)
           const { error: uploadError } = await supabaseServiceClient.storage
-            .from(adminUploadBucket)
+            .from('PHOTOS')
             .upload(path, buffer, {
               contentType: 'image/webp',
               cacheControl: '3600',
@@ -3421,7 +3442,7 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
           if (uploadError) throw uploadError
 
           const { data: publicData } = supabaseServiceClient.storage
-            .from(adminUploadBucket)
+            .from('PHOTOS')
             .getPublicUrl(path)
 
           // Use media proxy
@@ -3438,14 +3459,14 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
               adminId: user.id,
               adminEmail: user.email || null,
               adminName: uploaderDisplayName,
-              bucket: adminUploadBucket,
+              bucket: 'PHOTOS',
               path: path,
               publicUrl: proxyUrl,
               mimeType: 'image/webp',
               originalMimeType: file.mimetype || 'image/unknown',
               sizeBytes: buffer.length,
               originalSizeBytes: file.size,
-              quality: 80,
+              quality: contactScreenshotQuality,
               compressionPercent: file.size > 0 ? Math.max(0, Math.round(100 - (buffer.length / file.size) * 100)) : 0,
               uploadSource: 'contact_screenshot',
               metadata: {
@@ -3489,7 +3510,7 @@ app.post('/api/contact/delete-screenshot', async (req, res) => {
     }
 
     const info = parseStoragePublicUrl(url)
-    if (!info || info.bucket !== adminUploadBucket) {
+    if (!info || info.bucket !== 'PHOTOS') {
       // Just ignore if it doesn't match our bucket, claim success
       res.json({ ok: true })
       return
@@ -3502,7 +3523,7 @@ app.post('/api/contact/delete-screenshot', async (req, res) => {
     }
 
     const { error } = await supabaseServiceClient.storage
-      .from(adminUploadBucket)
+      .from('PHOTOS')
       .remove([info.path])
 
     if (error) {
@@ -5124,6 +5145,9 @@ app.post('/api/admin/upload-image', async (req, res) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [adminUploadPrefix, folder].filter(Boolean).join('/')
     },
+    // Admin uploads: UTILITY bucket, 90% quality (highest)
+    bucket: 'UTILITY',
+    webpQuality: 90,
   })
 })
 
@@ -5160,6 +5184,9 @@ app.post('/api/blog/upload-image', async (req, res) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [blogUploadPrefix, folder].filter(Boolean).join('/')
     },
+    // Blog uploads: UTILITY bucket, 90% quality (same as admin)
+    bucket: 'UTILITY',
+    webpQuality: 90,
   })
 })
 
@@ -5196,6 +5223,9 @@ app.post('/api/pro-advice/upload-image', async (req, res) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [proAdviceUploadPrefix, folder].filter(Boolean).join('/')
     },
+    // Pro advice uploads: PHOTOS bucket, 50% quality (standard)
+    bucket: 'PHOTOS',
+    webpQuality: 50,
   })
 })
 
@@ -5239,6 +5269,9 @@ app.post('/api/messages/upload-image', async (req, res) => {
       const userId = uploader?.id || 'anonymous'
       return `${messagesUploadPrefix}/${userId}`
     },
+    // Messages uploads: PHOTOS bucket, 50% quality (standard)
+    bucket: 'PHOTOS',
+    webpQuality: 50,
   })
 })
 
@@ -12767,24 +12800,38 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
   }
 })
 
-// === Messaging Image Upload Endpoint ===
-// Follows the same pattern as garden cover uploads with sharp optimization
-app.post('/api/messages/upload-image', async (req, res) => {
+// === Plant Scan API Endpoints ===
+
+// Combined upload + identify endpoint
+// Uses the same upload pattern as Admin/Garden Cover/Messages uploads
+// Optimizes image, uploads to storage, calls Kindwise API, returns everything
+app.post('/api/scan/upload-and-identify', async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
     return
   }
   const user = await getUserFromRequest(req)
   if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' })
+    res.status(401).json({ error: 'You must be signed in to scan plants' })
     return
   }
 
-  singleMessageImageUpload(req, res, (err) => {
+  if (!KINDWISE_API_KEY) {
+    console.error('[scan] KINDWISE API key not configured')
+    res.status(503).json({ error: 'Plant identification service is not configured' })
+    return
+  }
+
+  // Ensure admin_media_uploads table exists for tracking
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  singleScanImageUpload(req, res, (err) => {
     if (err) {
       const message =
         err?.code === 'LIMIT_FILE_SIZE'
-          ? `File exceeds the maximum size of ${(messageImageMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          ? `File exceeds the maximum size of ${(scanImageMaxBytes / (1024 * 1024)).toFixed(1)} MB`
           : err?.message || 'Failed to process upload'
       res.status(400).json({ error: message })
       return
@@ -12800,7 +12847,6 @@ app.post('/api/messages/upload-image', async (req, res) => {
         res.status(400).json({ error: 'Only image uploads are supported' })
         return
       }
-      // Allow common image types
       const allowedMimes = new Set([
         'image/jpeg', 'image/png', 'image/webp', 'image/gif',
         'image/heic', 'image/heif', 'image/avif'
@@ -12814,10 +12860,14 @@ app.post('/api/messages/upload-image', async (req, res) => {
         return
       }
 
+      // Parse optional location from form data
+      const latitude = req.body?.latitude ? parseFloat(req.body.latitude) : undefined
+      const longitude = req.body?.longitude ? parseFloat(req.body.longitude) : undefined
+
       let optimizedBuffer
       let finalMimeType = 'image/webp'
 
-      // GIFs are kept as-is to preserve animation
+      // GIFs are kept as-is
       if (mime === 'image/gif') {
         optimizedBuffer = file.buffer
         finalMimeType = 'image/gif'
@@ -12826,35 +12876,80 @@ app.post('/api/messages/upload-image', async (req, res) => {
           optimizedBuffer = await sharp(file.buffer)
             .rotate()
             .resize({
-              width: messageImageMaxDimension,
-              height: messageImageMaxDimension,
+              width: scanImageMaxDimension,
+              height: scanImageMaxDimension,
               fit: 'inside',
               withoutEnlargement: true,
               fastShrinkOnLoad: true,
             })
             .webp({
-              quality: messageImageWebpQuality,
+              quality: scanImageWebpQuality,
               effort: 5,
               smartSubsample: true,
             })
             .toBuffer()
         } catch (sharpErr) {
-          console.error('[message-image] failed to convert image to webp', sharpErr)
+          console.error('[scan] failed to convert image to webp', sharpErr)
           res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
           return
         }
       }
 
+      // Convert optimized buffer to base64 for Kindwise API
+      const optimizedBase64 = `data:${finalMimeType};base64,${optimizedBuffer.toString('base64')}`
+
+      // Call Kindwise API with the optimized image
+      let identificationResult = null
+      try {
+        const requestBody = {
+          images: [optimizedBase64],
+          similar_images: true,
+        }
+        if (latitude !== undefined && longitude !== undefined && !isNaN(latitude) && !isNaN(longitude)) {
+          requestBody.latitude = latitude
+          requestBody.longitude = longitude
+        }
+
+        console.log('[scan] Calling Kindwise API for user:', user.id)
+
+        const apiResponse = await fetch('https://plant.id/api/v3/identification', {
+          method: 'POST',
+          headers: {
+            'Api-Key': KINDWISE_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        })
+
+        if (!apiResponse.ok) {
+          const errorText = await apiResponse.text()
+          console.error('[scan] Kindwise API error:', apiResponse.status, errorText)
+          res.status(502).json({ 
+            error: 'Plant identification service error', 
+            details: `API returned ${apiResponse.status}` 
+          })
+          return
+        }
+
+        identificationResult = await apiResponse.json()
+        console.log('[scan] Kindwise API success, status:', identificationResult.status)
+      } catch (apiErr) {
+        console.error('[scan] Error calling Kindwise API:', apiErr?.message || apiErr)
+        res.status(500).json({ error: 'Failed to identify plant', details: apiErr?.message })
+        return
+      }
+
+      // Upload optimized image to storage
       const baseName = sanitizeUploadBaseName(file.originalname)
       const timestamp = Date.now()
       const randomId = Math.random().toString(36).substring(2, 10)
       const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
-      const objectPath = `${messageImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
+      const objectPath = `${scanImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
 
       try {
         const { error: uploadError } = await supabaseServiceClient
           .storage
-          .from(messageImageUploadBucket)
+          .from(scanImageUploadBucket)
           .upload(objectPath, optimizedBuffer, {
             cacheControl: '31536000',
             contentType: finalMimeType,
@@ -12864,20 +12959,19 @@ app.post('/api/messages/upload-image', async (req, res) => {
           throw new Error(uploadError.message || 'Supabase storage upload failed')
         }
       } catch (storageErr) {
-        console.error('[message-image] supabase storage upload failed', storageErr)
-        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        console.error('[scan] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store image' })
         return
       }
 
       const { data: publicData } = supabaseServiceClient
         .storage
-        .from(messageImageUploadBucket)
+        .from(scanImageUploadBucket)
         .getPublicUrl(objectPath)
       const publicUrl = publicData?.publicUrl || null
-      // Transform URL to use media proxy (hides Supabase project URL)
       const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
       if (!proxyUrl) {
-        res.status(500).json({ error: 'Failed to generate public URL for message image' })
+        res.status(500).json({ error: 'Failed to generate public URL for scan image' })
         return
       }
 
@@ -12897,44 +12991,46 @@ app.post('/api/messages/upload-image', async (req, res) => {
           adminId: user.id,
           adminEmail: user.email || null,
           adminName: uploaderDisplayName,
-          bucket: messageImageUploadBucket,
+          bucket: scanImageUploadBucket,
           path: objectPath,
           publicUrl: proxyUrl,
           mimeType: finalMimeType,
           originalMimeType: mime,
           sizeBytes: optimizedBuffer.length,
           originalSizeBytes: file.size,
-          quality: finalMimeType === 'image/gif' ? null : messageImageWebpQuality,
+          quality: finalMimeType === 'image/gif' ? null : scanImageWebpQuality,
           compressionPercent,
-          uploadSource: 'messages',
+          uploadSource: 'plant_scan',
           metadata: {
-            source: 'messages',
+            source: 'plant_scan',
             originalName: file.originalname,
             userId: user.id,
           },
           createdAt: new Date().toISOString(),
         })
       } catch (recordErr) {
-        console.error('[message-image] failed to record media upload', recordErr)
+        console.error('[scan] failed to record media upload', recordErr)
       }
 
+      // Return combined result
       res.json({
         ok: true,
-        url: proxyUrl,
-        bucket: messageImageUploadBucket,
-        path: objectPath,
-        mimeType: finalMimeType,
-        size: optimizedBuffer.length,
-        originalMimeType: mime,
-        originalSize: file.size,
-        quality: finalMimeType === 'image/gif' ? null : messageImageWebpQuality,
-        maxDimension: messageImageMaxDimension,
-        compressionPercent,
+        upload: {
+          url: proxyUrl,
+          bucket: scanImageUploadBucket,
+          path: objectPath,
+          mimeType: finalMimeType,
+          size: optimizedBuffer.length,
+          originalMimeType: mime,
+          originalSize: file.size,
+          compressionPercent,
+        },
+        identification: identificationResult,
       })
-    })().catch((uploadErr) => {
-      console.error('[message-image] unexpected failure', uploadErr)
+    })().catch((err) => {
+      console.error('[scan] unexpected failure', err)
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Unexpected upload failure' })
+        res.status(500).json({ error: 'Unexpected failure during scan' })
       }
     })
   })
@@ -16114,16 +16210,43 @@ app.post('/api/garden/:id/upload', async (req, res) => {
         return
       }
 
+      const originalSize = fileBuffer.length
+      let finalBuffer = fileBuffer
+      let finalMimeType = mimeType
+      let finalExt = fileName.split('.').pop() || 'jpg'
+      const gardenUploadQuality = 50 // Standard 50% quality for non-admin uploads
+
+      // Optimize images (convert to WebP)
+      const isOptimizableImage = ['image/jpeg', 'image/png', 'image/webp'].includes(mimeType.toLowerCase())
+      if (isOptimizableImage) {
+        try {
+          finalBuffer = await sharp(fileBuffer)
+            .rotate()
+            .resize({
+              width: 1920,
+              height: 1920,
+              fit: 'inside',
+              withoutEnlargement: true,
+            })
+            .webp({ quality: gardenUploadQuality })
+            .toBuffer()
+          finalMimeType = 'image/webp'
+          finalExt = 'webp'
+        } catch (sharpErr) {
+          console.error('[garden-upload] sharp optimization failed, using original', sharpErr)
+          // Fall back to original if optimization fails
+        }
+      }
+
       // Generate unique filename
-      const ext = fileName.split('.').pop() || 'jpg'
-      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${finalExt}`
       const storagePath = `gardens/${gardenId}/${folder}/${uniqueName}`
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('photos')
-        .upload(storagePath, fileBuffer, {
-          contentType: mimeType,
+      // Upload to Supabase Storage (PHOTOS bucket)
+      const { data, error } = await supabaseServiceClient.storage
+        .from('PHOTOS')
+        .upload(storagePath, finalBuffer, {
+          contentType: finalMimeType,
           upsert: false,
         })
 
@@ -16134,7 +16257,7 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       }
 
       // Get public URL and transform to media proxy
-      const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
+      const { data: urlData } = supabaseServiceClient.storage.from('PHOTOS').getPublicUrl(storagePath)
       const proxyUrl = supabaseStorageToMediaProxy(urlData?.publicUrl) || urlData?.publicUrl || ''
 
       // Record to global image database
@@ -16143,20 +16266,24 @@ app.post('/api/garden/:id/upload', async (req, res) => {
         uploaderDisplayName = await getAdminProfileName(user.id)
       } catch { }
       
+      const compressionPercent = originalSize > 0 && isOptimizableImage
+        ? Math.max(0, Math.round(100 - (finalBuffer.length / originalSize) * 100))
+        : 0
+
       try {
         await recordAdminMediaUpload({
           adminId: user.id,
           adminEmail: user.email || null,
           adminName: uploaderDisplayName,
-          bucket: 'photos',
+          bucket: 'PHOTOS',
           path: storagePath,
           publicUrl: proxyUrl,
-          mimeType: mimeType || 'image/jpeg',
+          mimeType: finalMimeType,
           originalMimeType: mimeType || 'image/jpeg',
-          sizeBytes: fileBuffer.length,
-          originalSizeBytes: fileBuffer.length,
-          quality: null,
-          compressionPercent: null,
+          sizeBytes: finalBuffer.length,
+          originalSizeBytes: originalSize,
+          quality: isOptimizableImage ? gardenUploadQuality : null,
+          compressionPercent,
           uploadSource: folder === 'journal' ? 'garden_journal' : 'garden_photo',
           metadata: {
             source: folder === 'journal' ? 'garden_journal' : 'garden_photo',

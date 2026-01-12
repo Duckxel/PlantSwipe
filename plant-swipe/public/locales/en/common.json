@@ -2785,6 +2785,41 @@
         "attachImage": "Attach image",
         "removeAttachment": "Remove attachment"
       }
+    },
+    "scan": {
+      "pageTitle": "Plant Scanner",
+      "pageDescription": "Identify any plant by taking a photo or uploading an image",
+      "title": "Plant Scanner",
+      "subtitle": "Take a photo or upload an image to identify any plant",
+      "signInTitle": "Sign in to Scan Plants",
+      "signInDescription": "Please log in to identify plants and save your scan history.",
+      "newScanTitle": "Identify a Plant",
+      "newScanHint": "Take a clear photo of a leaf, flower, or the whole plant for best results.",
+      "takePhoto": "Take Photo",
+      "uploadImage": "Upload",
+      "identifying": "Identifying plant...",
+      "identifyingHint": "Our AI is analyzing your image. This usually takes a few seconds.",
+      "errorTitle": "Identification Failed",
+      "tryAgain": "Try Again",
+      "history": "Your Scans",
+      "noScans": "No scans yet",
+      "noScansHint": "Take a photo or upload an image of a plant to get started.",
+      "unknownPlant": "Unknown Plant",
+      "inDatabase": "In Database",
+      "resultTitle": "Identification Result",
+      "resultDescription": "Here's what we found based on your image.",
+      "topMatch": "Best Match",
+      "viewInDatabase": "View in Our Database",
+      "otherSuggestions": "Other Possibilities",
+      "similarImages": "Similar Images",
+      "scanAnother": "Scan Another",
+      "deleteTitle": "Delete Scan?",
+      "deleteDescription": "This will permanently remove this scan from your history. This action cannot be undone.",
+      "errors": {
+        "loadFailed": "Failed to load your scans",
+        "notAPlant": "This doesn't appear to be a plant. Please try a different image.",
+        "identifyFailed": "Failed to identify plant. Please try again."
+      }
     }
   }
 }

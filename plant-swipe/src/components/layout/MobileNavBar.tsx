@@ -18,7 +18,8 @@ import {
   UserPlus, 
   Bell, 
   MessageCircle,
-  ChevronRight
+  ChevronRight,
+  ScanLine
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
@@ -294,7 +295,16 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
               <p className="px-2 py-2 text-xs font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wider">
                 {t("common.quickActions", { defaultValue: "Quick Actions" })}
               </p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
+                <QuickActionButton
+                  icon={<ScanLine className="h-5 w-5" />}
+                  label={t("scan.title", { defaultValue: "Scan" })}
+                  onClick={() => {
+                    setProfileMenuOpen(false)
+                    navigate("/scan")
+                  }}
+                  highlight
+                />
                 <QuickActionButton
                   icon={<HeartHandshake className="h-5 w-5" />}
                   label={t("common.friends", { defaultValue: "Friends" })}
@@ -519,20 +529,26 @@ function QuickActionButton({
   icon,
   label,
   onClick,
-  badge
+  badge,
+  highlight
 }: {
   icon: React.ReactNode
   label: string
   onClick: () => void
   badge?: number
+  highlight?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-stone-50 dark:bg-[#2a2a2d] hover:bg-stone-100 dark:hover:bg-[#333336] active:scale-95 transition-all"
+      className={`flex flex-col items-center gap-2 p-3 rounded-2xl active:scale-95 transition-all ${
+        highlight 
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30' 
+          : 'bg-stone-50 dark:bg-[#2a2a2d] hover:bg-stone-100 dark:hover:bg-[#333336]'
+      }`}
     >
-      <div className="relative text-stone-600 dark:text-stone-300">
+      <div className={`relative ${highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-300'}`}>
         {icon}
         {badge !== undefined && badge > 0 && (
           <span
@@ -543,7 +559,7 @@ function QuickActionButton({
           </span>
         )}
       </div>
-      <span className="text-[11px] font-medium text-stone-600 dark:text-stone-300">{label}</span>
+      <span className={`text-[11px] font-medium ${highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-300'}`}>{label}</span>
     </button>
   )
 }
