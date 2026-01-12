@@ -653,8 +653,8 @@ const BeginnerFriendlySection: React.FC = () => {
     },
     {
       icon: Sparkles,
-      title: t("beginner.feature2Title", { defaultValue: "AI Plant Doctor" }),
-      description: t("beginner.feature2Desc", { defaultValue: "Not sure what's wrong? Just ask Aphylia - our AI assistant explains plant care in simple terms." }),
+      title: t("beginner.feature2Title", { defaultValue: "Your Plant Assistant" }),
+      description: t("beginner.feature2Desc", { defaultValue: "Not sure what's wrong? Just ask Aphylia - your friendly assistant that explains plant care in simple terms." }),
       color: "purple",
     },
     {
@@ -694,7 +694,7 @@ const BeginnerFriendlySection: React.FC = () => {
             <span className="gradient-text">{t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })}</span>
           </h2>
           <p className="text-lg sm:text-xl text-stone-600 dark:text-stone-400 leading-relaxed">
-            {t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful AI that speaks your language — not complicated botany." })}
+            {t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany." })}
           </p>
         </div>
 
@@ -865,7 +865,7 @@ const InteractiveDemoSection: React.FC = () => {
     { icon: Camera, label: t("demo.identify", { defaultValue: "Identify Plants" }), color: "pink" },
     { icon: NotebookPen, label: t("demo.journal", { defaultValue: "Keep Journal" }), color: "amber" },
     { icon: Users, label: t("demo.community", { defaultValue: "Join Community" }), color: "teal" },
-    { icon: Sparkles, label: t("demo.ai", { defaultValue: "AI Assistant" }), color: "indigo" },
+    { icon: Sparkles, label: t("demo.assistant", { defaultValue: "Smart Assistant" }), color: "indigo" },
   ]
 
   // Use database features if available, otherwise use defaults
