@@ -528,9 +528,45 @@ render_service_env() {
 log "Rendering service environment from $NODE_DIR/.env(.server)…"
 render_service_env "$SERVICE_ENV_FILE"
 
-# Install/upgrade Node.js (ensure >= 20; prefer Node 22 LTS)
+# Install/upgrade Bun (preferred runtime) and Node.js (for compatibility)
+need_bun_install=false
 need_node_install=false
-if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+
+# Check for Bun
+if ! command -v bun >/dev/null 2>&1; then
+  need_bun_install=true
+else
+  bun_ver_raw="$(bun --version 2>/dev/null || echo 0.0.0)"
+  bun_major="${bun_ver_raw%%.*}"
+  if [[ -z "$bun_major" || "$bun_major" -lt 1 ]]; then
+    need_bun_install=true
+  else
+    log "Bun is already installed (v$bun_ver_raw)."
+  fi
+fi
+
+# Install Bun if needed
+if $need_bun_install; then
+  log "Installing Bun (fast JavaScript runtime and package manager)…"
+  # Install Bun system-wide
+  curl -fsSL https://bun.sh/install | bash
+  # Add Bun to PATH for current session
+  export BUN_INSTALL="$HOME/.bun"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+  # Also install for service user
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    log "Installing Bun for service user $SERVICE_USER…"
+    sudo -u "$SERVICE_USER" -H bash -c 'curl -fsSL https://bun.sh/install | bash' || true
+  fi
+fi
+
+# Ensure Bun is in PATH
+if [[ -d "$HOME/.bun/bin" ]]; then
+  export PATH="$HOME/.bun/bin:$PATH"
+fi
+
+# Check for Node.js (still needed for some tools and compatibility)
+if ! command -v node >/dev/null 2>&1; then
   need_node_install=true
 else
   node_ver_raw="$(node -v 2>/dev/null || echo v0.0.0)"
@@ -541,8 +577,7 @@ else
   fi
 fi
 if $need_node_install; then
-  log "Installing/upgrading Node.js to 22.x…"
-  # Use sudo only when needed; avoid emitting a stray "-E" if sudo is empty
+  log "Installing/upgrading Node.js to 22.x (for compatibility)…"
   if [[ -n "$SUDO" ]]; then
     curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO bash -
   else
@@ -553,7 +588,9 @@ else
   log "Node.js is sufficiently new ($(node -v))."
 fi
 
-# Build frontend and API bundle
+log "Using Bun $(bun --version 2>/dev/null || echo 'version unknown') as primary package manager."
+
+# Build frontend and API bundle using Bun
 # Delegate to refresh script if available (avoids code duplication and uses optimized build)
 REFRESH_SCRIPT="$REPO_DIR/scripts/refresh-plant-swipe.sh"
 if [[ -f "$REFRESH_SCRIPT" ]]; then
@@ -567,27 +604,57 @@ if [[ -f "$REFRESH_SCRIPT" ]]; then
   export SKIP_ENV_SYNC=true          # Skip env sync (setup handles it separately)
   export VITE_APP_BASE_PATH="${PWA_BASE_PATH}"
   
-  # Run refresh script for npm install + build (skip git pull since we just cloned/pulled)
+  # Run refresh script for bun install + build (skip git pull since we just cloned/pulled)
   chmod +x "$REFRESH_SCRIPT" 2>/dev/null || true
   if sudo -u "$SERVICE_USER" -H bash -lc "cd '$REPO_DIR' && PLANTSWIPE_DISABLE_DEFAULT_BRANCH_FALLBACK=true SKIP_PULL=true bash '$REFRESH_SCRIPT' --no-restart" 2>&1; then
     log "Build completed via refresh script."
   else
-    log "[WARN] Refresh script failed, falling back to direct build…"
-    # Fallback: direct build
-    log "Installing PlantSwipe client dependencies (PWA ready)…"
-    sudo -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
-    sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
-    log "Building PlantSwipe web client + API bundle (base ${PWA_BASE_PATH})…"
-    sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+    log "[WARN] Refresh script failed, falling back to direct build with Bun…"
+    # Fallback: direct build with Bun
+    log "Installing PlantSwipe client dependencies with Bun (PWA ready)…"
+    # Ensure Bun is available for service user
+    BUN_PATH=""
+    if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+      SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+      if [[ -x "$SERVICE_HOME/.bun/bin/bun" ]]; then
+        BUN_PATH="$SERVICE_HOME/.bun/bin"
+      elif [[ -x "/usr/local/bin/bun" ]]; then
+        BUN_PATH="/usr/local/bin"
+      elif [[ -x "$HOME/.bun/bin/bun" ]]; then
+        # Copy bun to service user home
+        log "Copying Bun to service user home…"
+        sudo -u "$SERVICE_USER" -H mkdir -p "$SERVICE_HOME/.bun/bin"
+        sudo cp "$HOME/.bun/bin/bun" "$SERVICE_HOME/.bun/bin/bun"
+        sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.bun"
+        BUN_PATH="$SERVICE_HOME/.bun/bin"
+      fi
+    fi
+    sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
+    log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
+    sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
   fi
 else
-  # Fallback: refresh script not found, do direct install/build
-  log "Installing PlantSwipe client dependencies (PWA ready)…"
-  sudo -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
-  sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
-  log "Building PlantSwipe web client + API bundle (base ${PWA_BASE_PATH})…"
+  # Fallback: refresh script not found, do direct install/build with Bun
+  log "Installing PlantSwipe client dependencies with Bun (PWA ready)…"
+  BUN_PATH=""
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+    if [[ -x "$SERVICE_HOME/.bun/bin/bun" ]]; then
+      BUN_PATH="$SERVICE_HOME/.bun/bin"
+    elif [[ -x "/usr/local/bin/bun" ]]; then
+      BUN_PATH="/usr/local/bin"
+    elif [[ -x "$HOME/.bun/bin/bun" ]]; then
+      log "Copying Bun to service user home…"
+      sudo -u "$SERVICE_USER" -H mkdir -p "$SERVICE_HOME/.bun/bin"
+      sudo cp "$HOME/.bun/bin/bun" "$SERVICE_HOME/.bun/bin/bun"
+      sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.bun"
+      BUN_PATH="$SERVICE_HOME/.bun/bin"
+    fi
+  fi
+  sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
+  log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
   NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
-  sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+  sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
 fi
 
 # Link web root expected by nginx config to the repo copy, unless that would create
