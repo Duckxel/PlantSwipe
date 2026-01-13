@@ -1050,7 +1050,6 @@ export const AdminLandingPanel: React.FC = () => {
             <HeroCardsTab
               cards={heroCards}
               setCards={setHeroCards}
-              saving={saving}
               setSaving={setSaving}
               showPreview={showPreview}
               sectionVisible={settings?.show_hero_section ?? true}
@@ -1070,7 +1069,6 @@ export const AdminLandingPanel: React.FC = () => {
             <FeaturesTab
               features={features}
               setFeatures={setFeatures}
-              saving={saving}
               setSaving={setSaving}
               showPreview={showPreview}
               sectionVisible={settings?.show_features_section ?? true}
@@ -1080,7 +1078,6 @@ export const AdminLandingPanel: React.FC = () => {
             <ShowcaseTab
               cards={showcaseCards}
               setCards={setShowcaseCards}
-              saving={saving}
               setSaving={setSaving}
               sectionVisible={settings?.show_showcase_section ?? true}
             />
@@ -1089,7 +1086,6 @@ export const AdminLandingPanel: React.FC = () => {
             <TestimonialsTab
               testimonials={testimonials}
               setTestimonials={setTestimonials}
-              saving={saving}
               setSaving={setSaving}
               sectionVisible={settings?.show_testimonials_section ?? true}
             />
@@ -1098,7 +1094,6 @@ export const AdminLandingPanel: React.FC = () => {
             <FAQTab
               items={faqItems}
               setItems={setFaqItems}
-              saving={saving}
               setSaving={setSaving}
               sectionVisible={settings?.show_faq_section ?? true}
             />
@@ -1754,11 +1749,10 @@ const SectionHiddenBanner: React.FC<{ visible: boolean }> = ({ visible }) => {
 const HeroCardsTab: React.FC<{
   cards: HeroCard[]
   setCards: React.Dispatch<React.SetStateAction<HeroCard[]>>
-  saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   showPreview: boolean
   sectionVisible: boolean
-}> = ({ cards, setCards, saving, setSaving, showPreview, sectionVisible }) => {
+}> = ({ cards, setCards, setSaving, showPreview, sectionVisible }) => {
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [importPlantOpen, setImportPlantOpen] = React.useState(false)
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
@@ -2347,11 +2341,10 @@ const StatsTab: React.FC<{
 const FeaturesTab: React.FC<{
   features: LandingFeature[]
   setFeatures: React.Dispatch<React.SetStateAction<LandingFeature[]>>
-  saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   showPreview: boolean
   sectionVisible: boolean
-}> = ({ features, setFeatures, saving, setSaving, showPreview, sectionVisible }) => {
+}> = ({ features, setFeatures, setSaving, showPreview, sectionVisible }) => {
   const circleFeatures = features.filter(f => f.is_in_circle)
   const gridFeatures = features.filter(f => !f.is_in_circle)
 
@@ -2549,10 +2542,9 @@ const FeaturesTab: React.FC<{
 const ShowcaseTab: React.FC<{
   cards: ShowcaseCard[]
   setCards: React.Dispatch<React.SetStateAction<ShowcaseCard[]>>
-  saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   sectionVisible: boolean
-}> = ({ cards, setCards, saving, setSaving, sectionVisible }) => {
+}> = ({ cards, setCards, setSaving, sectionVisible }) => {
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
 
@@ -2758,10 +2750,9 @@ const ShowcaseTab: React.FC<{
 const TestimonialsTab: React.FC<{
   testimonials: Testimonial[]
   setTestimonials: React.Dispatch<React.SetStateAction<Testimonial[]>>
-  saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   sectionVisible: boolean
-}> = ({ testimonials, setTestimonials, saving, setSaving, sectionVisible }) => {
+}> = ({ testimonials, setTestimonials, setSaving, sectionVisible }) => {
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(null)
 
@@ -2953,10 +2944,9 @@ const TestimonialsTab: React.FC<{
 const FAQTab: React.FC<{
   items: FAQ[]
   setItems: React.Dispatch<React.SetStateAction<FAQ[]>>
-  saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   sectionVisible: boolean
-}> = ({ items, setItems, saving, setSaving, sectionVisible }) => {
+}> = ({ items, setItems, setSaving, sectionVisible }) => {
   const addFAQ = async () => {
     const newFAQ: Partial<FAQ> = {
       position: items.length,
