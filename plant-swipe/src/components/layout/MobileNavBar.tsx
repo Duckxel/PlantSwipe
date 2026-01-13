@@ -42,49 +42,68 @@ const MOBILE_NAV_HOST_ATTR = "data-mobile-nav-root"
 const MOBILE_NAV_HOST_ID = "mobile-nav-root"
 
 const isBrowser = typeof window !== "undefined"
-const useIsomorphicLayoutEffect = isBrowser ? React.useLayoutEffect : React.useEffect
 
+// Persistent reference to the host element - survives across all renders
 let mobileNavHost: HTMLElement | null = null
-let mobileNavHostUsers = 0
 
-const useMobileNavHost = () => {
-  const [host, setHost] = React.useState<HTMLElement | null>(() => {
-    if (typeof document === "undefined") return null
-    const existing = document.querySelector<HTMLElement>(`[${MOBILE_NAV_HOST_ATTR}="true"]`)
-    return existing ?? null
-  })
+/**
+ * Get or create the mobile nav portal host element.
+ * This is called synchronously to ensure the host is always available.
+ */
+const getOrCreateHost = (): HTMLElement | null => {
+  if (typeof document === "undefined") return null
+  
+  // Return cached host if it's still in the DOM
+  if (mobileNavHost && mobileNavHost.isConnected) {
+    return mobileNavHost
+  }
+  
+  // Check for existing host in DOM
+  const existing = document.querySelector<HTMLElement>(`[${MOBILE_NAV_HOST_ATTR}="true"]`)
+  if (existing) {
+    mobileNavHost = existing
+    return existing
+  }
+  
+  // Create new host element
+  const element = document.createElement("div")
+  element.id = MOBILE_NAV_HOST_ID
+  element.setAttribute(MOBILE_NAV_HOST_ATTR, "true")
+  element.style.position = "relative"
+  document.body.appendChild(element)
+  mobileNavHost = element
+  return element
+}
 
-  useIsomorphicLayoutEffect(() => {
-    if (typeof document === "undefined") return undefined
-
-    let element = mobileNavHost
-    if (!element) {
-      element = document.querySelector<HTMLElement>(`[${MOBILE_NAV_HOST_ATTR}="true"]`) ?? null
+/**
+ * Hook to get the mobile nav portal host.
+ * Always returns a valid host element on the client (never null after first render).
+ */
+const useMobileNavHost = (): HTMLElement | null => {
+  // Get or create host synchronously - this ensures we never have a null host on client
+  const hostRef = React.useRef<HTMLElement | null>(isBrowser ? getOrCreateHost() : null)
+  
+  // Force update mechanism for SSR hydration
+  const [, forceUpdate] = React.useReducer((x) => x + 1, 0)
+  
+  React.useEffect(() => {
+    if (typeof document === "undefined") return
+    
+    // Ensure host exists (handles SSR hydration case)
+    if (!hostRef.current || !hostRef.current.isConnected) {
+      hostRef.current = getOrCreateHost()
+      forceUpdate()
     }
-
-    if (!element) {
-      element = document.createElement("div")
-      element.id = MOBILE_NAV_HOST_ID
-      element.setAttribute(MOBILE_NAV_HOST_ATTR, "true")
-      element.style.position = "relative"
-      document.body.appendChild(element)
-    }
-
-    mobileNavHost = element
-    mobileNavHostUsers += 1
-    setHost(element)
-
+    
+    // Cleanup: only remove host if component unmounts AND no other components need it
+    // In practice, we never remove the host to prevent layout thrashing
     return () => {
-      mobileNavHostUsers -= 1
-      if (mobileNavHostUsers <= 0 && mobileNavHost?.parentElement) {
-        mobileNavHost.parentElement.removeChild(mobileNavHost)
-        mobileNavHost = null
-      }
-      setHost(null)
+      // Host persists for app lifetime - no cleanup needed
     }
   }, [])
-
-  return host
+  
+  // Always return a valid host on client
+  return hostRef.current
 }
 
 const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin, onSignup }) => {
@@ -415,10 +434,15 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     </>
   )
 
-  if (host) {
-    return createPortal(navMarkup, host)
+  // Always use portal when we have a host (which should always be true on client)
+  // Fall back to getOrCreateHost() to ensure we never render inline
+  const portalTarget = host ?? (isBrowser ? getOrCreateHost() : null)
+  
+  if (portalTarget) {
+    return createPortal(navMarkup, portalTarget)
   }
 
+  // SSR fallback only - on client this should never execute
   return navMarkup
 }
 
