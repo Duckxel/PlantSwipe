@@ -642,9 +642,14 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
                 className="rounded-2xl"
                 disabled={formStatus === "loading" || formStatus === "success"}
               >
-                {formStatus === "loading"
-                  ? t('contactUs.form.submitSending')
-                  : t('contactUs.form.submitButton')}
+                {formStatus === "loading" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    {t('contactUs.form.submitSending')}
+                  </>
+                ) : (
+                  t('contactUs.form.submitButton')
+                )}
               </Button>
             </DialogFooter>
           </form>
