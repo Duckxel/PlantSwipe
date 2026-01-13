@@ -1,5 +1,4 @@
 import React from "react"
-import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 import { 
@@ -38,76 +37,10 @@ interface MobileNavBarProps {
   onSignup?: () => void
 }
 
-const MOBILE_NAV_HOST_ATTR = "data-mobile-nav-root"
-const MOBILE_NAV_HOST_ID = "mobile-nav-root"
-
-const isBrowser = typeof window !== "undefined"
-
-// Persistent reference to the host element - survives across all renders
-let mobileNavHost: HTMLElement | null = null
-
-/**
- * Get or create the mobile nav portal host element.
- * This is called synchronously to ensure the host is always available.
- */
-const getOrCreateHost = (): HTMLElement | null => {
-  if (typeof document === "undefined") return null
-  
-  // Return cached host if it's still in the DOM
-  if (mobileNavHost && mobileNavHost.isConnected) {
-    return mobileNavHost
-  }
-  
-  // Check for existing host in DOM
-  const existing = document.querySelector<HTMLElement>(`[${MOBILE_NAV_HOST_ATTR}="true"]`)
-  if (existing) {
-    mobileNavHost = existing
-    return existing
-  }
-  
-  // Create new host element
-  const element = document.createElement("div")
-  element.id = MOBILE_NAV_HOST_ID
-  element.setAttribute(MOBILE_NAV_HOST_ATTR, "true")
-  element.style.position = "relative"
-  document.body.appendChild(element)
-  mobileNavHost = element
-  return element
-}
-
-/**
- * Hook to get the mobile nav portal host.
- * Always returns a valid host element on the client (never null after first render).
- */
-const useMobileNavHost = (): HTMLElement | null => {
-  // Get or create host synchronously - this ensures we never have a null host on client
-  const hostRef = React.useRef<HTMLElement | null>(isBrowser ? getOrCreateHost() : null)
-  
-  // Force update mechanism for SSR hydration
-  const [, forceUpdate] = React.useReducer((x) => x + 1, 0)
-  
-  React.useEffect(() => {
-    if (typeof document === "undefined") return
-    
-    // Ensure host exists (handles SSR hydration case)
-    if (!hostRef.current || !hostRef.current.isConnected) {
-      hostRef.current = getOrCreateHost()
-      forceUpdate()
-    }
-    
-    // Cleanup: only remove host if component unmounts AND no other components need it
-    // In practice, we never remove the host to prevent layout thrashing
-    return () => {
-      // Host persists for app lifetime - no cleanup needed
-    }
-  }, [])
-  
-  // Always return a valid host on client
-  return hostRef.current
-}
+// No portal needed - the nav uses position:fixed which is relative to viewport
+// Removing the portal simplifies the code and prevents potential rendering issues
 
 const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin, onSignup }) => {
-  const host = useMobileNavHost()
   const pathWithoutLang = usePathWithoutLanguage()
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
@@ -434,15 +367,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     </>
   )
 
-  // Always use portal when we have a host (which should always be true on client)
-  // Fall back to getOrCreateHost() to ensure we never render inline
-  const portalTarget = host ?? (isBrowser ? getOrCreateHost() : null)
-  
-  if (portalTarget) {
-    return createPortal(navMarkup, portalTarget)
-  }
-
-  // SSR fallback only - on client this should never execute
+  // No portal needed - position:fixed is relative to viewport regardless of DOM position
   return navMarkup
 }
 
