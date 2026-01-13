@@ -3515,6 +3515,9 @@ export const GardenDashboardPage: React.FC = () => {
           garden={garden} 
           members={members}
           plants={plants}
+          todayTaskOccurrences={todayTaskOccurrences}
+          weekTaskOccurrences={weekTaskOccurrences}
+          taskCountsByPlant={taskCountsByPlant}
         />
       )}
     </div>
@@ -3526,7 +3529,10 @@ export const GardenDashboardPage: React.FC = () => {
 function AphyliaChatPortal({ 
   garden, 
   members,
-  plants 
+  plants,
+  todayTaskOccurrences,
+  weekTaskOccurrences,
+  taskCountsByPlant
 }: { 
   garden: Garden
   members: Array<{
@@ -3539,6 +3545,28 @@ function AphyliaChatPortal({
     avatarUrl?: string | null
   }>
   plants: Array<any>
+  todayTaskOccurrences: Array<{
+    id: string
+    taskId: string
+    gardenPlantId: string
+    dueAt: string
+    requiredCount: number
+    completedCount: number
+    completedAt: string | null
+  }>
+  weekTaskOccurrences: Array<{
+    id: string
+    taskId: string
+    gardenPlantId: string
+    dueAt: string
+    requiredCount: number
+    completedCount: number
+    completedAt: string | null
+    taskType: "water" | "fertilize" | "harvest" | "cut" | "custom"
+    taskEmoji?: string | null
+    dayIndex: number
+  }>
+  taskCountsByPlant: Record<string, number>
 }) {
   const [mounted, setMounted] = React.useState(false)
   
@@ -3549,41 +3577,96 @@ function AphyliaChatPortal({
   
   // Build comprehensive garden context with ALL available data
   // This ensures the AI has full knowledge of the garden even if backend enrichment fails
-  const gardenContext = React.useMemo(() => ({
-    gardenId: garden.id,
-    gardenName: garden.name,
-    // Location info
-    locationCity: garden.locationCity,
-    locationCountry: garden.locationCountry,
-    locationTimezone: garden.locationTimezone,
-    locationLat: garden.locationLat,
-    locationLon: garden.locationLon,
-    // Counts
-    plantCount: plants.length,
-    memberCount: members.length,
-    // Garden settings
-    privacy: garden.privacy,
-    streak: garden.streak,
-    createdAt: garden.createdAt,
-    adviceLanguage: garden.preferredLanguage,
-    // Member details - important for AI to know who's in the garden
-    members: members.map(m => ({
-      userId: m.userId,
-      displayName: m.displayName || 'Member',
-      role: m.role,
-      joinedAt: m.joinedAt
-    })),
-    // Plant summaries for quick context
-    plants: plants.map(p => ({
-      gardenPlantId: p.id,
-      plantId: p.plantId,
-      plantName: p.name || p.plantName || 'Unknown Plant',
-      nickname: p.nickname,
-      healthStatus: p.healthStatus,
-      plantsOnHand: p.plantsOnHand,
-      seedsPlanted: p.seedsPlanted
-    }))
-  }), [
+  const gardenContext = React.useMemo(() => {
+    // Calculate task stats
+    const totalTasksToday = todayTaskOccurrences.length
+    const completedTasksToday = todayTaskOccurrences.filter(t => t.completedAt !== null).length
+    const pendingTasksToday = totalTasksToday - completedTasksToday
+    
+    const totalTasksThisWeek = weekTaskOccurrences.length
+    const completedTasksThisWeek = weekTaskOccurrences.filter(t => t.completedAt !== null).length
+    
+    // Group tasks by type for this week
+    const tasksByType: Record<string, number> = {}
+    for (const task of weekTaskOccurrences) {
+      tasksByType[task.taskType] = (tasksByType[task.taskType] || 0) + 1
+    }
+    
+    // Calculate total plants on hand
+    const totalPlantsOnHand = plants.reduce((sum, p) => sum + (p.plantsOnHand || 0), 0)
+    const totalSeedsPlanted = plants.reduce((sum, p) => sum + (p.seedsPlanted || 0), 0)
+    
+    return {
+      gardenId: garden.id,
+      gardenName: garden.name,
+      // Location info
+      locationCity: garden.locationCity,
+      locationCountry: garden.locationCountry,
+      locationTimezone: garden.locationTimezone,
+      locationLat: garden.locationLat,
+      locationLon: garden.locationLon,
+      // Counts
+      plantCount: plants.length,
+      memberCount: members.length,
+      totalPlantsOnHand,
+      totalSeedsPlanted,
+      // Garden settings
+      privacy: garden.privacy,
+      // Streak as number (backend will handle both formats)
+      streak: garden.streak || 0,
+      createdAt: garden.createdAt,
+      adviceLanguage: garden.preferredLanguage,
+      // Task statistics - IMPORTANT for AI to know current garden status
+      taskStats: {
+        totalTasksToday,
+        completedTasksToday,
+        pendingTasksToday,
+        totalTasksThisWeek,
+        completedTasksThisWeek,
+        tasksByType
+      },
+      // Member details - important for AI to know who's in the garden
+      members: members.map(m => ({
+        userId: m.userId,
+        displayName: m.displayName || 'Member',
+        role: m.role,
+        joinedAt: m.joinedAt
+      })),
+      // Plant summaries for quick context
+      plants: plants.map(p => ({
+        gardenPlantId: p.id,
+        plantId: p.plantId,
+        plantName: p.name || p.plantName || 'Unknown Plant',
+        nickname: p.nickname,
+        healthStatus: p.healthStatus,
+        plantsOnHand: p.plantsOnHand,
+        seedsPlanted: p.seedsPlanted,
+        taskCount: taskCountsByPlant[p.id] || 0
+      })),
+      // Today's tasks with details
+      todayTasks: todayTaskOccurrences.map(t => {
+        const plant = plants.find(p => p.id === t.gardenPlantId)
+        return {
+          taskId: t.taskId,
+          plantName: plant?.nickname || plant?.name || plant?.plantName || 'Unknown',
+          dueAt: t.dueAt,
+          requiredCount: t.requiredCount,
+          completedCount: t.completedCount,
+          isCompleted: t.completedAt !== null
+        }
+      }),
+      // This week's tasks summary
+      weekTasks: weekTaskOccurrences.slice(0, 20).map(t => {
+        const plant = plants.find(p => p.id === t.gardenPlantId)
+        return {
+          taskType: t.taskType,
+          plantName: plant?.nickname || plant?.name || plant?.plantName || 'Unknown',
+          dueAt: t.dueAt,
+          isCompleted: t.completedAt !== null
+        }
+      })
+    }
+  }, [
     garden.id, 
     garden.name, 
     garden.locationCity, 
@@ -3596,7 +3679,10 @@ function AphyliaChatPortal({
     garden.createdAt,
     garden.preferredLanguage,
     members, 
-    plants
+    plants,
+    todayTaskOccurrences,
+    weekTaskOccurrences,
+    taskCountsByPlant
   ])
   
   if (!mounted) return null

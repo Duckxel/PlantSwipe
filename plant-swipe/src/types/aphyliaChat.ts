@@ -66,6 +66,26 @@ export interface GardenPlantSummary {
   healthStatus?: string | null
   plantsOnHand?: number
   seedsPlanted?: number
+  taskCount?: number
+}
+
+export interface GardenTaskStats {
+  totalTasksToday: number
+  completedTasksToday: number
+  pendingTasksToday: number
+  totalTasksThisWeek: number
+  completedTasksThisWeek: number
+  tasksByType: Record<string, number>
+}
+
+export interface GardenTaskSummary {
+  taskId?: string
+  taskType?: string
+  plantName: string
+  dueAt: string
+  requiredCount?: number
+  completedCount?: number
+  isCompleted: boolean
 }
 
 export interface GardenContext {
@@ -78,6 +98,10 @@ export interface GardenContext {
   locationLon?: number | null
   plantCount?: number
   memberCount?: number
+  /** Total plants currently on hand */
+  totalPlantsOnHand?: number
+  /** Total seeds planted */
+  totalSeedsPlanted?: number
   /** Garden members with basic info */
   members?: GardenMemberContext[]
   /** Summary of plants in the garden */
@@ -90,6 +114,12 @@ export interface GardenContext {
   createdAt?: string
   /** Preferred language for advice */
   adviceLanguage?: string | null
+  /** Task statistics for today and this week */
+  taskStats?: GardenTaskStats
+  /** Today's tasks with details */
+  todayTasks?: GardenTaskSummary[]
+  /** This week's tasks (limited) */
+  weekTasks?: GardenTaskSummary[]
 }
 
 export interface PlantContext {
