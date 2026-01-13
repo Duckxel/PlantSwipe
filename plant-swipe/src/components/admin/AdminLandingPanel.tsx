@@ -1128,8 +1128,11 @@ const GlobalSettingsTab: React.FC<{
     setLocalSettings(settings)
   }, [settings])
 
+  const [initError, setInitError] = React.useState<string | null>(null)
+
   const createDefaultSettings = async () => {
     setSaving(true)
+    setInitError(null)
     try {
       const { data, error } = await supabase
         .from("landing_page_settings")
@@ -1137,12 +1140,19 @@ const GlobalSettingsTab: React.FC<{
         .select()
         .single()
 
-      if (data && !error) {
+      if (error) {
+        console.error("Failed to create settings:", error)
+        setInitError(error.message || "Failed to initialize settings. Please ensure you have admin permissions.")
+        return
+      }
+
+      if (data) {
         setSettings(data)
         setLocalSettings(data)
       }
     } catch (e) {
       console.error("Failed to create settings:", e)
+      setInitError("An unexpected error occurred. Please try again.")
     } finally {
       setSaving(false)
     }
@@ -1182,10 +1192,22 @@ const GlobalSettingsTab: React.FC<{
           <Settings className="h-12 w-12 mx-auto mb-4 text-stone-300" />
           <h3 className="font-semibold text-stone-900 dark:text-white mb-2">No global settings configured</h3>
           <p className="text-sm text-stone-500 mb-4">Initialize your landing page settings to customize content and visibility</p>
+          
+          {initError && (
+            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+              <AlertCircle className="h-4 w-4 inline mr-2" />
+              {initError}
+            </div>
+          )}
+          
           <Button onClick={createDefaultSettings} disabled={saving} className="rounded-xl">
             {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
             Initialize Settings
           </Button>
+          
+          <p className="text-xs text-stone-400 mt-4">
+            Note: The database table must exist. Run the migration first if you haven't already.
+          </p>
         </CardContent>
       </Card>
     )
