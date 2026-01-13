@@ -3,6 +3,7 @@
 <div align="center">
 
 ![Build](https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square)
+![Bun](https://img.shields.io/badge/Bun-1.x-f9f1e1?style=flat-square&logo=bun)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178c6?style=flat-square&logo=typescript)
 ![React](https://img.shields.io/badge/React-19.1.1-61dafb?style=flat-square&logo=react)
 ![Vite](https://img.shields.io/badge/Vite-7.1.2-646cff?style=flat-square&logo=vite)
@@ -45,6 +46,7 @@ Aphylia is a modern Progressive Web Application built with **React 19**, **TypeS
 
 | Layer | Technology | Version |
 |-------|------------|---------|
+| **Package Manager** | Bun | 1.x |
 | **Frontend** | React | 19.1.1 |
 | **Language** | TypeScript | 5.8.3 |
 | **Build Tool** | Vite | 7.1.2 |
@@ -54,6 +56,8 @@ Aphylia is a modern Progressive Web Application built with **React 19**, **TypeS
 | **Auth** | Supabase Auth | 2.57.2 |
 | **i18n** | react-i18next | 16.2.4 |
 | **PWA** | vite-plugin-pwa | 1.1.0 |
+
+> 💡 **Bun** is used as the primary package manager and runtime, offering ~7x faster package installation compared to npm. See [BUN_MIGRATION.md](./BUN_MIGRATION.md) for details.
 
 ---
 
@@ -280,14 +284,16 @@ SITEMAP_MAX_PLANT_URLS=1000
 
 | Script | Command | Purpose |
 |--------|---------|---------|
-| `dev` | `npm run dev` | Start Vite dev server (port 5173) |
-| `serve` | `npm run serve` | Start Express API server (port 3000) |
-| `build` | `npm run build` | Build production bundle (includes sitemap) |
-| `build:low-mem` | `npm run build:low-mem` | Build with reduced memory usage |
-| `preview` | `npm run preview` | Preview production build |
-| `lint` | `npm run lint` | Run ESLint |
-| `check-translations` | `npm run check-translations` | Validate translation files |
-| `generate:sitemap` | `npm run generate:sitemap` | Generate sitemap.xml |
+| `dev` | `bun run dev` | Start Vite dev server (port 5173) |
+| `serve` | `bun run serve` | Start Express API server (port 3000) |
+| `build` | `bun run build` | Build production bundle (includes sitemap) |
+| `build:low-mem` | `bun run build:low-mem` | Build with reduced memory usage |
+| `preview` | `bun run preview` | Preview production build |
+| `lint` | `bun run lint` | Run ESLint |
+| `check-translations` | `bun run check-translations` | Validate translation files |
+| `generate:sitemap` | `bun run generate:sitemap` | Generate sitemap.xml |
+
+> 💡 All commands use Bun for faster execution. You can also use `npm run` as a fallback.
 
 </details>
 
@@ -295,19 +301,29 @@ SITEMAP_MAX_PLANT_URLS=1000
 
 ## 🔧 Development Workflow
 
+### Installing Dependencies
+
+```bash
+# Install Bun if not already installed
+curl -fsSL https://bun.sh/install | bash
+
+# Install dependencies (7x faster than npm)
+bun install
+```
+
 ### Running Locally
 
 1. **Start API Server** (Terminal 1):
 
 ```bash
-npm run serve
+bun run serve
 # Runs on http://localhost:3000
 ```
 
 2. **Start Dev Server** (Terminal 2):
 
 ```bash
-npm run dev
+bun run dev
 # Runs on http://127.0.0.1:5173
 # Proxies /api/* requests to port 3000
 ```
@@ -315,8 +331,8 @@ npm run dev
 ### Building for Production
 
 ```bash
-npm ci                    # Clean install
-npm run build            # TypeScript compilation + sitemap + Vite build
+bun install              # Install dependencies
+bun run build            # TypeScript compilation + sitemap + Vite build
 # Output: dist/
 ```
 
@@ -324,10 +340,10 @@ npm run build            # TypeScript compilation + sitemap + Vite build
 
 ```bash
 # Enable PWA in development
-VITE_ENABLE_PWA=true npm run dev
+VITE_ENABLE_PWA=true bun run dev
 
 # Disable PWA for fast iteration
-VITE_DISABLE_PWA=true npm run build
+VITE_DISABLE_PWA=true bun run build
 ```
 
 ---
@@ -812,7 +828,7 @@ The `ServiceWorkerToast` component handles:
 
 ```bash
 # Enable PWA in development
-VITE_ENABLE_PWA=true npm run dev
+VITE_ENABLE_PWA=true bun run dev
 
 # Check PWA in browser DevTools:
 # Application → Manifest (install assets)
@@ -825,7 +841,7 @@ For fast iteration during development/QA:
 
 ```bash
 # Via environment variable
-VITE_DISABLE_PWA=true npm run build
+VITE_DISABLE_PWA=true bun run build
 
 # Existing clients will auto-unregister on next load
 ```
@@ -919,8 +935,8 @@ npm run check-translations
 ### Build Process
 
 ```bash
-npm ci
-npm run build
+bun install
+bun run build
 # Output: dist/
 # Includes: optimized assets, sitemap.xml, service worker
 ```
@@ -975,10 +991,10 @@ server {
 
 ```bash
 # Generate sitemap manually
-npm run generate:sitemap
+bun run generate:sitemap
 
 # Automatically runs during build
-npm run build
+bun run build
 ```
 
 ### Configuration
@@ -1022,7 +1038,7 @@ sudo bash scripts/refresh-plant-swipe.sh
 ### What the Scripts Do
 
 1. Pull latest code from git
-2. Run `npm ci && npm run build`
+2. Run `bun install && bun run build` (7x faster than npm)
 3. Sync `dist/` to web root
 4. Run database migrations
 5. Restart `plant-swipe-node` and `admin-api` services
@@ -1075,7 +1091,7 @@ curl -X POST https://api.deepl.com/v2/translate \
 **Solution**: Use low-memory build script
 
 ```bash
-npm run build:low-mem
+bun run build:low-mem
 ```
 
 ### PWA Issues
@@ -1108,7 +1124,7 @@ caches.keys().then(names => names.forEach(name => caches.delete(name)))
 
 1. Create feature branch from `main`
 2. Make changes with clear commits
-3. Run linting: `npm run lint`
+3. Run linting: `bun run lint`
 4. Test locally
 5. Submit PR with description
 
@@ -1138,6 +1154,8 @@ caches.keys().then(names => names.forEach(name => caches.delete(name)))
 
 | Resource | Link |
 |----------|------|
+| Bun Documentation | [bun.sh/docs](https://bun.sh/docs) |
+| Bun Migration Guide | [BUN_MIGRATION.md](./BUN_MIGRATION.md) |
 | React Documentation | [react.dev](https://react.dev) |
 | Vite Documentation | [vitejs.dev](https://vitejs.dev) |
 | Supabase Documentation | [supabase.com/docs](https://supabase.com/docs) |
