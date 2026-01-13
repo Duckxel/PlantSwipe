@@ -51,6 +51,43 @@ export interface ContextChip {
   data?: Record<string, unknown>
 }
 
+export interface GardenMemberContext {
+  userId: string
+  displayName?: string | null
+  role: 'owner' | 'member'
+  joinedAt?: string
+}
+
+export interface GardenPlantSummary {
+  gardenPlantId: string
+  plantId: string
+  plantName: string
+  nickname?: string | null
+  healthStatus?: string | null
+  plantsOnHand?: number
+  seedsPlanted?: number
+  taskCount?: number
+}
+
+export interface GardenTaskStats {
+  totalTasksToday: number
+  completedTasksToday: number
+  pendingTasksToday: number
+  totalTasksThisWeek: number
+  completedTasksThisWeek: number
+  tasksByType: Record<string, number>
+}
+
+export interface GardenTaskSummary {
+  taskId?: string
+  taskType?: string
+  plantName: string
+  dueAt: string
+  requiredCount?: number
+  completedCount?: number
+  isCompleted: boolean
+}
+
 export interface GardenContext {
   gardenId: string
   gardenName: string
@@ -61,6 +98,28 @@ export interface GardenContext {
   locationLon?: number | null
   plantCount?: number
   memberCount?: number
+  /** Total plants currently on hand */
+  totalPlantsOnHand?: number
+  /** Total seeds planted */
+  totalSeedsPlanted?: number
+  /** Garden members with basic info */
+  members?: GardenMemberContext[]
+  /** Summary of plants in the garden */
+  plants?: GardenPlantSummary[]
+  /** Current task streak */
+  streak?: number
+  /** Garden privacy setting */
+  privacy?: 'public' | 'friends_only' | 'private'
+  /** When the garden was created */
+  createdAt?: string
+  /** Preferred language for advice */
+  adviceLanguage?: string | null
+  /** Task statistics for today and this week */
+  taskStats?: GardenTaskStats
+  /** Today's tasks with details */
+  todayTasks?: GardenTaskSummary[]
+  /** This week's tasks (limited) */
+  weekTasks?: GardenTaskSummary[]
 }
 
 export interface PlantContext {

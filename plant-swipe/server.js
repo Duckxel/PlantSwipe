@@ -17596,19 +17596,78 @@ async function buildGardenContextString(context) {
       parts.push(`- Garden created: ${createdDate.toLocaleDateString()} (${ageInDays} days ago)`)
     }
     
-    // Garden summary counts
+    // Garden summary counts - use frontend values as they're always up-to-date
     parts.push(`\n### Garden Summary`)
-    parts.push(`- Total plants: ${context.garden.plantCount || 0}`)
+    parts.push(`- Total plant species: ${context.garden.plantCount || 0}`)
     parts.push(`- Total plants on hand: ${context.garden.totalPlantsOnHand || 0}`)
     parts.push(`- Total seeds planted: ${context.garden.totalSeedsPlanted || 0}`)
     parts.push(`- Total members: ${context.garden.memberCount || 0}`)
     
-    // Garden streak info
+    // Calculate health distribution from frontend plants if available
+    if (context.garden.plants && context.garden.plants.length > 0) {
+      const healthCounts = {}
+      for (const plant of context.garden.plants) {
+        if (plant.healthStatus) {
+          healthCounts[plant.healthStatus] = (healthCounts[plant.healthStatus] || 0) + 1
+        }
+      }
+      if (Object.keys(healthCounts).length > 0) {
+        const healthSummary = Object.entries(healthCounts)
+          .map(([status, count]) => `${status}: ${count}`)
+          .join(', ')
+        parts.push(`- Plant health overview: ${healthSummary}`)
+      }
+    }
+    
+    // Garden streak info - handle both object (from DB) and number (from frontend) formats
     if (context.garden.streak) {
-      parts.push(`- Current streak: ${context.garden.streak.currentStreak} days`)
-      parts.push(`- Longest streak: ${context.garden.streak.longestStreak} days`)
-      if (context.garden.streak.lastStreakDate) {
-        parts.push(`- Last streak activity: ${new Date(context.garden.streak.lastStreakDate).toLocaleDateString()}`)
+      if (typeof context.garden.streak === 'object') {
+        parts.push(`- Current streak: ${context.garden.streak.currentStreak} days`)
+        parts.push(`- Longest streak: ${context.garden.streak.longestStreak} days`)
+        if (context.garden.streak.lastStreakDate) {
+          parts.push(`- Last streak activity: ${new Date(context.garden.streak.lastStreakDate).toLocaleDateString()}`)
+        }
+      } else if (typeof context.garden.streak === 'number' && context.garden.streak > 0) {
+        parts.push(`- Current streak: ${context.garden.streak} days`)
+      }
+    }
+    
+    // Task statistics from frontend context
+    if (context.garden.taskStats) {
+      const ts = context.garden.taskStats
+      parts.push(`\n### Task Overview`)
+      parts.push(`- Tasks due today: ${ts.totalTasksToday} (${ts.completedTasksToday} completed, ${ts.pendingTasksToday} pending)`)
+      parts.push(`- Tasks this week: ${ts.totalTasksThisWeek} (${ts.completedTasksThisWeek} completed)`)
+      if (ts.tasksByType && Object.keys(ts.tasksByType).length > 0) {
+        const typeBreakdown = Object.entries(ts.tasksByType)
+          .map(([type, count]) => `${type}: ${count}`)
+          .join(', ')
+        parts.push(`- Task types this week: ${typeBreakdown}`)
+      }
+    }
+    
+    // Today's tasks from frontend context
+    if (context.garden.todayTasks && context.garden.todayTasks.length > 0) {
+      parts.push(`\n### Today's Tasks (${context.garden.todayTasks.length} total)`)
+      const pending = context.garden.todayTasks.filter(t => !t.isCompleted)
+      const completed = context.garden.todayTasks.filter(t => t.isCompleted)
+      
+      if (pending.length > 0) {
+        parts.push(`\n#### Pending Tasks:`)
+        for (const task of pending) {
+          let taskInfo = `- ${task.plantName}`
+          if (task.requiredCount && task.requiredCount > 1) {
+            taskInfo += ` (${task.completedCount || 0}/${task.requiredCount} done)`
+          }
+          parts.push(taskInfo)
+        }
+      }
+      
+      if (completed.length > 0) {
+        parts.push(`\n#### ✅ Completed Today:`)
+        for (const task of completed) {
+          parts.push(`- ${task.plantName}`)
+        }
       }
     }
     
@@ -17708,19 +17767,24 @@ async function buildGardenContextString(context) {
         parts.push(`- Added to garden: ${addedDate.toLocaleDateString()}`)
       }
       
-      // Care requirements
-      parts.push(`\n#### Care Requirements:`)
-      if (plant.waterFrequency) parts.push(`- Water frequency: ${plant.waterFrequency}`)
-      if (plant.wateringType && plant.wateringType.length > 0) parts.push(`- Watering methods: ${plant.wateringType.join(', ')}`)
-      if (plant.lightLevel) parts.push(`- Light needs: ${plant.lightLevel}`)
+      // Care requirements - only show section if there's care data
+      const careRequirements = []
+      if (plant.waterFrequency) careRequirements.push(`- Water frequency: ${plant.waterFrequency}`)
+      if (plant.wateringType && plant.wateringType.length > 0) careRequirements.push(`- Watering methods: ${plant.wateringType.join(', ')}`)
+      if (plant.lightLevel) careRequirements.push(`- Light needs: ${plant.lightLevel}`)
       if (plant.temperatureRange) {
-        parts.push(`- Temperature range: ${plant.temperatureRange.min}°C to ${plant.temperatureRange.max}°C (ideal: ${plant.temperatureRange.ideal}°C)`)
+        careRequirements.push(`- Temperature range: ${plant.temperatureRange.min}°C to ${plant.temperatureRange.max}°C (ideal: ${plant.temperatureRange.ideal}°C)`)
       }
-      if (plant.humidity) parts.push(`- Humidity needs: ${plant.humidity}%`)
-      if (plant.hardinessZone) parts.push(`- Hardiness zone: ${plant.hardinessZone}`)
-      if (plant.soilType && plant.soilType.length > 0) parts.push(`- Soil types: ${plant.soilType.join(', ')}`)
-      if (plant.nutritionNeeds && plant.nutritionNeeds.length > 0) parts.push(`- Nutrition needs: ${plant.nutritionNeeds.join(', ')}`)
-      if (plant.fertilizerTypes && plant.fertilizerTypes.length > 0) parts.push(`- Fertilizer types: ${plant.fertilizerTypes.join(', ')}`)
+      if (plant.humidity) careRequirements.push(`- Humidity needs: ${plant.humidity}%`)
+      if (plant.hardinessZone) careRequirements.push(`- Hardiness zone: ${plant.hardinessZone}`)
+      if (plant.soilType && plant.soilType.length > 0) careRequirements.push(`- Soil types: ${plant.soilType.join(', ')}`)
+      if (plant.nutritionNeeds && plant.nutritionNeeds.length > 0) careRequirements.push(`- Nutrition needs: ${plant.nutritionNeeds.join(', ')}`)
+      if (plant.fertilizerTypes && plant.fertilizerTypes.length > 0) careRequirements.push(`- Fertilizer types: ${plant.fertilizerTypes.join(', ')}`)
+      
+      if (careRequirements.length > 0) {
+        parts.push(`\n#### Care Requirements:`)
+        parts.push(...careRequirements)
+      }
       
       // Growing info
       if (plant.sowingMonths && plant.sowingMonths.length > 0) parts.push(`- Sowing months: ${plant.sowingMonths.join(', ')}`)
@@ -18895,11 +18959,27 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       console.warn('[aphylia-chat] ⚠️ No garden context provided! AI responses will be generic without garden-specific information.')
     }
     
+    // Use frontend-provided plant summaries as fallback if backend fetch returned empty
+    // This ensures the AI always has some plant context even if database queries fail
+    let effectivePlantsContext = plantsContext
+    if ((!plantsContext || plantsContext.length === 0) && gardenContext?.plants && gardenContext.plants.length > 0) {
+      console.log(`[aphylia-chat] Using ${gardenContext.plants.length} plants from frontend context as fallback`)
+      effectivePlantsContext = gardenContext.plants.map(p => ({
+        gardenPlantId: p.gardenPlantId,
+        plantId: p.plantId,
+        plantName: p.plantName,
+        nickname: p.nickname,
+        healthStatus: p.healthStatus,
+        plantsOnHand: p.plantsOnHand,
+        seedsPlanted: p.seedsPlanted
+      }))
+    }
+    
     // Build full context with ALL data
     const fullContext = {
       user: userContext,
       garden: gardenContext,
-      plants: plantsContext,
+      plants: effectivePlantsContext,
       tasks: tasksContext,
       journal: journalContext,
       analytics: analyticsContext,
