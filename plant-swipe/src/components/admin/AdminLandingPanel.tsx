@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,21 @@ import {
   ExternalLink,
   Copy,
   Monitor,
+  Settings,
+  Type,
+  MousePointer,
+  Instagram,
+  Twitter,
+  Mail,
+  FileText,
+  Layers,
+  Megaphone,
+  GraduationCap,
+  CirclePlay,
+  Route,
+  Grid3X3,
+  Quote,
+  AlertCircle,
 } from "lucide-react"
 
 // Icon mapping for dynamic rendering
@@ -161,7 +177,51 @@ type FAQ = {
   is_active: boolean
 }
 
-type LandingTab = "hero" | "stats" | "features" | "showcase" | "testimonials" | "faq"
+type LandingPageSettings = {
+  id: string
+  // Hero Section
+  hero_badge_text: string
+  hero_title: string
+  hero_title_highlight: string
+  hero_title_end: string
+  hero_description: string
+  hero_cta_primary_text: string
+  hero_cta_primary_link: string
+  hero_cta_secondary_text: string
+  hero_cta_secondary_link: string
+  hero_social_proof_text: string
+  // Section Visibility
+  show_hero_section: boolean
+  show_stats_section: boolean
+  show_beginner_section: boolean
+  show_features_section: boolean
+  show_demo_section: boolean
+  show_how_it_works_section: boolean
+  show_showcase_section: boolean
+  show_testimonials_section: boolean
+  show_faq_section: boolean
+  show_final_cta_section: boolean
+  // Social Links
+  instagram_url: string
+  twitter_url: string
+  support_email: string
+  // Final CTA
+  final_cta_badge: string
+  final_cta_title: string
+  final_cta_subtitle: string
+  final_cta_button_text: string
+  final_cta_secondary_text: string
+  // Beginner Section
+  beginner_badge: string
+  beginner_title: string
+  beginner_title_highlight: string
+  beginner_subtitle: string
+  // Meta/SEO
+  meta_title: string
+  meta_description: string
+}
+
+type LandingTab = "settings" | "hero" | "stats" | "features" | "showcase" | "testimonials" | "faq"
 
 // ========================
 // IMPORT FROM PLANTS MODAL
@@ -841,12 +901,13 @@ const FeaturePreview: React.FC<{ feature: LandingFeature }> = ({ feature }) => {
 // MAIN COMPONENT
 // ========================
 export const AdminLandingPanel: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<LandingTab>("hero")
+  const [activeTab, setActiveTab] = React.useState<LandingTab>("settings")
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [showPreview, setShowPreview] = React.useState(true)
 
   // Data states
+  const [settings, setSettings] = React.useState<LandingPageSettings | null>(null)
   const [heroCards, setHeroCards] = React.useState<HeroCard[]>([])
   const [stats, setStats] = React.useState<LandingStats | null>(null)
   const [features, setFeatures] = React.useState<LandingFeature[]>([])
@@ -858,15 +919,17 @@ export const AdminLandingPanel: React.FC = () => {
   const loadData = React.useCallback(async () => {
     setLoading(true)
     try {
-      const [heroRes, statsRes, featuresRes, showcaseRes, testimonialsRes, faqRes] = await Promise.all([
+      const [settingsRes, heroRes, statsRes, featuresRes, showcaseRes, testimonialsRes, faqRes] = await Promise.all([
+        supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
         supabase.from("landing_hero_cards").select("*").order("position"),
-        supabase.from("landing_stats").select("*").limit(1).single(),
+        supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
         supabase.from("landing_features").select("*").order("position"),
         supabase.from("landing_showcase_cards").select("*").order("position"),
         supabase.from("landing_testimonials").select("*").order("position"),
         supabase.from("landing_faq").select("*").order("position"),
       ])
 
+      if (settingsRes.data) setSettings(settingsRes.data)
       if (heroRes.data) setHeroCards(heroRes.data)
       if (statsRes.data) setStats(statsRes.data)
       if (featuresRes.data) setFeatures(featuresRes.data)
@@ -885,6 +948,7 @@ export const AdminLandingPanel: React.FC = () => {
   }, [loadData])
 
   const tabs = [
+    { id: "settings" as const, label: "Global Settings", icon: Settings },
     { id: "hero" as const, label: "Hero Cards", icon: Smartphone, count: heroCards.length },
     { id: "stats" as const, label: "Stats", icon: BarChart3 },
     { id: "features" as const, label: "Features", icon: Sparkles, count: features.length },
@@ -974,6 +1038,14 @@ export const AdminLandingPanel: React.FC = () => {
         </div>
       ) : (
         <>
+          {activeTab === "settings" && (
+            <GlobalSettingsTab
+              settings={settings}
+              setSettings={setSettings}
+              saving={saving}
+              setSaving={setSaving}
+            />
+          )}
           {activeTab === "hero" && (
             <HeroCardsTab
               cards={heroCards}
@@ -981,6 +1053,7 @@ export const AdminLandingPanel: React.FC = () => {
               saving={saving}
               setSaving={setSaving}
               showPreview={showPreview}
+              sectionVisible={settings?.show_hero_section ?? true}
             />
           )}
           {activeTab === "stats" && (
@@ -990,6 +1063,7 @@ export const AdminLandingPanel: React.FC = () => {
               saving={saving}
               setSaving={setSaving}
               showPreview={showPreview}
+              sectionVisible={settings?.show_stats_section ?? true}
             />
           )}
           {activeTab === "features" && (
@@ -999,6 +1073,7 @@ export const AdminLandingPanel: React.FC = () => {
               saving={saving}
               setSaving={setSaving}
               showPreview={showPreview}
+              sectionVisible={settings?.show_features_section ?? true}
             />
           )}
           {activeTab === "showcase" && (
@@ -1007,6 +1082,7 @@ export const AdminLandingPanel: React.FC = () => {
               setCards={setShowcaseCards}
               saving={saving}
               setSaving={setSaving}
+              sectionVisible={settings?.show_showcase_section ?? true}
             />
           )}
           {activeTab === "testimonials" && (
@@ -1015,6 +1091,7 @@ export const AdminLandingPanel: React.FC = () => {
               setTestimonials={setTestimonials}
               saving={saving}
               setSaving={setSaving}
+              sectionVisible={settings?.show_testimonials_section ?? true}
             />
           )}
           {activeTab === "faq" && (
@@ -1023,6 +1100,7 @@ export const AdminLandingPanel: React.FC = () => {
               setItems={setFaqItems}
               saving={saving}
               setSaving={setSaving}
+              sectionVisible={settings?.show_faq_section ?? true}
             />
           )}
         </>
@@ -1040,6 +1118,637 @@ export const AdminLandingPanel: React.FC = () => {
 }
 
 // ========================
+// GLOBAL SETTINGS TAB
+// ========================
+const GlobalSettingsTab: React.FC<{
+  settings: LandingPageSettings | null
+  setSettings: React.Dispatch<React.SetStateAction<LandingPageSettings | null>>
+  saving: boolean
+  setSaving: React.Dispatch<React.SetStateAction<boolean>>
+}> = ({ settings, setSettings, saving, setSaving }) => {
+  const [localSettings, setLocalSettings] = React.useState<LandingPageSettings | null>(settings)
+  const [activeSection, setActiveSection] = React.useState<"visibility" | "hero" | "beginner" | "cta" | "social" | "meta">("visibility")
+
+  React.useEffect(() => {
+    setLocalSettings(settings)
+  }, [settings])
+
+  const createDefaultSettings = async () => {
+    setSaving(true)
+    try {
+      const { data, error } = await supabase
+        .from("landing_page_settings")
+        .insert({})
+        .select()
+        .single()
+
+      if (data && !error) {
+        setSettings(data)
+        setLocalSettings(data)
+      }
+    } catch (e) {
+      console.error("Failed to create settings:", e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveSettings = async () => {
+    if (!localSettings) return
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from("landing_page_settings")
+        .update({
+          ...localSettings,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", localSettings.id)
+
+      if (!error) {
+        setSettings(localSettings)
+      }
+    } catch (e) {
+      console.error("Failed to save settings:", e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateSetting = <K extends keyof LandingPageSettings>(key: K, value: LandingPageSettings[K]) => {
+    if (!localSettings) return
+    setLocalSettings({ ...localSettings, [key]: value })
+  }
+
+  if (!localSettings) {
+    return (
+      <Card className="rounded-xl">
+        <CardContent className="py-16 text-center">
+          <Settings className="h-12 w-12 mx-auto mb-4 text-stone-300" />
+          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">No global settings configured</h3>
+          <p className="text-sm text-stone-500 mb-4">Initialize your landing page settings to customize content and visibility</p>
+          <Button onClick={createDefaultSettings} disabled={saving} className="rounded-xl">
+            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+            Initialize Settings
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const sectionTabs = [
+    { id: "visibility" as const, label: "Section Visibility", icon: Layers, description: "Control which sections appear on the landing page" },
+    { id: "hero" as const, label: "Hero Section", icon: Type, description: "Headlines, descriptions, and CTA buttons" },
+    { id: "beginner" as const, label: "Beginner Section", icon: GraduationCap, description: "Content for the beginner-friendly section" },
+    { id: "cta" as const, label: "Final CTA", icon: Megaphone, description: "Final call-to-action section at page bottom" },
+    { id: "social" as const, label: "Social & Contact", icon: Share2, description: "Social media links and contact info" },
+    { id: "meta" as const, label: "SEO & Meta", icon: FileText, description: "Page title and description for search engines" },
+  ]
+
+  const visibilityItems = [
+    { key: "show_hero_section" as const, label: "Hero Section", description: "Main hero area with headline and phone mockup", icon: Smartphone },
+    { key: "show_stats_section" as const, label: "Stats Banner", description: "Statistics banner showing key metrics", icon: BarChart3 },
+    { key: "show_beginner_section" as const, label: "Beginner Section", description: "Section encouraging new users", icon: GraduationCap },
+    { key: "show_features_section" as const, label: "Features Grid", description: "Feature cards showcasing capabilities", icon: Grid3X3 },
+    { key: "show_demo_section" as const, label: "Interactive Demo", description: "Animated demo with rotating features", icon: CirclePlay },
+    { key: "show_how_it_works_section" as const, label: "How It Works", description: "Step-by-step guide section", icon: Route },
+    { key: "show_showcase_section" as const, label: "Showcase", description: "App showcase bento grid", icon: Layout },
+    { key: "show_testimonials_section" as const, label: "Testimonials", description: "Customer reviews and ratings", icon: Quote },
+    { key: "show_faq_section" as const, label: "FAQ Section", description: "Frequently asked questions", icon: HelpCircle },
+    { key: "show_final_cta_section" as const, label: "Final CTA", description: "Final call-to-action before footer", icon: Megaphone },
+  ]
+
+  return (
+    <div className="space-y-6">
+      {/* Header with Save Button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+            <Settings className="h-5 w-5 text-emerald-500" />
+            Global Landing Page Settings
+          </h3>
+          <p className="text-sm text-stone-500 mt-1">
+            Control visibility and customize text content across all sections
+          </p>
+        </div>
+        <Button onClick={saveSettings} disabled={saving} className="rounded-xl">
+          {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          Save All Changes
+        </Button>
+      </div>
+
+      {/* Section Navigation */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {sectionTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveSection(tab.id)}
+            className={cn(
+              "flex flex-col items-center gap-2 p-3 rounded-xl text-center transition-all",
+              activeSection === tab.id
+                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+            )}
+          >
+            <tab.icon className="h-5 w-5" />
+            <span className="text-xs font-medium">{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Active Section Content */}
+      <Card className="rounded-xl">
+        <CardContent className="p-6">
+          {/* Section Visibility */}
+          {activeSection === "visibility" && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between pb-4 border-b border-stone-200 dark:border-stone-700">
+                <div>
+                  <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-emerald-500" />
+                    Section Visibility
+                  </h4>
+                  <p className="text-sm text-stone-500 mt-1">Toggle sections on or off to customize your landing page</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-stone-500">
+                  <span className="flex items-center gap-1">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                    Visible
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <div className="h-2 w-2 rounded-full bg-stone-300" />
+                    Hidden
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-3">
+                {visibilityItems.map((item) => {
+                  const isVisible = localSettings[item.key]
+                  return (
+                    <div
+                      key={item.key}
+                      className={cn(
+                        "flex items-center justify-between p-4 rounded-xl border transition-all",
+                        isVisible
+                          ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800"
+                          : "bg-stone-50 dark:bg-stone-900/50 border-stone-200 dark:border-stone-700 opacity-75"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "h-10 w-10 rounded-xl flex items-center justify-center",
+                          isVisible ? "bg-emerald-500/10" : "bg-stone-200 dark:bg-stone-800"
+                        )}>
+                          <item.icon className={cn(
+                            "h-5 w-5",
+                            isVisible ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400"
+                          )} />
+                        </div>
+                        <div>
+                          <p className={cn(
+                            "font-medium",
+                            isVisible ? "text-stone-900 dark:text-white" : "text-stone-500"
+                          )}>
+                            {item.label}
+                          </p>
+                          <p className="text-xs text-stone-500">{item.description}</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={isVisible}
+                        onCheckedChange={(checked) => updateSetting(item.key, checked)}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex gap-2 pt-4 border-t border-stone-200 dark:border-stone-700">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    visibilityItems.forEach(item => updateSetting(item.key, true))
+                  }}
+                  className="rounded-xl"
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Show All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    visibilityItems.forEach(item => updateSetting(item.key, false))
+                  }}
+                  className="rounded-xl"
+                >
+                  <EyeOff className="h-4 w-4 mr-2" />
+                  Hide All
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Hero Section Settings */}
+          {activeSection === "hero" && (
+            <div className="space-y-6">
+              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
+                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                  <Type className="h-4 w-4 text-emerald-500" />
+                  Hero Section Content
+                </h4>
+                <p className="text-sm text-stone-500 mt-1">Customize the main headline and call-to-action buttons</p>
+              </div>
+
+              {/* Badge */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Badge Text</Label>
+                <Input
+                  value={localSettings.hero_badge_text}
+                  onChange={(e) => updateSetting("hero_badge_text", e.target.value)}
+                  placeholder="Your Personal Plant Care Expert"
+                  className="rounded-xl"
+                />
+                <p className="text-xs text-stone-500">Small badge shown above the headline</p>
+              </div>
+
+              {/* Headline */}
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Title Start</Label>
+                  <Input
+                    value={localSettings.hero_title}
+                    onChange={(e) => updateSetting("hero_title", e.target.value)}
+                    placeholder="Grow Your"
+                    className="rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Title Highlight <span className="text-emerald-500">(Gradient)</span></Label>
+                  <Input
+                    value={localSettings.hero_title_highlight}
+                    onChange={(e) => updateSetting("hero_title_highlight", e.target.value)}
+                    placeholder="Green Paradise"
+                    className="rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Title End</Label>
+                  <Input
+                    value={localSettings.hero_title_end}
+                    onChange={(e) => updateSetting("hero_title_end", e.target.value)}
+                    placeholder="with Confidence"
+                    className="rounded-xl"
+                  />
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="p-4 rounded-xl bg-stone-100 dark:bg-stone-900">
+                <p className="text-xs text-stone-500 mb-2">Preview:</p>
+                <h3 className="text-xl font-bold">
+                  <span className="text-stone-900 dark:text-white">{localSettings.hero_title || "Grow Your"}</span>{" "}
+                  <span className="text-emerald-500">{localSettings.hero_title_highlight || "Green Paradise"}</span>{" "}
+                  <span className="text-stone-900 dark:text-white">{localSettings.hero_title_end || "with Confidence"}</span>
+                </h3>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Description</Label>
+                <Textarea
+                  value={localSettings.hero_description}
+                  onChange={(e) => updateSetting("hero_description", e.target.value)}
+                  placeholder="Discover, track, and nurture your plants..."
+                  className="rounded-xl"
+                  rows={3}
+                />
+              </div>
+
+              {/* CTA Buttons */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl border border-stone-200 dark:border-stone-700 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <MousePointer className="h-4 w-4 text-emerald-500" />
+                    <Label className="text-sm font-medium">Primary CTA Button</Label>
+                  </div>
+                  <Input
+                    value={localSettings.hero_cta_primary_text}
+                    onChange={(e) => updateSetting("hero_cta_primary_text", e.target.value)}
+                    placeholder="Download App"
+                    className="rounded-xl"
+                  />
+                  <Input
+                    value={localSettings.hero_cta_primary_link}
+                    onChange={(e) => updateSetting("hero_cta_primary_link", e.target.value)}
+                    placeholder="/download"
+                    className="rounded-xl"
+                  />
+                </div>
+                <div className="p-4 rounded-xl border border-stone-200 dark:border-stone-700 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <MousePointer className="h-4 w-4 text-stone-400" />
+                    <Label className="text-sm font-medium">Secondary CTA Button</Label>
+                  </div>
+                  <Input
+                    value={localSettings.hero_cta_secondary_text}
+                    onChange={(e) => updateSetting("hero_cta_secondary_text", e.target.value)}
+                    placeholder="Try in Browser"
+                    className="rounded-xl"
+                  />
+                  <Input
+                    value={localSettings.hero_cta_secondary_link}
+                    onChange={(e) => updateSetting("hero_cta_secondary_link", e.target.value)}
+                    placeholder="/discovery"
+                    className="rounded-xl"
+                  />
+                </div>
+              </div>
+
+              {/* Social Proof */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Social Proof Text</Label>
+                <Input
+                  value={localSettings.hero_social_proof_text}
+                  onChange={(e) => updateSetting("hero_social_proof_text", e.target.value)}
+                  placeholder="10,000+ plant lovers"
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Beginner Section Settings */}
+          {activeSection === "beginner" && (
+            <div className="space-y-6">
+              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
+                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                  <GraduationCap className="h-4 w-4 text-emerald-500" />
+                  Beginner-Friendly Section
+                </h4>
+                <p className="text-sm text-stone-500 mt-1">Content for users who are new to plant care</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Badge Text</Label>
+                <Input
+                  value={localSettings.beginner_badge}
+                  onChange={(e) => updateSetting("beginner_badge", e.target.value)}
+                  placeholder="Perfect for Beginners"
+                  className="rounded-xl"
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Title</Label>
+                  <Input
+                    value={localSettings.beginner_title}
+                    onChange={(e) => updateSetting("beginner_title", e.target.value)}
+                    placeholder="Know Nothing About Gardening?"
+                    className="rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Title Highlight <span className="text-emerald-500">(Colored)</span></Label>
+                  <Input
+                    value={localSettings.beginner_title_highlight}
+                    onChange={(e) => updateSetting("beginner_title_highlight", e.target.value)}
+                    placeholder="That's Exactly Why We Built This"
+                    className="rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Subtitle</Label>
+                <Textarea
+                  value={localSettings.beginner_subtitle}
+                  onChange={(e) => updateSetting("beginner_subtitle", e.target.value)}
+                  placeholder="Everyone starts somewhere..."
+                  className="rounded-xl"
+                  rows={2}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Final CTA Settings */}
+          {activeSection === "cta" && (
+            <div className="space-y-6">
+              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
+                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                  <Megaphone className="h-4 w-4 text-emerald-500" />
+                  Final Call-to-Action Section
+                </h4>
+                <p className="text-sm text-stone-500 mt-1">The last push to convert visitors before the footer</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Badge Text</Label>
+                <Input
+                  value={localSettings.final_cta_badge}
+                  onChange={(e) => updateSetting("final_cta_badge", e.target.value)}
+                  placeholder="No experience needed"
+                  className="rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Title</Label>
+                <Input
+                  value={localSettings.final_cta_title}
+                  onChange={(e) => updateSetting("final_cta_title", e.target.value)}
+                  placeholder="Ready to Start Your Plant Journey?"
+                  className="rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Subtitle</Label>
+                <Textarea
+                  value={localSettings.final_cta_subtitle}
+                  onChange={(e) => updateSetting("final_cta_subtitle", e.target.value)}
+                  placeholder="Whether it's your first succulent..."
+                  className="rounded-xl"
+                  rows={2}
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Primary Button Text</Label>
+                  <Input
+                    value={localSettings.final_cta_button_text}
+                    onChange={(e) => updateSetting("final_cta_button_text", e.target.value)}
+                    placeholder="Start Growing"
+                    className="rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Secondary Button Text</Label>
+                  <Input
+                    value={localSettings.final_cta_secondary_text}
+                    onChange={(e) => updateSetting("final_cta_secondary_text", e.target.value)}
+                    placeholder="Explore Plants"
+                    className="rounded-xl"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Social & Contact Settings */}
+          {activeSection === "social" && (
+            <div className="space-y-6">
+              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
+                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                  <Share2 className="h-4 w-4 text-emerald-500" />
+                  Social Media & Contact
+                </h4>
+                <p className="text-sm text-stone-500 mt-1">Links displayed in the footer and contact sections</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-stone-700">
+                  <div className="h-10 w-10 rounded-xl bg-pink-500/10 flex items-center justify-center">
+                    <Instagram className="h-5 w-5 text-pink-500" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-sm font-medium">Instagram URL</Label>
+                    <Input
+                      value={localSettings.instagram_url}
+                      onChange={(e) => updateSetting("instagram_url", e.target.value)}
+                      placeholder="https://instagram.com/your_handle"
+                      className="rounded-xl mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-stone-700">
+                  <div className="h-10 w-10 rounded-xl bg-sky-500/10 flex items-center justify-center">
+                    <Twitter className="h-5 w-5 text-sky-500" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-sm font-medium">Twitter/X URL</Label>
+                    <Input
+                      value={localSettings.twitter_url}
+                      onChange={(e) => updateSetting("twitter_url", e.target.value)}
+                      placeholder="https://twitter.com/your_handle"
+                      className="rounded-xl mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-stone-700">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <Mail className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-sm font-medium">Support Email</Label>
+                    <Input
+                      value={localSettings.support_email}
+                      onChange={(e) => updateSetting("support_email", e.target.value)}
+                      placeholder="hello@example.com"
+                      className="rounded-xl mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SEO & Meta Settings */}
+          {activeSection === "meta" && (
+            <div className="space-y-6">
+              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
+                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-emerald-500" />
+                  SEO & Meta Information
+                </h4>
+                <p className="text-sm text-stone-500 mt-1">Optimize how your landing page appears in search results</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Meta Title</Label>
+                <Input
+                  value={localSettings.meta_title}
+                  onChange={(e) => updateSetting("meta_title", e.target.value)}
+                  placeholder="Aphylia – Your Personal Plant Care Expert"
+                  className="rounded-xl"
+                />
+                <p className="text-xs text-stone-500">{localSettings.meta_title?.length || 0}/60 characters recommended</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Meta Description</Label>
+                <Textarea
+                  value={localSettings.meta_description}
+                  onChange={(e) => updateSetting("meta_description", e.target.value)}
+                  placeholder="Discover, track, and nurture your plants..."
+                  className="rounded-xl"
+                  rows={3}
+                />
+                <p className="text-xs text-stone-500">{localSettings.meta_description?.length || 0}/160 characters recommended</p>
+              </div>
+
+              {/* Preview */}
+              <div className="p-4 rounded-xl bg-stone-100 dark:bg-stone-900 space-y-1">
+                <p className="text-xs text-stone-500 mb-2">Search Result Preview:</p>
+                <p className="text-blue-600 dark:text-blue-400 text-base font-medium truncate">
+                  {localSettings.meta_title || "Page Title"}
+                </p>
+                <p className="text-emerald-600 text-xs">example.com</p>
+                <p className="text-sm text-stone-600 dark:text-stone-400 line-clamp-2">
+                  {localSettings.meta_description || "Page description will appear here..."}
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Unsaved Changes Warning */}
+      {settings && localSettings && JSON.stringify(settings) !== JSON.stringify(localSettings) && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500 text-white shadow-lg z-50">
+          <AlertCircle className="h-5 w-5" />
+          <span className="text-sm font-medium">You have unsaved changes</span>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={saveSettings}
+            disabled={saving}
+            className="rounded-lg bg-white/20 hover:bg-white/30 text-white"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Now"}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ========================
+// SECTION VISIBILITY BANNER
+// ========================
+const SectionHiddenBanner: React.FC<{ visible: boolean }> = ({ visible }) => {
+  if (visible) return null
+  
+  return (
+    <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
+      <EyeOff className="h-5 w-5 text-amber-500 flex-shrink-0" />
+      <div>
+        <p className="text-sm font-medium text-amber-700 dark:text-amber-400">This section is currently hidden</p>
+        <p className="text-xs text-amber-600 dark:text-amber-500">Go to Global Settings → Section Visibility to enable it</p>
+      </div>
+    </div>
+  )
+}
+
+// ========================
 // HERO CARDS TAB
 // ========================
 const HeroCardsTab: React.FC<{
@@ -1048,7 +1757,8 @@ const HeroCardsTab: React.FC<{
   saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   showPreview: boolean
-}> = ({ cards, setCards, saving, setSaving, showPreview }) => {
+  sectionVisible: boolean
+}> = ({ cards, setCards, saving, setSaving, showPreview, sectionVisible }) => {
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [importPlantOpen, setImportPlantOpen] = React.useState(false)
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
@@ -1152,6 +1862,9 @@ const HeroCardsTab: React.FC<{
 
   return (
     <div className="space-y-6">
+      {/* Section Hidden Warning */}
+      <SectionHiddenBanner visible={sectionVisible} />
+
       {/* Info Banner */}
       <div className="rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-green-500/10 border border-emerald-500/20 p-4">
         <div className="flex items-start gap-3">
@@ -1452,7 +2165,8 @@ const StatsTab: React.FC<{
   saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   showPreview: boolean
-}> = ({ stats, setStats, saving, setSaving, showPreview }) => {
+  sectionVisible: boolean
+}> = ({ stats, setStats, saving, setSaving, showPreview, sectionVisible }) => {
   const [localStats, setLocalStats] = React.useState<LandingStats | null>(stats)
 
   React.useEffect(() => {
@@ -1550,6 +2264,8 @@ const StatsTab: React.FC<{
 
   return (
     <div className="space-y-6">
+      <SectionHiddenBanner visible={sectionVisible} />
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Statistics Banner</h3>
@@ -1634,7 +2350,8 @@ const FeaturesTab: React.FC<{
   saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   showPreview: boolean
-}> = ({ features, setFeatures, saving, setSaving, showPreview }) => {
+  sectionVisible: boolean
+}> = ({ features, setFeatures, saving, setSaving, showPreview, sectionVisible }) => {
   const circleFeatures = features.filter(f => f.is_in_circle)
   const gridFeatures = features.filter(f => !f.is_in_circle)
 
@@ -1756,6 +2473,8 @@ const FeaturesTab: React.FC<{
 
   return (
     <div className="space-y-8">
+      <SectionHiddenBanner visible={sectionVisible} />
+
       {/* Circle Features */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -1832,7 +2551,8 @@ const ShowcaseTab: React.FC<{
   setCards: React.Dispatch<React.SetStateAction<ShowcaseCard[]>>
   saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
-}> = ({ cards, setCards, saving, setSaving }) => {
+  sectionVisible: boolean
+}> = ({ cards, setCards, saving, setSaving, sectionVisible }) => {
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
 
@@ -1887,6 +2607,8 @@ const ShowcaseTab: React.FC<{
 
   return (
     <div className="space-y-4">
+      <SectionHiddenBanner visible={sectionVisible} />
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Showcase Cards</h3>
@@ -2038,7 +2760,8 @@ const TestimonialsTab: React.FC<{
   setTestimonials: React.Dispatch<React.SetStateAction<Testimonial[]>>
   saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
-}> = ({ testimonials, setTestimonials, saving, setSaving }) => {
+  sectionVisible: boolean
+}> = ({ testimonials, setTestimonials, saving, setSaving, sectionVisible }) => {
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(null)
 
@@ -2092,6 +2815,8 @@ const TestimonialsTab: React.FC<{
 
   return (
     <div className="space-y-4">
+      <SectionHiddenBanner visible={sectionVisible} />
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Customer Reviews</h3>
@@ -2230,7 +2955,8 @@ const FAQTab: React.FC<{
   setItems: React.Dispatch<React.SetStateAction<FAQ[]>>
   saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
-}> = ({ items, setItems, saving, setSaving }) => {
+  sectionVisible: boolean
+}> = ({ items, setItems, saving, setSaving, sectionVisible }) => {
   const addFAQ = async () => {
     const newFAQ: Partial<FAQ> = {
       position: items.length,
@@ -2295,6 +3021,8 @@ const FAQTab: React.FC<{
 
   return (
     <div className="space-y-4">
+      <SectionHiddenBanner visible={sectionVisible} />
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">FAQ Items</h3>
