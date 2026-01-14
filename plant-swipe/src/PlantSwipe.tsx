@@ -514,6 +514,67 @@ export default function PlantSwipe() {
     }
   }, [user?.id, profile?.display_name])
 
+
+  // Swiping-only randomized order with continuous wrap-around
+  // Optimization: Pre-calculate filter attributes to avoid expensive operations during render/filtering
+  const preparedPlants = useMemo(() => {
+    return plants.map((p) => {
+      // 1. Search String
+      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+      const identityColors = Array.isArray(p.identity?.colors)
+        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+        : []
+      const allColorsRaw = [...legacyColors, ...identityColors]
+
+      const searchStr = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${allColorsRaw.join(" ")}`.toLowerCase()
+
+      // 2. Color Tokens (for fast set lookup)
+      const allColorTokens = new Set<string>()
+      allColorsRaw.forEach(colorName => {
+        const normalized = (colorName || "").toLowerCase().trim()
+        if (!normalized) return
+        // Add the full normalized name
+        allColorTokens.add(normalized)
+        // Add individual tokens
+        normalized.replace(/[-_/]+/g, " ").split(/\s+/).filter(Boolean).forEach(t => allColorTokens.add(t))
+      })
+
+      // 3. Type
+      const normalizedType = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
+
+      // 4. Usage (Set for fast lookup)
+      const usageLabels = new Set(getPlantUsageLabels(p).map((label) => label.toLowerCase()))
+
+      // 5. Habitat (Set for fast lookup)
+      const habitatLabels = new Set((p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase()))
+
+      // 6. Maintenance
+      const maintenanceLabel = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+
+      // 7. Toxicity
+      const toxicityPets = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '')
+      const toxicityHuman = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '')
+
+      // 8. Living Space
+      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
+
+      return {
+        ...p,
+        _prepared: {
+          searchStr,
+          allColorTokens,
+          normalizedType,
+          usageLabels,
+          habitatLabels,
+          maintenanceLabel,
+          toxicityPets,
+          toxicityHuman,
+          livingSpace
+        }
+      }
+    })
+  }, [plants])
+
   const filtered = useMemo(() => {
     const lowerQuery = query.toLowerCase()
     const normalizedType = typeFilter?.toLowerCase() ?? null
@@ -543,102 +604,82 @@ export default function PlantSwipe() {
     // Build expanded color filters including children
     const expandedColorFilters = normalizedColorFilters.flatMap((f) => getMatchingColorNames(f))
 
-    const colorMatches = (colorName: string, normalizedColorFilter: string): boolean => {
-      const normalizedColor = (colorName || "").toLowerCase().trim()
-      if (!normalizedColor) return false
-
-      if (normalizedColor === normalizedColorFilter) {
-        return true
-      }
-
-      const tokens = normalizedColor
-        .replace(/[-_/]+/g, " ")
-        .split(/\s+/)
-        .filter(Boolean)
-
-      return tokens.includes(normalizedColorFilter)
-    }
-
     // Normalize habitat filters
     const normalizedHabitatFilters = habitatFilters.map((h) => h.toLowerCase())
     
     // Normalize maintenance filter
     const normalizedMaintenanceFilter = maintenanceFilter?.toLowerCase() ?? null
 
-    return plants.filter((p: Plant) => {
-      // Extract colors from both legacy format (p.colors) and new format (p.identity?.colors)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors) 
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
+    return preparedPlants.filter((p) => {
+      const {
+        searchStr,
+        allColorTokens,
+        normalizedType: pType,
+        usageLabels,
+        habitatLabels,
+        maintenanceLabel: pMaintenance,
+        toxicityPets,
+        toxicityHuman,
+        livingSpace
+      } = p._prepared
+
+      const matchesQ = searchStr.includes(lowerQuery)
+
       const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
-        .toLowerCase()
-        .includes(lowerQuery)
       const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
+
       // Match if any of the selected colors (including children) matches any of the plant's colors (OR logic)
+      // Optimized: check against pre-calculated token set
       const matchesColor = expandedColorFilters.length === 0 
         ? true 
-        : expandedColorFilters.some((filterColor) => 
-            colors.some((plantColor) => colorMatches(plantColor, filterColor))
-          )
+        : expandedColorFilters.some((filterColor) => allColorTokens.has(filterColor))
+
       const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
       const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
-      const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
-      const matchesType = normalizedType ? typeLabel === normalizedType : true
-      const plantUsageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
+
+      const matchesType = normalizedType ? pType === normalizedType : true
+
       const matchesUsage = normalizedUsage.length
-        ? normalizedUsage.every((usage) => plantUsageLabels.includes(usage))
+        ? normalizedUsage.every((usage) => usageLabels.has(usage))
         : true
       
       // Habitat filter - match if plant has ANY of the selected habitats (OR logic)
-      const plantHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
       const matchesHabitat = normalizedHabitatFilters.length === 0 
         ? true 
-        : normalizedHabitatFilters.some((h) => plantHabitats.includes(h))
+        : normalizedHabitatFilters.some((h) => habitatLabels.has(h))
       
       // Maintenance level filter
-      const plantMaintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
       const matchesMaintenance = !normalizedMaintenanceFilter 
         ? true 
-        : plantMaintenance === normalizedMaintenanceFilter
+        : pMaintenance === normalizedMaintenanceFilter
       
       // Pet-safe filter - show only plants that are Non-Toxic to pets
-      const plantToxicityPets = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '')
       const matchesPetSafe = !petSafe 
         ? true 
-        : plantToxicityPets === 'nontoxic'
+        : toxicityPets === 'nontoxic'
       
       // Human-safe filter - show only plants that are Non-Toxic to humans
-      const plantToxicityHuman = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '')
       const matchesHumanSafe = !humanSafe 
         ? true 
-        : plantToxicityHuman === 'nontoxic'
+        : toxicityHuman === 'nontoxic'
       
-      // Living space filter with special logic:
-      // - Nothing selected = show all plants
-      // - Indoor only = show plants with livingSpace "Indoor" or "Both"
-      // - Outdoor only = show plants with livingSpace "Outdoor" or "Both"
-      // - Both selected = show ONLY plants that have livingSpace "Both" (can be both indoor AND outdoor)
-      const plantLivingSpace = (p.identity?.livingSpace || '').toLowerCase()
+      // Living space filter
       let matchesLivingSpace = true
       if (livingSpaceFilters.length === 2) {
         // Both Indoor and Outdoor selected - show only plants that can be BOTH
-        matchesLivingSpace = plantLivingSpace === 'both'
+        matchesLivingSpace = livingSpace === 'both'
       } else if (livingSpaceFilters.length === 1) {
         const selectedSpace = livingSpaceFilters[0].toLowerCase()
         if (selectedSpace === 'indoor') {
-          matchesLivingSpace = plantLivingSpace === 'indoor' || plantLivingSpace === 'both'
+          matchesLivingSpace = livingSpace === 'indoor' || livingSpace === 'both'
         } else if (selectedSpace === 'outdoor') {
-          matchesLivingSpace = plantLivingSpace === 'outdoor' || plantLivingSpace === 'both'
+          matchesLivingSpace = livingSpace === 'outdoor' || livingSpace === 'both'
         }
       }
-      // If no filters selected, show all plants
       
       return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage && matchesHabitat && matchesMaintenance && matchesPetSafe && matchesHumanSafe && matchesLivingSpace
     })
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, habitatFilters, maintenanceFilter, petSafe, humanSafe, livingSpaceFilters, likedSet, colorOptions])
+  }, [preparedPlants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, habitatFilters, maintenanceFilter, petSafe, humanSafe, livingSpaceFilters, likedSet, colorOptions])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
