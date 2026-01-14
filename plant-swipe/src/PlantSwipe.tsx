@@ -1603,6 +1603,10 @@ export default function PlantSwipe() {
                           setQuery(e.target.value)
                           setIndex(0)
                         }}
+                        onClear={() => {
+                          setQuery("")
+                          setIndex(0)
+                        }}
                       />
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">

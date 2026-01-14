@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Search, Loader2 } from "lucide-react"
+import { Search, Loader2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export interface SearchInputProps
@@ -12,6 +12,8 @@ export interface SearchInputProps
   variant?: "sm" | "default" | "lg"
   /** Additional className for the wrapper div */
   wrapperClassName?: string
+  /** Callback to clear the input value. If provided, a clear button will appear when input has value */
+  onClear?: () => void
 }
 
 /**
@@ -42,11 +44,12 @@ export interface SearchInputProps
  * />
  */
 const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
-  ({ className, loading, icon, variant = "default", wrapperClassName, ...props }, ref) => {
+  ({ className, loading, icon, variant = "default", wrapperClassName, onClear, ...props }, ref) => {
     const showIcon = icon !== null
     const isSmall = variant === "sm"
     const isLarge = variant === "lg"
-    
+    const showClear = !loading && !!onClear && props.value !== undefined && props.value !== ""
+
     // Calculate padding based on icon visibility and size
     const getLeftPadding = () => {
       if (!showIcon) {
@@ -87,8 +90,8 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
                 : "h-10 rounded-xl pr-4 text-sm md:h-9",
             // Dynamic left padding based on icon
             getLeftPadding(),
-            // Loading state - add right padding for spinner
-            loading && (isLarge ? "pr-11" : isSmall ? "pr-8" : "pr-10"),
+            // Loading state or Clear button - add right padding
+            (loading || showClear) && (isLarge ? "pr-11" : isSmall ? "pr-8" : "pr-10"),
             className
           )}
           {...props}
@@ -103,6 +106,21 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
             )}
             aria-hidden="true"
           />
+        )}
+
+        {/* Clear button */}
+        {showClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 focus-visible:outline-none focus-visible:text-emerald-500 transition-colors",
+              isLarge ? "right-4 h-5 w-5" : isSmall ? "right-2.5 h-3.5 w-3.5" : "right-3 h-4 w-4"
+            )}
+            aria-label="Clear search"
+          >
+            <X className="h-full w-full" />
+          </button>
         )}
       </div>
     )
