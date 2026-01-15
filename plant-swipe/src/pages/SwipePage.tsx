@@ -272,11 +272,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     if (!isDesktop) {
       return (
         <div 
-          className="fixed inset-x-0 z-10 swipe-card-container bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#1a1a1c] dark:to-[#121214]"
+          className="relative w-full swipe-card-container -mt-2 px-2 pb-2"
           style={{ 
-            top: 'env(safe-area-inset-top, 0px)',
-            bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
-            padding: '8px',
+            height: 'calc(100dvh - 80px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px))',
+            minHeight: '400px',
           }}
         >
           <AnimatePresence initial={false} mode="sync">
@@ -293,13 +292,13 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0 }}
-                className="absolute inset-2 cursor-grab active:cursor-grabbing select-none"
+                className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
                 layout={false}
               >
                 {cardContent}
               </motion.div>
             ) : (
-              <div className="absolute inset-2 flex items-center justify-center bg-stone-100 dark:bg-[#1e1e1e] rounded-[24px]">
+              <div className="absolute inset-0 flex items-center justify-center bg-stone-100 dark:bg-[#1e1e1e] rounded-[24px]">
                 <EmptyState onReset={() => setIndex(0)} />
               </div>
             )}
