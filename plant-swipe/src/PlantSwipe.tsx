@@ -4,7 +4,7 @@ import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "
 import { Navigate } from "@/components/i18n/Navigate";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X, LayoutGrid, Square } from "lucide-react";
+import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -141,7 +141,6 @@ export default function PlantSwipe() {
   })
   const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
   const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
-  const [mobileGridCols, setMobileGridCols] = useState<1 | 2>(2)
   const [searchBarVisible, setSearchBarVisible] = useState(true)
   const lastScrollY = React.useRef(0)
 
@@ -1652,37 +1651,21 @@ export default function PlantSwipe() {
                   }`}
                 >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="flex-1 flex gap-2">
-                      <div className="flex-1">
-                        <Label htmlFor="plant-search-main" className="sr-only">
-                          {t("common.search")}
-                        </Label>
-                        <SearchInput
-                          id="plant-search-main"
-                          variant="lg"
-                          className="rounded-2xl"
-                          placeholder={t("plant.searchPlaceholder")}
-                          value={query}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            setQuery(e.target.value)
-                            setIndex(0)
-                          }}
-                        />
-                      </div>
-                      {/* Mobile grid toggle */}
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="rounded-2xl h-12 w-12 flex-shrink-0 md:hidden"
-                        onClick={() => setMobileGridCols((prev) => prev === 1 ? 2 : 1)}
-                        aria-label={mobileGridCols === 1 ? "Switch to 2-column grid" : "Switch to single column"}
-                      >
-                        {mobileGridCols === 1 ? (
-                          <LayoutGrid className="h-5 w-5" />
-                        ) : (
-                          <Square className="h-5 w-5" />
-                        )}
-                      </Button>
+                    <div className="flex-1">
+                      <Label htmlFor="plant-search-main" className="sr-only">
+                        {t("common.search")}
+                      </Label>
+                      <SearchInput
+                        id="plant-search-main"
+                        variant="lg"
+                        className="rounded-2xl"
+                        placeholder={t("plant.searchPlaceholder")}
+                        value={query}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          setQuery(e.target.value)
+                          setIndex(0)
+                        }}
+                      />
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
                       <Button
@@ -1757,7 +1740,6 @@ export default function PlantSwipe() {
                     plants={sortedSearchResults}
                     openInfo={(p) => navigate(`/plants/${p.id}`)}
                     likedIds={likedIds}
-                    mobileGridCols={mobileGridCols}
                   />
                 </Suspense>
               }
