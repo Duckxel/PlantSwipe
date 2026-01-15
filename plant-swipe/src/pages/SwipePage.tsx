@@ -110,8 +110,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   }, [handleInfo, handlePass, handlePrevious])
 
   const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
-  // Mobile: Full height minus nav bar (80px) and safe areas
-  const mobileCardHeight = "calc(100dvh - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))"
   const prefersCoarsePointer = usePrefersCoarsePointer()
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
