@@ -4,7 +4,7 @@ import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "
 import { Navigate } from "@/components/i18n/Navigate";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X, LayoutGrid, Square } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -141,6 +141,9 @@ export default function PlantSwipe() {
   })
   const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
   const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
+  const [mobileGridCols, setMobileGridCols] = useState<1 | 2>(2)
+  const [searchBarVisible, setSearchBarVisible] = useState(true)
+  const lastScrollY = React.useRef(0)
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -262,6 +265,35 @@ export default function PlantSwipe() {
       }
     }
   }, [pathWithoutLang, searchParams, setSearchParams]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hide search bar on scroll down, show on scroll up (mobile only)
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    if (currentView !== "search") return
+    
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      const scrollDelta = currentScrollY - lastScrollY.current
+      
+      // Only trigger if scrolled more than 10px to avoid jitter
+      if (Math.abs(scrollDelta) < 10) return
+      
+      // Show search bar when scrolling up or at top
+      if (scrollDelta < 0 || currentScrollY < 50) {
+        setSearchBarVisible(true)
+      } else {
+        // Hide when scrolling down (only on mobile)
+        if (window.innerWidth < 768) {
+          setSearchBarVisible(false)
+        }
+      }
+      
+      lastScrollY.current = currentScrollY
+    }
+    
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [currentView])
 
   const loadPlants = React.useCallback(async () => {
     // Only show loading if we don't have plants
@@ -1612,25 +1644,45 @@ export default function PlantSwipe() {
 
             {/* Main content area */}
             <main className="min-h-[60vh]" aria-live="polite">
-              {/* Sticky search bar for search view - sticks to top when scrolled past */}
+              {/* Sticky search bar for search view - hides on scroll down on mobile */}
               {currentView === "search" && (
-                <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4">
+                <div 
+                  className={`sticky z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4 transition-all duration-300 ${
+                    searchBarVisible ? 'top-0 opacity-100' : '-top-32 opacity-0 md:top-0 md:opacity-100'
+                  }`}
+                >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="flex-1">
-                      <Label htmlFor="plant-search-main" className="sr-only">
-                        {t("common.search")}
-                      </Label>
-                      <SearchInput
-                        id="plant-search-main"
-                        variant="lg"
-                        className="rounded-2xl"
-                        placeholder={t("plant.searchPlaceholder")}
-                        value={query}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setQuery(e.target.value)
-                          setIndex(0)
-                        }}
-                      />
+                    <div className="flex-1 flex gap-2">
+                      <div className="flex-1">
+                        <Label htmlFor="plant-search-main" className="sr-only">
+                          {t("common.search")}
+                        </Label>
+                        <SearchInput
+                          id="plant-search-main"
+                          variant="lg"
+                          className="rounded-2xl"
+                          placeholder={t("plant.searchPlaceholder")}
+                          value={query}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                            setQuery(e.target.value)
+                            setIndex(0)
+                          }}
+                        />
+                      </div>
+                      {/* Mobile grid toggle */}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="rounded-2xl h-12 w-12 flex-shrink-0 md:hidden"
+                        onClick={() => setMobileGridCols((prev) => prev === 1 ? 2 : 1)}
+                        aria-label={mobileGridCols === 1 ? "Switch to 2-column grid" : "Switch to single column"}
+                      >
+                        {mobileGridCols === 1 ? (
+                          <LayoutGrid className="h-5 w-5" />
+                        ) : (
+                          <Square className="h-5 w-5" />
+                        )}
+                      </Button>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
                       <Button
@@ -1705,6 +1757,7 @@ export default function PlantSwipe() {
                     plants={sortedSearchResults}
                     openInfo={(p) => navigate(`/plants/${p.id}`)}
                     likedIds={likedIds}
+                    mobileGridCols={mobileGridCols}
                   />
                 </Suspense>
               }
