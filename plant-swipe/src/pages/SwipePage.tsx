@@ -148,7 +148,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
 
     // Card content component to avoid duplication
     const cardContent = current ? (
-      <Card className={`relative h-full w-full overflow-hidden bg-black text-white shadow-2xl ${isDesktop ? 'rounded-[28px] border border-white/60 dark:border-white/10' : 'rounded-none'}`}>
+      <Card className="relative h-full w-full overflow-hidden bg-black text-white shadow-2xl rounded-[24px] border border-white/20 dark:border-white/10">
         {displayImage ? (
           <img
             src={displayImage}
@@ -167,7 +167,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
         <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
         {highlightBadges.length > 0 && (
-          <div className="absolute top-4 left-4 z-20 flex flex-col gap-2" style={!isDesktop ? { top: 'calc(env(safe-area-inset-top, 0px) + 16px)' } : undefined}>
+          <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
             {highlightBadges.map((badge) => (
               <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center backdrop-blur ${badge.className}`}>
                 {badge.icon}
@@ -176,7 +176,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             ))}
           </div>
         )}
-        <div className="absolute top-4 right-4 z-20" style={!isDesktop ? { top: 'calc(env(safe-area-inset-top, 0px) + 16px)' } : undefined}>
+        <div className="absolute top-4 right-4 z-20">
           <button
             onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
               e.stopPropagation()
@@ -272,34 +272,34 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     if (!isDesktop) {
       return (
         <div 
-          className="fixed inset-x-0 top-0 z-10 bg-black swipe-card-container"
+          className="fixed inset-x-0 z-10 swipe-card-container bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#1a1a1c] dark:to-[#121214]"
           style={{ 
-            top: 0,
+            top: 'env(safe-area-inset-top, 0px)',
             bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
-            touchAction: 'pan-y pinch-zoom',
+            padding: '8px',
           }}
         >
           <AnimatePresence initial={false} mode="sync">
             {current ? (
               <motion.div
                 key={`${current.id}-${index}`}
-                drag="x"
-                dragElastic={{ left: 0.3, right: 0.3 }}
+                drag
+                dragElastic={{ left: 0.3, right: 0.3, top: 0.2, bottom: 0.1 }}
                 dragMomentum={false}
-                style={{ x }}
-                dragConstraints={{ left: -300, right: 300 }}
+                style={{ x, y }}
+                dragConstraints={{ left: -300, right: 300, top: -200, bottom: 0 }}
                 onDragEnd={onDragEnd}
                 initial={false}
-                animate={{ opacity: 1, x: 0 }}
+                animate={{ opacity: 1, x: 0, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0 }}
-                className="absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing select-none"
+                className="absolute inset-2 cursor-grab active:cursor-grabbing select-none"
                 layout={false}
               >
                 {cardContent}
               </motion.div>
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center bg-stone-100 dark:bg-[#1e1e1e]">
+              <div className="absolute inset-2 flex items-center justify-center bg-stone-100 dark:bg-[#1e1e1e] rounded-[24px]">
                 <EmptyState onReset={() => setIndex(0)} />
               </div>
             )}
