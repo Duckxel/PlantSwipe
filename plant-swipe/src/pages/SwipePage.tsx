@@ -272,27 +272,28 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     if (!isDesktop) {
       return (
         <div 
-          className="relative w-full swipe-card-container -mt-2 px-2 pb-2"
+          className="relative w-full swipe-card-container px-2"
           style={{ 
-            height: 'calc(100dvh - 80px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px))',
+            height: 'calc(100dvh - 160px)',
             minHeight: '400px',
+            marginBottom: '8px',
           }}
         >
           <AnimatePresence initial={false} mode="sync">
             {current ? (
               <motion.div
-                key={`${current.id}-${index}`}
+                key={current.id}
                 drag
-                dragElastic={{ left: 0.3, right: 0.3, top: 0.2, bottom: 0.1 }}
+                dragElastic={{ left: 0.25, right: 0.25, top: 0.15, bottom: 0 }}
                 dragMomentum={false}
                 style={{ x, y }}
-                dragConstraints={{ left: -300, right: 300, top: -200, bottom: 0 }}
+                dragConstraints={{ left: -250, right: 250, top: -150, bottom: 0 }}
                 onDragEnd={onDragEnd}
                 initial={false}
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0 }}
-                className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
+                className="absolute inset-0 cursor-grab active:cursor-grabbing select-none touch-pan-y"
                 layout={false}
               >
                 {cardContent}
@@ -328,7 +329,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               <AnimatePresence initial={false} mode="sync">
                 {current ? (
                   <motion.div
-                    key={`${current.id}-${index}`}
+                    key={current.id}
                     drag
                     dragElastic={{ left: 0.28, right: 0.28, top: 0.18, bottom: 0.08 }}
                     dragMomentum={false}
