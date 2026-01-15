@@ -838,17 +838,18 @@ const normalizeDescriptor = (value?: string | null): string => {
 
 const includesAny = (value: string, tokens: string[]) => tokens.some((token) => value.includes(token))
 
+// ⚡ Performance: Hoisted constants to avoid allocation on every function call
+const SUN_HIGH_TOKENS = ["full sun", "direct sun", "bright light", "very bright", "brightness 7", "plein soleil"]
+const SUN_MEDIUM_TOKENS = ["partial sun", "partial shade", "filtered sun", "indirect light", "medium light", "brightness medium"]
+const SUN_LOW_TOKENS = ["full shade", "shade only", "no sun", "no sunlight", "low light", "brightness empty", "no sun necessary", "shade tolerant"]
+
 const resolveSunLevel = (value?: string | null): IndicatorLevel | null => {
   const normalized = normalizeDescriptor(value)
   if (!normalized) return null
 
-  const sunHighTokens = ["full sun", "direct sun", "bright light", "very bright", "brightness 7", "plein soleil"]
-    const sunMediumTokens = ["partial sun", "partial shade", "filtered sun", "indirect light", "medium light", "brightness medium"]
-    const sunLowTokens = ["full shade", "shade only", "no sun", "no sunlight", "low light", "brightness empty", "no sun necessary", "shade tolerant"]
-
-  if (includesAny(normalized, sunHighTokens)) return "high"
-  if (includesAny(normalized, sunMediumTokens)) return "medium"
-  if (includesAny(normalized, sunLowTokens)) return "low"
+  if (includesAny(normalized, SUN_HIGH_TOKENS)) return "high"
+  if (includesAny(normalized, SUN_MEDIUM_TOKENS)) return "medium"
+  if (includesAny(normalized, SUN_LOW_TOKENS)) return "low"
 
   if (normalized.includes("partial shade")) return "medium"
   if (normalized.includes("partial")) return "medium"
@@ -861,17 +862,18 @@ const resolveSunLevel = (value?: string | null): IndicatorLevel | null => {
   return null
 }
 
+// ⚡ Performance: Hoisted constants to avoid allocation on every function call
+const WATER_HIGH_TOKENS = ["keep moist", "moist soil", "soak", "wet", "daily", "frequent", "humidity high", "high humidity", "high water", "constant moisture", "plenty of water"]
+const WATER_MEDIUM_TOKENS = ["medium", "moderate", "balanced", "weekly", "every few days", "humidity mid", "average", "regular", "even moisture"]
+const WATER_LOW_TOKENS = ["low", "dry", "drought", "sparingly", "infrequent", "monthly", "humidity low", "succulent", "well-drained", "allow soil to dry"]
+
 const resolveWaterLevel = (value?: string | null): IndicatorLevel | null => {
   const normalized = normalizeDescriptor(value)
   if (!normalized) return null
 
-  const waterHighTokens = ["keep moist", "moist soil", "soak", "wet", "daily", "frequent", "humidity high", "high humidity", "high water", "constant moisture", "plenty of water"]
-  const waterMediumTokens = ["medium", "moderate", "balanced", "weekly", "every few days", "humidity mid", "average", "regular", "even moisture"]
-  const waterLowTokens = ["low", "dry", "drought", "sparingly", "infrequent", "monthly", "humidity low", "succulent", "well-drained", "allow soil to dry"]
-
-  if (includesAny(normalized, waterHighTokens) || normalized === "high") return "high"
-  if (includesAny(normalized, waterMediumTokens) || normalized === "medium") return "medium"
-  if (includesAny(normalized, waterLowTokens) || normalized === "low") return "low"
+  if (includesAny(normalized, WATER_HIGH_TOKENS) || normalized === "high") return "high"
+  if (includesAny(normalized, WATER_MEDIUM_TOKENS) || normalized === "medium") return "medium"
+  if (includesAny(normalized, WATER_LOW_TOKENS) || normalized === "low") return "low"
 
   if (normalized.includes("frequent") || normalized.includes("often")) return "high"
   if (normalized.includes("weekly") || normalized.includes("regular") || normalized.includes("average")) return "medium"
