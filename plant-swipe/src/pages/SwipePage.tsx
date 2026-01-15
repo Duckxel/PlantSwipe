@@ -162,10 +162,14 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         <div className="pointer-events-none absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="relative p-2 sm:p-6 md:p-12 space-y-6">
             <div
-              className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px]"
-              style={isDesktop ? { height: desktopCardHeight } : { height: mobileCardHeight }}
+              className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px] swipe-card-container"
+              style={isDesktop ? { height: desktopCardHeight } : { 
+                height: mobileCardHeight,
+                contain: "layout style paint",
+                isolation: "isolate",
+              }}
             >
-              <AnimatePresence initial={false} mode="wait">
+              <AnimatePresence initial={false} mode="popLayout">
                 {current ? (
                   <motion.div
                     key={`${current.id}-${index}`}
@@ -178,8 +182,9 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     initial={{ scale: 0.94, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.94, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: "easeOut" }}
-                    className="relative h-full w-full cursor-grab active:cursor-grabbing select-none"
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing select-none"
+                    layout={false}
                   >
                         <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
                           {displayImage ? (

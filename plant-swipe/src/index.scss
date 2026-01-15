@@ -182,6 +182,25 @@
   }
 }
 
+/* Mobile nav bar stability - prevent flashing during Discovery card swipes */
+@media (max-width: 767px) {
+  /* Force mobile nav to its own compositor layer for smoother animations */
+  nav[aria-label="Primary"] {
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    perspective: 1000px;
+    -webkit-perspective: 1000px;
+  }
+  
+  /* Isolate the swipe card container from affecting nav layout */
+  .swipe-card-container {
+    contain: layout style paint;
+    isolation: isolate;
+  }
+}
+
 @layer components {
   .legal-content {
     @apply space-y-4 text-base leading-relaxed text-stone-700 dark:text-stone-200 text-left;
