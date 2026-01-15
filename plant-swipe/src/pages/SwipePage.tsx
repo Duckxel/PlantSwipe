@@ -50,7 +50,7 @@ interface SwipePageProps {
 
 export const SwipePage: React.FC<SwipePageProps> = ({
   current,
-  index,
+  index: _index,
   setIndex,
   x,
   y,
@@ -62,6 +62,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   onToggleLike,
   boostImagePriority = false,
 }) => {
+  void _index // Prop kept for interface compatibility
       const { t } = useTranslation("common")
     const seoTitle = t("seo.home.title", { defaultValue: "Aphylia" })
       const seoDescription = t("seo.home.description", {
