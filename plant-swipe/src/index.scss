@@ -190,14 +190,11 @@
     -webkit-transform: translate3d(0, 0, 0);
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
-    perspective: 1000px;
-    -webkit-perspective: 1000px;
   }
   
   /* Isolate the swipe card container from affecting nav layout */
   .swipe-card-container {
-    contain: layout style paint;
-    isolation: isolate;
+    contain: layout paint;
   }
 }
 

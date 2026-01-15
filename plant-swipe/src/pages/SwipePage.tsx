@@ -165,8 +165,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px] swipe-card-container"
               style={isDesktop ? { height: desktopCardHeight } : { 
                 height: mobileCardHeight,
-                contain: "layout style paint",
-                isolation: "isolate",
               }}
             >
               <AnimatePresence initial={false} mode="popLayout">

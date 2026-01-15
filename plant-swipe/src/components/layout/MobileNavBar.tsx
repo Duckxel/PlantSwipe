@@ -85,9 +85,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
         aria-label="Primary"
         style={{ 
           transform: "translate3d(0, 0, 0)", 
-          contain: "strict",
           willChange: "transform",
-          isolation: "isolate",
           backfaceVisibility: "hidden",
           WebkitBackfaceVisibility: "hidden",
         }}
