@@ -281,7 +281,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             touchAction: 'pan-y pinch-zoom',
           }}
         >
-          <AnimatePresence initial={false} mode="popLayout">
+          <AnimatePresence initial={false} mode="sync">
             {current ? (
               <motion.div
                 key={`${current.id}-${index}`}
@@ -291,10 +291,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 style={{ x }}
                 dragConstraints={{ left: -300, right: 300 }}
                 onDragEnd={onDragEnd}
-                initial={{ opacity: 0, x: 100 }}
+                initial={false}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -100 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0 }}
                 className="absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing select-none"
                 layout={false}
               >
@@ -328,7 +328,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               className="relative mx-auto w-full max-w-3xl min-h-[520px] swipe-card-container"
               style={{ height: desktopCardHeight }}
             >
-              <AnimatePresence initial={false} mode="popLayout">
+              <AnimatePresence initial={false} mode="sync">
                 {current ? (
                   <motion.div
                     key={`${current.id}-${index}`}
@@ -338,10 +338,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     style={{ x, y }}
                     dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
                     onDragEnd={onDragEnd}
-                    initial={{ scale: 0.94, opacity: 0 }}
+                    initial={false}
                     animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.94, opacity: 0 }}
-                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.05 }}
                     className="absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing select-none"
                     layout={false}
                   >

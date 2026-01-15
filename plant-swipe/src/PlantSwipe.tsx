@@ -724,6 +724,33 @@ export default function PlantSwipe() {
     initialCardBoostRef.current = false
   }, [heroImageCandidate, index])
 
+  // Preload next 3 card images for instant swipe transitions
+  React.useEffect(() => {
+    if (currentView !== "discovery") return
+    if (typeof window === "undefined") return
+    if (swipeList.length === 0) return
+
+    const imagesToPreload: string[] = []
+    // Preload next 3 cards and previous 1 card
+    const offsets = [1, 2, 3, -1]
+    offsets.forEach((offset) => {
+      const targetIndex = (index + offset + swipeList.length) % swipeList.length
+      const plant = swipeList[targetIndex]
+      if (plant) {
+        const imageUrl = getDiscoveryPageImageUrl(plant)
+        if (imageUrl && !imagesToPreload.includes(imageUrl)) {
+          imagesToPreload.push(imageUrl)
+        }
+      }
+    })
+
+    // Preload images using Image objects (browser caches them)
+    imagesToPreload.forEach((url) => {
+      const img = new Image()
+      img.src = url
+    })
+  }, [currentView, index, swipeList])
+
   React.useEffect(() => {
     if (currentView !== "discovery") return
     if (typeof document === "undefined" || typeof window === "undefined") return
