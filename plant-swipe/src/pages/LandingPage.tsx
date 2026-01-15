@@ -101,6 +101,49 @@ type FAQ = {
   answer: string
 }
 
+type LandingPageSettings = {
+  // Hero Section
+  hero_badge_text: string
+  hero_title: string
+  hero_title_highlight: string
+  hero_title_end: string
+  hero_description: string
+  hero_cta_primary_text: string
+  hero_cta_primary_link: string
+  hero_cta_secondary_text: string
+  hero_cta_secondary_link: string
+  hero_social_proof_text: string
+  // Section Visibility
+  show_hero_section: boolean
+  show_stats_section: boolean
+  show_beginner_section: boolean
+  show_features_section: boolean
+  show_demo_section: boolean
+  show_how_it_works_section: boolean
+  show_showcase_section: boolean
+  show_testimonials_section: boolean
+  show_faq_section: boolean
+  show_final_cta_section: boolean
+  // Social Links
+  instagram_url: string
+  twitter_url: string
+  support_email: string
+  // Final CTA
+  final_cta_badge: string
+  final_cta_title: string
+  final_cta_subtitle: string
+  final_cta_button_text: string
+  final_cta_secondary_text: string
+  // Beginner Section
+  beginner_badge: string
+  beginner_title: string
+  beginner_title_highlight: string
+  beginner_subtitle: string
+  // Meta/SEO
+  meta_title: string
+  meta_description: string
+}
+
 // Context for landing page data
 type LandingDataContextType = {
   heroCards: HeroCard[]
@@ -109,6 +152,7 @@ type LandingDataContextType = {
   gridFeatures: LandingFeature[]
   testimonials: Testimonial[]
   faqItems: FAQ[]
+  settings: LandingPageSettings | null
   loading: boolean
 }
 
@@ -119,6 +163,7 @@ const LandingDataContext = React.createContext<LandingDataContextType>({
   gridFeatures: [],
   testimonials: [],
   faqItems: [],
+  settings: null,
   loading: true,
 })
 
@@ -210,13 +255,15 @@ const LandingPage: React.FC = () => {
     gridFeatures: [],
     testimonials: [],
     faqItems: [],
+    settings: null,
     loading: true,
   })
 
   React.useEffect(() => {
     const loadData = async () => {
       try {
-        const [heroRes, statsRes, featuresRes, testimonialsRes, faqRes] = await Promise.all([
+        const [settingsRes, heroRes, statsRes, featuresRes, testimonialsRes, faqRes] = await Promise.all([
+          supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
           supabase.from("landing_hero_cards").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
           supabase.from("landing_features").select("*").eq("is_active", true).order("position"),
@@ -233,6 +280,7 @@ const LandingPage: React.FC = () => {
           gridFeatures: features.filter((f: LandingFeature) => !f.is_in_circle),
           testimonials: testimonialsRes.data || [],
           faqItems: faqRes.data || [],
+          settings: settingsRes.data || null,
           loading: false,
         })
       } catch (e) {
@@ -304,34 +352,34 @@ const LandingPage: React.FC = () => {
         <MobileNavBar canCreate={false} onLogin={openLogin} onSignup={openSignup} onProfile={handleProfileNavigation} onLogout={handleLogout} />
 
         {/* Hero Section */}
-        <HeroSection />
+        {(landingData.settings?.show_hero_section ?? true) && <HeroSection />}
 
         {/* Stats Banner */}
-        <StatsBanner />
+        {(landingData.settings?.show_stats_section ?? true) && <StatsBanner />}
 
         {/* Beginner Friendly Section */}
-        <BeginnerFriendlySection />
+        {(landingData.settings?.show_beginner_section ?? true) && <BeginnerFriendlySection />}
 
         {/* Features Grid */}
-        <FeaturesSection />
+        {(landingData.settings?.show_features_section ?? true) && <FeaturesSection />}
 
         {/* Interactive Demo */}
-        <InteractiveDemoSection />
+        {(landingData.settings?.show_demo_section ?? true) && <InteractiveDemoSection />}
 
         {/* How It Works */}
-        <HowItWorksSection />
+        {(landingData.settings?.show_how_it_works_section ?? true) && <HowItWorksSection />}
 
         {/* Showcase */}
-        <ShowcaseSection />
+        {(landingData.settings?.show_showcase_section ?? true) && <ShowcaseSection />}
 
         {/* Testimonials */}
-        <TestimonialsSection />
+        {(landingData.settings?.show_testimonials_section ?? true) && <TestimonialsSection />}
 
         {/* FAQ */}
-        <FAQSection />
+        {(landingData.settings?.show_faq_section ?? true) && <FAQSection />}
 
         {/* Final CTA */}
-        <FinalCTASection />
+        {(landingData.settings?.show_final_cta_section ?? true) && <FinalCTASection />}
 
         {/* Footer */}
         <Footer />
@@ -346,6 +394,19 @@ const LandingPage: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const HeroSection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { settings } = useLandingData()
+
+  // Use settings if available, otherwise fall back to translations
+  const badgeText = settings?.hero_badge_text || t("hero.badge")
+  const titleStart = settings?.hero_title || t("hero.title")
+  const titleHighlight = settings?.hero_title_highlight || t("hero.titleHighlight")
+  const titleEnd = settings?.hero_title_end || t("hero.titleEnd")
+  const description = settings?.hero_description || t("hero.description")
+  const ctaPrimaryText = settings?.hero_cta_primary_text || t("hero.ctaDownload")
+  const ctaPrimaryLink = settings?.hero_cta_primary_link || "/download"
+  const ctaSecondaryText = settings?.hero_cta_secondary_text || t("hero.ctaTryBrowser")
+  const ctaSecondaryLink = settings?.hero_cta_secondary_link || "/discovery"
+  const socialProofText = settings?.hero_social_proof_text || t("hero.socialProof")
 
   return (
     <section className="relative pt-24 pb-16 lg:pt-32 lg:pb-24 px-4 sm:px-6 lg:px-8 overflow-visible">
@@ -381,37 +442,37 @@ const HeroSection: React.FC = () => {
                 </div>
               </div>
               <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                {t("hero.badge")}
+                {badgeText}
               </span>
             </div>
 
             {/* Headline */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.1]">
-              <span className="text-stone-900 dark:text-white">{t("hero.title")}</span>{" "}
-              <span className="gradient-text">{t("hero.titleHighlight")}</span>{" "}
-              <span className="text-stone-900 dark:text-white">{t("hero.titleEnd")}</span>
+              <span className="text-stone-900 dark:text-white">{titleStart}</span>{" "}
+              <span className="gradient-text">{titleHighlight}</span>{" "}
+              <span className="text-stone-900 dark:text-white">{titleEnd}</span>
             </h1>
 
             {/* Subheadline */}
             <p className="text-lg sm:text-xl text-stone-600 dark:text-stone-300 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-              {t("hero.description")}
+              {description}
             </p>
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <Link
-                to="/download"
+                to={ctaPrimaryLink}
                 className="group relative inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-emerald-500 text-white text-base font-semibold overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-0.5"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <Leaf className="relative h-5 w-5" />
-                <span className="relative">{t("hero.ctaDownload")}</span>
+                <span className="relative">{ctaPrimaryText}</span>
               </Link>
               <Link
-                to="/discovery"
+                to={ctaSecondaryLink}
                 className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/80 dark:bg-white/10 backdrop-blur-sm text-stone-900 dark:text-white text-base font-semibold border border-stone-200 dark:border-white/20 hover:bg-white dark:hover:bg-white/20 transition-all duration-300 hover:-translate-y-0.5"
               >
-                <span>{t("hero.ctaTryBrowser")}</span>
+                <span>{ctaSecondaryText}</span>
                 <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>
@@ -424,7 +485,7 @@ const HeroSection: React.FC = () => {
                     <div key={i} className={`h-6 w-6 rounded-full border-2 border-white dark:border-stone-800 ${['bg-emerald-400', 'bg-teal-400', 'bg-green-400', 'bg-lime-400'][i]}`} />
                   ))}
                 </div>
-                <span className="text-sm text-stone-600 dark:text-stone-300">{t("hero.socialProof")}</span>
+                <span className="text-sm text-stone-600 dark:text-stone-300">{socialProofText}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 {[...Array(5)].map((_, i) => (
@@ -448,7 +509,18 @@ const HeroSection: React.FC = () => {
 const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
   const { heroCards: dbHeroCards } = useLandingData()
-  const [activeCardIndex, setActiveCardIndex] = React.useState(0)
+  
+  // Start with a random card for variety across different page loads
+  const [activeCardIndex, setActiveCardIndex] = React.useState(() => 
+    dbHeroCards.length > 0 ? Math.floor(Math.random() * dbHeroCards.length) : 0
+  )
+
+  // Reset to random when cards are loaded
+  React.useEffect(() => {
+    if (dbHeroCards.length > 0) {
+      setActiveCardIndex(Math.floor(Math.random() * dbHeroCards.length))
+    }
+  }, [dbHeroCards.length])
 
   // Use first hero card from database if available, otherwise use translation defaults
   const activeCard = dbHeroCards[activeCardIndex] || null
@@ -642,6 +714,13 @@ const StatsBanner: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const BeginnerFriendlySection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { settings } = useLandingData()
+
+  // Use settings if available, otherwise fall back to translations
+  const badge = settings?.beginner_badge || t("beginner.badge", { defaultValue: "Perfect for Beginners" })
+  const title = settings?.beginner_title || t("beginner.title", { defaultValue: "Know Nothing About Gardening?" })
+  const titleHighlight = settings?.beginner_title_highlight || t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })
+  const subtitle = settings?.beginner_subtitle || t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany." })
 
   const beginnerFeatures = [
     {
@@ -684,16 +763,16 @@ const BeginnerFriendlySection: React.FC = () => {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
             <Sprout className="h-4 w-4 text-emerald-500" />
             <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-              {t("beginner.badge", { defaultValue: "Perfect for Beginners" })}
+              {badge}
             </span>
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
-            {t("beginner.title", { defaultValue: "Know Nothing About Gardening?" })}
+            {title}
             <br />
-            <span className="gradient-text">{t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })}</span>
+            <span className="gradient-text">{titleHighlight}</span>
           </h2>
           <p className="text-lg sm:text-xl text-stone-600 dark:text-stone-400 leading-relaxed">
-            {t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany." })}
+            {subtitle}
           </p>
         </div>
 
@@ -1278,6 +1357,14 @@ const FAQSection: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const FinalCTASection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { settings } = useLandingData()
+
+  // Use settings if available, otherwise fall back to translations
+  const badge = settings?.final_cta_badge || t("finalCta.badge", { defaultValue: "No experience needed" })
+  const title = settings?.final_cta_title || t("finalCta.title", { defaultValue: "Ready to Start Your Plant Journey?" })
+  const subtitle = settings?.final_cta_subtitle || t("finalCta.subtitle", { defaultValue: "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents." })
+  const primaryButtonText = settings?.final_cta_button_text || t("finalCta.ctaDownload", { defaultValue: "Start Growing" })
+  const secondaryButtonText = settings?.final_cta_secondary_text || t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })
 
   return (
     <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8">
@@ -1299,15 +1386,15 @@ const FinalCTASection: React.FC = () => {
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm">
                 <Sprout className="h-4 w-4 text-white" />
                 <span className="text-sm font-medium text-white">
-                  {t("finalCta.badge", { defaultValue: "No experience needed" })}
+                  {badge}
                 </span>
               </div>
 
               <h2 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight">
-                {t("finalCta.title", { defaultValue: "Ready to Start Your Plant Journey?" })}
+                {title}
               </h2>
               <p className="text-lg sm:text-xl text-white/80 max-w-2xl mx-auto">
-                {t("finalCta.subtitle", { defaultValue: "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents." })}
+                {subtitle}
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
                 <Link
@@ -1315,13 +1402,13 @@ const FinalCTASection: React.FC = () => {
                   className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white text-emerald-600 text-base font-bold hover:bg-white/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5"
                 >
                   <Leaf className="h-5 w-5" />
-                  {t("finalCta.ctaDownload", { defaultValue: "Start Growing" })}
+                  {primaryButtonText}
                 </Link>
                 <Link
                   to="/discovery"
                   className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-semibold border border-white/30 transition-all hover:-translate-y-0.5"
                 >
-                  {t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })}
+                  {secondaryButtonText}
                   <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </div>
