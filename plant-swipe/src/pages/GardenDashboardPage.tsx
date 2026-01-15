@@ -3174,6 +3174,7 @@ export const GardenDashboardPage: React.FC = () => {
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setPlantQuery(e.target.value)
                   }
+                  onClear={() => setPlantQuery("")}
                 />
                 <div className="max-h-60 overflow-auto rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526]">
                   {plantResults.map((p) => (

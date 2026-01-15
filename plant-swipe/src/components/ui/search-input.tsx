@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Search, Loader2 } from "lucide-react"
+import { Search, Loader2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export interface SearchInputProps
@@ -12,6 +12,8 @@ export interface SearchInputProps
   variant?: "sm" | "default" | "lg"
   /** Additional className for the wrapper div */
   wrapperClassName?: string
+  /** Callback to clear the input. If provided, a clear button will appear when there is text. */
+  onClear?: () => void
 }
 
 /**
@@ -35,18 +37,24 @@ export interface SearchInputProps
  * <SearchInput icon={null} placeholder="Filter by name..." />
  * 
  * @example
- * // Custom styling
+ * // With clear button
  * <SearchInput 
- *   className="border-emerald-300 bg-emerald-50"
- *   wrapperClassName="max-w-md"
+ *   value={query}
+ *   onChange={e => setQuery(e.target.value)}
+ *   onClear={() => setQuery('')}
  * />
  */
 const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
-  ({ className, loading, icon, variant = "default", wrapperClassName, ...props }, ref) => {
+  ({ className, loading, icon, variant = "default", wrapperClassName, onClear, ...props }, ref) => {
     const showIcon = icon !== null
     const isSmall = variant === "sm"
     const isLarge = variant === "lg"
     
+    // Check if we should show the clear button
+    // Only show if onClear is provided, we have a value, and we're not loading (spinner takes precedence)
+    const hasValue = props.value !== undefined && props.value !== null && String(props.value).length > 0
+    const showClear = !!onClear && hasValue && !loading
+
     // Calculate padding based on icon visibility and size
     const getLeftPadding = () => {
       if (!showIcon) {
@@ -87,13 +95,28 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
                 : "h-10 rounded-xl pr-4 text-sm md:h-9",
             // Dynamic left padding based on icon
             getLeftPadding(),
-            // Loading state - add right padding for spinner
-            loading && (isLarge ? "pr-11" : isSmall ? "pr-8" : "pr-10"),
+            // Loading/Clear state - add right padding for spinner or clear button
+            (loading || showClear) && (isLarge ? "pr-11" : isSmall ? "pr-8" : "pr-10"),
             className
           )}
           {...props}
         />
         
+        {/* Clear Button */}
+        {showClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 p-0.5",
+              isLarge ? "right-4" : isSmall ? "right-2.5" : "right-3"
+            )}
+            aria-label="Clear search"
+          >
+            <X className={cn(isLarge ? "h-5 w-5" : isSmall ? "h-3.5 w-3.5" : "h-4 w-4")} />
+          </button>
+        )}
+
         {/* Loading spinner */}
         {loading && (
           <Loader2
