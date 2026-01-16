@@ -104,66 +104,81 @@ export async function fetchAiPlantFill({
   let completedFields = 0
   onProgress?.({ field: 'init', completed: completedFields, total: totalFields })
 
-    for (const fieldKey of fieldEntries) {
+  // Process fields in parallel batches of 5
+  const BATCH_SIZE = 5
+  for (let i = 0; i < fieldEntries.length; i += BATCH_SIZE) {
     if (signal?.aborted) {
       throw new Error('AI fill was cancelled')
     }
 
-    onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
+    const batch = fieldEntries.slice(i, i + BATCH_SIZE)
+    onProgress?.({ field: batch.join(', '), completed: completedFields, total: totalFields })
 
-      let fieldError: Error | null = null
-      try {
-        const response = await fetch('/api/admin/ai/plant-fill/field', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            plantName,
-            schema,
-            fieldKey,
-            existingField:
-              existingData && typeof existingData === 'object' && !Array.isArray(existingData)
-                ? existingData[fieldKey]
-                : undefined,
-            language,
-          }),
-          signal,
-        })
+    const batchResults = await Promise.all(
+      batch.map(async (fieldKey) => {
+        let fieldError: Error | null = null
+        let fieldData: unknown = null
 
-        let payload: any = null
         try {
-          payload = await response.json()
-        } catch {}
+          const response = await fetch('/api/admin/ai/plant-fill/field', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              plantName,
+              schema,
+              fieldKey,
+              existingField:
+                existingData && typeof existingData === 'object' && !Array.isArray(existingData)
+                  ? existingData[fieldKey]
+                  : undefined,
+              language,
+            }),
+            signal,
+          })
 
-        if (!response.ok) {
-          const message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
-          throw new Error(message)
+          let payload: any = null
+          try {
+            payload = await response.json()
+          } catch {}
+
+          if (!response.ok) {
+            const message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+            throw new Error(message)
+          }
+
+          if (!payload?.success) {
+            const message = payload?.error || `AI fill failed for "${fieldKey}"`
+            throw new Error(message)
+          }
+
+          fieldData = payload?.data ?? null
+        } catch (err) {
+          fieldError = err instanceof Error ? err : new Error(String(err || 'AI fill failed'))
         }
 
-        if (!payload?.success) {
-          const message = payload?.error || `AI fill failed for "${fieldKey}"`
-          throw new Error(message)
-        }
+        return { fieldKey, fieldData, fieldError }
+      })
+    )
 
-        if (payload?.data !== undefined && payload?.data !== null) {
-          aggregated[fieldKey] = payload.data
-        } else {
-          delete aggregated[fieldKey]
-        }
-
-        onFieldComplete?.({ field: fieldKey, data: payload?.data ?? null })
-      } catch (err) {
-        fieldError = err instanceof Error ? err : new Error(String(err || 'AI fill failed'))
-      }
-
+    // Process batch results
+    for (const { fieldKey, fieldData, fieldError } of batchResults) {
       if (fieldError) {
         if (!continueOnFieldError) {
           throw fieldError
         }
         onFieldError?.({ field: fieldKey, error: fieldError.message })
+      } else {
+        if (fieldData !== undefined && fieldData !== null) {
+          aggregated[fieldKey] = fieldData
+        } else {
+          delete aggregated[fieldKey]
+        }
+        onFieldComplete?.({ field: fieldKey, data: fieldData })
       }
-
       completedFields += 1
-      onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
+    }
+
+    onProgress?.({ field: batch.join(', '), completed: completedFields, total: totalFields })
   }
 
   onProgress?.({ field: 'complete', completed: completedFields, total: totalFields })
