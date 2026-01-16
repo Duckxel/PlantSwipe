@@ -462,7 +462,8 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
           <CardContent className="p-4 text-sm text-red-700 dark:text-red-200">{error}</CardContent>
         </Card>
       )}
-      {!loading && !error && advices.length === 0 && canContribute && (
+      {/* Empty state only shown when user cannot contribute - for contributors, the CTA area already conveys this */}
+      {!loading && !error && advices.length === 0 && !canContribute && (
         <Card className="relative z-10 -mt-8 sm:-mt-10 mx-3 sm:mx-6 rounded-xl border-dashed border-emerald-200 bg-emerald-50/60 dark:border-emerald-800 dark:bg-emerald-950/20">
           <CardContent className="p-4 text-sm text-stone-700 dark:text-stone-200 flex items-center gap-2">
             <ImageIcon className="h-4 w-4 text-emerald-500" />
