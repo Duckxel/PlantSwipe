@@ -77,7 +77,15 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       return { ...next, id: typeof data === 'string' ? data : next.id }
     case 'plantType': {
       const result = normalizeEnumValueInput(plantTypeEnum as EnumTools, data)
-      if (!result.shouldUpdate) return next
+      if (!result.shouldUpdate) {
+        // If AI returned an unrecognized value but data was provided, default to 'plant'
+        // This prevents database constraint violations when an unrecognized type is returned
+        if (data !== undefined && data !== null && typeof data === 'string' && data.trim()) {
+          console.warn(`[applyAiField] Unrecognized plantType "${data}", defaulting to "plant"`)
+          return { ...next, plantType: 'plant' }
+        }
+        return next
+      }
       return { ...next, plantType: result.value as Plant['plantType'] | undefined }
     }
     case 'utility': {
@@ -111,6 +119,14 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       type IdentityComposition = NonNullable<NonNullable<Plant['identity']>['composition']>
       const payload = { ...(data as Record<string, unknown>) }
       delete (payload as any).colors
+      // Remove fields that belong at the top level, not in identity
+      delete (payload as any).plant_type
+      delete (payload as any).plantType
+      delete (payload as any).utility
+      delete (payload as any).comestible_part
+      delete (payload as any).comestiblePart
+      delete (payload as any).fruit_type
+      delete (payload as any).fruitType
       if ('composition' in payload) {
         const normalizedComposition = expandCompositionFromDb(
           payload.composition as string[] | null | undefined,

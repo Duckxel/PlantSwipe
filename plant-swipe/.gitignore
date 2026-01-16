@@ -22,6 +22,9 @@ dist-ssr
 # Generated files
 public/sitemap.xml
 
+# Ephemeral chat uploads
+uploads/to_delete/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

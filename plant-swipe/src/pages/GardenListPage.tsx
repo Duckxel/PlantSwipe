@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Sprout, Check, X, Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   getUserGardens,
@@ -38,6 +38,8 @@ import {
   refreshGardenTaskCache,
   refreshUserTaskCache,
 } from "@/lib/gardens";
+import { getPendingGardenInvites, acceptGardenInvite, declineGardenInvite } from "@/lib/notifications";
+import type { GardenInvite } from "@/types/notification";
 import { useAuthActions } from "@/context/AuthActionsContext";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -50,6 +52,7 @@ import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
 import { GardenListSkeleton } from "@/components/garden/GardenSkeletons";
+import { updateTaskNotificationState } from "@/hooks/useTaskNotification";
 
 export const GardenListPage: React.FC = () => {
   const { user, profile } = useAuth();
@@ -104,6 +107,9 @@ export const GardenListPage: React.FC = () => {
     Set<string>
   >(new Set());
   const [markingAllCompleted, setMarkingAllCompleted] = React.useState(false);
+  // Garden invites state
+  const [gardenInvites, setGardenInvites] = React.useState<GardenInvite[]>([]);
+  const [processingInviteId, setProcessingInviteId] = React.useState<string | null>(null);
 
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -1205,12 +1211,40 @@ export const GardenListPage: React.FC = () => {
     };
   }, [scheduleReload, user?.id, clearLocalStorageCache]);
 
+  // ⚡ Shared lookup memos - O(1) lookups instead of O(n) .find()/.filter() calls
+  // NOTE: These MUST be defined before callbacks that use them to avoid TDZ errors
+  const plantsById = React.useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const p of allPlants) {
+      map[p.id] = p;
+    }
+    return map;
+  }, [allPlants]);
+
+  const gardensById = React.useMemo(() => {
+    const map: Record<string, (typeof gardens)[0]> = {};
+    for (const g of gardens) {
+      map[g.id] = g;
+    }
+    return map;
+  }, [gardens]);
+
+  const plantIdsByGarden = React.useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const p of allPlants) {
+      if (!map[p.gardenId]) map[p.gardenId] = new Set();
+      map[p.gardenId].add(p.id);
+    }
+    return map;
+  }, [allPlants]);
+
   const onProgressOccurrence = React.useCallback(
     async (occId: string, inc: number) => {
       // Set loading state
       setProgressingOccIds((prev) => new Set(prev).add(occId));
 
       let broadcastGardenId: string | null = null;
+      let gp: any = null;
       const o = todayTaskOccurrences.find((x: any) => x.id === occId);
 
       // Optimistic update - update UI immediately
@@ -1223,7 +1257,8 @@ export const GardenListPage: React.FC = () => {
           prev.map((x: any) => (x.id === occId ? optimisticOcc : x)),
         );
 
-        const gp = allPlants.find((p: any) => p.id === o.gardenPlantId);
+        // ⚡ O(1) lookup instead of O(P) .find()
+        gp = plantsById[o.gardenPlantId];
         broadcastGardenId = gp?.gardenId || null;
       }
 
@@ -1232,7 +1267,7 @@ export const GardenListPage: React.FC = () => {
         // Log activity for the appropriate garden
         try {
           if (o && broadcastGardenId) {
-            const gp = allPlants.find((p: any) => p.id === o.gardenPlantId);
+            // Reuse gp from above - no need to find again
             const type = (o as any).taskType || "custom";
             const taskTypeLabel = t(`garden.taskTypes.${type}`);
             const plantName = gp?.nickname || gp?.plant?.name || null;
@@ -1342,7 +1377,7 @@ export const GardenListPage: React.FC = () => {
       }
     },
     [
-      allPlants,
+      plantsById,
       emitGardenRealtime,
       loadAllTodayOccurrences,
       todayTaskOccurrences,
@@ -1359,13 +1394,17 @@ export const GardenListPage: React.FC = () => {
       // Set loading state
       setCompletingPlantIds((prev) => new Set(prev).add(gardenPlantId));
 
-      const gp = allPlants.find((p: any) => p.id === gardenPlantId);
+      // ⚡ O(1) lookup instead of O(P) .find()
+      const gp = plantsById[gardenPlantId];
       const gardenId = gp?.gardenId ? String(gp.gardenId) : null;
 
       // Optimistic update - mark all as completed immediately
       const occs = todayTaskOccurrences.filter(
         (o) => o.gardenPlantId === gardenPlantId,
       );
+      // Build lookup map for O(1) updates
+      const occsById = new Map(occs.map((o) => [o.id, o]));
+
       const optimisticOccs = occs.map((o) => ({
         ...o,
         completedCount: Math.max(
@@ -1373,11 +1412,9 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
+      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
       setTodayTaskOccurrences((prev) =>
-        prev.map((x: any) => {
-          const updated = optimisticOccs.find((opt) => opt.id === x.id);
-          return updated || x;
-        }),
+        prev.map((x: any) => optimisticById.get(x.id) || x),
       );
 
       try {
@@ -1428,12 +1465,9 @@ export const GardenListPage: React.FC = () => {
           });
         }
       } catch (error) {
-        // Revert optimistic update on error
+        // Revert optimistic update on error using O(1) Map lookup
         setTodayTaskOccurrences((prev) =>
-          prev.map((x: any) => {
-            const original = occs.find((orig) => orig.id === x.id);
-            return original || x;
-          }),
+          prev.map((x: any) => occsById.get(x.id) || x),
         );
         throw error;
       } finally {
@@ -1485,7 +1519,7 @@ export const GardenListPage: React.FC = () => {
       }
     },
     [
-      allPlants,
+      plantsById,
       emitGardenRealtime,
       loadAllTodayOccurrences,
       todayTaskOccurrences,
@@ -1501,13 +1535,14 @@ export const GardenListPage: React.FC = () => {
       // Set loading state
       setCompletingGardenIds((prev) => new Set(prev).add(gardenId));
 
-      // Get all tasks for this garden
-      const gardenPlantIds = allPlants
-        .filter((p: any) => p.gardenId === gardenId)
-        .map((p: any) => p.id);
-      const occs = todayTaskOccurrences.filter((o) =>
-        gardenPlantIds.includes(o.gardenPlantId),
-      );
+      // ⚡ O(O) using Set lookup instead of O(P) filter + O(O*P) includes
+      const gardenPlantIdSet = plantIdsByGarden[gardenId];
+      const occs = gardenPlantIdSet
+        ? todayTaskOccurrences.filter((o) => gardenPlantIdSet.has(o.gardenPlantId))
+        : [];
+
+      // Build lookup map for O(1) updates
+      const occsById = new Map(occs.map((o) => [o.id, o]));
 
       // Optimistic update - mark all as completed immediately
       const optimisticOccs = occs.map((o) => ({
@@ -1517,11 +1552,9 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
+      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
       setTodayTaskOccurrences((prev) =>
-        prev.map((x: any) => {
-          const updated = optimisticOccs.find((opt) => opt.id === x.id);
-          return updated || x;
-        }),
+        prev.map((x: any) => optimisticById.get(x.id) || x),
       );
 
       try {
@@ -1537,7 +1570,7 @@ export const GardenListPage: React.FC = () => {
         await Promise.all(promises);
 
         // Log activity for completing all garden tasks (fire and forget)
-        const gardenName = gardens.find((g) => g.id === gardenId)?.name || t("garden.garden");
+        const gardenName = gardensById[gardenId]?.name || t("garden.garden");
         logGardenActivity({
           gardenId,
           kind: "task_completed" as any,
@@ -1555,12 +1588,9 @@ export const GardenListPage: React.FC = () => {
           actorId: user?.id ?? null,
         }).catch(() => {});
       } catch (error) {
-        // Revert optimistic update on error
+        // Revert optimistic update on error using O(1) Map lookup
         setTodayTaskOccurrences((prev) =>
-          prev.map((x: any) => {
-            const original = occs.find((orig) => orig.id === x.id);
-            return original || x;
-          }),
+          prev.map((x: any) => occsById.get(x.id) || x),
         );
         throw error;
       } finally {
@@ -1607,8 +1637,8 @@ export const GardenListPage: React.FC = () => {
       }
     },
     [
-      allPlants,
-      gardens,
+      plantIdsByGarden,
+      gardensById,
       emitGardenRealtime,
       loadAllTodayOccurrences,
       todayTaskOccurrences,
@@ -1625,9 +1655,9 @@ export const GardenListPage: React.FC = () => {
 
     const affectedGardenIds = new Set<string>();
 
-    // Optimistic update - mark all as completed immediately
+    // ⚡ Optimistic update using O(1) plantsById lookup instead of O(P) .find()
     const optimisticOccs = todayTaskOccurrences.map((o) => {
-      const gp = allPlants.find((p: any) => p.id === o.gardenPlantId);
+      const gp = plantsById[o.gardenPlantId];
       if (gp?.gardenId) affectedGardenIds.add(String(gp.gardenId));
       return {
         ...o,
@@ -1742,13 +1772,14 @@ export const GardenListPage: React.FC = () => {
       }
     }
   }, [
-    allPlants,
+    plantsById,
     emitGardenRealtime,
     loadAllTodayOccurrences,
     todayTaskOccurrences,
     serverToday,
     user?.id,
     clearLocalStorageCache,
+    t,
   ]);
 
   const onCreate = async () => {
@@ -1925,6 +1956,37 @@ export const GardenListPage: React.FC = () => {
   ]);
 
   const gardensWithTasks = React.useMemo(() => {
+    // ⚡ Optimized: Single-pass O(T + G) using shared plantsById lookup
+    const gardenData: Record<
+      string,
+      { plantIds: Set<string>; plants: any[]; req: number; done: number }
+    > = {};
+
+    // O(T): Single pass over occurrences - compute plants, req, done simultaneously
+    for (const o of todayTaskOccurrences) {
+      const plant = plantsById[o.gardenPlantId];
+      if (!plant) continue;
+
+      const gardenId = plant.gardenId;
+      let data = gardenData[gardenId];
+      if (!data) {
+        data = { plantIds: new Set(), plants: [], req: 0, done: 0 };
+        gardenData[gardenId] = data;
+      }
+
+      // Accumulate task counts
+      const reqCount = Math.max(1, Number(o.requiredCount || 1));
+      data.req += reqCount;
+      data.done += Math.min(reqCount, Number(o.completedCount || 0));
+
+      // Track unique plants (Set for O(1) dedup)
+      if (!data.plantIds.has(o.gardenPlantId)) {
+        data.plantIds.add(o.gardenPlantId);
+        data.plants.push(plant);
+      }
+    }
+
+    // O(G): Build result array in garden order
     const byGarden: Array<{
       gardenId: string;
       gardenName: string;
@@ -1932,75 +1994,94 @@ export const GardenListPage: React.FC = () => {
       req: number;
       done: number;
     }> = [];
-    const idToGardenName = gardens.reduce<Record<string, string>>((acc, g) => {
-      acc[g.id] = g.name;
-      return acc;
-    }, {});
+
     for (const g of gardens) {
-      const plants = allPlants.filter(
-        (gp: any) =>
-          gp.gardenId === g.id && (occsByPlant[gp.id] || []).length > 0,
-      );
-      if (plants.length === 0) continue;
-      let req = 0,
-        done = 0;
-      for (const gp of plants) {
-        const occs = occsByPlant[gp.id] || [];
-        req += occs.reduce(
-          (a: number, o: any) => a + Math.max(1, Number(o.requiredCount || 1)),
-          0,
-        );
-        done += occs.reduce(
-          (a: number, o: any) =>
-            a +
-            Math.min(
-              Math.max(1, Number(o.requiredCount || 1)),
-              Number(o.completedCount || 0),
-            ),
-          0,
-        );
-      }
+      const data = gardenData[g.id];
+      if (!data || data.plants.length === 0) continue;
       byGarden.push({
         gardenId: g.id,
-        gardenName: idToGardenName[g.id] || "",
-        plants,
-        req,
-        done,
+        gardenName: g.name,
+        plants: data.plants,
+        req: data.req,
+        done: data.done,
       });
     }
+
     console.log(
       "[GardenList] gardensWithTasks computed:",
       byGarden.length,
-      "gardens with tasks,",
+      "gardens,",
       todayTaskOccurrences.length,
-      "occurrences,",
-      allPlants.length,
-      "plants",
+      "occurrences",
     );
     return byGarden;
-  }, [gardens, allPlants, occsByPlant, todayTaskOccurrences.length]);
+  }, [gardens, plantsById, todayTaskOccurrences]);
 
-  const totalTasks = React.useMemo(
-    () =>
-      todayTaskOccurrences.reduce(
-        (a, o) => a + Math.max(1, Number(o.requiredCount || 1)),
-        0,
-      ),
-    [todayTaskOccurrences],
-  );
-  const totalDone = React.useMemo(
-    () =>
-      todayTaskOccurrences.reduce(
-        (a, o) =>
-          a +
-          Math.min(
-            Math.max(1, Number(o.requiredCount || 1)),
-            Number(o.completedCount || 0),
-          ),
-        0,
-      ),
-    [todayTaskOccurrences],
-  );
+  // ⚡ Single-pass computation of totalTasks and totalDone
+  const { totalTasks, totalDone } = React.useMemo(() => {
+    let tasks = 0;
+    let done = 0;
+    for (const o of todayTaskOccurrences) {
+      const req = Math.max(1, Number(o.requiredCount || 1));
+      tasks += req;
+      done += Math.min(req, Number(o.completedCount || 0));
+    }
+    return { totalTasks: tasks, totalDone: done };
+  }, [todayTaskOccurrences]);
+
+  // ⚡ Update task notification state immediately when we have fresh task data
+  // This ensures the red dot indicator in the nav is instantly accurate
+  React.useEffect(() => {
+    if (!user?.id) return;
+    if (loadingTasks) return; // Don't update while still loading
+    // Has unfinished tasks if totalTasks > totalDone
+    const hasUnfinished = totalTasks > totalDone;
+    updateTaskNotificationState(user.id, hasUnfinished);
+  }, [user?.id, totalTasks, totalDone, loadingTasks]);
+
+  // Load garden invites
+  const loadGardenInvites = React.useCallback(async () => {
+    if (!user?.id) {
+      setGardenInvites([]);
+      return;
+    }
+    try {
+      const invites = await getPendingGardenInvites(user.id);
+      setGardenInvites(invites);
+    } catch (e) {
+      console.warn('[GardenList] Failed to load garden invites:', e);
+    }
+  }, [user?.id]);
+
+  React.useEffect(() => {
+    loadGardenInvites();
+  }, [loadGardenInvites]);
+
+  // Handle accept garden invite
+  const handleAcceptInvite = React.useCallback(async (inviteId: string) => {
+    setProcessingInviteId(inviteId);
+    try {
+      await acceptGardenInvite(inviteId);
+      await Promise.all([loadGardenInvites(), loadGardens()]);
+    } catch (e: any) {
+      console.error('Failed to accept invite:', e);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  }, [loadGardenInvites]);
+
+  // Handle decline garden invite
+  const handleDeclineInvite = React.useCallback(async (inviteId: string) => {
+    setProcessingInviteId(inviteId);
+    try {
+      await declineGardenInvite(inviteId);
+      await loadGardenInvites();
+    } catch (e: any) {
+      console.error('Failed to decline invite:', e);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  }, [loadGardenInvites]);
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16">
@@ -2268,7 +2349,7 @@ export const GardenListPage: React.FC = () => {
                   >
                     {markingAllCompleted ? (
                       <span className="flex items-center gap-2">
-                        <span className="animate-spin">⏳</span>
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         {t("garden.completing")}
                       </span>
                     ) : (
@@ -2358,7 +2439,7 @@ export const GardenListPage: React.FC = () => {
                         >
                           {completingGardenIds.has(gw.gardenId) ? (
                             <span className="flex items-center gap-1">
-                              <span className="animate-spin">⏳</span>
+                              <Loader2 className="h-4 w-4 animate-spin" />
                             </span>
                           ) : (
                             t("garden.completeAll")
@@ -2434,7 +2515,7 @@ export const GardenListPage: React.FC = () => {
                                   disabled={progressingOccIds.has(o.id)}
                                 >
                                   {progressingOccIds.has(o.id) ? (
-                                    <span className="animate-spin">⏳</span>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
                                   ) : (
                                     t("garden.complete", "Complete")
                                   )}
@@ -2451,6 +2532,88 @@ export const GardenListPage: React.FC = () => {
                     </div>
                   </Card>
                 ))}
+
+              {/* Garden Invitations Section */}
+              {gardenInvites.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-stone-200/70 dark:border-[#3e3e42]/70">
+                  <div className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Sprout className="h-5 w-5 text-emerald-500" />
+                    {t("gardenInvites.title", { defaultValue: "Garden Invitations" })}
+                    <span className="ml-auto text-sm font-medium px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                      {gardenInvites.length}
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {gardenInvites.map((invite) => (
+                      <Card
+                        key={invite.id}
+                        className="rounded-[20px] border border-emerald-200/70 dark:border-emerald-900/30 bg-emerald-50/50 dark:bg-emerald-900/10 p-4"
+                      >
+                        <div className="flex items-start gap-3">
+                          {invite.gardenCoverImageUrl ? (
+                            <img
+                              src={invite.gardenCoverImageUrl}
+                              alt=""
+                              className="w-12 h-12 rounded-xl object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+                              <Sprout className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-stone-900 dark:text-white truncate">
+                              {invite.gardenName}
+                            </p>
+                            <p className="text-xs text-stone-500 dark:text-stone-400">
+                              {t("gardenInvites.sentBy", { defaultValue: "from" })} {invite.inviterName || t("friends.unknown", { defaultValue: "Unknown" })}
+                            </p>
+                          </div>
+                        </div>
+                        {invite.message && (
+                          <p className="mt-2 text-xs text-stone-600 dark:text-stone-400 italic">
+                            "{invite.message}"
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 mt-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex-1 h-9 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            onClick={() => handleDeclineInvite(invite.id)}
+                            disabled={processingInviteId === invite.id}
+                          >
+                            {processingInviteId === invite.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <X className="h-4 w-4 mr-1" />
+                                {t("gardenInvites.declineInvite", { defaultValue: "Decline" })}
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="flex-1 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                            onClick={() => handleAcceptInvite(invite.id)}
+                            disabled={processingInviteId === invite.id}
+                          >
+                            {processingInviteId === invite.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Check className="h-4 w-4 mr-1" />
+                                {t("gardenInvites.acceptInvite", { defaultValue: "Accept" })}
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </aside>
         )}

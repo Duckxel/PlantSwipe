@@ -235,7 +235,19 @@ case "${PLANTSWIPE_DISABLE_DEFAULT_BRANCH_FALLBACK:-}" in
 esac
 
 # Internal flag: when true, skip the git pull step (e.g., no upstream and fallback disabled)
-SKIP_PULL=false
+# Can be set via environment variable SKIP_PULL=true or command line --skip-pull
+if [[ "${SKIP_PULL:-}" == "true" ]]; then
+  SKIP_PULL=true
+else
+  SKIP_PULL=false
+fi
+for arg in "$@"; do
+  case "$arg" in
+    --skip-pull|--no-pull)
+      SKIP_PULL=true
+      ;;
+  esac
+done
 
 log "Repo (cwd): $WORK_DIR"
 log "Node app: $NODE_DIR"
@@ -616,20 +628,22 @@ if [[ "$SKIP_NPM_INSTALL" != "true" ]]; then
 fi
 
 log "Building application…"
+# Limit Node.js memory to prevent OOM on low-RAM servers (default 512MB, override with NODE_BUILD_MEMORY)
+NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
 if [[ "$REPO_OWNER" != "" ]]; then
   if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H env CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+    sudo -u "$REPO_OWNER" -H env CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
   elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
     if $SUDO -n true >/dev/null 2>&1; then
-      $SUDO -u "$REPO_OWNER" -H env CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+      $SUDO -u "$REPO_OWNER" -H env CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
     else
-      CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+      CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
     fi
   else
-    CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+    CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
   fi
 else
-  CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+  CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
 fi
 
 # Deploy Supabase Edge Functions (delegates to dedicated script)

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
 import { executeRecaptcha } from "@/lib/recaptcha";
@@ -16,6 +16,8 @@ import { Footer } from "@/components/layout/Footer";
 import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
+import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
+import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant, PlantSeason } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -44,6 +46,8 @@ const CreatePlantPageLazy = lazy(() => import("@/pages/CreatePlantPage").then(mo
 const PlantInfoPageLazy = lazy(() => import("@/pages/PlantInfoPage"))
 const PublicProfilePageLazy = lazy(() => import("@/pages/PublicProfilePage"))
 const FriendsPageLazy = lazy(() => import("@/pages/FriendsPage").then(module => ({ default: module.FriendsPage })))
+const MessagesPageLazy = lazy(() => import("@/pages/MessagesPage").then(module => ({ default: module.MessagesPage })))
+const ScanPageLazy = lazy(() => import("@/pages/ScanPage").then(module => ({ default: module.ScanPage })))
 const SettingsPageLazy = lazy(() => import("@/pages/SettingsPage"))
 const ContactUsPageLazy = lazy(() => import("@/pages/ContactUsPage"))
 const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
@@ -119,23 +123,33 @@ export default function PlantSwipe() {
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [usageFilters, setUsageFilters] = useState<string[]>([])
+  const [habitatFilters, setHabitatFilters] = useState<string[]>([])
+  const [maintenanceFilter, setMaintenanceFilter] = useState<string | null>(null)
+  const [petSafe, setPetSafe] = useState(false)
+  const [humanSafe, setHumanSafe] = useState(false)
+  const [livingSpaceFilters, setLivingSpaceFilters] = useState<string[]>([])
   const [seasonSectionOpen, setSeasonSectionOpen] = useState(false)
   const [colorSectionOpen, setColorSectionOpen] = useState(false)
   const [advancedColorsOpen, setAdvancedColorsOpen] = useState(false)
   const [typeSectionOpen, setTypeSectionOpen] = useState(false)
   const [usageSectionOpen, setUsageSectionOpen] = useState(false)
+  const [habitatSectionOpen, setHabitatSectionOpen] = useState(false)
+  const [maintenanceSectionOpen, setMaintenanceSectionOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
   })
   const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
   const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
+  const [searchBarVisible, setSearchBarVisible] = useState(true)
+  const lastScrollY = React.useRef(0)
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
   const initialCardBoostRef = React.useRef(true)
 
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "landing" | "discovery" | "gardens" | "search" | "profile" | "create" =
@@ -145,6 +159,18 @@ export default function PlantSwipe() {
     pathWithoutLang.startsWith("/search") ? "search" :
     pathWithoutLang.startsWith("/profile") ? "profile" :
     pathWithoutLang.startsWith("/create") ? "create" : "discovery"
+  
+  // Message notifications - determine if user is on messages page
+  const isOnMessagesPage = pathWithoutLang.startsWith('/messages')
+  const { 
+    notification: messageNotification, 
+    dismiss: dismissMessageNotification
+  } = useMessageNotifications({
+    userId: user?.id ?? null,
+    enabled: Boolean(user),
+    // Don't show notifications when already on messages page
+    currentConversationId: isOnMessagesPage ? 'all' : null
+  })
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -226,6 +252,47 @@ export default function PlantSwipe() {
     const arr = Array.isArray(profile?.liked_plant_ids) ? profile.liked_plant_ids.map(String) : []
     setLikedIds(arr)
   }, [profile])
+
+  // Read search query from URL parameters when on search page
+  React.useEffect(() => {
+    if (pathWithoutLang.startsWith("/search")) {
+      const urlQuery = searchParams.get("q")
+      if (urlQuery && urlQuery !== query) {
+        setQuery(urlQuery)
+        // Clear the URL parameter after setting the query to keep URL clean
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [pathWithoutLang, searchParams, setSearchParams]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hide search bar on scroll down, show on scroll up (mobile only)
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    if (currentView !== "search") return
+    
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      const scrollDelta = currentScrollY - lastScrollY.current
+      
+      // Only trigger if scrolled more than 10px to avoid jitter
+      if (Math.abs(scrollDelta) < 10) return
+      
+      // Show search bar when scrolling up or at top
+      if (scrollDelta < 0 || currentScrollY < 50) {
+        setSearchBarVisible(true)
+      } else {
+        // Hide when scrolling down (only on mobile)
+        if (window.innerWidth < 768) {
+          setSearchBarVisible(false)
+        }
+      }
+      
+      lastScrollY.current = currentScrollY
+    }
+    
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [currentView])
 
   const loadPlants = React.useCallback(async () => {
     // Only show loading if we don't have plants
@@ -523,6 +590,12 @@ export default function PlantSwipe() {
       return tokens.includes(normalizedColorFilter)
     }
 
+    // Normalize habitat filters
+    const normalizedHabitatFilters = habitatFilters.map((h) => h.toLowerCase())
+    
+    // Normalize maintenance filter
+    const normalizedMaintenanceFilter = maintenanceFilter?.toLowerCase() ?? null
+
     return plants.filter((p: Plant) => {
       // Extract colors from both legacy format (p.colors) and new format (p.identity?.colors)
       const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
@@ -549,9 +622,54 @@ export default function PlantSwipe() {
       const matchesUsage = normalizedUsage.length
         ? normalizedUsage.every((usage) => plantUsageLabels.includes(usage))
         : true
-      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage
+      
+      // Habitat filter - match if plant has ANY of the selected habitats (OR logic)
+      const plantHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+      const matchesHabitat = normalizedHabitatFilters.length === 0 
+        ? true 
+        : normalizedHabitatFilters.some((h) => plantHabitats.includes(h))
+      
+      // Maintenance level filter
+      const plantMaintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+      const matchesMaintenance = !normalizedMaintenanceFilter 
+        ? true 
+        : plantMaintenance === normalizedMaintenanceFilter
+      
+      // Pet-safe filter - show only plants that are Non-Toxic to pets
+      const plantToxicityPets = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '')
+      const matchesPetSafe = !petSafe 
+        ? true 
+        : plantToxicityPets === 'nontoxic'
+      
+      // Human-safe filter - show only plants that are Non-Toxic to humans
+      const plantToxicityHuman = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '')
+      const matchesHumanSafe = !humanSafe 
+        ? true 
+        : plantToxicityHuman === 'nontoxic'
+      
+      // Living space filter with special logic:
+      // - Nothing selected = show all plants
+      // - Indoor only = show plants with livingSpace "Indoor" or "Both"
+      // - Outdoor only = show plants with livingSpace "Outdoor" or "Both"
+      // - Both selected = show ONLY plants that have livingSpace "Both" (can be both indoor AND outdoor)
+      const plantLivingSpace = (p.identity?.livingSpace || '').toLowerCase()
+      let matchesLivingSpace = true
+      if (livingSpaceFilters.length === 2) {
+        // Both Indoor and Outdoor selected - show only plants that can be BOTH
+        matchesLivingSpace = plantLivingSpace === 'both'
+      } else if (livingSpaceFilters.length === 1) {
+        const selectedSpace = livingSpaceFilters[0].toLowerCase()
+        if (selectedSpace === 'indoor') {
+          matchesLivingSpace = plantLivingSpace === 'indoor' || plantLivingSpace === 'both'
+        } else if (selectedSpace === 'outdoor') {
+          matchesLivingSpace = plantLivingSpace === 'outdoor' || plantLivingSpace === 'both'
+        }
+      }
+      // If no filters selected, show all plants
+      
+      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage && matchesHabitat && matchesMaintenance && matchesPetSafe && matchesHumanSafe && matchesLivingSpace
     })
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, likedSet, colorOptions])
+  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, habitatFilters, maintenanceFilter, petSafe, humanSafe, livingSpaceFilters, likedSet, colorOptions])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
@@ -559,6 +677,17 @@ export default function PlantSwipe() {
     // shuffleEpoch is used to trigger a reshuffle when user completes a cycle
     void shuffleEpoch
     if (filtered.length === 0) return []
+    
+    // Filter out plants without images for Discovery page
+    const plantsWithImages = filtered.filter((p) => {
+      // Check for image in multiple locations
+      const hasLegacyImage = Boolean(p.image)
+      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
+      return hasLegacyImage || hasImagesArray
+    })
+    
+    if (plantsWithImages.length === 0) return []
+    
     const shuffleList = (list: Plant[]) => {
       const arr = list.slice()
       for (let i = arr.length - 1; i > 0; i--) {
@@ -570,7 +699,7 @@ export default function PlantSwipe() {
     const now = new Date()
     const promoted: Plant[] = []
     const regular: Plant[] = []
-    filtered.forEach((plant) => {
+    plantsWithImages.forEach((plant) => {
       if (isPlantOfTheMonth(plant, now)) {
         promoted.push(plant)
       } else {
@@ -578,7 +707,7 @@ export default function PlantSwipe() {
       }
     })
     if (promoted.length === 0) {
-      return shuffleList(filtered)
+      return shuffleList(plantsWithImages)
     }
     return [...shuffleList(promoted), ...shuffleList(regular)]
   }, [filtered, shuffleEpoch])
@@ -625,6 +754,36 @@ export default function PlantSwipe() {
     if (index !== 0) return
     initialCardBoostRef.current = false
   }, [heroImageCandidate, index])
+
+  // Track which images have been preloaded to avoid re-preloading
+  const preloadedImagesRef = React.useRef<Set<string>>(new Set())
+
+  // Preload next card images for instant swipe transitions
+  React.useEffect(() => {
+    if (currentView !== "discovery") return
+    if (typeof window === "undefined") return
+    if (swipeList.length === 0) return
+
+    // Debounce preloading to avoid flashing
+    const timeoutId = setTimeout(() => {
+      // Preload next 2 cards and previous 1 card
+      const offsets = [1, 2, -1]
+      offsets.forEach((offset) => {
+        const targetIndex = (index + offset + swipeList.length) % swipeList.length
+        const plant = swipeList[targetIndex]
+        if (plant) {
+          const imageUrl = getDiscoveryPageImageUrl(plant)
+          if (imageUrl && !preloadedImagesRef.current.has(imageUrl)) {
+            preloadedImagesRef.current.add(imageUrl)
+            const img = new Image()
+            img.src = imageUrl
+          }
+        }
+      })
+    }, 100)
+
+    return () => clearTimeout(timeoutId)
+  }, [currentView, index, swipeList])
 
   React.useEffect(() => {
     if (currentView !== "discovery") return
@@ -911,6 +1070,11 @@ export default function PlantSwipe() {
         colorFilter.length > 0 || 
         typeFilter !== null || 
         usageFilters.length > 0 || 
+        habitatFilters.length > 0 ||
+        maintenanceFilter !== null ||
+        petSafe ||
+        humanSafe ||
+        livingSpaceFilters.length > 0 ||
         onlySeeds || 
         onlyFavorites
 
@@ -920,9 +1084,26 @@ export default function PlantSwipe() {
         setColorFilter([])
         setTypeFilter(null)
         setUsageFilters([])
+        setHabitatFilters([])
+        setMaintenanceFilter(null)
+        setPetSafe(false)
+        setHumanSafe(false)
+        setLivingSpaceFilters([])
         setOnlySeeds(false)
         setOnlyFavorites(false)
       }
+      
+      // Habitat options
+      const habitatOptions = [
+        "Aquatic", "Semi-Aquatic", "Wetland", "Tropical", "Temperate", 
+        "Arid", "Mediterranean", "Mountain", "Grassland", "Forest", "Coastal", "Urban"
+      ] as const
+      
+      // Maintenance level options
+      const maintenanceOptions = ["None", "Low", "Moderate", "Heavy"] as const
+      
+      // Living space options  
+      const livingSpaceOptions = ["Indoor", "Outdoor"] as const
 
       const renderColorOption = (color: ColorOption) => {
         const isActive = colorFilter.includes(color.name)
@@ -1134,6 +1315,140 @@ export default function PlantSwipe() {
             )}
           </div>
 
+          {/* Habitat */}
+          <div>
+            <FilterSectionHeader
+              label={t("moreInfo.labels.habitat", { defaultValue: "Habitat" })}
+              isOpen={habitatSectionOpen}
+              onToggle={() => setHabitatSectionOpen((prev) => !prev)}
+            />
+            {habitatSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {habitatOptions.map((habitat) => {
+                  const isSelected = habitatFilters.includes(habitat)
+                  const habitatKey = habitat.toLowerCase().replace(/[\s-]/g, '')
+                  return (
+                    <button
+                      key={habitat}
+                      type="button"
+                      onClick={() =>
+                        setHabitatFilters((current) =>
+                          isSelected ? current.filter((h) => h !== habitat) : [...current, habitat]
+                        )
+                      }
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        isSelected
+                          ? "bg-teal-600 dark:bg-teal-500 text-white"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={isSelected}
+                    >
+                      {t(`moreInfo.enums.habitat.${habitatKey}`, { defaultValue: habitat })}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Maintenance Level */}
+          <div>
+            <FilterSectionHeader
+              label={t("moreInfo.labels.maintenance", { defaultValue: "Maintenance" })}
+              isOpen={maintenanceSectionOpen}
+              onToggle={() => setMaintenanceSectionOpen((prev) => !prev)}
+            />
+            {maintenanceSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {maintenanceOptions.map((level) => {
+                  const isSelected = maintenanceFilter === level
+                  const levelKey = level.toLowerCase()
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setMaintenanceFilter((current) => (current === level ? null : level))}
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        isSelected
+                          ? "bg-violet-600 dark:bg-violet-500 text-white"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={isSelected}
+                    >
+                      {t(`plantDetails.maintenanceLevels.${levelKey}`, { defaultValue: level })}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Safety Toggles - Pet-Safe & Human-Safe */}
+          <div>
+            <div className="text-xs font-medium mb-3 uppercase tracking-wide text-stone-500 dark:text-stone-300">
+              {t("plant.safetyFilters", { defaultValue: "Safety" })}
+            </div>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setPetSafe((v) => !v)}
+                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                  petSafe ? "bg-cyan-600 dark:bg-cyan-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                }`}
+                aria-pressed={petSafe}
+              >
+                <span>🐾</span> {t("plant.petSafe", { defaultValue: "Pet-Safe" })}
+              </button>
+              <button
+                type="button"
+                onClick={() => setHumanSafe((v) => !v)}
+                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                  humanSafe ? "bg-cyan-600 dark:bg-cyan-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                }`}
+                aria-pressed={humanSafe}
+              >
+                <span>👤</span> {t("plant.humanSafe", { defaultValue: "Human-Safe" })}
+              </button>
+            </div>
+          </div>
+
+          {/* Indoor / Outdoor - Not collapsible */}
+          <div>
+            <div className="text-xs font-medium mb-3 uppercase tracking-wide text-stone-500 dark:text-stone-300">
+              {t("moreInfo.labels.livingSpace", { defaultValue: "Living Space" })}
+            </div>
+            <div className="flex gap-2">
+              {livingSpaceOptions.map((space) => {
+                const isSelected = livingSpaceFilters.includes(space)
+                const spaceKey = space.toLowerCase()
+                return (
+                  <button
+                    key={space}
+                    type="button"
+                    onClick={() =>
+                      setLivingSpaceFilters((current) =>
+                        isSelected ? current.filter((s) => s !== space) : [...current, space]
+                      )
+                    }
+                    className={`flex-1 px-4 py-2 rounded-2xl text-sm shadow-sm border transition ${
+                      isSelected
+                        ? "bg-indigo-600 dark:bg-indigo-500 text-white"
+                        : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                    }`}
+                    aria-pressed={isSelected}
+                  >
+                    {t(`moreInfo.enums.livingSpace.${spaceKey}`, { defaultValue: space })}
+                  </button>
+                )
+              })}
+            </div>
+            {livingSpaceFilters.length === 2 && (
+              <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                {t("plant.livingSpaceBothHint", { defaultValue: "Showing plants suitable for both indoor AND outdoor" })}
+              </p>
+            )}
+          </div>
+
           {/* Toggles */}
           <div className="pt-2 space-y-2">
             <button
@@ -1170,9 +1485,18 @@ export default function PlantSwipe() {
               {usageFilters.map((usage) => (
                 <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
               ))}
+              {habitatFilters.map((habitat) => (
+                <Badge key={habitat} variant="secondary" className="rounded-xl">{t(`moreInfo.enums.habitat.${habitat.toLowerCase().replace(/[\s-]/g, '')}`, { defaultValue: habitat })}</Badge>
+              ))}
+              {maintenanceFilter && <Badge variant="secondary" className="rounded-xl">{t(`plantDetails.maintenanceLevels.${maintenanceFilter.toLowerCase()}`, { defaultValue: maintenanceFilter })}</Badge>}
+              {petSafe && <Badge variant="secondary" className="rounded-xl">🐾 {t("plant.petSafe", { defaultValue: "Pet-Safe" })}</Badge>}
+              {humanSafe && <Badge variant="secondary" className="rounded-xl">👤 {t("plant.humanSafe", { defaultValue: "Human-Safe" })}</Badge>}
+              {livingSpaceFilters.map((space) => (
+                <Badge key={space} variant="secondary" className="rounded-xl">{t(`moreInfo.enums.livingSpace.${space.toLowerCase()}`, { defaultValue: space })}</Badge>
+              ))}
               {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
               {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
-              {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
+              {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && habitatFilters.length === 0 && !maintenanceFilter && !petSafe && !humanSafe && livingSpaceFilters.length === 0 && !onlySeeds && !onlyFavorites && (
                 <span className="opacity-50">{t("plant.none")}</span>
               )}
             </div>
@@ -1322,9 +1646,13 @@ export default function PlantSwipe() {
 
             {/* Main content area */}
             <main className="min-h-[60vh]" aria-live="polite">
-              {/* Sticky search bar for search view - sticks to top when scrolled past */}
+              {/* Sticky search bar for search view - hides on scroll down on mobile */}
               {currentView === "search" && (
-                <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4">
+                <div 
+                  className={`sticky z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4 transition-all duration-300 ${
+                    searchBarVisible ? 'top-0 opacity-100' : '-top-32 opacity-0 md:top-0 md:opacity-100'
+                  }`}
+                >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div className="flex-1">
                       <Label htmlFor="plant-search-main" className="sr-only">
@@ -1436,6 +1764,26 @@ export default function PlantSwipe() {
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
                   <FriendsPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/messages"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <MessagesPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/scan"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <ScanPageLazy />
                 </Suspense>
               ) : (
                 <Navigate to="/" replace />
@@ -1567,7 +1915,7 @@ export default function PlantSwipe() {
               path="/admin/*"
               element={
                 <RequireEditor>
-                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
+                  <Suspense fallback={<div className="p-8 flex items-center justify-center gap-2 text-sm opacity-60"><Loader2 className="h-4 w-4 animate-spin" /><span>Loading admin panel...</span></div>}>
                     <AdminPage />
                   </Suspense>
                 </RequireEditor>
@@ -1792,6 +2140,15 @@ export default function PlantSwipe() {
       <Footer />
       <BroadcastToast />
       <RequestPlantDialog open={requestPlantDialogOpen} onOpenChange={setRequestPlantDialogOpen} />
+      
+      {/* Message notification toast - shows when new messages arrive */}
+      <MessageNotificationToast
+        notification={messageNotification}
+        onDismiss={dismissMessageNotification}
+        onOpen={(conversationId) => {
+          navigate(`/messages?conversation=${conversationId}`)
+        }}
+      />
     </div>
     </AuthActionsProvider>
   )

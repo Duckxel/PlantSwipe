@@ -18,6 +18,8 @@ export interface Garden {
   locationLat?: number | null
   locationLon?: number | null
   preferredLanguage?: string | null
+  /** If true, hide the AI chat bubble for this garden */
+  hideAiChat?: boolean
 }
 
 export interface GardenMember {

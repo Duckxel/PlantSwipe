@@ -3,10 +3,12 @@ import { useParams } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
 import { DimensionCube } from '@/components/plant/DimensionCube'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { PlantInfoPageSkeleton } from '@/components/garden/GardenSkeletons'
+import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
 import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
-import { checkEditorAccess } from '@/constants/userRoles'
+import { checkEditorAccess, hasAnyRole, USER_ROLES } from '@/constants/userRoles'
 import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
 import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
 import { supabase } from '@/lib/supabaseClient'
@@ -19,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Pencil,
   MapPin,
   Compass,
@@ -46,6 +49,10 @@ import {
   ShieldCheck,
   User,
   PawPrint,
+  HardHat,
+  Clock,
+  CalendarDays,
+  FileText,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -501,7 +508,7 @@ const PlantInfoPage: React.FC = () => {
   }
 
   if (loading) {
-    return <PlantInfoSkeleton label={t('common.loading', { defaultValue: 'Loading plant data' })} />
+    return <PlantInfoPageSkeleton label={t('common.loading', { defaultValue: 'Loading plant data' })} />
   }
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
@@ -594,14 +601,78 @@ const PlantInfoPage: React.FC = () => {
           )}
         </div>
       </div>
-      <PlantDetails 
-        plant={plant} 
-        liked={likedIds.includes(plant.id)} 
-        onToggleLike={toggleLiked} 
-        onBookmark={handleBookmark}
-        isBookmarked={isBookmarked}
-      />
-      <MoreInformationSection plant={plant} />
+      {/* Check if plant is "In Progress" - show construction message for regular users, full page with disclaimer for privileged users */}
+      {(() => {
+        const isInConstruction = plant.meta?.status?.toLowerCase() === 'in progres' || plant.meta?.status?.toLowerCase() === 'in progress'
+        // Check if user has privileged access: Admin, Editor, or Pro
+        const hasPrivilegedAccess = profile?.is_admin === true || hasAnyRole(profile?.roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR, USER_ROLES.PRO])
+        
+        // Regular users see simplified construction message
+        if (isInConstruction && !hasPrivilegedAccess) {
+          return (
+            <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
+              <div className="flex justify-center">
+                <div className="p-4 rounded-full bg-amber-100 dark:bg-amber-900/40">
+                  <HardHat className="h-12 w-12 text-amber-600 dark:text-amber-400" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h2 className="text-2xl sm:text-3xl font-bold text-amber-900 dark:text-amber-100">
+                  {t('plantInfo.inConstruction.title', { defaultValue: 'Plant in Construction' })}
+                </h2>
+                <p className="text-amber-700 dark:text-amber-300 max-w-lg mx-auto">
+                  {t('plantInfo.inConstruction.description', { 
+                    defaultValue: 'We are currently verifying and completing the information for this plant. Check back soon for the full details!' 
+                  })}
+                </p>
+              </div>
+              {/* Show basic info that we have */}
+              <div className="pt-4 space-y-4 max-w-md mx-auto">
+                <div className="text-left p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-amber-200/50 dark:border-amber-500/20">
+                  <h3 className="font-semibold text-lg text-stone-900 dark:text-white">{plant.name}</h3>
+                  {plant.identity?.scientificName && (
+                    <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.identity.scientificName}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        }
+        
+        // Privileged users (Admin/Editor/Pro) see full page with disclaimer banner if plant is in construction
+        return (
+          <>
+            {isInConstruction && hasPrivilegedAccess && (
+              <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-900/30 dark:to-amber-800/20 p-4 sm:p-5 flex items-center gap-4">
+                <div className="shrink-0 p-2.5 rounded-full bg-amber-200 dark:bg-amber-800/50">
+                  <HardHat className="h-6 w-6 text-amber-700 dark:text-amber-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-amber-900 dark:text-amber-100">
+                    {t('plantInfo.inConstruction.adminTitle', { defaultValue: 'Plant in Construction' })}
+                  </h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">
+                    {t('plantInfo.inConstruction.adminDescription', { 
+                      defaultValue: 'This plant is still being verified. Regular users cannot see this page yet.' 
+                    })}
+                  </p>
+                </div>
+                <Badge variant="outline" className="shrink-0 border-amber-400 text-amber-700 dark:border-amber-500 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40">
+                  {t('plantInfo.inConstruction.privilegedBadge', { defaultValue: 'Early Access' })}
+                </Badge>
+              </div>
+            )}
+            <PlantDetails 
+              plant={plant} 
+              liked={likedIds.includes(plant.id)} 
+              onToggleLike={toggleLiked} 
+              onBookmark={handleBookmark}
+              isBookmarked={isBookmarked}
+            />
+            <MoreInformationSection plant={plant} />
+          </>
+        )
+      })()}
       
       {user?.id && plant && (
         <AddToBookmarkDialog 
@@ -623,168 +694,6 @@ const PlantInfoPage: React.FC = () => {
           onAdded={handleGardenAdded}
         />
       )}
-    </div>
-  )
-}
-
-const SkeletonBlock: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <div className={`animate-pulse rounded-md bg-stone-200/80 dark:bg-stone-800/70 ${className}`} />
-)
-
-const InfoCardSkeleton: React.FC<{ lines?: number }> = ({ lines = 4 }) => (
-  <Card className="rounded-2xl sm:rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
-    <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
-      <SkeletonBlock className="h-4 w-1/3 rounded-full" />
-    </CardHeader>
-    <CardContent className="space-y-2.5 sm:space-y-3 p-4 sm:p-6 pt-0">
-      {Array.from({ length: lines }).map((_, idx) => (
-        <div key={`info-line-${idx}`} className="flex items-start gap-3">
-          <SkeletonBlock className="h-9 w-9 rounded-xl" />
-          <div className="flex-1 space-y-1.5">
-            <SkeletonBlock className="h-3 w-1/3 rounded-full" />
-            <SkeletonBlock className="h-4 w-5/6" />
-          </div>
-        </div>
-      ))}
-    </CardContent>
-  </Card>
-)
-
-const PlantInfoSkeleton: React.FC<{ label?: string }> = ({ label = 'Loading...' }) => {
-  const infoCardSkeletons = [4, 4, 3, 4, 3, 2]
-
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-5 sm:space-y-6"
-    >
-      <span className="sr-only">{label}</span>
-
-      <div className="flex flex-wrap items-center gap-3 justify-between">
-        <SkeletonBlock className="h-10 w-32 rounded-2xl" />
-        <SkeletonBlock className="h-10 w-24 rounded-2xl" />
-      </div>
-
-      <div className="rounded-3xl border border-stone-200/70 dark:border-[#1d1d1f] bg-white/80 dark:bg-[#0c111b] shadow-md p-4 sm:p-6 space-y-5">
-        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
-          <div className="flex-1 space-y-3 sm:space-y-4">
-            <SkeletonBlock className="h-5 w-24 rounded-full" />
-            <SkeletonBlock className="h-9 w-3/4 rounded-xl" />
-            <SkeletonBlock className="h-5 w-2/5 rounded-md" />
-            <div className="space-y-2">
-              <SkeletonBlock className="h-4 w-full" />
-              <SkeletonBlock className="h-4 w-5/6" />
-              <SkeletonBlock className="h-4 w-2/3" />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {Array.from({ length: 4 }).map((_, idx) => (
-                <SkeletonBlock key={`plant-badge-${idx}`} className="h-6 w-24 rounded-full" />
-              ))}
-            </div>
-          </div>
-          <div className="w-full lg:w-96">
-            <SkeletonBlock className="aspect-[4/3] w-full rounded-2xl" />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, idx) => (
-            <SkeletonBlock key={`stat-pill-${idx}`} className="h-28 rounded-[20px]" />
-          ))}
-        </div>
-      </div>
-
-      <section className="space-y-4 sm:space-y-6">
-        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)]">
-          <div className="rounded-2xl border border-emerald-200/70 dark:border-emerald-500/30 bg-white/80 dark:bg-[#0f1f1f] p-4 sm:p-5 space-y-3">
-            <SkeletonBlock className="h-4 w-32" />
-            <SkeletonBlock className="h-5 w-24" />
-            <div className="grid md:grid-cols-2 gap-3">
-              <SkeletonBlock className="min-h-[240px] rounded-2xl" />
-              <div className="flex flex-col gap-2">
-                {Array.from({ length: 3 }).map((_, idx) => (
-                  <div
-                    key={`dimension-chip-${idx}`}
-                    className="space-y-2 rounded-2xl border border-emerald-100/70 dark:border-emerald-500/30 p-3"
-                  >
-                    <SkeletonBlock className="h-3 w-1/3 rounded-full" />
-                    <SkeletonBlock className="h-5 w-1/2 rounded-md" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 max-w-[280px]">
-            <SkeletonBlock className="h-4 w-24 mb-3" />
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, idx) => (
-                <div key={`palette-line-${idx}`} className="space-y-1.5">
-                  <SkeletonBlock className="h-14 rounded-xl" />
-                  <SkeletonBlock className="h-3 w-3/4 rounded-full" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6 space-y-4">
-            <SkeletonBlock className="h-4 w-32" />
-            <SkeletonBlock className="h-5 w-20" />
-            <div className="space-y-2">
-              {Array.from({ length: 6 }).map((_, idx) => (
-                <SkeletonBlock key={`timeline-bar-${idx}`} className="h-6 w-full rounded-full" />
-              ))}
-            </div>
-            <div className="flex gap-3 flex-wrap text-stone-400 text-xs">
-              {Array.from({ length: 3 }).map((_, idx) => (
-                <SkeletonBlock key={`timeline-label-${idx}`} className="h-3 w-20 rounded-full" />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/70 via-white/70 to-emerald-100/70 dark:from-[#03191b] dark:via-[#05263a] dark:to-[#081121] p-4 sm:p-6 space-y-4">
-          <SkeletonBlock className="h-4 w-36" />
-          <SkeletonBlock className="h-52 w-full rounded-2xl" />
-          <div className="flex flex-wrap gap-2">
-            {Array.from({ length: 4 }).map((_, idx) => (
-              <SkeletonBlock key={`map-badge-${idx}`} className="h-6 w-24 rounded-full" />
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-500/40 bg-gradient-to-br from-emerald-50/80 via-orange-50/50 to-amber-50/70 dark:from-emerald-500/20 dark:via-orange-500/10 dark:to-amber-500/10 p-4 sm:p-6 space-y-4">
-          <SkeletonBlock className="h-5 w-48" />
-          <div className="flex flex-wrap gap-3">
-            {Array.from({ length: 4 }).map((_, idx) => (
-              <SkeletonBlock key={`recipe-pill-${idx}`} className="h-10 w-32 rounded-2xl" />
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-3 sm:space-y-4">
-          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
-            {infoCardSkeletons.map((lines, idx) => (
-              <InfoCardSkeleton key={`info-card-${idx}`} lines={lines} />
-            ))}
-          </div>
-
-          <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6 space-y-3">
-            <SkeletonBlock className="h-4 w-32" />
-            <div className="flex gap-3 overflow-hidden">
-              {Array.from({ length: 3 }).map((_, idx) => (
-                <SkeletonBlock key={`gallery-card-${idx}`} className="h-48 flex-1 rounded-2xl" />
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-stone-200/70 bg-white/90 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f] p-4 sm:p-5 space-y-3">
-            <SkeletonBlock className="h-4 w-44" />
-            <SkeletonBlock className="h-4 w-36" />
-            <SkeletonBlock className="h-4 w-2/3" />
-          </div>
-        </div>
-      </section>
     </div>
   )
 }
@@ -1042,7 +951,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const fertilizerAdvice = formatTextValue(plantCare.adviceFertilizer)
       const medicinalNotes = formatTextValue(usage.adviceMedicinal)
       const infusionNotes = formatTextValue(usage.adviceInfusion)
-      const adminCommentary = formatTextValue(meta.adminCommentary)
+      // adminCommentary hidden from public view
       const createdTimestamp = formatTimestampDetailed(meta.createdAt ?? meta.createdTime)
       const updatedTimestamp = formatTimestampDetailed(meta.updatedAt ?? meta.updatedTime)
       const createdByLabel = formatTextValue(meta.createdBy)
@@ -1059,8 +968,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         t('moreInfo.values.feedsNeighbors'),
         t('moreInfo.values.neutralGroundEffect'),
       )
-      const supportDescriptor = formatBooleanDescriptor(growth.tutoring, t('moreInfo.values.needsSupport'), t('moreInfo.values.selfSupporting'))
-      const transplantDescriptor = formatBooleanDescriptor(growth.transplanting, t('moreInfo.values.transplantRecommended'), t('moreInfo.values.noTransplantNeeded'))
+      const supportDescriptor = formatBooleanDescriptor(growth.tutoring, t('moreInfo.values.needsSupport'), t('moreInfo.values.selfSupporting'), true)
+      const transplantDescriptor = formatBooleanDescriptor(growth.transplanting, t('moreInfo.values.transplantRecommended'), t('moreInfo.values.noTransplantNeeded'), true)
       const fragranceDescriptor = formatBooleanDescriptor(identity.scent, t('moreInfo.values.fragrant'), t('moreInfo.values.neutralScent'))
       const spikedDescriptor = formatBooleanDescriptor(identity.spiked, t('moreInfo.values.hasThorns'), t('moreInfo.values.smoothStems'))
       const recipesIdeasList = compactStrings(usage.recipesIdeas)
@@ -1158,7 +1067,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const usageFlavor = filterInfoItems([
         {
           label: t('moreInfo.labels.utility'),
-          value: utilityLabel || t('moreInfo.values.ornamental'),
+          value: utilityLabel,
           icon: <Palette className="h-3.5 w-3.5" />,
         },
         { label: t('moreInfo.labels.comestibleParts'), value: comestiblePartsLabel, icon: <Leaf className="h-3.5 w-3.5" /> },
@@ -1172,8 +1081,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: t('moreInfo.labels.spiceMixes'), value: spiceMixesLabel },
       ])
       const ecologyItems = filterInfoItems([
-        { label: t('moreInfo.labels.habitat'), value: habitatLabel || t('moreInfo.values.gardenAdaptable'), icon: <MapPin className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.pollinators'), value: pollenizerLabel || t('moreInfo.values.beeFriendly'), icon: <Wind className="h-3.5 w-3.5" /> },
+        { label: t('moreInfo.labels.habitat'), value: habitatLabel, icon: <MapPin className="h-3.5 w-3.5" /> },
+        { label: t('moreInfo.labels.pollinators'), value: pollenizerLabel, icon: <Wind className="h-3.5 w-3.5" /> },
         { label: t('moreInfo.labels.groundEffect'), value: groundEffectLabel, icon: <Sprout className="h-3.5 w-3.5" /> },
         { label: t('moreInfo.labels.melliferous'), value: melliferousDescriptor },
         { label: t('moreInfo.labels.greenManure'), value: manureDescriptor },
@@ -1204,23 +1113,23 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const riskItems = filterInfoItems([
         {
           label: t('moreInfo.labels.toxicityHuman'),
-          value: plant.identity?.toxicityHuman ? translateEnum(plant.identity.toxicityHuman) : t('moreInfo.values.low'),
+          value: plant.identity?.toxicityHuman ? translateEnum(plant.identity.toxicityHuman) : undefined,
           icon: <Flame className="h-3.5 w-3.5" />,
         },
         {
           label: t('moreInfo.labels.toxicityPets'),
-          value: plant.identity?.toxicityPets ? translateEnum(plant.identity.toxicityPets) : t('moreInfo.values.low'),
+          value: plant.identity?.toxicityPets ? translateEnum(plant.identity.toxicityPets) : undefined,
           icon: <Leaf className="h-3.5 w-3.5" />,
         },
         {
           label: t('moreInfo.labels.conservation'),
-          value: conservationLabel || t('moreInfo.values.stable'),
+          value: conservationLabel,
           icon: <Compass className="h-3.5 w-3.5" />,
         },
         { label: t('moreInfo.labels.pests'), value: pestLabel },
         { label: t('moreInfo.labels.diseases'), value: diseaseLabel },
       ])
-      const recordItems = filterInfoItems([{ label: t('moreInfo.labels.adminCommentary'), value: adminCommentary, variant: 'note' }])
+      const recordItems: ReturnType<typeof filterInfoItems> = [] // Admin commentary hidden from public view
       const sourcesValue = formatSourcesList(misc.sources)
       const infoSections = [
         { title: t('moreInfo.sections.careHighlights'), icon: <Droplets className="h-4 w-4" />, items: careHighlights },
@@ -1428,6 +1337,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </section>
         )}
 
+      <ProAdviceSection plantId={plant.id} plantName={plant.name} />
+
       {/* Prominent Toxicity Warning Banner - Placed before detailed info cards */}
         <ToxicityWarningBanner
           toxicityHuman={plant.identity?.toxicityHuman}
@@ -1435,21 +1346,30 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           t={t}
         />
 
-      {/* Info Cards Section - Full width for better mobile experience */}
+      {/* Info Cards Section - Dynamic grid based on content */}
+        {infoSections.length > 0 && (
         <div className="space-y-3 sm:space-y-4">
-          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+          <div className={`${
+            infoSections.length === 1 
+              ? 'max-w-xl mx-auto' 
+              : infoSections.length === 2 
+                ? 'columns-1 sm:columns-2 max-w-3xl mx-auto gap-3 sm:gap-4' 
+                : 'columns-1 sm:columns-2 gap-3 sm:gap-4'
+          }`} style={{ columnFill: 'balance' }}>
             {infoSections.map((section) => (
-              <InfoCard key={section.title} title={section.title} icon={section.icon}>
-                {section.items.map((item) => (
-                  <InfoItem
-                    key={`${section.title}-${item.label}`}
-                    label={item.label}
-                    value={item.value || '—'}
-                    icon={item.icon}
-                    variant={item.variant}
-                  />
-                ))}
-              </InfoCard>
+              <div key={section.title} className="break-inside-avoid mb-3 sm:mb-4">
+                <InfoCard title={section.title} icon={section.icon}>
+                  {section.items.map((item) => (
+                    <InfoItem
+                      key={`${section.title}-${item.label}`}
+                      label={item.label}
+                      value={item.value || '—'}
+                      icon={item.icon}
+                      variant={item.variant}
+                    />
+                  ))}
+                </InfoCard>
+              </div>
             ))}
           </div>
           
@@ -1492,32 +1412,35 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </section>
           )}
           
-          {(createdTimestamp || updatedTimestamp || createdByLabel || updatedByLabel || sourcesValue) && (
-            <div className="rounded-2xl border border-stone-200/70 bg-white/90 p-4 sm:p-5 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]">
-              <div className="flex flex-col gap-3 text-xs sm:text-sm text-stone-600 dark:text-stone-300">
-                <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
-                  <span className="font-semibold text-stone-800 dark:text-stone-100">{t('moreInfo.meta.created')}</span>
-                  <span className="text-stone-700 dark:text-stone-200">{createdTimestamp || t('moreInfo.meta.notRecorded')}</span>
-                  <span className="text-stone-400">•</span>
-                  <span className="text-stone-700 dark:text-stone-200">{t('moreInfo.meta.by')} {createdByLabel || t('moreInfo.meta.unknown')}</span>
-                </div>
-                <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
-                  <span className="font-semibold text-stone-800 dark:text-stone-100">{t('moreInfo.meta.updated')}</span>
-                  <span className="text-stone-700 dark:text-stone-200">{updatedTimestamp || t('moreInfo.meta.notRecorded')}</span>
-                  <span className="text-stone-400">•</span>
-                  <span className="text-stone-700 dark:text-stone-200">{t('moreInfo.meta.by')} {updatedByLabel || t('moreInfo.meta.unknown')}</span>
-                </div>
-                {sourcesValue && (
-                  <div className="flex flex-wrap gap-2 sm:gap-3 items-center text-stone-700 dark:text-stone-200">
-                    <span className="font-semibold text-stone-800 dark:text-stone-100">{t('moreInfo.meta.sources')}</span>
-                    <span className="text-stone-400">•</span>
-                    <span className="flex-1 min-w-0">{sourcesValue}</span>
-                  </div>
-                )}
-              </div>
+          {(createdTimestamp || updatedTimestamp || sourcesValue) && (
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 py-3">
+              {(createdTimestamp || createdByLabel) && (
+                <span className="flex items-center gap-1.5">
+                  <CalendarDays className="h-3 w-3" />
+                  <span>{t('moreInfo.meta.created')}</span>
+                  <span className="text-stone-500 dark:text-stone-400">{createdTimestamp || '—'}</span>
+                  {createdByLabel && <span>· {createdByLabel}</span>}
+                </span>
+              )}
+              {(updatedTimestamp || updatedByLabel) && (
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-3 w-3" />
+                  <span>{t('moreInfo.meta.updated')}</span>
+                  <span className="text-stone-500 dark:text-stone-400">{updatedTimestamp || '—'}</span>
+                  {updatedByLabel && <span>· {updatedByLabel}</span>}
+                </span>
+              )}
+              {sourcesValue && (
+                <span className="flex items-center gap-1.5 basis-full justify-center mt-1">
+                  <FileText className="h-3 w-3" />
+                  <span>{t('moreInfo.meta.sources')}:</span>
+                  <span className="text-stone-500 dark:text-stone-400">{sourcesValue}</span>
+                </span>
+              )}
             </div>
           )}
         </div>
+        )}
     </section>
   )
 }
@@ -1617,17 +1540,33 @@ const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: st
   </div>
 )
 
-const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
-  <Card className="rounded-2xl sm:rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
-    <CardHeader className="space-y-2 sm:space-y-3 p-4 sm:p-6">
-      <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-        <div className="h-3.5 w-3.5 sm:h-4 sm:w-4">{icon}</div>
-        <span className="text-[10px] sm:text-xs uppercase tracking-wide">{title}</span>
+const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; defaultExpanded?: boolean }> = ({ title, icon, children, defaultExpanded = false }) => {
+  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded)
+  
+  return (
+    <Card className="rounded-2xl sm:rounded-3xl border-stone-200/70 dark:border-[#3e3e42]/70">
+      <CardHeader 
+        className="p-4 sm:p-6 cursor-pointer select-none"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+            <div className="h-3.5 w-3.5 sm:h-4 sm:w-4">{icon}</div>
+            <span className="text-[10px] sm:text-xs uppercase tracking-wide">{title}</span>
+          </div>
+          <ChevronDown 
+            className={`h-4 w-4 sm:h-5 sm:w-5 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+          />
+        </div>
+      </CardHeader>
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}
+      >
+        <CardContent className="space-y-1.5 sm:space-y-2 p-4 sm:p-6 pt-0">{children}</CardContent>
       </div>
-    </CardHeader>
-    <CardContent className="space-y-1.5 sm:space-y-2 p-4 sm:p-6 pt-0">{children}</CardContent>
-  </Card>
-)
+    </Card>
+  )
+}
 
 const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.ReactNode; variant?: 'note' }> = ({
   label,
@@ -2022,9 +1961,10 @@ const compactStrings = (values?: (string | null | undefined)[]) => {
     .filter((value) => Boolean(value) && isMeaningfulString(value))
 }
 
-const formatBooleanDescriptor = (value: boolean | null | undefined, positive: string, negative: string) => {
+const formatBooleanDescriptor = (value: boolean | null | undefined, positive: string, negative: string, showNegative = false) => {
   if (value === undefined || value === null) return null
-  return value ? positive : negative
+  if (value) return positive
+  return showNegative ? negative : null
 }
 
 const formatTemperatureRange = (min?: number | null, ideal?: number | null, max?: number | null) => {

@@ -256,3 +256,42 @@ export async function verifyPlantNameIsPlant(
     reason: typeof payload?.reason === 'string' ? payload.reason : '',
   }
 }
+
+interface EnglishPlantNameResult {
+  originalName: string
+  englishName: string
+  wasTranslated: boolean
+}
+
+/**
+ * Get the English common name for a plant.
+ * The input can be in any language (scientific name, French, Spanish, etc.)
+ * and the AI will return the common English name.
+ */
+export async function getEnglishPlantName(
+  plantName: string,
+  signal?: AbortSignal,
+): Promise<EnglishPlantNameResult> {
+  const headers = await buildAuthHeaders()
+  const response = await fetch('/api/admin/ai/plant-fill/english-name', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ plantName }),
+    signal,
+  })
+  let payload: any = null
+  try {
+    payload = await response.json()
+  } catch {}
+
+  if (!response.ok) {
+    const message = payload?.error || 'Failed to get English plant name'
+    throw new Error(message)
+  }
+
+  return {
+    originalName: typeof payload?.originalName === 'string' ? payload.originalName : plantName,
+    englishName: typeof payload?.englishName === 'string' ? payload.englishName : plantName,
+    wasTranslated: Boolean(payload?.wasTranslated),
+  }
+}

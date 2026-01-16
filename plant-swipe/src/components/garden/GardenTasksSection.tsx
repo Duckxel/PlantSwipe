@@ -12,6 +12,7 @@ import {
   Calendar,
   Clock,
   Flower2,
+  Loader2,
 } from "lucide-react";
 import { listCompletionsForOccurrences } from "@/lib/gardens";
 
@@ -487,7 +488,7 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                           disabled={isCompleting}
                         >
                           {isCompleting ? (
-                            <span className="animate-pulse">⏳</span>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           ) : (
                             <>
                               <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
@@ -561,7 +562,7 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                               disabled={isProgressing}
                             >
                               {isProgressing ? (
-                                <span className="animate-spin">⏳</span>
+                                <Loader2 className="w-4 h-4 animate-spin" />
                               ) : (
                                 <>
                                   <CheckCircle2 className="w-4 h-4 mr-1" />

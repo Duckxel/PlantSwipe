@@ -236,6 +236,11 @@ self.addEventListener('push', (event) => {
   }
   const title = typeof payload.title === 'string' && payload.title.length ? payload.title : 'Aphylia'
   const data = payload.data && typeof payload.data === 'object' ? payload.data : {}
+  
+  // Determine if this is a message notification
+  const isMessageNotification = (data as any)?.type === 'new_message' || 
+    (typeof payload.tag === 'string' && payload.tag.startsWith('message-'))
+  
   const options: ExtendedNotificationOptions = {
     body: typeof payload.body === 'string' ? payload.body : undefined,
     tag:
@@ -246,7 +251,14 @@ self.addEventListener('push', (event) => {
     icon: typeof payload.icon === 'string' && payload.icon.length ? payload.icon : notificationIconUrl,
     badge: typeof payload.badge === 'string' && payload.badge.length ? payload.badge : notificationBadgeUrl,
   }
-  if (Array.isArray(payload.actions) && payload.actions.length) {
+  
+  // Add reply action for message notifications
+  if (isMessageNotification) {
+    options.actions = [
+      { action: 'reply', title: 'Reply' },
+      { action: 'dismiss', title: 'Dismiss' }
+    ]
+  } else if (Array.isArray(payload.actions) && payload.actions.length) {
     const normalizedActions = payload.actions
       .map((action: any, index: number) => {
         if (!action) return null
@@ -265,16 +277,21 @@ self.addEventListener('push', (event) => {
       options.actions = normalizedActions.slice(0, 3)
     }
   }
+  
   if (Array.isArray(payload.vibrate)) {
     options.vibrate = payload.vibrate
   } else {
-    options.vibrate = [100, 50, 100]
+    // Use different vibration pattern for messages
+    options.vibrate = isMessageNotification ? [200, 100, 200] : [100, 50, 100]
   }
   if (typeof payload.requireInteraction === 'boolean') {
     options.requireInteraction = payload.requireInteraction
   }
   if (typeof payload.renotify === 'boolean') {
     options.renotify = payload.renotify
+  } else if (isMessageNotification) {
+    // Always renotify for new messages to ensure they're seen
+    options.renotify = true
   }
   if (typeof payload.image === 'string' && payload.image.length) {
     options.image = payload.image
@@ -282,27 +299,63 @@ self.addEventListener('push', (event) => {
   if (typeof payload.silent === 'boolean') {
     options.silent = payload.silent
   }
-  event.waitUntil(self.registration.showNotification(title, options))
+  
+  // Broadcast to open clients for in-app notification
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      // Notify open windows about the new message
+      broadcastMessage({
+        type: isMessageNotification ? 'NEW_MESSAGE' : 'PUSH_RECEIVED',
+        meta: buildMeta,
+      })
+    ])
+  )
 })
 
 self.addEventListener('notificationclick', (event) => {
-  const notificationData = (event.notification?.data || {}) as { ctaUrl?: string; url?: string }
-  const target = resolveNotificationUrl(notificationData.ctaUrl || notificationData.url)
+  const notificationData = (event.notification?.data || {}) as { 
+    ctaUrl?: string
+    url?: string
+    conversationId?: string
+    type?: string
+  }
+  const action = event.action
+  
+  // Handle dismiss action
+  if (action === 'dismiss') {
+    event.notification?.close()
+    return
+  }
+  
+  // Determine the target URL
+  let target: string
+  
+  // For message notifications, navigate to the conversation
+  if (notificationData.type === 'new_message' && notificationData.conversationId) {
+    target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
+  } else {
+    target = resolveNotificationUrl(notificationData.ctaUrl || notificationData.url)
+  }
+  
   event.notification?.close()
+  
   event.waitUntil(
     (async () => {
       const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      
+      // First, try to find an existing window to focus and navigate
       for (const client of allClients) {
-        if ('focus' in client) {
+        if ('focus' in client && 'navigate' in client) {
           const windowClient = client as WindowClient
-          const normalizedClientUrl = windowClient.url?.replace(/\/?$/, '/')
-          const normalizedTarget = target.replace(/\/?$/, '/')
-          if (normalizedClientUrl === normalizedTarget) {
-            await windowClient.focus()
-            return
-          }
+          // Focus the first window and navigate to the target
+          await windowClient.focus()
+          await windowClient.navigate(target)
+          return
         }
       }
+      
+      // No existing window found, open a new one
       if (self.clients.openWindow) {
         await self.clients.openWindow(target)
       }

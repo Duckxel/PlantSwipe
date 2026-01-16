@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React from "react";
+import ReactDOM from "react-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useParams, Routes, Route, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
@@ -77,9 +78,11 @@ import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSecti
 import { GardenJournalSection } from "@/components/garden/GardenJournalSection";
 import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
 import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLanguageEditor";
+import { GardenAiChatToggle } from "@/components/garden/GardenAiChatToggle";
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
+import { AphyliaChat } from "@/components/aphylia";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
 
@@ -473,6 +476,25 @@ export const GardenDashboardPage: React.FC = () => {
                     return [...prev, { date: today, due, completed, success: due === 0 || completed >= due }];
                   });
                 }
+              }
+              // Use pre-calculated task counts per plant from server (for guests viewing public gardens)
+              if (data.taskCountsByPlant && typeof data.taskCountsByPlant === 'object') {
+                // Convert server format to number of tasks per plant
+                const countsMap: Record<string, number> = {};
+                for (const [plantId, counts] of Object.entries(data.taskCountsByPlant)) {
+                  const c = counts as { totalTasks?: number; dueToday?: number };
+                  countsMap[plantId] = c.totalTasks || 0;
+                }
+                setTaskCountsByPlant(countsMap);
+                // Also update taskOccDueToday from server data
+                const dueMap: Record<string, number> = {};
+                for (const [plantId, counts] of Object.entries(data.taskCountsByPlant)) {
+                  const c = counts as { totalTasks?: number; dueToday?: number };
+                  if (c.dueToday && c.dueToday > 0) {
+                    dueMap[plantId] = c.dueToday;
+                  }
+                }
+                setTaskOccDueToday(dueMap);
               }
               // totalOnHand and speciesOnHand are now derived via useMemo from plants state
               // Mark as fully hydrated if we got all data
@@ -2716,12 +2738,15 @@ export const GardenDashboardPage: React.FC = () => {
                     baseStreak={garden.streak || 0}
                     handleShare={handleShare}
                     todayTaskOccurrences={todayTaskOccurrences}
+                    taskCountsByPlant={taskCountsByPlant}
+                    taskOccDueToday={taskOccDueToday}
                     onProgressOccurrence={progressOccurrenceHandler}
                     progressingOccIds={progressingOccIds}
                     completingPlantIds={completingPlantIds}
                     completeAllTodayForPlant={completeAllTodayForPlant}
                     onNavigateToPlants={() => navigate(`/garden/${id}/tasks`)}
                     shareStatus={shareStatus}
+                    isMember={isMember}
                   />
                 }
               />
@@ -3113,6 +3138,7 @@ export const GardenDashboardPage: React.FC = () => {
                       GardenLocationEditor={GardenLocationEditor}
                       GardenAdviceLanguageEditor={GardenAdviceLanguageEditor}
                       GardenPrivacyToggle={GardenPrivacyToggle}
+                      GardenAiChatToggle={GardenAiChatToggle}
                       MemberCard={MemberCard}
                     />
                   ) : (
@@ -3148,6 +3174,7 @@ export const GardenDashboardPage: React.FC = () => {
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setPlantQuery(e.target.value)
                   }
+                  onClear={() => setPlantQuery("")}
                 />
                 <div className="max-h-60 overflow-auto rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526]">
                   {plantResults.map((p) => (
@@ -3482,9 +3509,194 @@ export const GardenDashboardPage: React.FC = () => {
           </Dialog>
         </>
       )}
+      
+      {/* Aphylia AI Chat - Only visible for garden members when not hidden in settings */}
+      {garden && user && isMember && !garden.hideAiChat && (
+        <AphyliaChatPortal 
+          garden={garden} 
+          members={members}
+          plants={plants}
+          todayTaskOccurrences={todayTaskOccurrences}
+          weekTaskOccurrences={weekTaskOccurrences}
+          taskCountsByPlant={taskCountsByPlant}
+        />
+      )}
     </div>
   );
 };
+
+// Portal wrapper to render chat outside the main component tree
+// This prevents the chat from interfering with React Router rendering
+function AphyliaChatPortal({ 
+  garden, 
+  members,
+  plants,
+  todayTaskOccurrences,
+  weekTaskOccurrences,
+  taskCountsByPlant
+}: { 
+  garden: Garden
+  members: Array<{
+    userId: string
+    displayName?: string | null
+    email?: string | null
+    role: "owner" | "member"
+    joinedAt?: string
+    accentKey?: string | null
+    avatarUrl?: string | null
+  }>
+  plants: Array<any>
+  todayTaskOccurrences: Array<{
+    id: string
+    taskId: string
+    gardenPlantId: string
+    dueAt: string
+    requiredCount: number
+    completedCount: number
+    completedAt: string | null
+  }>
+  weekTaskOccurrences: Array<{
+    id: string
+    taskId: string
+    gardenPlantId: string
+    dueAt: string
+    requiredCount: number
+    completedCount: number
+    completedAt: string | null
+    taskType: "water" | "fertilize" | "harvest" | "cut" | "custom"
+    taskEmoji?: string | null
+    dayIndex: number
+  }>
+  taskCountsByPlant: Record<string, number>
+}) {
+  const [mounted, setMounted] = React.useState(false)
+  
+  React.useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+  
+  // Build comprehensive garden context with ALL available data
+  // This ensures the AI has full knowledge of the garden even if backend enrichment fails
+  const gardenContext = React.useMemo(() => {
+    // Calculate task stats
+    const totalTasksToday = todayTaskOccurrences.length
+    const completedTasksToday = todayTaskOccurrences.filter(t => t.completedAt !== null).length
+    const pendingTasksToday = totalTasksToday - completedTasksToday
+    
+    const totalTasksThisWeek = weekTaskOccurrences.length
+    const completedTasksThisWeek = weekTaskOccurrences.filter(t => t.completedAt !== null).length
+    
+    // Group tasks by type for this week
+    const tasksByType: Record<string, number> = {}
+    for (const task of weekTaskOccurrences) {
+      tasksByType[task.taskType] = (tasksByType[task.taskType] || 0) + 1
+    }
+    
+    // Calculate total plants on hand
+    const totalPlantsOnHand = plants.reduce((sum, p) => sum + (p.plantsOnHand || 0), 0)
+    const totalSeedsPlanted = plants.reduce((sum, p) => sum + (p.seedsPlanted || 0), 0)
+    
+    return {
+      gardenId: garden.id,
+      gardenName: garden.name,
+      // Location info
+      locationCity: garden.locationCity,
+      locationCountry: garden.locationCountry,
+      locationTimezone: garden.locationTimezone,
+      locationLat: garden.locationLat,
+      locationLon: garden.locationLon,
+      // Counts
+      plantCount: plants.length,
+      memberCount: members.length,
+      totalPlantsOnHand,
+      totalSeedsPlanted,
+      // Garden settings
+      privacy: garden.privacy,
+      // Streak as number (backend will handle both formats)
+      streak: garden.streak || 0,
+      createdAt: garden.createdAt,
+      adviceLanguage: garden.preferredLanguage,
+      // Task statistics - IMPORTANT for AI to know current garden status
+      taskStats: {
+        totalTasksToday,
+        completedTasksToday,
+        pendingTasksToday,
+        totalTasksThisWeek,
+        completedTasksThisWeek,
+        tasksByType
+      },
+      // Member details - important for AI to know who's in the garden
+      members: members.map(m => ({
+        userId: m.userId,
+        displayName: m.displayName || 'Member',
+        role: m.role,
+        joinedAt: m.joinedAt
+      })),
+      // Plant summaries for quick context
+      plants: plants.map(p => ({
+        gardenPlantId: p.id,
+        plantId: p.plantId,
+        plantName: p.name || p.plantName || 'Unknown Plant',
+        nickname: p.nickname,
+        healthStatus: p.healthStatus,
+        plantsOnHand: p.plantsOnHand,
+        seedsPlanted: p.seedsPlanted,
+        taskCount: taskCountsByPlant[p.id] || 0
+      })),
+      // Today's tasks with details
+      todayTasks: todayTaskOccurrences.map(t => {
+        const plant = plants.find(p => p.id === t.gardenPlantId)
+        return {
+          taskId: t.taskId,
+          plantName: plant?.nickname || plant?.name || plant?.plantName || 'Unknown',
+          dueAt: t.dueAt,
+          requiredCount: t.requiredCount,
+          completedCount: t.completedCount,
+          isCompleted: t.completedAt !== null
+        }
+      }),
+      // This week's tasks summary
+      weekTasks: weekTaskOccurrences.slice(0, 20).map(t => {
+        const plant = plants.find(p => p.id === t.gardenPlantId)
+        return {
+          taskType: t.taskType,
+          plantName: plant?.nickname || plant?.name || plant?.plantName || 'Unknown',
+          dueAt: t.dueAt,
+          isCompleted: t.completedAt !== null
+        }
+      })
+    }
+  }, [
+    garden.id, 
+    garden.name, 
+    garden.locationCity, 
+    garden.locationCountry,
+    garden.locationTimezone,
+    garden.locationLat,
+    garden.locationLon,
+    garden.privacy,
+    garden.streak,
+    garden.createdAt,
+    garden.preferredLanguage,
+    members, 
+    plants,
+    todayTaskOccurrences,
+    weekTaskOccurrences,
+    taskCountsByPlant
+  ])
+  
+  if (!mounted) return null
+  
+  // Use portal to render outside the main component tree
+  return ReactDOM.createPortal(
+    <AphyliaChat 
+      showBubble={true} 
+      gardenContext={gardenContext}
+    />,
+    document.body
+  )
+}
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RoutineSection({
@@ -3702,7 +3914,7 @@ function RoutineSection({
                     >
                       {completingPlantIds.has(gp.id) ? (
                         <span className="flex items-center gap-1">
-                          <span className="animate-spin">⏳</span>
+                          <Loader2 className="h-4 w-4 animate-spin" />
                           {t("garden.completing")}
                         </span>
                       ) : (
@@ -3772,7 +3984,7 @@ function RoutineSection({
                               }
                             >
                               {progressingOccIds.has(o.id) ? (
-                                <span className="animate-spin">⏳</span>
+                                <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 t(
                                   "gardenDashboard.routineSection.completePlus1",
@@ -3858,11 +4070,14 @@ function OverviewSection({
   handleShare,
   shareStatus,
   todayTaskOccurrences,
+  taskCountsByPlant = {},
+  taskOccDueToday = {},
   onProgressOccurrence,
   progressingOccIds,
   completingPlantIds,
   completeAllTodayForPlant,
   onNavigateToPlants,
+  isMember = true,
 }: {
   gardenId: string;
   activityRev?: number;
@@ -3899,11 +4114,14 @@ function OverviewSection({
     taskType?: "water" | "fertilize" | "harvest" | "cut" | "custom";
     taskEmoji?: string;
   }>;
+  taskCountsByPlant?: Record<string, number>;
+  taskOccDueToday?: Record<string, number>;
   onProgressOccurrence: (id: string, inc: number) => Promise<void>;
   progressingOccIds: Set<string>;
   completingPlantIds: Set<string>;
   completeAllTodayForPlant: (gardenPlantId: string) => Promise<void>;
   onNavigateToPlants: () => void;
+  isMember?: boolean;
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
@@ -4024,22 +4242,56 @@ function OverviewSection({
     return s;
   })();
 
-  // Get plants with images for the gallery
-  const plantsWithImages = React.useMemo(() => {
-    return plants
-      .map((gp) => {
-        const primaryImageUrl = gp.plant?.photos
-          ? getPrimaryPhotoUrl(gp.plant.photos)
-          : gp.plant?.image || null;
-        return {
-          id: gp.id,
-          name: gp.nickname || gp.plant?.name || "Plant",
-          imageUrl: primaryImageUrl,
-          plantId: gp.plant?.id,
+  // Calculate task counts per plant - use server data or compute from todayTaskOccurrences
+  const taskCountsPerPlant = React.useMemo(() => {
+    const counts: Record<string, { total: number; dueToday: number }> = {};
+    
+    // First, try to use server-provided task counts (available for guests viewing public gardens)
+    if (taskCountsByPlant && Object.keys(taskCountsByPlant).length > 0) {
+      for (const [gpId, totalCount] of Object.entries(taskCountsByPlant)) {
+        counts[gpId] = {
+          total: totalCount,
+          dueToday: taskOccDueToday[gpId] || 0,
         };
-      })
-      .filter((p) => p.imageUrl);
-  }, [plants]);
+      }
+    }
+    
+    // Also compute from todayTaskOccurrences if available (for logged-in members)
+    for (const occ of todayTaskOccurrences) {
+      const gpId = occ.gardenPlantId;
+      if (!counts[gpId]) counts[gpId] = { total: 0, dueToday: 0 };
+      // Only count unique tasks, not occurrences
+      counts[gpId].total = Math.max(counts[gpId].total, 1);
+      const remaining = Math.max(0, (occ.requiredCount || 1) - (occ.completedCount || 0));
+      if (remaining > 0) counts[gpId].dueToday = Math.max(counts[gpId].dueToday, remaining);
+    }
+    return counts;
+  }, [todayTaskOccurrences, taskCountsByPlant, taskOccDueToday]);
+
+  // Get ALL plants for display (with or without images)
+  const allPlantsDisplay = React.useMemo(() => {
+    return plants.map((gp) => {
+      const primaryImageUrl = gp.plant?.photos
+        ? getPrimaryPhotoUrl(gp.plant.photos)
+        : gp.plant?.image || null;
+      const taskInfo = taskCountsPerPlant[gp.id] || { total: 0, dueToday: 0 };
+      return {
+        id: gp.id,
+        name: gp.nickname || gp.plant?.name || "Plant",
+        imageUrl: primaryImageUrl,
+        plantId: gp.plant?.id,
+        plantsOnHand: Number(gp.plantsOnHand || 0),
+        healthStatus: gp.healthStatus || null,
+        taskCount: taskInfo.total,
+        tasksDueToday: taskInfo.dueToday,
+      };
+    });
+  }, [plants, taskCountsPerPlant]);
+
+  // Get plants with images for the gallery (legacy - kept for compatibility)
+  const plantsWithImages = React.useMemo(() => {
+    return allPlantsDisplay.filter((p) => p.imageUrl);
+  }, [allPlantsDisplay]);
 
   // Get initials for avatar fallback
   const getInitials = (name?: string | null) => {
@@ -4122,6 +4374,13 @@ function OverviewSection({
                       <span className="font-medium">{totalOnHand}</span>
                       <span className="text-sm opacity-80">
                         {t("gardenDashboard.overviewSection.plants")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                      <span className="text-lg">🌿</span>
+                      <span className="font-medium">{speciesOnHand}</span>
+                      <span className="text-sm opacity-80">
+                        {t("gardenDashboard.overviewSection.species")}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
@@ -4278,7 +4537,10 @@ function OverviewSection({
               const profile = memberProfiles[member.userId];
               const avatarUrl = profile?.avatarUrl;
               const color = getMemberColor(member);
-              const isOwner = member.role === "owner";
+              const isOwnerRole = member.role === "owner";
+              // For non-members, only show display name (not email)
+              const displayLabel = member.displayName || (isMember ? member.email?.split("@")[0] : null) || t("gardenDashboard.settingsSection.member");
+              const titleLabel = member.displayName || (isMember ? member.email : null) || t("gardenDashboard.settingsSection.member");
               return (
                 <button
                   key={member.userId}
@@ -4289,13 +4551,13 @@ function OverviewSection({
                     }
                   }}
                   className="group flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 rounded-2xl px-3 py-2 transition-all hover:bg-stone-100 dark:hover:bg-stone-800 hover:shadow-md cursor-pointer text-left"
-                  title={member.displayName || member.email || "Member"}
+                  title={titleLabel}
                 >
                   <div className="relative">
                     {avatarUrl ? (
                       <img
                         src={avatarUrl}
-                        alt={member.displayName || "Member"}
+                        alt={member.displayName || t("gardenDashboard.settingsSection.member")}
                         className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-stone-700 shadow-sm"
                       />
                     ) : (
@@ -4303,10 +4565,10 @@ function OverviewSection({
                         className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ring-2 ring-white dark:ring-stone-700 shadow-sm"
                         style={{ backgroundColor: color }}
                       >
-                        {getInitials(member.displayName || member.email)}
+                        {getInitials(member.displayName || (isMember ? member.email : null))}
                       </div>
                     )}
-                    {isOwner && (
+                    {isOwnerRole && (
                       <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-gradient-to-br from-amber-300 to-orange-400 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-stone-800 shadow-md">
                         <span className="text-[11px] drop-shadow-sm">👑</span>
                       </div>
@@ -4314,10 +4576,10 @@ function OverviewSection({
                   </div>
                   <div className="min-w-0">
                     <div className="font-medium text-sm truncate max-w-[120px] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                      {member.displayName || member.email?.split("@")[0] || "Member"}
+                      {displayLabel}
                     </div>
                     <div className="text-xs text-stone-500 dark:text-stone-400">
-                      {isOwner
+                      {isOwnerRole
                         ? t("gardenDashboard.settingsSection.owner")
                         : t("gardenDashboard.settingsSection.member")}
                     </div>
@@ -4329,8 +4591,8 @@ function OverviewSection({
         </Card>
       )}
 
-      {/* Plants Gallery */}
-      {plantsWithImages.length > 0 && (
+      {/* Plants Gallery - show all plants with task info on image cards */}
+      {allPlantsDisplay.length > 0 && (
         <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-lg flex items-center gap-2">
@@ -4340,49 +4602,93 @@ function OverviewSection({
                 ({plants.length})
               </span>
             </h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
-              onClick={() => navigate(`/garden/${gardenId}/plants`)}
-            >
-              {t("gardenDashboard.overviewSection.viewAll")}
-              <ArrowUpRight className="w-4 h-4 ml-1" />
-            </Button>
+            {/* Only show View All button for members */}
+            {isMember && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                onClick={() => navigate(`/garden/${gardenId}/plants`)}
+              >
+                {t("gardenDashboard.overviewSection.viewAll")}
+                <ArrowUpRight className="w-4 h-4 ml-1" />
+              </Button>
+            )}
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
-            {plantsWithImages.slice(0, 12).map((plant, idx) => (
+          {/* Plant cards with info overlaid on images */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {allPlantsDisplay.slice(0, 15).map((plant, idx) => (
               <div
                 key={plant.id}
-                className="group relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
+                className="group relative aspect-[4/5] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
                 onClick={() => {
                   if (plant.plantId) navigate(`/plants/${plant.plantId}`);
                 }}
                 style={{
-                  animationDelay: `${idx * 50}ms`,
+                  animationDelay: `${idx * 40}ms`,
                 }}
               >
-                <img
-                  src={plant.imageUrl!}
-                  alt={plant.name}
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-                <div className="absolute bottom-0 left-0 right-0 p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
-                  <div className="text-white text-xs font-medium truncate drop-shadow-lg">
+                {/* Plant Image or Placeholder */}
+                {plant.imageUrl ? (
+                  <img
+                    src={plant.imageUrl}
+                    alt={plant.name}
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-4xl opacity-50">🌱</span>
+                  </div>
+                )}
+                {/* Gradient overlay for text readability */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                
+                {/* Top badges: quantity and tasks due */}
+                <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
+                  {/* Plant quantity badge */}
+                  {plant.plantsOnHand > 1 && (
+                    <span className="px-2 py-0.5 rounded-full bg-white/90 dark:bg-black/70 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-sm backdrop-blur-sm">
+                      ×{plant.plantsOnHand}
+                    </span>
+                  )}
+                  {plant.plantsOnHand <= 1 && <span />}
+                  {/* Tasks due today badge */}
+                  {plant.tasksDueToday > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500 text-xs font-semibold text-white shadow-sm">
+                      {plant.tasksDueToday} 📋
+                    </span>
+                  )}
+                </div>
+                
+                {/* Bottom info: name and task count */}
+                <div className="absolute bottom-0 left-0 right-0 p-3">
+                  <div className="text-white text-sm font-semibold truncate drop-shadow-lg mb-1">
                     {plant.name}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {plant.taskCount > 0 && (
+                      <span className="text-white/80 text-xs">
+                        {plant.taskCount} {plant.taskCount === 1 ? t("gardenDashboard.plantsSection.task", "task") : t("gardenDashboard.plantsSection.tasks")}
+                      </span>
+                    )}
+                    {plant.taskCount === 0 && (
+                      <span className="text-white/60 text-xs">
+                        {t("gardenDashboard.overviewSection.noTasks", "No tasks")}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
-            {plants.length > 12 && (
+            {/* Show more card */}
+            {allPlantsDisplay.length > 15 && (
               <div
-                className="aspect-square rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all border-2 border-dashed border-emerald-300 dark:border-emerald-700"
-                onClick={() => navigate(`/garden/${gardenId}/plants`)}
+                className="aspect-[4/5] rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all border-2 border-dashed border-emerald-300 dark:border-emerald-700"
+                onClick={() => isMember && navigate(`/garden/${gardenId}/plants`)}
               >
-                <span className="text-2xl mb-1">+{plants.length - 12}</span>
-                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="text-3xl mb-2">+{allPlantsDisplay.length - 15}</span>
+                <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
                   {t("gardenDashboard.overviewSection.morePlants")}
                 </span>
               </div>
@@ -4438,19 +4744,21 @@ function OverviewSection({
         </div>
       </Card>
 
-      {/* Today's Tasks Widget */}
-      <TodaysTasksWidget
-        plants={plants}
-        todayTaskOccurrences={todayTaskOccurrences}
-        onProgressOccurrence={onProgressOccurrence}
-        progressingOccIds={progressingOccIds}
-        completingPlantIds={completingPlantIds}
-        completeAllTodayForPlant={completeAllTodayForPlant}
-        onNavigateToPlants={onNavigateToPlants}
-        compact
-      />
+      {/* Today's Tasks Widget - Only for members */}
+      {isMember && (
+        <TodaysTasksWidget
+          plants={plants}
+          todayTaskOccurrences={todayTaskOccurrences}
+          onProgressOccurrence={onProgressOccurrence}
+          progressingOccIds={progressingOccIds}
+          completingPlantIds={completingPlantIds}
+          completeAllTodayForPlant={completeAllTodayForPlant}
+          onNavigateToPlants={onNavigateToPlants}
+          compact
+        />
+      )}
 
-      {/* Activity Feed */}
+      {/* Activity Feed - visible to all viewers */}
       <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-lg flex items-center gap-2">
@@ -4539,6 +4847,21 @@ function OverviewSection({
           </div>
         )}
       </Card>
+
+      {/* Public Garden Notice for non-members */}
+      {!isMember && (
+        <Card className="rounded-[28px] border border-emerald-200/70 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-[#1f1f1f] p-5 shadow-sm">
+          <div className="text-center py-4">
+            <div className="text-3xl mb-3">🌿</div>
+            <h3 className="font-semibold text-lg mb-2">
+              {t("gardenDashboard.publicView.welcomeTitle", "Welcome to this Garden")}
+            </h3>
+            <p className="text-sm text-stone-600 dark:text-stone-400 max-w-md mx-auto">
+              {t("gardenDashboard.publicView.welcomeDescription", "You're viewing this garden as a guest. Only basic information is shown. Join the garden to see more details and participate in tasks.")}
+            </p>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

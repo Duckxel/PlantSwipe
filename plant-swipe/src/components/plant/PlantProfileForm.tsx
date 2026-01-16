@@ -10,7 +10,7 @@ import type { TFunction } from "i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles, ChevronDown, ChevronUp, Leaf } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2 } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 
@@ -351,7 +351,7 @@ const CompanionSelector: React.FC<{
                       }`}
                     >
                       {isSearching ? (
-                        <span className="animate-spin h-3 w-3 border-2 border-emerald-500 border-t-transparent rounded-full" />
+                        <Loader2 className="h-3 w-3 animate-spin text-emerald-500" />
                       ) : alreadyAdded ? (
                         <span className="text-emerald-600">✓</span>
                       ) : (
