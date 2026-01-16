@@ -2258,7 +2258,6 @@ async function generateFieldData(options) {
     {
       model: openaiModel,
       reasoning: { effort: 'medium' },
-      tools: [{ type: 'web_search_preview' }],
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
     },
@@ -3184,31 +3183,26 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
         return { fieldKey, fieldSchema, existingFieldClean }
       })
 
-    // Process all fields in parallel (no batching)
-    const results = await Promise.all(
-      fieldTasks.map(async ({ fieldKey, fieldSchema, existingFieldClean }) => {
-        try {
-          const fieldValue = await generateFieldData({
-            plantName,
-            fieldKey,
-            fieldSchema,
-            existingField: existingFieldClean,
-          })
-          return { fieldKey, fieldValue, error: null }
-        } catch (err) {
-          console.error(`[server] AI fill failed for field "${fieldKey}":`, err?.message || err)
-          return { fieldKey, fieldValue: undefined, error: err }
-        }
-      })
-    )
+    // Process fields one by one (sequential)
+    for (const { fieldKey, fieldSchema, existingFieldClean } of fieldTasks) {
+      try {
+        const fieldValue = await generateFieldData({
+          plantName,
+          fieldKey,
+          fieldSchema,
+          existingField: existingFieldClean,
+        })
 
-    for (const { fieldKey, fieldValue } of results) {
-      const cleanedField =
-        fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
-      if (cleanedField !== undefined) {
-        aggregated[fieldKey] = removeExternalIds(cleanedField)
-      } else {
-        delete aggregated[fieldKey]
+        const cleanedField =
+          fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+        if (cleanedField !== undefined) {
+          aggregated[fieldKey] = removeExternalIds(cleanedField)
+        } else {
+          delete aggregated[fieldKey]
+        }
+      } catch (err) {
+        console.error(`[server] AI fill failed for field "${fieldKey}":`, err?.message || err)
+        // Continue with next field on error
       }
     }
 
