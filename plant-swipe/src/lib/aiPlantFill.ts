@@ -1,5 +1,54 @@
 import { supabase } from "@/lib/supabaseClient"
 
+// Retry configuration for handling timeouts and rate limits
+const MAX_RETRIES = 3
+const INITIAL_RETRY_DELAY = 2000 // 2 seconds
+const BATCH_SIZE = 3 // Reduced from 5 to avoid overwhelming the server
+const BATCH_DELAY = 1000 // 1 second delay between batches
+
+// Helper to delay execution
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+// Helper to check if error is retryable (504, 502, 503, 429)
+const isRetryableStatus = (status: number) => [502, 503, 504, 429].includes(status)
+
+// Fetch with retry logic and exponential backoff
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = MAX_RETRIES
+): Promise<Response> {
+  let lastError: Error | null = null
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options)
+      
+      // If it's a retryable error and we have retries left, retry
+      if (isRetryableStatus(response.status) && attempt < maxRetries) {
+        const retryDelay = INITIAL_RETRY_DELAY * Math.pow(2, attempt)
+        console.log(`[AI Fill] Request failed with ${response.status}, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries})`)
+        await delay(retryDelay)
+        continue
+      }
+      
+      return response
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      
+      // Network errors - retry if we have attempts left
+      if (attempt < maxRetries) {
+        const retryDelay = INITIAL_RETRY_DELAY * Math.pow(2, attempt)
+        console.log(`[AI Fill] Network error, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries}):`, lastError.message)
+        await delay(retryDelay)
+        continue
+      }
+    }
+  }
+  
+  throw lastError || new Error('Request failed after retries')
+}
+
 async function buildAuthHeaders() {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -66,7 +115,7 @@ export async function fetchAiPlantFill({
 
   if (!schemaObject) {
     onProgress?.({ field: 'init', completed: 0, total: 1 })
-    const response = await fetch('/api/admin/ai/plant-fill', {
+    const response = await fetchWithRetry('/api/admin/ai/plant-fill', {
       method: 'POST',
       headers,
       body: JSON.stringify({ plantName, schema, existingData, language }),
@@ -104,11 +153,15 @@ export async function fetchAiPlantFill({
   let completedFields = 0
   onProgress?.({ field: 'init', completed: completedFields, total: totalFields })
 
-  // Process fields in parallel batches of 5
-  const BATCH_SIZE = 5
+  // Process fields in parallel batches (with retry logic and delays)
   for (let i = 0; i < fieldEntries.length; i += BATCH_SIZE) {
     if (signal?.aborted) {
       throw new Error('AI fill was cancelled')
+    }
+
+    // Add delay between batches (except for first batch)
+    if (i > 0) {
+      await delay(BATCH_DELAY)
     }
 
     const batch = fieldEntries.slice(i, i + BATCH_SIZE)
@@ -120,7 +173,7 @@ export async function fetchAiPlantFill({
         let fieldData: unknown = null
 
         try {
-          const response = await fetch('/api/admin/ai/plant-fill/field', {
+          const response = await fetchWithRetry('/api/admin/ai/plant-fill/field', {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -207,7 +260,7 @@ export async function fetchAiPlantFillField({
 }: PlantFillFieldRequest) {
   const headers = await buildAuthHeaders()
 
-  const response = await fetch('/api/admin/ai/plant-fill/field', {
+  const response = await fetchWithRetry('/api/admin/ai/plant-fill/field', {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -250,7 +303,7 @@ export async function verifyPlantNameIsPlant(
   signal?: AbortSignal,
 ): Promise<VerifyPlantNameResult> {
   const headers = await buildAuthHeaders()
-  const response = await fetch('/api/admin/ai/plant-fill/verify-name', {
+  const response = await fetchWithRetry('/api/admin/ai/plant-fill/verify-name', {
     method: 'POST',
     headers,
     body: JSON.stringify({ plantName }),
@@ -288,7 +341,7 @@ export async function getEnglishPlantName(
   signal?: AbortSignal,
 ): Promise<EnglishPlantNameResult> {
   const headers = await buildAuthHeaders()
-  const response = await fetch('/api/admin/ai/plant-fill/english-name', {
+  const response = await fetchWithRetry('/api/admin/ai/plant-fill/english-name', {
     method: 'POST',
     headers,
     body: JSON.stringify({ plantName }),

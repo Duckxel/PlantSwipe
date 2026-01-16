@@ -3184,9 +3184,15 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
         return { fieldKey, fieldSchema, existingFieldClean }
       })
 
-    // Process fields in parallel batches of 5
-    const BATCH_SIZE = 5
+    // Process fields in parallel batches of 3 (reduced to avoid timeouts)
+    const BATCH_SIZE = 3
+    const BATCH_DELAY_MS = 1000 // 1 second delay between batches
     for (let i = 0; i < fieldTasks.length; i += BATCH_SIZE) {
+      // Add delay between batches (except for first batch)
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS))
+      }
+      
       const batch = fieldTasks.slice(i, i + BATCH_SIZE)
       const results = await Promise.all(
         batch.map(async ({ fieldKey, fieldSchema, existingFieldClean }) => {
