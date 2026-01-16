@@ -94,6 +94,8 @@ import {
 } from "@/lib/broadcastStorage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { processAllPlantRequests } from "@/lib/aiPrefillService";
+import { getEnglishPlantName } from "@/lib/aiPlantFill";
+import { Languages } from "lucide-react";
 import { 
   buildCategoryProgress, 
   createEmptyCategoryProgress, 
@@ -1607,6 +1609,12 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
   const [createPlantName, setCreatePlantName] = React.useState<string>("");
+  
+  // Plant request editing state
+  const [editingRequestId, setEditingRequestId] = React.useState<string | null>(null);
+  const [editingRequestName, setEditingRequestName] = React.useState<string>("");
+  const [savingRequestName, setSavingRequestName] = React.useState<boolean>(false);
+  const [translatingRequestId, setTranslatingRequestId] = React.useState<string | null>(null);
   const requestViewMode: RequestViewMode = React.useMemo(() => {
     if (currentPath.includes("/admin/plants/requests")) return "requests";
     return "plants";
@@ -1895,6 +1903,94 @@ export const AdminPage: React.FC = () => {
     },
     [],
   );
+
+  // Start editing a plant request name
+  const handleStartEditRequest = React.useCallback((req: PlantRequestRow) => {
+    setEditingRequestId(req.id);
+    setEditingRequestName(req.plant_name);
+  }, []);
+
+  // Cancel editing
+  const handleCancelEditRequest = React.useCallback(() => {
+    setEditingRequestId(null);
+    setEditingRequestName("");
+  }, []);
+
+  // Save edited plant request name
+  const handleSaveRequestName = React.useCallback(async (requestId: string) => {
+    const trimmedName = editingRequestName.trim();
+    if (!trimmedName) return;
+    
+    setSavingRequestName(true);
+    try {
+      const { error } = await supabase
+        .from("requested_plants")
+        .update({ 
+          plant_name: trimmedName,
+          plant_name_normalized: trimmedName.toLowerCase().trim(),
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", requestId);
+      
+      if (error) throw new Error(error.message);
+      
+      // Update local state
+      setPlantRequests((prev) => 
+        prev.map((req) => 
+          req.id === requestId 
+            ? { ...req, plant_name: trimmedName, plant_name_normalized: trimmedName.toLowerCase().trim() }
+            : req
+        )
+      );
+      
+      setEditingRequestId(null);
+      setEditingRequestName("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPlantRequestsError(`Failed to update name: ${msg}`);
+    } finally {
+      setSavingRequestName(false);
+    }
+  }, [editingRequestName, supabase]);
+
+  // Translate plant request name to English using AI (auto-detects language)
+  const handleTranslateRequestName = React.useCallback(async (req: PlantRequestRow) => {
+    setTranslatingRequestId(req.id);
+    try {
+      // Use AI to get the English common name (auto-detects source language)
+      const result = await getEnglishPlantName(req.plant_name);
+      const translatedName = result.englishName;
+      
+      // If translation is different, update the database
+      if (translatedName && translatedName.toLowerCase() !== req.plant_name.toLowerCase()) {
+        const { error } = await supabase
+          .from("requested_plants")
+          .update({ 
+            plant_name: translatedName,
+            plant_name_normalized: translatedName.toLowerCase().trim(),
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", req.id);
+        
+        if (error) throw new Error(error.message);
+        
+        // Update local state
+        setPlantRequests((prev) => 
+          prev.map((r) => 
+            r.id === req.id 
+              ? { ...r, plant_name: translatedName, plant_name_normalized: translatedName.toLowerCase().trim() }
+              : r
+          )
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPlantRequestsError(`Failed to translate: ${msg}`);
+    } finally {
+      setTranslatingRequestId(null);
+    }
+  }, [supabase]);
+
   const handleOpenPlantEditor = React.useCallback(
     (plantId: string) => {
       if (!plantId) return;
@@ -7723,9 +7819,73 @@ export const AdminPage: React.FC = () => {
                                     >
                                       <div className="flex items-start gap-2 flex-1">
                                         <div className="flex-1">
-                                          <div className="text-sm font-medium">
-                                            {req.plant_name}
-                                          </div>
+                                          {editingRequestId === req.id ? (
+                                            <div className="flex items-center gap-2">
+                                              <Input
+                                                value={editingRequestName}
+                                                onChange={(e) => setEditingRequestName(e.target.value)}
+                                                className="h-8 text-sm"
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                  if (e.key === 'Enter') {
+                                                    handleSaveRequestName(req.id);
+                                                  } else if (e.key === 'Escape') {
+                                                    handleCancelEditRequest();
+                                                  }
+                                                }}
+                                              />
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                                onClick={() => handleSaveRequestName(req.id)}
+                                                disabled={savingRequestName}
+                                              >
+                                                {savingRequestName ? (
+                                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                  <Check className="h-4 w-4 text-green-600" />
+                                                )}
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                                onClick={handleCancelEditRequest}
+                                              >
+                                                <X className="h-4 w-4 text-red-600" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-1">
+                                              <div className="text-sm font-medium">
+                                                {req.plant_name}
+                                              </div>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 opacity-40 hover:opacity-100"
+                                                onClick={() => handleStartEditRequest(req)}
+                                                title="Edit name"
+                                              >
+                                                <Pencil className="h-3 w-3" />
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 opacity-40 hover:opacity-100"
+                                                onClick={() => handleTranslateRequestName(req)}
+                                                disabled={translatingRequestId === req.id}
+                                                title="Translate to English (DeepL)"
+                                              >
+                                                {translatingRequestId === req.id ? (
+                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                  <Languages className="h-3 w-3" />
+                                                )}
+                                              </Button>
+                                            </div>
+                                          )}
                                           <div
                                             className="text-xs opacity-60"
                                             title={updatedTitle}

@@ -4,11 +4,29 @@ import { supabase } from "@/lib/supabaseClient"
 const MAX_RETRIES = 3
 const INITIAL_RETRY_DELAY = 2000 // 2 seconds
 
-// Helper to delay execution
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+// Helper to delay execution (abortable)
+const delay = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+  if (signal?.aborted) {
+    reject(new DOMException('Aborted', 'AbortError'))
+    return
+  }
+  const timeout = setTimeout(resolve, ms)
+  signal?.addEventListener('abort', () => {
+    clearTimeout(timeout)
+    reject(new DOMException('Aborted', 'AbortError'))
+  }, { once: true })
+})
 
 // Helper to check if error is retryable (504, 502, 503, 429)
 const isRetryableStatus = (status: number) => [502, 503, 504, 429].includes(status)
+
+// Helper to check if error is an abort error
+const isAbortError = (err: unknown): boolean => {
+  if (err instanceof DOMException && err.name === 'AbortError') return true
+  if (err instanceof Error && err.name === 'AbortError') return true
+  if (err instanceof Error && err.message.includes('aborted')) return true
+  return false
+}
 
 // Fetch with retry logic and exponential backoff
 async function fetchWithRetry(
@@ -17,8 +35,14 @@ async function fetchWithRetry(
   maxRetries = MAX_RETRIES
 ): Promise<Response> {
   let lastError: Error | null = null
+  const signal = options.signal
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Check if aborted before each attempt
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
+    }
+    
     try {
       const response = await fetch(url, options)
       
@@ -26,19 +50,28 @@ async function fetchWithRetry(
       if (isRetryableStatus(response.status) && attempt < maxRetries) {
         const retryDelay = INITIAL_RETRY_DELAY * Math.pow(2, attempt)
         console.log(`[AI Fill] Request failed with ${response.status}, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries})`)
-        await delay(retryDelay)
+        await delay(retryDelay, signal)
         continue
       }
       
       return response
     } catch (err) {
+      // Don't retry abort errors
+      if (isAbortError(err)) {
+        throw err
+      }
+      
       lastError = err instanceof Error ? err : new Error(String(err))
       
       // Network errors - retry if we have attempts left
       if (attempt < maxRetries) {
         const retryDelay = INITIAL_RETRY_DELAY * Math.pow(2, attempt)
         console.log(`[AI Fill] Network error, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries}):`, lastError.message)
-        await delay(retryDelay)
+        try {
+          await delay(retryDelay, signal)
+        } catch (delayErr) {
+          if (isAbortError(delayErr)) throw delayErr
+        }
         continue
       }
     }
