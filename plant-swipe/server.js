@@ -760,6 +760,7 @@ const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-5.2-2025-12-11'
+const openaiModelNano = process.env.OPENAI_MODEL_NANO || 'gpt-5-nano'
 let openaiClient = null
 let openai = null // Alias for garden advice endpoints
 if (openaiApiKey) {
@@ -2256,7 +2257,8 @@ async function generateFieldData(options) {
   const response = await openaiClient.responses.create(
     {
       model: openaiModel,
-      reasoning: { effort: 'low' },
+      reasoning: { effort: 'medium' },
+      tools: [{ type: 'web_search_preview' }],
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
     },
@@ -2317,7 +2319,7 @@ async function verifyPlantNameCandidate(plantName) {
 
   const response = await openaiClient.responses.create(
     {
-      model: openaiModel,
+      model: openaiModelNano,
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
@@ -3097,7 +3099,7 @@ Rules:
     const prompt = `What is the common English name for this plant: "${plantName}"?`
     
     const response = await openaiClient.responses.create({
-      model: openaiModel,
+      model: openaiModelNano,
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
