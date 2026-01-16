@@ -3,6 +3,7 @@
 <div align="center">
 
 ![Aphylia](https://img.shields.io/badge/Aphylia-Plant%20Discovery-green?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNNyAyMGgxMCI+PC9wYXRoPjxwYXRoIGQ9Ik0xMiAyMHYtMTYiPjwvcGF0aD48cGF0aCBkPSJtMTcgNS0yIDIiPjwvcGF0aD48cGF0aCBkPSJtNyA1IDIgMiI+PC9wYXRoPjxwYXRoIGQ9Im0xNyA5LTIgMiI+PC9wYXRoPjxwYXRoIGQ9Im03IDkgMiAyIj48L3BhdGg+PHBhdGggZD0ibTE3IDEzLTIgMiI+PC9wYXRoPjxwYXRoIGQ9Im03IDEzIDIgMiI+PC9wYXRoPjwvc3ZnPg==)
+![Bun](https://img.shields.io/badge/Bun-1.x-f9f1e1?style=flat-square&logo=bun)
 ![React](https://img.shields.io/badge/React-19.1.1-61dafb?style=flat-square&logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178c6?style=flat-square&logo=typescript)
 ![Vite](https://img.shields.io/badge/Vite-7.1.2-646cff?style=flat-square&logo=vite)
@@ -282,25 +283,33 @@ flowchart TB
 <details>
 <summary><strong>📋 Prerequisites</strong></summary>
 
-- **Node.js** 18+ and npm
+- **Bun** 1.x (recommended) or Node.js 18+
 - **PostgreSQL** database (or Supabase account)
 - **(Optional)** DeepL API key for automatic translations
 - **(Optional)** Resend API key for emails
+
+> 💡 **Why Bun?** Bun is ~7x faster than npm for package installation. See [BUN_MIGRATION.md](./plant-swipe/BUN_MIGRATION.md) for details.
 
 </details>
 
 <details>
 <summary><strong>⚙️ Installation</strong></summary>
 
-### 1. Clone & Install Dependencies
+### 1. Install Bun (if not already installed)
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+### 2. Clone & Install Dependencies
 
 ```bash
 git clone https://github.com/your-org/aphylia.git
 cd aphylia/plant-swipe
-npm install
+bun install
 ```
 
-### 2. Configure Environment
+### 3. Configure Environment
 
 Create `plant-swipe/.env` (client-side):
 
@@ -338,18 +347,18 @@ DEEPL_API_KEY=your-deepl-api-key
 RESEND_API_KEY=your-resend-api-key
 ```
 
-### 3. Run Locally
+### 4. Run Locally
 
 **Terminal A** — API Server (http://localhost:3000):
 
 ```bash
-npm run serve
+bun run serve
 ```
 
 **Terminal B** — Development Server (http://127.0.0.1:5173):
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 The dev server proxies `/api/*` requests to the API server automatically.
@@ -361,8 +370,8 @@ The dev server proxies `/api/*` requests to the API server automatically.
 
 ```bash
 cd plant-swipe
-npm ci
-npm run build
+bun install
+bun run build
 ```
 
 The `dist/` folder contains the production build including:
@@ -492,6 +501,7 @@ sudo systemctl reload nginx
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
+| Bun | 1.x | Package manager & runtime (7x faster than npm) |
 | vite-plugin-pwa | 1.1.0 | PWA generation |
 | Workbox | 7.3.0 | Service worker |
 | ESLint | 9.33.0 | Linting |
@@ -540,6 +550,7 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 | Document | Description |
 |----------|-------------|
 | [**Technical README**](./plant-swipe/README.md) | Deep dive for engineers |
+| [**Bun Migration Guide**](./plant-swipe/BUN_MIGRATION.md) | npm to Bun transition & performance comparison |
 | [**DeepL Setup Guide**](./plant-swipe/DEEPL_API_SETUP.md) | Translation API configuration |
 | [**Cache Implementation**](./plant-swipe/CACHE_IMPLEMENTATION.md) | Database caching system details |
 | [**Garden Task Cache**](./plant-swipe/GARDEN_TASK_CACHE.md) | Task caching documentation |
