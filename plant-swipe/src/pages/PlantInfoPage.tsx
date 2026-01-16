@@ -8,7 +8,7 @@ import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
 import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
-import { checkEditorAccess } from '@/constants/userRoles'
+import { checkEditorAccess, hasAnyRole, USER_ROLES } from '@/constants/userRoles'
 import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
 import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
 import { supabase } from '@/lib/supabaseClient'
@@ -601,13 +601,14 @@ const PlantInfoPage: React.FC = () => {
           )}
         </div>
       </div>
-      {/* Check if plant is "In Progress" - show construction message for non-admins, disclaimer for admins */}
+      {/* Check if plant is "In Progress" - show construction message for regular users, full page with disclaimer for privileged users */}
       {(() => {
         const isInConstruction = plant.meta?.status?.toLowerCase() === 'in progres' || plant.meta?.status?.toLowerCase() === 'in progress'
-        const isAdminOrEditor = checkEditorAccess(profile)
+        // Check if user has privileged access: Admin, Editor, or Pro
+        const hasPrivilegedAccess = profile?.is_admin === true || hasAnyRole(profile?.roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR, USER_ROLES.PRO])
         
-        // Non-admin users see simplified construction message
-        if (isInConstruction && !isAdminOrEditor) {
+        // Regular users see simplified construction message
+        if (isInConstruction && !hasPrivilegedAccess) {
           return (
             <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
               <div className="flex justify-center">
@@ -638,10 +639,10 @@ const PlantInfoPage: React.FC = () => {
           )
         }
         
-        // Admin/Editor users see full page with disclaimer banner if plant is in construction
+        // Privileged users (Admin/Editor/Pro) see full page with disclaimer banner if plant is in construction
         return (
           <>
-            {isInConstruction && isAdminOrEditor && (
+            {isInConstruction && hasPrivilegedAccess && (
               <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-900/30 dark:to-amber-800/20 p-4 sm:p-5 flex items-center gap-4">
                 <div className="shrink-0 p-2.5 rounded-full bg-amber-200 dark:bg-amber-800/50">
                   <HardHat className="h-6 w-6 text-amber-700 dark:text-amber-300" />
@@ -657,7 +658,7 @@ const PlantInfoPage: React.FC = () => {
                   </p>
                 </div>
                 <Badge variant="outline" className="shrink-0 border-amber-400 text-amber-700 dark:border-amber-500 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40">
-                  {t('plantInfo.inConstruction.adminBadge', { defaultValue: 'Admin View' })}
+                  {t('plantInfo.inConstruction.privilegedBadge', { defaultValue: 'Early Access' })}
                 </Badge>
               </div>
             )}
