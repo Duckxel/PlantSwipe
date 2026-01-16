@@ -141,6 +141,8 @@ export default function PlantSwipe() {
   })
   const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
   const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
+  const [searchBarVisible, setSearchBarVisible] = useState(true)
+  const lastScrollY = React.useRef(0)
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -262,6 +264,35 @@ export default function PlantSwipe() {
       }
     }
   }, [pathWithoutLang, searchParams, setSearchParams]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hide search bar on scroll down, show on scroll up (mobile only)
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    if (currentView !== "search") return
+    
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      const scrollDelta = currentScrollY - lastScrollY.current
+      
+      // Only trigger if scrolled more than 10px to avoid jitter
+      if (Math.abs(scrollDelta) < 10) return
+      
+      // Show search bar when scrolling up or at top
+      if (scrollDelta < 0 || currentScrollY < 50) {
+        setSearchBarVisible(true)
+      } else {
+        // Hide when scrolling down (only on mobile)
+        if (window.innerWidth < 768) {
+          setSearchBarVisible(false)
+        }
+      }
+      
+      lastScrollY.current = currentScrollY
+    }
+    
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [currentView])
 
   const loadPlants = React.useCallback(async () => {
     // Only show loading if we don't have plants
@@ -723,6 +754,36 @@ export default function PlantSwipe() {
     if (index !== 0) return
     initialCardBoostRef.current = false
   }, [heroImageCandidate, index])
+
+  // Track which images have been preloaded to avoid re-preloading
+  const preloadedImagesRef = React.useRef<Set<string>>(new Set())
+
+  // Preload next card images for instant swipe transitions
+  React.useEffect(() => {
+    if (currentView !== "discovery") return
+    if (typeof window === "undefined") return
+    if (swipeList.length === 0) return
+
+    // Debounce preloading to avoid flashing
+    const timeoutId = setTimeout(() => {
+      // Preload next 2 cards and previous 1 card
+      const offsets = [1, 2, -1]
+      offsets.forEach((offset) => {
+        const targetIndex = (index + offset + swipeList.length) % swipeList.length
+        const plant = swipeList[targetIndex]
+        if (plant) {
+          const imageUrl = getDiscoveryPageImageUrl(plant)
+          if (imageUrl && !preloadedImagesRef.current.has(imageUrl)) {
+            preloadedImagesRef.current.add(imageUrl)
+            const img = new Image()
+            img.src = imageUrl
+          }
+        }
+      })
+    }, 100)
+
+    return () => clearTimeout(timeoutId)
+  }, [currentView, index, swipeList])
 
   React.useEffect(() => {
     if (currentView !== "discovery") return
@@ -1585,9 +1646,13 @@ export default function PlantSwipe() {
 
             {/* Main content area */}
             <main className="min-h-[60vh]" aria-live="polite">
-              {/* Sticky search bar for search view - sticks to top when scrolled past */}
+              {/* Sticky search bar for search view - hides on scroll down on mobile */}
               {currentView === "search" && (
-                <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4">
+                <div 
+                  className={`sticky z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4 transition-all duration-300 ${
+                    searchBarVisible ? 'top-0 opacity-100' : '-top-32 opacity-0 md:top-0 md:opacity-100'
+                  }`}
+                >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div className="flex-1">
                       <Label htmlFor="plant-search-main" className="sr-only">

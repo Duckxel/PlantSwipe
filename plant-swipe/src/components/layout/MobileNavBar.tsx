@@ -1,5 +1,4 @@
 import React from "react"
-import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 import { 
@@ -38,57 +37,10 @@ interface MobileNavBarProps {
   onSignup?: () => void
 }
 
-const MOBILE_NAV_HOST_ATTR = "data-mobile-nav-root"
-const MOBILE_NAV_HOST_ID = "mobile-nav-root"
-
-const isBrowser = typeof window !== "undefined"
-const useIsomorphicLayoutEffect = isBrowser ? React.useLayoutEffect : React.useEffect
-
-let mobileNavHost: HTMLElement | null = null
-let mobileNavHostUsers = 0
-
-const useMobileNavHost = () => {
-  const [host, setHost] = React.useState<HTMLElement | null>(() => {
-    if (typeof document === "undefined") return null
-    const existing = document.querySelector<HTMLElement>(`[${MOBILE_NAV_HOST_ATTR}="true"]`)
-    return existing ?? null
-  })
-
-  useIsomorphicLayoutEffect(() => {
-    if (typeof document === "undefined") return undefined
-
-    let element = mobileNavHost
-    if (!element) {
-      element = document.querySelector<HTMLElement>(`[${MOBILE_NAV_HOST_ATTR}="true"]`) ?? null
-    }
-
-    if (!element) {
-      element = document.createElement("div")
-      element.id = MOBILE_NAV_HOST_ID
-      element.setAttribute(MOBILE_NAV_HOST_ATTR, "true")
-      element.style.position = "relative"
-      document.body.appendChild(element)
-    }
-
-    mobileNavHost = element
-    mobileNavHostUsers += 1
-    setHost(element)
-
-    return () => {
-      mobileNavHostUsers -= 1
-      if (mobileNavHostUsers <= 0 && mobileNavHost?.parentElement) {
-        mobileNavHost.parentElement.removeChild(mobileNavHost)
-        mobileNavHost = null
-      }
-      setHost(null)
-    }
-  }, [])
-
-  return host
-}
+// No portal needed - the nav uses position:fixed which is relative to viewport
+// Removing the portal simplifies the code and prevents potential rendering issues
 
 const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin, onSignup }) => {
-  const host = useMobileNavHost()
   const pathWithoutLang = usePathWithoutLanguage()
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
@@ -131,7 +83,12 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
         className="fixed bottom-0 left-0 right-0 md:hidden z-50 border-t border-stone-200/80 dark:border-[#3e3e42]/80 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-[#1a1a1c]/70 pb-[max(env(safe-area-inset-bottom),0px)]"
         role="navigation"
         aria-label="Primary"
-        style={{ transform: "translateZ(0)", contain: "layout paint" }}
+        style={{ 
+          transform: "translate3d(0, 0, 0)", 
+          willChange: "transform",
+          backfaceVisibility: "hidden",
+          WebkitBackfaceVisibility: "hidden",
+        }}
       >
         <div className="relative mx-auto max-w-lg px-2 pt-2 pb-1">
           {/* Center floating create button */}
@@ -166,7 +123,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   icon={<Sprout className="h-5 w-5" />} 
                   label={t('common.garden', { defaultValue: 'Garden' })}
                   isActive={currentView === 'gardens'}
-                  showDot={hasUnfinished}
+                  showDot={hasUnfinished || gardenInvites.length > 0}
                 />
                 <NavItem 
                   to="/search" 
@@ -415,10 +372,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     </>
   )
 
-  if (host) {
-    return createPortal(navMarkup, host)
-  }
-
+  // No portal needed - position:fixed is relative to viewport regardless of DOM position
   return navMarkup
 }
 

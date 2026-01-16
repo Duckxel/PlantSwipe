@@ -50,7 +50,7 @@ interface SwipePageProps {
 
 export const SwipePage: React.FC<SwipePageProps> = ({
   current,
-  index,
+  index: _index,
   setIndex,
   x,
   y,
@@ -62,6 +62,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   onToggleLike,
   boostImagePriority = false,
 }) => {
+  void _index // Prop kept for interface compatibility
       const { t } = useTranslation("common")
     const seoTitle = t("seo.home.title", { defaultValue: "Aphylia" })
       const seoDescription = t("seo.home.description", {
@@ -69,6 +70,40 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       })
       usePageMetadata({ title: seoTitle, description: seoDescription })
     const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
+    
+    // Touch tracking for swipe-up gesture on mobile (to open info)
+    const touchStartRef = React.useRef<{ x: number; y: number; time: number } | null>(null)
+    
+    const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
+      if (e.touches.length === 1) {
+        touchStartRef.current = {
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY,
+          time: Date.now()
+        }
+      }
+    }, [])
+    
+    const handleTouchEnd = React.useCallback((e: React.TouchEvent) => {
+      if (!touchStartRef.current || e.changedTouches.length !== 1) {
+        touchStartRef.current = null
+        return
+      }
+      
+      const touch = e.changedTouches[0]
+      const deltaX = touch.clientX - touchStartRef.current.x
+      const deltaY = touch.clientY - touchStartRef.current.y
+      const deltaTime = Date.now() - touchStartRef.current.time
+      
+      // Swipe up detection: significant upward movement, more vertical than horizontal, quick gesture
+      const isSwipeUp = deltaY < -80 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5 && deltaTime < 500
+      
+      if (isSwipeUp) {
+        handleInfo()
+      }
+      
+      touchStartRef.current = null
+    }, [handleInfo])
 
     React.useEffect(() => {
       if (typeof window === "undefined") return
@@ -110,7 +145,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   }, [handleInfo, handlePass, handlePrevious])
 
   const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
-  const mobileCardHeight = "calc(100vh - 13rem)"
   const prefersCoarsePointer = usePrefersCoarsePointer()
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
@@ -147,165 +181,206 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     return badges
   }, [current, t])
 
+    // Card content component to avoid duplication
+    const cardContent = current ? (
+      <Card className="relative h-full w-full overflow-hidden bg-black text-white shadow-2xl rounded-[24px] border border-white/20 dark:border-white/10">
+        {displayImage ? (
+          <img
+            src={displayImage}
+            alt={current?.name ? `${current.name} preview` : 'Plant preview'}
+            className="absolute inset-0 z-0 h-full w-full object-cover"
+            loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
+            fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
+            decoding="async"
+            width={960}
+            height={1280}
+            sizes="(max-width: 768px) 100vw, 70vw"
+          />
+        ) : (
+          <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
+        )}
+        <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
+        <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
+        {highlightBadges.length > 0 && (
+          <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
+            {highlightBadges.map((badge) => (
+              <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center backdrop-blur ${badge.className}`}>
+                {badge.icon}
+                {badge.label}
+              </Badge>
+            ))}
+          </div>
+        )}
+        <div className="absolute top-4 right-4 z-20">
+          <button
+            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+              e.stopPropagation()
+              if (onToggleLike) {
+                onToggleLike()
+              }
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-pressed={liked}
+            aria-label={liked ? "Unlike" : "Like"}
+            className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition ${
+              liked ? "bg-rose-600 text-white border-rose-500" : "bg-white/90 text-black hover:bg-white"
+            }`}
+          >
+            <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+          </button>
+        </div>
+        {current && (
+          <PlantMetaRail
+            plant={current}
+            variant="sidebar"
+            disableHoverActivation={prefersCoarsePointer}
+          />
+        )}
+        <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
+            {seasons.map((s) => {
+              const badgeClass = seasonBadge[s] ?? "bg-stone-200/70 dark:bg-stone-700/70 text-stone-900 dark:text-stone-100"
+              return (
+                <span key={s} className={`text-[11px] px-2.5 py-1 rounded-full shadow ${badgeClass}`}>
+                  {s}
+                </span>
+              )
+            })}
+          </div>
+          <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
+          {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
+          <div className="mt-5 grid w-full gap-2 grid-cols-3">
+            <Button
+              className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
+              onClick={(e) => {
+                e.stopPropagation()
+                handlePrevious()
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={t("plant.back")}
+            >
+              {isDesktop ? (
+                <>
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  {t("plant.back")}
+                </>
+              ) : (
+                <ChevronLeft className="h-5 w-5" />
+              )}
+            </Button>
+            <Button
+              className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleInfo()
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              {t("plant.info")}
+              <ChevronUp className="h-4 w-4 ml-1" />
+            </Button>
+            <Button
+              className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
+              onClick={(e) => {
+                e.stopPropagation()
+                handlePass()
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={t("plant.next")}
+            >
+              {isDesktop ? (
+                <>
+                  {t("plant.next")}
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </>
+              ) : (
+                <ChevronRight className="h-5 w-5" />
+              )}
+            </Button>
+          </div>
+        </div>
+      </Card>
+    ) : null
+
+    // ==================== MOBILE LAYOUT ====================
+    if (!isDesktop) {
+      return (
+        <div 
+          className="relative w-full swipe-card-container px-2"
+          style={{ 
+            height: 'calc(100dvh - 120px)',
+            minHeight: '450px',
+            marginBottom: '8px',
+          }}
+        >
+          <AnimatePresence initial={false} mode="sync">
+            {current ? (
+              <motion.div
+                key={current.id}
+                drag="x"
+                dragElastic={0.25}
+                dragMomentum={false}
+                style={{ x }}
+                dragConstraints={{ left: -250, right: 250 }}
+                onDragEnd={onDragEnd}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+                initial={false}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0 }}
+                className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
+                layout={false}
+              >
+                {cardContent}
+              </motion.div>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-stone-100 dark:bg-[#1e1e1e] rounded-[24px]">
+                <EmptyState onReset={() => setIndex(0)} />
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
+      )
+    }
+
+    // ==================== DESKTOP LAYOUT ====================
     return (
       <div
-        className="max-w-5xl mx-auto -mt-2 sm:mt-6 px-1 sm:px-4 md:px-0 pb-[140px] md:pb-16"
-        style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 140px)" } : undefined}
+        className="max-w-5xl mx-auto mt-6 px-4 md:px-0 pb-16"
       >
-      <motion.section
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-          className="relative overflow-visible md:overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-white via-emerald-50/60 to-stone-100 dark:from-[#1e1e1e] dark:via-[#252526] dark:to-[#171717] shadow-[0_30px_80px_-40px_rgba(16,185,129,0.45)]"
-      >
-        <div className="pointer-events-none absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
-          <div className="relative p-2 sm:p-6 md:p-12 space-y-6">
+        <motion.section
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-white via-emerald-50/60 to-stone-100 dark:from-[#1e1e1e] dark:via-[#252526] dark:to-[#171717] shadow-[0_30px_80px_-40px_rgba(16,185,129,0.45)]"
+        >
+          <div className="pointer-events-none absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+          <div className="relative p-6 md:p-12 space-y-6">
             <div
-              className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px]"
-              style={isDesktop ? { height: desktopCardHeight } : { height: mobileCardHeight }}
+              className="relative mx-auto w-full max-w-3xl min-h-[520px] swipe-card-container"
+              style={{ height: desktopCardHeight }}
             >
-              <AnimatePresence initial={false} mode="wait">
+              <AnimatePresence initial={false} mode="sync">
                 {current ? (
                   <motion.div
-                    key={`${current.id}-${index}`}
+                    key={current.id}
                     drag
                     dragElastic={{ left: 0.28, right: 0.28, top: 0.18, bottom: 0.08 }}
                     dragMomentum={false}
                     style={{ x, y }}
                     dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
                     onDragEnd={onDragEnd}
-                    initial={{ scale: 0.94, opacity: 0 }}
+                    initial={false}
                     animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.94, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: "easeOut" }}
-                    className="relative h-full w-full cursor-grab active:cursor-grabbing select-none"
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.05 }}
+                    className="absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing select-none"
+                    layout={false}
                   >
-                        <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
-                          {displayImage ? (
-                            <img
-                              src={displayImage}
-                              alt={current?.name ? `${current.name} preview` : 'Plant preview'}
-                              className="absolute inset-0 z-0 h-full w-full object-cover"
-                              loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
-                              fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
-                              decoding="async"
-                              width={960}
-                              height={1280}
-                              sizes="(max-width: 768px) 100vw, 70vw"
-                            />
-                        ) : (
-                          <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
-                        )}
-                      <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
-                      <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
-                      {highlightBadges.length > 0 && (
-                        <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
-                          {highlightBadges.map((badge) => (
-                            <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center backdrop-blur ${badge.className}`}>
-                              {badge.icon}
-                              {badge.label}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                        <div className="absolute top-4 right-4 z-20">
-                        <button
-                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                            e.stopPropagation()
-                            if (onToggleLike) {
-                              onToggleLike()
-                            }
-                          }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          aria-pressed={liked}
-                          aria-label={liked ? "Unlike" : "Like"}
-                          className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition ${
-                            liked ? "bg-rose-600 text-white border-rose-500" : "bg-white/90 text-black hover:bg-white"
-                          }`}
-                        >
-                          <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
-                        </button>
-                      </div>
-                        {current && (
-                          <PlantMetaRail
-                            plant={current}
-                            variant="sidebar"
-                            disableHoverActivation={prefersCoarsePointer}
-                          />
-                        )}
-                      <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
-                        <div className="mb-3 flex flex-wrap items-center gap-2">
-                          <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
-                          {seasons.map((s) => {
-                            const badgeClass = seasonBadge[s] ?? "bg-stone-200/70 dark:bg-stone-700/70 text-stone-900 dark:text-stone-100"
-                            return (
-                              <span key={s} className={`text-[11px] px-2.5 py-1 rounded-full shadow ${badgeClass}`}>
-                                {s}
-                              </span>
-                            )
-                          })}
-                        </div>
-                        <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
-                        {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
-                        <div
-                          className="mt-5 grid w-full gap-2 pb-2 grid-cols-3 sm:gap-3 sm:pb-0"
-                          style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" } : undefined}
-                        >
-                          <Button
-                            className={`rounded-2xl w-full text-white transition-colors ${
-                              isDesktop ? "bg-black hover:bg-black/90" : "bg-black/80 hover:bg-black"
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handlePrevious()
-                            }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            aria-label={t("plant.back")}
-                          >
-                            {isDesktop ? (
-                              <>
-                                <ChevronLeft className="h-4 w-4 mr-1" />
-                                {t("plant.back")}
-                              </>
-                            ) : (
-                              <ChevronLeft className="h-5 w-5" />
-                            )}
-                          </Button>
-                          <Button
-                            className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleInfo()
-                            }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                          >
-                            {t("plant.info")}
-                            <ChevronUp className="h-4 w-4 ml-1" />
-                          </Button>
-                          <Button
-                            className={`rounded-2xl w-full text-white transition-colors ${
-                              isDesktop ? "bg-black hover:bg-black/90" : "bg-black/80 hover:bg-black"
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handlePass()
-                            }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            aria-label={t("plant.next")}
-                          >
-                            {isDesktop ? (
-                              <>
-                                {t("plant.next")}
-                                <ChevronRight className="h-4 w-4 ml-1" />
-                              </>
-                            ) : (
-                              <ChevronRight className="h-5 w-5" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
+                    {cardContent}
                   </motion.div>
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -313,26 +388,26 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                   </div>
                 )}
               </AnimatePresence>
-          </div>
+            </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-3 pt-3 sm:pt-4">
-            <Button asChild className="rounded-2xl">
-              <Link to="/search">
-                <Sparkles className="h-4 w-4 mr-2" />
-                {t("discoveryPage.hero.ctaPrimary")}
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="rounded-2xl">
-              <Link to="/gardens">
-                <Palette className="h-4 w-4 mr-2" />
-                {t("discoveryPage.hero.ctaSecondary")}
-              </Link>
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+              <Button asChild className="rounded-2xl">
+                <Link to="/search">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  {t("discoveryPage.hero.ctaPrimary")}
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="rounded-2xl">
+                <Link to="/gardens">
+                  <Palette className="h-4 w-4 mr-2" />
+                  {t("discoveryPage.hero.ctaSecondary")}
+                </Link>
+              </Button>
+            </div>
           </div>
-        </div>
-      </motion.section>
-    </div>
-  )
+        </motion.section>
+      </div>
+    )
 }
 
 const EmptyState = ({ onReset }: { onReset: () => void }) => {
