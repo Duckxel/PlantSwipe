@@ -275,8 +275,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         <div 
           className="relative w-full swipe-card-container px-2"
           style={{ 
-            height: 'calc(100dvh - 160px)',
-            minHeight: '400px',
+            height: 'calc(100dvh - 120px)',
+            minHeight: '450px',
             marginBottom: '8px',
           }}
         >
@@ -284,17 +284,17 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             {current ? (
               <motion.div
                 key={current.id}
-                drag
-                dragElastic={{ left: 0.25, right: 0.25, top: 0.15, bottom: 0 }}
+                drag="x"
+                dragElastic={0.25}
                 dragMomentum={false}
-                style={{ x, y }}
-                dragConstraints={{ left: -250, right: 250, top: -150, bottom: 0 }}
+                style={{ x }}
+                dragConstraints={{ left: -250, right: 250 }}
                 onDragEnd={onDragEnd}
                 initial={false}
-                animate={{ opacity: 1, x: 0, y: 0 }}
+                animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0 }}
-                className="absolute inset-0 cursor-grab active:cursor-grabbing select-none touch-pan-y"
+                className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
                 layout={false}
               >
                 {cardContent}
