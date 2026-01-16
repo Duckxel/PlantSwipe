@@ -131,7 +131,7 @@ export const ROLE_CONFIG: Record<UserRole, {
 /**
  * Check if user has a specific role
  */
-export function hasRole(roles: UserRole[] | null | undefined, role: UserRole): boolean {
+export function hasRole(roles: string[] | null | undefined, role: UserRole): boolean {
   if (!roles || !Array.isArray(roles)) return false
   return roles.includes(role)
 }
@@ -139,7 +139,7 @@ export function hasRole(roles: UserRole[] | null | undefined, role: UserRole): b
 /**
  * Check if user has any of the specified roles
  */
-export function hasAnyRole(roles: UserRole[] | null | undefined, checkRoles: UserRole[]): boolean {
+export function hasAnyRole(roles: string[] | null | undefined, checkRoles: UserRole[]): boolean {
   if (!roles || !Array.isArray(roles)) return false
   return checkRoles.some(role => roles.includes(role))
 }
@@ -148,7 +148,7 @@ export function hasAnyRole(roles: UserRole[] | null | undefined, checkRoles: Use
  * Check if user has admin-level access (admin or editor)
  */
 export function hasAdminAccess(roles: string[] | null | undefined): boolean {
-  return hasAnyRole(roles as UserRole[] | null | undefined, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
+  return hasAnyRole(roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
 }
 
 /**
@@ -156,7 +156,7 @@ export function hasAdminAccess(roles: string[] | null | undefined): boolean {
  */
 export function hasFullAdminAccess(roles: string[] | null | undefined, isAdmin?: boolean | null): boolean {
   if (isAdmin === true) return true
-  return hasRole(roles as UserRole[] | null | undefined, USER_ROLES.ADMIN)
+  return hasRole(roles, USER_ROLES.ADMIN)
 }
 
 /**
@@ -165,7 +165,7 @@ export function hasFullAdminAccess(roles: string[] | null | undefined, isAdmin?:
  */
 export function hasEditorAccess(roles: string[] | null | undefined, isAdmin?: boolean | null): boolean {
   if (isAdmin === true) return true
-  return hasAnyRole(roles as UserRole[] | null | undefined, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
+  return hasAnyRole(roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
 }
 
 /**
@@ -183,5 +183,5 @@ export function checkEditorAccess(profile: { is_admin?: boolean | null; roles?: 
 export function checkFullAdminAccess(profile: { is_admin?: boolean | null; roles?: string[] | null } | null | undefined): boolean {
   if (!profile) return false
   if (profile.is_admin === true) return true
-  return hasRole(profile.roles as UserRole[] | null | undefined, USER_ROLES.ADMIN)
+  return hasRole(profile.roles, USER_ROLES.ADMIN)
 }
