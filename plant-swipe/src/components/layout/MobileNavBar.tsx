@@ -123,7 +123,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   icon={<Sprout className="h-5 w-5" />} 
                   label={t('common.garden', { defaultValue: 'Garden' })}
                   isActive={currentView === 'gardens'}
-                  showDot={hasUnfinished}
+                  showDot={hasUnfinished || gardenInvites.length > 0}
                 />
                 <NavItem 
                   to="/search" 
