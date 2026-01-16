@@ -2737,6 +2737,16 @@
       "postedAt": "Publié le {{date}}",
       "validation": {
         "missingContent": "Ajoute quelques mots pour partager ton conseil."
+      },
+      "translation": {
+        "translate": "Traduire",
+        "translating": "Traduction en cours...",
+        "showOriginal": "Afficher l'original",
+        "showTranslation": "Afficher la traduction",
+        "originalLanguage": "Original : {{language}}",
+        "translatedFrom": "Traduit de {{language}}",
+        "translationFailed": "La traduction a échoué. Réessaie.",
+        "autoDetected": "Langue détectée : {{language}}"
       }
     },
     "admin": {
