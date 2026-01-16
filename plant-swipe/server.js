@@ -760,6 +760,9 @@ const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
+// Use a more capable model for AI plant fill operations with longer timeout
+const openaiPlantFillModel = process.env.OPENAI_PLANT_FILL_MODEL || 'gpt-5.2-2025-12-11'
+const openaiPlantFillTimeoutMs = Number(process.env.OPENAI_PLANT_FILL_TIMEOUT_MS || 300000)
 let openaiClient = null
 let openai = null // Alias for garden advice endpoints
 if (openaiApiKey) {
@@ -2136,12 +2139,12 @@ async function generateFieldData(options) {
 
   const response = await openaiClient.responses.create(
     {
-      model: openaiModel,
+      model: openaiPlantFillModel,
       reasoning: { effort: 'low' },
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) }
+    { timeout: openaiPlantFillTimeoutMs }
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -2198,12 +2201,12 @@ async function verifyPlantNameCandidate(plantName) {
 
   const response = await openaiClient.responses.create(
     {
-      model: openaiModel,
+      model: openaiPlantFillModel,
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+    { timeout: openaiPlantFillTimeoutMs },
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
