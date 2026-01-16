@@ -2737,6 +2737,16 @@
       "postedAt": "Posted on {{date}}",
       "validation": {
         "missingContent": "Add a few words to share your advice."
+      },
+      "translation": {
+        "translate": "Translate",
+        "translating": "Translating...",
+        "showOriginal": "Show original",
+        "showTranslation": "Show translation",
+        "originalLanguage": "Original: {{language}}",
+        "translatedFrom": "Translated from {{language}}",
+        "translationFailed": "Translation failed. Please try again.",
+        "autoDetected": "Language detected: {{language}}"
       }
     },
     "admin": {
