@@ -1309,7 +1309,7 @@ const FAQSection: React.FC = () => {
               {/* Social Links */}
               <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
                 <a
-                  href="https://instagram.com/aphylia.app"
+                  href="https://instagram.com/aphylia_app"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium hover:shadow-lg hover:shadow-pink-500/25 hover:-translate-y-0.5 transition-all"
@@ -1420,7 +1420,7 @@ const FinalCTASection: React.FC = () => {
                 </p>
                 <div className="flex items-center justify-center gap-3">
                   <a
-                    href="https://instagram.com/aphylia.app"
+                    href="https://instagram.com/aphylia_app"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
