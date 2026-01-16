@@ -83,7 +83,12 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
         className="fixed bottom-0 left-0 right-0 md:hidden z-50 border-t border-stone-200/80 dark:border-[#3e3e42]/80 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-[#1a1a1c]/70 pb-[max(env(safe-area-inset-bottom),0px)]"
         role="navigation"
         aria-label="Primary"
-        style={{ transform: "translateZ(0)", contain: "layout paint" }}
+        style={{ 
+          transform: "translate3d(0, 0, 0)", 
+          willChange: "transform",
+          backfaceVisibility: "hidden",
+          WebkitBackfaceVisibility: "hidden",
+        }}
       >
         <div className="relative mx-auto max-w-lg px-2 pt-2 pb-1">
           {/* Center floating create button */}
@@ -118,7 +123,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   icon={<Sprout className="h-5 w-5" />} 
                   label={t('common.garden', { defaultValue: 'Garden' })}
                   isActive={currentView === 'gardens'}
-                  showDot={hasUnfinished}
+                  showDot={hasUnfinished || gardenInvites.length > 0}
                 />
                 <NavItem 
                   to="/search" 
