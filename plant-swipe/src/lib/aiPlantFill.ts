@@ -3,8 +3,6 @@ import { supabase } from "@/lib/supabaseClient"
 // Retry configuration for handling timeouts and rate limits
 const MAX_RETRIES = 3
 const INITIAL_RETRY_DELAY = 2000 // 2 seconds
-const BATCH_SIZE = 3 // Reduced from 5 to avoid overwhelming the server
-const BATCH_DELAY = 1000 // 1 second delay between batches
 
 // Helper to delay execution
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -153,86 +151,78 @@ export async function fetchAiPlantFill({
   let completedFields = 0
   onProgress?.({ field: 'init', completed: completedFields, total: totalFields })
 
-  // Process fields in parallel batches (with retry logic and delays)
-  for (let i = 0; i < fieldEntries.length; i += BATCH_SIZE) {
-    if (signal?.aborted) {
-      throw new Error('AI fill was cancelled')
-    }
-
-    // Add delay between batches (except for first batch)
-    if (i > 0) {
-      await delay(BATCH_DELAY)
-    }
-
-    const batch = fieldEntries.slice(i, i + BATCH_SIZE)
-    onProgress?.({ field: batch.join(', '), completed: completedFields, total: totalFields })
-
-    const batchResults = await Promise.all(
-      batch.map(async (fieldKey) => {
-        let fieldError: Error | null = null
-        let fieldData: unknown = null
-
-        try {
-          const response = await fetchWithRetry('/api/admin/ai/plant-fill/field', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-              plantName,
-              schema,
-              fieldKey,
-              existingField:
-                existingData && typeof existingData === 'object' && !Array.isArray(existingData)
-                  ? existingData[fieldKey]
-                  : undefined,
-              language,
-            }),
-            signal,
-          })
-
-          let payload: any = null
-          try {
-            payload = await response.json()
-          } catch {}
-
-          if (!response.ok) {
-            const message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
-            throw new Error(message)
-          }
-
-          if (!payload?.success) {
-            const message = payload?.error || `AI fill failed for "${fieldKey}"`
-            throw new Error(message)
-          }
-
-          fieldData = payload?.data ?? null
-        } catch (err) {
-          fieldError = err instanceof Error ? err : new Error(String(err || 'AI fill failed'))
-        }
-
-        return { fieldKey, fieldData, fieldError }
-      })
-    )
-
-    // Process batch results
-    for (const { fieldKey, fieldData, fieldError } of batchResults) {
-      if (fieldError) {
-        if (!continueOnFieldError) {
-          throw fieldError
-        }
-        onFieldError?.({ field: fieldKey, error: fieldError.message })
-      } else {
-        if (fieldData !== undefined && fieldData !== null) {
-          aggregated[fieldKey] = fieldData
-        } else {
-          delete aggregated[fieldKey]
-        }
-        onFieldComplete?.({ field: fieldKey, data: fieldData })
-      }
-      completedFields += 1
-    }
-
-    onProgress?.({ field: batch.join(', '), completed: completedFields, total: totalFields })
+  if (signal?.aborted) {
+    throw new Error('AI fill was cancelled')
   }
+
+  // Process all fields in parallel (no batching)
+  onProgress?.({ field: fieldEntries.join(', '), completed: completedFields, total: totalFields })
+
+  const allResults = await Promise.all(
+    fieldEntries.map(async (fieldKey) => {
+      let fieldError: Error | null = null
+      let fieldData: unknown = null
+
+      try {
+        const response = await fetchWithRetry('/api/admin/ai/plant-fill/field', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            plantName,
+            schema,
+            fieldKey,
+            existingField:
+              existingData && typeof existingData === 'object' && !Array.isArray(existingData)
+                ? existingData[fieldKey]
+                : undefined,
+            language,
+          }),
+          signal,
+        })
+
+        let payload: any = null
+        try {
+          payload = await response.json()
+        } catch {}
+
+        if (!response.ok) {
+          const message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+          throw new Error(message)
+        }
+
+        if (!payload?.success) {
+          const message = payload?.error || `AI fill failed for "${fieldKey}"`
+          throw new Error(message)
+        }
+
+        fieldData = payload?.data ?? null
+      } catch (err) {
+        fieldError = err instanceof Error ? err : new Error(String(err || 'AI fill failed'))
+      }
+
+      return { fieldKey, fieldData, fieldError }
+    })
+  )
+
+  // Process all results
+  for (const { fieldKey, fieldData, fieldError } of allResults) {
+    if (fieldError) {
+      if (!continueOnFieldError) {
+        throw fieldError
+      }
+      onFieldError?.({ field: fieldKey, error: fieldError.message })
+    } else {
+      if (fieldData !== undefined && fieldData !== null) {
+        aggregated[fieldKey] = fieldData
+      } else {
+        delete aggregated[fieldKey]
+      }
+      onFieldComplete?.({ field: fieldKey, data: fieldData })
+    }
+    completedFields += 1
+  }
+
+  onProgress?.({ field: 'complete', completed: completedFields, total: totalFields })
 
   onProgress?.({ field: 'complete', completed: completedFields, total: totalFields })
 

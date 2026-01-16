@@ -3184,41 +3184,31 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
         return { fieldKey, fieldSchema, existingFieldClean }
       })
 
-    // Process fields in parallel batches of 3 (reduced to avoid timeouts)
-    const BATCH_SIZE = 3
-    const BATCH_DELAY_MS = 1000 // 1 second delay between batches
-    for (let i = 0; i < fieldTasks.length; i += BATCH_SIZE) {
-      // Add delay between batches (except for first batch)
-      if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS))
-      }
-      
-      const batch = fieldTasks.slice(i, i + BATCH_SIZE)
-      const results = await Promise.all(
-        batch.map(async ({ fieldKey, fieldSchema, existingFieldClean }) => {
-          try {
-            const fieldValue = await generateFieldData({
-              plantName,
-              fieldKey,
-              fieldSchema,
-              existingField: existingFieldClean,
-            })
-            return { fieldKey, fieldValue, error: null }
-          } catch (err) {
-            console.error(`[server] AI fill failed for field "${fieldKey}":`, err?.message || err)
-            return { fieldKey, fieldValue: undefined, error: err }
-          }
-        })
-      )
-
-      for (const { fieldKey, fieldValue } of results) {
-        const cleanedField =
-          fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
-        if (cleanedField !== undefined) {
-          aggregated[fieldKey] = removeExternalIds(cleanedField)
-        } else {
-          delete aggregated[fieldKey]
+    // Process all fields in parallel (no batching)
+    const results = await Promise.all(
+      fieldTasks.map(async ({ fieldKey, fieldSchema, existingFieldClean }) => {
+        try {
+          const fieldValue = await generateFieldData({
+            plantName,
+            fieldKey,
+            fieldSchema,
+            existingField: existingFieldClean,
+          })
+          return { fieldKey, fieldValue, error: null }
+        } catch (err) {
+          console.error(`[server] AI fill failed for field "${fieldKey}":`, err?.message || err)
+          return { fieldKey, fieldValue: undefined, error: err }
         }
+      })
+    )
+
+    for (const { fieldKey, fieldValue } of results) {
+      const cleanedField =
+        fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+      if (cleanedField !== undefined) {
+        aggregated[fieldKey] = removeExternalIds(cleanedField)
+      } else {
+        delete aggregated[fieldKey]
       }
     }
 
