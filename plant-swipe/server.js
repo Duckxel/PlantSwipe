@@ -759,7 +759,7 @@ const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
   : null
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
-const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
+const openaiModel = process.env.OPENAI_MODEL || 'gpt-5.2-2025-12-11'
 let openaiClient = null
 let openai = null // Alias for garden advice endpoints
 if (openaiApiKey) {
@@ -2260,7 +2260,7 @@ async function generateFieldData(options) {
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) }
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) }
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -2322,7 +2322,7 @@ async function verifyPlantNameCandidate(plantName) {
       instructions,
       input: prompt,
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -5316,7 +5316,7 @@ app.post('/api/blog/summarize', async (req, res) => {
         input: promptSections.join('\n\n'),
         max_output_tokens: 150,
       },
-      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
     )
     const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
     res.json({ summary })
