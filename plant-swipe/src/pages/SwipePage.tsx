@@ -70,6 +70,40 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       })
       usePageMetadata({ title: seoTitle, description: seoDescription })
     const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
+    
+    // Touch tracking for swipe-up gesture on mobile (to open info)
+    const touchStartRef = React.useRef<{ x: number; y: number; time: number } | null>(null)
+    
+    const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
+      if (e.touches.length === 1) {
+        touchStartRef.current = {
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY,
+          time: Date.now()
+        }
+      }
+    }, [])
+    
+    const handleTouchEnd = React.useCallback((e: React.TouchEvent) => {
+      if (!touchStartRef.current || e.changedTouches.length !== 1) {
+        touchStartRef.current = null
+        return
+      }
+      
+      const touch = e.changedTouches[0]
+      const deltaX = touch.clientX - touchStartRef.current.x
+      const deltaY = touch.clientY - touchStartRef.current.y
+      const deltaTime = Date.now() - touchStartRef.current.time
+      
+      // Swipe up detection: significant upward movement, more vertical than horizontal, quick gesture
+      const isSwipeUp = deltaY < -80 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5 && deltaTime < 500
+      
+      if (isSwipeUp) {
+        handleInfo()
+      }
+      
+      touchStartRef.current = null
+    }, [handleInfo])
 
     React.useEffect(() => {
       if (typeof window === "undefined") return
@@ -290,6 +324,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 style={{ x }}
                 dragConstraints={{ left: -250, right: 250 }}
                 onDragEnd={onDragEnd}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
                 initial={false}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0 }}
