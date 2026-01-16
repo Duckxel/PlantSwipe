@@ -1655,7 +1655,35 @@ export const AdminPage: React.FC = () => {
   const [aiPrefillCurrentField, setAiPrefillCurrentField] = React.useState<string | null>(null);
   const [aiPrefillFieldProgress, setAiPrefillFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 });
   const [aiPrefillCategoryProgress, setAiPrefillCategoryProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress());
-  const [aiPrefillCompletedPlants, setAiPrefillCompletedPlants] = React.useState<Array<{ name: string; success: boolean; error?: string }>>([]);
+  const [aiPrefillCompletedPlants, setAiPrefillCompletedPlants] = React.useState<Array<{ name: string; success: boolean; error?: string; durationMs?: number }>>([]);
+  const [aiPrefillStartTime, setAiPrefillStartTime] = React.useState<number | null>(null);
+  const [aiPrefillElapsedTime, setAiPrefillElapsedTime] = React.useState<number>(0);
+  const [aiPrefillPlantStartTime, setAiPrefillPlantStartTime] = React.useState<number | null>(null);
+
+  // Timer effect for elapsed time
+  React.useEffect(() => {
+    if (!aiPrefillRunning || !aiPrefillStartTime) {
+      return;
+    }
+    const interval = setInterval(() => {
+      setAiPrefillElapsedTime(Date.now() - aiPrefillStartTime);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [aiPrefillRunning, aiPrefillStartTime]);
+
+  // Helper to format duration
+  const formatDuration = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    }
+    if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    }
+    return `${seconds}s`;
+  };
 
   // Category labels for display
   const aiPrefillCategoryLabels: Record<PlantFormCategory, string> = {
@@ -2379,6 +2407,9 @@ export const AdminPage: React.FC = () => {
     if (aiPrefillRunning || plantRequests.length === 0) return;
     
     const abortController = new AbortController();
+    const overallStartTime = Date.now();
+    let plantStartTime = Date.now();
+    
     setAiPrefillAbortController(abortController);
     setAiPrefillRunning(true);
     setAiPrefillError(null);
@@ -2387,6 +2418,9 @@ export const AdminPage: React.FC = () => {
     setAiPrefillCurrentField(null);
     setAiPrefillFieldProgress({ completed: 0, total: 0 });
     setAiPrefillCompletedPlants([]);
+    setAiPrefillStartTime(overallStartTime);
+    setAiPrefillElapsedTime(0);
+    setAiPrefillPlantStartTime(plantStartTime);
     initAiPrefillCategoryProgress();
     
     try {
@@ -2416,9 +2450,13 @@ export const AdminPage: React.FC = () => {
           onPlantProgress: ({ current, total, plantName }) => {
             setAiPrefillProgress({ current, total });
             setAiPrefillCurrentPlant(plantName);
+            // Track start time for new plant
+            plantStartTime = Date.now();
+            setAiPrefillPlantStartTime(plantStartTime);
           },
           onPlantComplete: ({ plantName, requestId, success, error }) => {
-            setAiPrefillCompletedPlants((prev) => [...prev.slice(-4), { name: plantName, success, error }]);
+            const durationMs = Date.now() - plantStartTime;
+            setAiPrefillCompletedPlants((prev) => [...prev.slice(-4), { name: plantName, success, error, durationMs }]);
             if (success) {
               // Remove completed plant from the local list immediately for visual feedback
               setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
@@ -2450,6 +2488,8 @@ export const AdminPage: React.FC = () => {
       setAiPrefillStatus('idle');
       setAiPrefillCurrentField(null);
       setAiPrefillFieldProgress({ completed: 0, total: 0 });
+      setAiPrefillStartTime(null);
+      setAiPrefillPlantStartTime(null);
     }
   }, [aiPrefillRunning, plantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
 
@@ -7475,6 +7515,9 @@ export const AdminPage: React.FC = () => {
                                 <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
                                   AI Prefill in Progress
                                 </span>
+                                <span className="text-xs bg-purple-200 dark:bg-purple-800 px-2 py-0.5 rounded-full text-purple-700 dark:text-purple-300 font-mono">
+                                  {formatDuration(aiPrefillElapsedTime)}
+                                </span>
                               </div>
                               <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
                                 Plant {aiPrefillProgress.current + 1} of {aiPrefillProgress.total}
@@ -7590,8 +7633,13 @@ export const AdminPage: React.FC = () => {
                                         <X className="h-3 w-3 flex-shrink-0" />
                                       )}
                                       <span className="truncate">{plant.name}</span>
+                                      {plant.durationMs && (
+                                        <span className="ml-auto text-[10px] font-mono opacity-70">
+                                          {formatDuration(plant.durationMs)}
+                                        </span>
+                                      )}
                                       {!plant.success && plant.error && (
-                                        <span className="truncate opacity-70 ml-auto text-[10px]">{plant.error}</span>
+                                        <span className="truncate opacity-70 text-[10px]">{plant.error}</span>
                                       )}
                                     </div>
                                   ))}
