@@ -601,46 +601,77 @@ const PlantInfoPage: React.FC = () => {
           )}
         </div>
       </div>
-      {/* Check if plant is "In Progress" - show construction message instead of detailed info */}
-      {(plant.meta?.status?.toLowerCase() === 'in progres' || plant.meta?.status?.toLowerCase() === 'in progress') ? (
-        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
-          <div className="flex justify-center">
-            <div className="p-4 rounded-full bg-amber-100 dark:bg-amber-900/40">
-              <HardHat className="h-12 w-12 text-amber-600 dark:text-amber-400" />
+      {/* Check if plant is "In Progress" - show construction message for non-admins, disclaimer for admins */}
+      {(() => {
+        const isInConstruction = plant.meta?.status?.toLowerCase() === 'in progres' || plant.meta?.status?.toLowerCase() === 'in progress'
+        const isAdminOrEditor = checkEditorAccess(profile)
+        
+        // Non-admin users see simplified construction message
+        if (isInConstruction && !isAdminOrEditor) {
+          return (
+            <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
+              <div className="flex justify-center">
+                <div className="p-4 rounded-full bg-amber-100 dark:bg-amber-900/40">
+                  <HardHat className="h-12 w-12 text-amber-600 dark:text-amber-400" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h2 className="text-2xl sm:text-3xl font-bold text-amber-900 dark:text-amber-100">
+                  {t('plantInfo.inConstruction.title', { defaultValue: 'Plant in Construction' })}
+                </h2>
+                <p className="text-amber-700 dark:text-amber-300 max-w-lg mx-auto">
+                  {t('plantInfo.inConstruction.description', { 
+                    defaultValue: 'We are currently verifying and completing the information for this plant. Check back soon for the full details!' 
+                  })}
+                </p>
+              </div>
+              {/* Show basic info that we have */}
+              <div className="pt-4 space-y-4 max-w-md mx-auto">
+                <div className="text-left p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-amber-200/50 dark:border-amber-500/20">
+                  <h3 className="font-semibold text-lg text-stone-900 dark:text-white">{plant.name}</h3>
+                  {plant.identity?.scientificName && (
+                    <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.identity.scientificName}</p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="space-y-3">
-            <h2 className="text-2xl sm:text-3xl font-bold text-amber-900 dark:text-amber-100">
-              {t('plantInfo.inConstruction.title', { defaultValue: 'Plant Info in Construction' })}
-            </h2>
-            <p className="text-amber-700 dark:text-amber-300 max-w-lg mx-auto">
-              {t('plantInfo.inConstruction.description', { 
-                defaultValue: 'We are currently verifying and completing the information for this plant. Check back soon for the full details!' 
-              })}
-            </p>
-          </div>
-          {/* Show basic info that we have */}
-          <div className="pt-4 space-y-4 max-w-md mx-auto">
-            <div className="text-left p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-amber-200/50 dark:border-amber-500/20">
-              <h3 className="font-semibold text-lg text-stone-900 dark:text-white">{plant.name}</h3>
-              {plant.identity?.scientificName && (
-                <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.identity.scientificName}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <>
-          <PlantDetails 
-            plant={plant} 
-            liked={likedIds.includes(plant.id)} 
-            onToggleLike={toggleLiked} 
-            onBookmark={handleBookmark}
-            isBookmarked={isBookmarked}
-          />
-          <MoreInformationSection plant={plant} />
-        </>
-      )}
+          )
+        }
+        
+        // Admin/Editor users see full page with disclaimer banner if plant is in construction
+        return (
+          <>
+            {isInConstruction && isAdminOrEditor && (
+              <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-900/30 dark:to-amber-800/20 p-4 sm:p-5 flex items-center gap-4">
+                <div className="shrink-0 p-2.5 rounded-full bg-amber-200 dark:bg-amber-800/50">
+                  <HardHat className="h-6 w-6 text-amber-700 dark:text-amber-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-amber-900 dark:text-amber-100">
+                    {t('plantInfo.inConstruction.adminTitle', { defaultValue: 'Plant in Construction' })}
+                  </h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">
+                    {t('plantInfo.inConstruction.adminDescription', { 
+                      defaultValue: 'This plant is still being verified. Regular users cannot see this page yet.' 
+                    })}
+                  </p>
+                </div>
+                <Badge variant="outline" className="shrink-0 border-amber-400 text-amber-700 dark:border-amber-500 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40">
+                  {t('plantInfo.inConstruction.adminBadge', { defaultValue: 'Admin View' })}
+                </Badge>
+              </div>
+            )}
+            <PlantDetails 
+              plant={plant} 
+              liked={likedIds.includes(plant.id)} 
+              onToggleLike={toggleLiked} 
+              onBookmark={handleBookmark}
+              isBookmarked={isBookmarked}
+            />
+            <MoreInformationSection plant={plant} />
+          </>
+        )
+      })()}
       
       {user?.id && plant && (
         <AddToBookmarkDialog 
