@@ -881,20 +881,20 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                       {translationState.isTranslating ? (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           disabled
-                          className="text-xs border-amber-300 text-amber-700 bg-amber-50"
+                          className="text-xs h-7 px-2 text-amber-800/60 bg-transparent"
                         >
                           {t("translation.translating")}
                         </Button>
                       ) : translationState.translatedContent ? (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onClick={toggleTranslation}
-                          className="text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
+                          className="text-xs h-7 px-2 text-amber-800/80 hover:text-amber-900 hover:bg-amber-200/50"
                         >
                           {translationState.showTranslated 
                             ? t("translation.showOriginal") 
@@ -903,10 +903,10 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                       ) : (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onClick={() => handleTranslate(expandedAdvice)}
-                          className="text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
+                          className="text-xs h-7 px-2 text-amber-800/80 hover:text-amber-900 hover:bg-amber-200/50"
                         >
                           {t("translation.translate")}
                         </Button>
