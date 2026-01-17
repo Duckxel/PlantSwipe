@@ -3844,6 +3844,9 @@ export const AdminPage: React.FC = () => {
   // Active reports count for showing danger indicator on Members nav
   const [activeReportsCount, setActiveReportsCount] = React.useState(0);
   
+  // Pending bug reports count for showing indicator on Bugs nav
+  const [pendingBugReportsCount, setPendingBugReportsCount] = React.useState(0);
+  
   // Load active reports count on mount (for full admins only)
   React.useEffect(() => {
     if (!isFullAdmin) return;
@@ -3856,6 +3859,25 @@ export const AdminPage: React.FC = () => {
       }
     };
     loadReportCounts();
+  }, [isFullAdmin]);
+  
+  // Load pending bug reports count on mount (for full admins only)
+  React.useEffect(() => {
+    if (!isFullAdmin) return;
+    const loadPendingBugReports = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('bug_reports')
+          .select('*', { count: 'exact', head: true })
+          .in('status', ['pending', 'reviewing']);
+        if (!error && count !== null) {
+          setPendingBugReportsCount(count);
+        }
+      } catch (e) {
+        console.warn('[AdminPage] Failed to load pending bug reports count:', e);
+      }
+    };
+    loadPendingBugReports();
   }, [isFullAdmin]);
   
   const [memberList, setMemberList] = React.useState<ListedMember[]>([]);
@@ -5085,6 +5107,11 @@ export const AdminPage: React.FC = () => {
                           {uniqueRequestedPlantsCount}
                         </span>
                       )}
+                      {key === "bugs" && pendingBugReportsCount > 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
+                          {pendingBugReportsCount}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
@@ -5171,6 +5198,15 @@ export const AdminPage: React.FC = () => {
                             } font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100 px-2 py-0.5`}
                           >
                             {uniqueRequestedPlantsCount}
+                          </span>
+                        )}
+                        {key === "bugs" && pendingBugReportsCount > 0 && (
+                          <span
+                            className={`${
+                              sidebarCollapsed ? "text-[10px]" : "ml-auto text-xs"
+                            } font-semibold rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-2 py-0.5`}
+                          >
+                            {pendingBugReportsCount}
                           </span>
                         )}
                       </Link>
