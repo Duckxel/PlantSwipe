@@ -8450,38 +8450,6 @@ export const AdminPage: React.FC = () => {
                                             ).toLocaleDateString()}
                                           </Badge>
                                         )}
-                                        {/* Bug Catcher Stats */}
-                                        {memberRoles.includes('bug_catcher' as UserRole) && (
-                                          <>
-                                            {typeof memberData.bugPoints === 'number' && (
-                                              <Badge
-                                                variant="secondary"
-                                                className="rounded-full px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-700"
-                                              >
-                                                <Zap className="h-3 w-3 mr-1" />
-                                                {memberData.bugPoints} Bug Points
-                                              </Badge>
-                                            )}
-                                            {typeof memberData.bugCatcherRank === 'number' && memberData.bugCatcherRank > 0 && (
-                                              <Badge
-                                                variant="secondary"
-                                                className="rounded-full px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700"
-                                              >
-                                                <Trophy className="h-3 w-3 mr-1" />
-                                                Rank #{memberData.bugCatcherRank}
-                                              </Badge>
-                                            )}
-                                            {typeof memberData.bugActionsCompleted === 'number' && (
-                                              <Badge
-                                                variant="secondary"
-                                                className="rounded-full px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700"
-                                              >
-                                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                                {memberData.bugActionsCompleted} Actions
-                                              </Badge>
-                                            )}
-                                          </>
-                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -8872,6 +8840,56 @@ export const AdminPage: React.FC = () => {
                                 </DialogFooter>
                               </DialogContent>
                             </Dialog>
+
+                            {/* Bug Catcher Stats Card - Only shown for bug_catcher role */}
+                            {memberRoles.includes('bug_catcher' as UserRole) && (
+                              <div className="rounded-xl border-2 border-orange-200 dark:border-orange-800/50 overflow-hidden bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20">
+                                <div className="px-4 py-3 flex items-center gap-2 border-b border-orange-200/50 dark:border-orange-800/30">
+                                  <Bug className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                  <span className="text-sm font-semibold text-orange-800 dark:text-orange-200">Bug Catcher Stats</span>
+                                </div>
+                                <div className="p-4 flex items-center justify-around gap-4">
+                                  {/* Bug Points */}
+                                  <div className="text-center">
+                                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                                      <Zap className="h-5 w-5 text-orange-500" />
+                                      <span className="text-2xl font-bold text-orange-700 dark:text-orange-300 tabular-nums">
+                                        {typeof memberData.bugPoints === 'number' ? memberData.bugPoints : 0}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-orange-600/70 dark:text-orange-400/70 font-medium">Bug Points</div>
+                                  </div>
+                                  
+                                  {/* Divider */}
+                                  <div className="h-10 w-px bg-orange-200 dark:bg-orange-700/50" />
+                                  
+                                  {/* Rank */}
+                                  <div className="text-center">
+                                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                                      <Trophy className="h-5 w-5 text-amber-500" />
+                                      <span className="text-2xl font-bold text-amber-700 dark:text-amber-300 tabular-nums">
+                                        {typeof memberData.bugCatcherRank === 'number' && memberData.bugCatcherRank > 0 ? `#${memberData.bugCatcherRank}` : '-'}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-amber-600/70 dark:text-amber-400/70 font-medium">Rank</div>
+                                  </div>
+                                  
+                                  {/* Divider */}
+                                  <div className="h-10 w-px bg-orange-200 dark:bg-orange-700/50" />
+                                  
+                                  {/* Actions Completed */}
+                                  <div className="text-center">
+                                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                      <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                                        {typeof memberData.bugActionsCompleted === 'number' ? memberData.bugActionsCompleted : 0}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70 font-medium">Actions</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Roles Management Section - Only shown when rolesOpen is true */}
                             {rolesOpen && (
