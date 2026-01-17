@@ -16,18 +16,12 @@ import { hasAnyRole, USER_ROLES, checkEditorAccess } from "@/constants/userRoles
 import type { UserRole } from "@/constants/userRoles"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
-import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, Pencil, Save, Trash2, Maximize2, Languages, RefreshCw } from "lucide-react"
+import { Image as ImageIcon, Plus, Upload, X, ExternalLink, ShieldCheck, CalendarClock, Sparkles, Megaphone, Pencil, Save, Trash2, Maximize2 } from "lucide-react"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { cn } from "@/lib/utils"
 import { createPlantProAdvice, deletePlantProAdvice, fetchPlantProAdvices, updatePlantProAdvice, uploadProAdviceImage, getOrTranslateProAdvice } from "@/lib/proAdvice"
 import type { PlantProAdvice } from "@/types/proAdvice"
 import type { SupportedLanguage } from "@/lib/i18n"
-
-/** Language display names for UI */
-const LANGUAGE_NAMES: Record<string, Record<SupportedLanguage, string>> = {
-  en: { en: "English", fr: "French" },
-  fr: { en: "anglais", fr: "français" },
-}
 
 const MAX_CONTENT_LENGTH = 150 // Characters before truncating
 
@@ -141,13 +135,6 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
 
   // Get current UI language
   const currentLanguage = (i18n.language || 'en').substring(0, 2).toLowerCase() as SupportedLanguage
-
-  // Helper to get language display name
-  const getLanguageName = React.useCallback((langCode: string | null | undefined): string => {
-    if (!langCode) return ""
-    const lang = langCode.toLowerCase() as SupportedLanguage
-    return LANGUAGE_NAMES[currentLanguage]?.[lang] || langCode.toUpperCase()
-  }, [currentLanguage])
 
   // Check if translation should be shown (advice in different language than UI)
   const shouldShowTranslateOption = React.useCallback((advice: PlantProAdvice): boolean => {
@@ -885,38 +872,30 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
-                  {/* Translation controls */}
+                  {/* Translate button - at the top */}
                   {shouldShowTranslateOption(expandedAdvice) && (
-                    <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-amber-100/50 border border-amber-200/60">
-                      {/* Original language indicator */}
-                      <div className="flex items-center gap-1.5 text-xs text-amber-700">
-                        <Languages className="h-3.5 w-3.5" />
-                        <span>{t("translation.originalLanguage", { language: getLanguageName(expandedAdvice.originalLanguage) })}</span>
-                      </div>
-
-                      <div className="flex-1" />
-
-                      {/* Translate/Toggle buttons */}
+                    <div>
+                      {translationState.error && (
+                        <p className="text-xs text-red-600 mb-2">{translationState.error}</p>
+                      )}
                       {translationState.isTranslating ? (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           disabled
-                          className="rounded-full border-amber-300 text-amber-700 bg-amber-50"
+                          className="text-xs h-7 px-2 text-amber-800/60 bg-transparent"
                         >
-                          <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                           {t("translation.translating")}
                         </Button>
                       ) : translationState.translatedContent ? (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onClick={toggleTranslation}
-                          className="rounded-full border-amber-300 text-amber-700 hover:bg-amber-100"
+                          className="text-xs h-7 px-2 text-amber-800/80 hover:text-amber-900 hover:bg-amber-200/50"
                         >
-                          <Languages className="h-3.5 w-3.5 mr-1.5" />
                           {translationState.showTranslated 
                             ? t("translation.showOriginal") 
                             : t("translation.showTranslation")}
@@ -924,30 +903,14 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                       ) : (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onClick={() => handleTranslate(expandedAdvice)}
-                          className="rounded-full border-amber-300 text-amber-700 hover:bg-amber-100"
+                          className="text-xs h-7 px-2 text-amber-800/80 hover:text-amber-900 hover:bg-amber-200/50"
                         >
-                          <Languages className="h-3.5 w-3.5 mr-1.5" />
                           {t("translation.translate")}
                         </Button>
                       )}
-                    </div>
-                  )}
-
-                  {/* Translation error */}
-                  {translationState.error && (
-                    <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-200">
-                      {translationState.error}
-                    </div>
-                  )}
-
-                  {/* Show translation source info when displaying translation */}
-                  {translationState.showTranslated && translationState.translatedContent && (
-                    <div className="text-xs text-amber-600 flex items-center gap-1.5">
-                      <Languages className="h-3 w-3" />
-                      {t("translation.translatedFrom", { language: getLanguageName(expandedAdvice.originalLanguage) })}
                     </div>
                   )}
 
