@@ -154,16 +154,16 @@ export function BugCatcherPage() {
         setUserRank(rankData)
       }
 
-      // Get leaderboard
-      const { data: leaderboardData } = await supabase.rpc('get_bug_catcher_leaderboard', { _limit: 10 })
+      // Get leaderboard (top 5)
+      const { data: leaderboardData } = await supabase.rpc('get_bug_catcher_leaderboard', { _limit: 5 })
       if (leaderboardData) {
         setLeaderboard(leaderboardData)
       }
 
-      // Get available actions (max 10)
+      // Get available actions (max 5)
       const { data: actionsData } = await supabase.rpc('get_available_bug_actions', { 
         _user_id: user.id, 
-        _limit: 10 
+        _limit: 5 
       })
       if (actionsData) {
         setAvailableActions(actionsData)
@@ -554,45 +554,42 @@ export function BugCatcherPage() {
           </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Leaderboard */}
+            {/* Leaderboard - Compact Top 5 */}
             <Card className={glassCard}>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Trophy className="h-5 w-5 text-amber-500" />
-                  <h2 className="text-lg font-semibold">Top Bug Catchers</h2>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Trophy className="h-4 w-4 text-amber-500" />
+                  <h2 className="text-sm font-semibold">Top 5 Bug Catchers</h2>
                 </div>
                 
                 {leaderboard.length === 0 ? (
-                  <div className="text-center py-8 opacity-60">
-                    <Medal className="h-8 w-8 mx-auto mb-2" />
-                    <p className="text-sm">No rankings yet. Be the first!</p>
+                  <div className="text-center py-4 opacity-60">
+                    <Medal className="h-6 w-6 mx-auto mb-1" />
+                    <p className="text-xs">No rankings yet</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     {leaderboard.map((entry) => (
                       <div
                         key={entry.user_id}
-                        className={`flex items-center gap-3 p-3 rounded-xl transition ${
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition text-sm ${
                           entry.user_id === user?.id 
-                            ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700' 
+                            ? 'bg-orange-50 dark:bg-orange-900/20' 
                             : 'hover:bg-stone-50 dark:hover:bg-stone-800/50'
                         }`}
                       >
-                        <div className="w-8 flex justify-center">
+                        <div className="w-6 flex justify-center shrink-0">
                           {getRankIcon(entry.rank)}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">
-                            {entry.display_name || 'Anonymous'}
-                            {entry.user_id === user?.id && (
-                              <span className="ml-2 text-xs text-orange-600 dark:text-orange-400">(You)</span>
-                            )}
-                          </div>
-                          <div className="text-xs opacity-60">{entry.actions_completed} actions</div>
+                        <div className="flex-1 min-w-0 truncate">
+                          {entry.display_name || 'Anonymous'}
+                          {entry.user_id === user?.id && (
+                            <span className="ml-1 text-[10px] text-orange-600 dark:text-orange-400">(You)</span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
-                          <Zap className="h-4 w-4" />
-                          <span className="font-semibold tabular-nums">{entry.bug_points}</span>
+                        <div className="flex items-center gap-0.5 text-orange-600 dark:text-orange-400 shrink-0">
+                          <Zap className="h-3 w-3" />
+                          <span className="font-medium tabular-nums text-xs">{entry.bug_points}</span>
                         </div>
                       </div>
                     ))}
@@ -601,22 +598,22 @@ export function BugCatcherPage() {
               </CardContent>
             </Card>
 
-            {/* Available Actions */}
+            {/* Available Actions - Compact */}
             <Card className={glassCard}>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <ClipboardList className="h-5 w-5 text-emerald-500" />
-                  <h2 className="text-lg font-semibold">Recommended Actions</h2>
-                  <Badge variant="secondary" className="ml-auto">{availableActions.length}/10</Badge>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <ClipboardList className="h-4 w-4 text-emerald-500" />
+                  <h2 className="text-sm font-semibold">Recommended Actions</h2>
+                  <Badge variant="secondary" className="ml-auto text-xs">{availableActions.length}/5</Badge>
                 </div>
 
                 {availableActions.length === 0 ? (
-                  <div className="text-center py-8 opacity-60">
-                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
-                    <p className="text-sm">All caught up! Check back later for more tasks.</p>
+                  <div className="text-center py-4 opacity-60">
+                    <CheckCircle2 className="h-6 w-6 mx-auto mb-1 text-emerald-500" />
+                    <p className="text-xs">All caught up! Check back later.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     {availableActions.map((action) => (
                       <button
                         key={action.id}
@@ -625,21 +622,14 @@ export function BugCatcherPage() {
                           setActionAnswers({})
                           setActionError(null)
                         }}
-                        className="w-full flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition text-left group"
+                        className="w-full flex items-center gap-2 px-2 py-2 rounded-lg border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition text-left group"
                       >
-                        <Target className="h-5 w-5 text-emerald-500 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">{action.title}</div>
-                          {action.description && (
-                            <div className="text-xs opacity-60 truncate">{action.description}</div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                            +{action.points_reward} pts
-                          </Badge>
-                          <ChevronRight className="h-4 w-4 opacity-40 group-hover:opacity-100 transition" />
-                        </div>
+                        <Target className="h-4 w-4 text-emerald-500 shrink-0" />
+                        <div className="flex-1 min-w-0 text-sm truncate">{action.title}</div>
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 text-xs shrink-0">
+                          +{action.points_reward}
+                        </Badge>
+                        <ChevronRight className="h-3 w-3 opacity-40 group-hover:opacity-100 transition shrink-0" />
                       </button>
                     ))}
                   </div>
