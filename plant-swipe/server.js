@@ -9319,6 +9319,346 @@ app.get('/api/admin/conversation-messages', async (req, res) => {
   }
 })
 
+// Admin: search all messages involving a user (for moderation)
+app.get('/api/admin/search-user-messages', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    
+    const userId = (req.query.userId || req.query.user_id || '').toString().trim()
+    const query = (req.query.query || req.query.q || '').toString().trim()
+    
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId parameter' })
+      return
+    }
+    
+    if (!query || query.length < 2) {
+      res.status(400).json({ error: 'Search query must be at least 2 characters' })
+      return
+    }
+    
+    const limit = Math.min(Number(req.query.limit) || 50, 100)
+    const searchPattern = `%${query}%`
+    
+    let messages = []
+    
+    if (sql) {
+      // Search all messages where user is either sender or recipient
+      const msgRows = await sql`
+        SELECT 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.link_type,
+          m.link_url,
+          m.created_at,
+          m.edited_at,
+          m.deleted_at,
+          m.reply_to_id,
+          ps.display_name as sender_name,
+          ps.avatar_url as sender_avatar,
+          -- Get the other participant in the conversation
+          CASE 
+            WHEN c.participant_1 = m.sender_id THEN c.participant_2 
+            ELSE c.participant_1 
+          END as other_user_id,
+          CASE 
+            WHEN c.participant_1 = m.sender_id THEN po.display_name 
+            ELSE po2.display_name 
+          END as other_user_name
+        FROM public.messages m
+        JOIN public.conversations c ON c.id = m.conversation_id
+        LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+        LEFT JOIN public.profiles po ON po.id = c.participant_2
+        LEFT JOIN public.profiles po2 ON po2.id = c.participant_1
+        WHERE (c.participant_1 = ${userId}::uuid OR c.participant_2 = ${userId}::uuid)
+          AND m.content ILIKE ${searchPattern}
+          AND m.deleted_at IS NULL
+        ORDER BY m.created_at DESC
+        LIMIT ${limit}
+      `
+      messages = msgRows || []
+      
+      // Log admin action
+      try {
+        let adminName = null
+        const nameRows = await sql`SELECT display_name FROM public.profiles WHERE id = ${adminUserId} LIMIT 1`
+        adminName = nameRows?.[0]?.display_name || null
+        await sql`
+          INSERT INTO public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          VALUES (${adminUserId}, ${adminName}, 'search_user_messages', ${userId}, ${sql.json({ query, resultCount: messages.length })})
+        `
+      } catch { }
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      // REST fallback - limited functionality (no ILIKE in REST)
+      // Get conversations first
+      const token = getBearerTokenFromRequest(req)
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      if (token) baseHeaders['Authorization'] = `Bearer ${token}`
+      
+      const convResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/conversations?or=(participant_1.eq.${encodeURIComponent(userId)},participant_2.eq.${encodeURIComponent(userId)})&select=id`,
+        { headers: baseHeaders }
+      )
+      if (convResp.ok) {
+        const convArr = await convResp.json().catch(() => [])
+        const conversationIds = (Array.isArray(convArr) ? convArr : []).map(c => c.id)
+        
+        if (conversationIds.length > 0) {
+          // Get messages from those conversations
+          const msgResp = await fetch(
+            `${supabaseUrlEnv}/rest/v1/messages?conversation_id=in.(${conversationIds.join(',')})&content=ilike.*${encodeURIComponent(query)}*&deleted_at=is.null&select=id,conversation_id,sender_id,content,link_type,link_url,created_at,edited_at,deleted_at,reply_to_id&order=created_at.desc&limit=${limit}`,
+            { headers: baseHeaders }
+          )
+          if (msgResp.ok) {
+            messages = await msgResp.json().catch(() => [])
+          }
+        }
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    
+    res.json({
+      ok: true,
+      userId,
+      query,
+      messages: messages.map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name || null,
+        senderAvatar: m.sender_avatar || null,
+        otherUserId: m.other_user_id || null,
+        otherUserName: m.other_user_name || null,
+        content: m.content,
+        linkType: m.link_type || null,
+        linkUrl: m.link_url || null,
+        createdAt: m.created_at,
+        editedAt: m.edited_at || null,
+        deletedAt: m.deleted_at || null,
+        replyToId: m.reply_to_id || null,
+      })),
+      resultCount: messages.length,
+      limit,
+    })
+  } catch (e) {
+    console.error('[admin/search-user-messages] Error:', e)
+    res.status(500).json({ error: e?.message || 'Failed to search user messages' })
+  }
+})
+
+// Admin: get all images from conversations involving a user (for moderation)
+app.get('/api/admin/user-images', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    
+    const userId = (req.query.userId || req.query.user_id || '').toString().trim()
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId parameter' })
+      return
+    }
+    
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+    const offset = Math.max(Number(req.query.offset) || 0, 0)
+    const sentOnly = req.query.sentOnly === 'true' // Only images sent BY the user (not received)
+    
+    let images = []
+    let totalCount = 0
+    
+    if (sql) {
+      // Get all image messages from conversations involving this user
+      // Images are stored as content starting with [image:URL]
+      let query
+      if (sentOnly) {
+        // Only images sent BY this user
+        query = await sql`
+          SELECT 
+            m.id,
+            m.conversation_id,
+            m.sender_id,
+            m.content,
+            m.created_at,
+            ps.display_name as sender_name,
+            ps.avatar_url as sender_avatar,
+            CASE 
+              WHEN c.participant_1 = ${userId}::uuid THEN c.participant_2 
+              ELSE c.participant_1 
+            END as other_user_id,
+            CASE 
+              WHEN c.participant_1 = ${userId}::uuid THEN po2.display_name 
+              ELSE po1.display_name 
+            END as other_user_name
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+          LEFT JOIN public.profiles po1 ON po1.id = c.participant_1
+          LEFT JOIN public.profiles po2 ON po2.id = c.participant_2
+          WHERE m.sender_id = ${userId}::uuid
+            AND m.content LIKE '[image:%'
+            AND m.deleted_at IS NULL
+          ORDER BY m.created_at DESC
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+        // Get total count
+        const countRows = await sql`
+          SELECT COUNT(*) as count 
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          WHERE m.sender_id = ${userId}::uuid
+            AND m.content LIKE '[image:%'
+            AND m.deleted_at IS NULL
+        `
+        totalCount = Number(countRows?.[0]?.count) || 0
+      } else {
+        // All images in conversations where user is participant
+        query = await sql`
+          SELECT 
+            m.id,
+            m.conversation_id,
+            m.sender_id,
+            m.content,
+            m.created_at,
+            ps.display_name as sender_name,
+            ps.avatar_url as sender_avatar,
+            CASE 
+              WHEN c.participant_1 = ${userId}::uuid THEN c.participant_2 
+              ELSE c.participant_1 
+            END as other_user_id,
+            CASE 
+              WHEN c.participant_1 = ${userId}::uuid THEN po2.display_name 
+              ELSE po1.display_name 
+            END as other_user_name
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+          LEFT JOIN public.profiles po1 ON po1.id = c.participant_1
+          LEFT JOIN public.profiles po2 ON po2.id = c.participant_2
+          WHERE (c.participant_1 = ${userId}::uuid OR c.participant_2 = ${userId}::uuid)
+            AND m.content LIKE '[image:%'
+            AND m.deleted_at IS NULL
+          ORDER BY m.created_at DESC
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+        // Get total count
+        const countRows = await sql`
+          SELECT COUNT(*) as count 
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          WHERE (c.participant_1 = ${userId}::uuid OR c.participant_2 = ${userId}::uuid)
+            AND m.content LIKE '[image:%'
+            AND m.deleted_at IS NULL
+        `
+        totalCount = Number(countRows?.[0]?.count) || 0
+      }
+      images = query || []
+      
+      // Log admin action
+      try {
+        let adminName = null
+        const nameRows = await sql`SELECT display_name FROM public.profiles WHERE id = ${adminUserId} LIMIT 1`
+        adminName = nameRows?.[0]?.display_name || null
+        await sql`
+          INSERT INTO public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          VALUES (${adminUserId}, ${adminName}, 'view_user_images', ${userId}, ${sql.json({ sentOnly, resultCount: images.length, totalCount })})
+        `
+      } catch { }
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      // REST fallback
+      const token = getBearerTokenFromRequest(req)
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      if (token) baseHeaders['Authorization'] = `Bearer ${token}`
+      
+      if (sentOnly) {
+        // Get images sent by user
+        const msgResp = await fetch(
+          `${supabaseUrlEnv}/rest/v1/messages?sender_id=eq.${encodeURIComponent(userId)}&content=like.[image:*&deleted_at=is.null&select=id,conversation_id,sender_id,content,created_at&order=created_at.desc&limit=${limit}&offset=${offset}`,
+          { headers: { ...baseHeaders, 'Prefer': 'count=exact' } }
+        )
+        if (msgResp.ok) {
+          images = await msgResp.json().catch(() => [])
+          const cr = msgResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) totalCount = Number(m[1])
+        }
+      } else {
+        // Get conversations first, then images
+        const convResp = await fetch(
+          `${supabaseUrlEnv}/rest/v1/conversations?or=(participant_1.eq.${encodeURIComponent(userId)},participant_2.eq.${encodeURIComponent(userId)})&select=id`,
+          { headers: baseHeaders }
+        )
+        if (convResp.ok) {
+          const convArr = await convResp.json().catch(() => [])
+          const conversationIds = (Array.isArray(convArr) ? convArr : []).map(c => c.id)
+          
+          if (conversationIds.length > 0) {
+            const msgResp = await fetch(
+              `${supabaseUrlEnv}/rest/v1/messages?conversation_id=in.(${conversationIds.join(',')})&content=like.[image:*&deleted_at=is.null&select=id,conversation_id,sender_id,content,created_at&order=created_at.desc&limit=${limit}&offset=${offset}`,
+              { headers: { ...baseHeaders, 'Prefer': 'count=exact' } }
+            )
+            if (msgResp.ok) {
+              images = await msgResp.json().catch(() => [])
+              const cr = msgResp.headers.get('content-range') || ''
+              const m = cr.match(/\/(\d+)$/)
+              if (m) totalCount = Number(m[1])
+            }
+          }
+        }
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    
+    // Parse image content to extract URL and caption
+    const parseImageContent = (content) => {
+      const match = content.match(/^\[image:(.*?)\](.*)$/)
+      if (match) {
+        return {
+          imageUrl: match[1],
+          caption: match[2]?.trim() || null
+        }
+      }
+      return { imageUrl: null, caption: null }
+    }
+    
+    res.json({
+      ok: true,
+      userId,
+      images: images.map(img => {
+        const parsed = parseImageContent(img.content || '')
+        return {
+          id: img.id,
+          conversationId: img.conversation_id,
+          senderId: img.sender_id,
+          senderName: img.sender_name || null,
+          senderAvatar: img.sender_avatar || null,
+          otherUserId: img.other_user_id || null,
+          otherUserName: img.other_user_name || null,
+          imageUrl: parsed.imageUrl,
+          caption: parsed.caption,
+          createdAt: img.created_at,
+          isSentByUser: img.sender_id === userId,
+        }
+      }),
+      totalCount,
+      limit,
+      offset,
+      hasMore: offset + images.length < totalCount,
+      sentOnly,
+    })
+  } catch (e) {
+    console.error('[admin/user-images] Error:', e)
+    res.status(500).json({ error: e?.message || 'Failed to fetch user images' })
+  }
+})
+
 // Admin: add a note on a profile
 app.post('/api/admin/member-note', async (req, res) => {
   try {
